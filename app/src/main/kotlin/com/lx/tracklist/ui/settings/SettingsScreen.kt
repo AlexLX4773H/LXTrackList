@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,21 +26,28 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -56,8 +64,10 @@ import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXErrorRed
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
+import com.lx.tracklist.ui.theme.LXScoreGold
 import com.lx.tracklist.ui.theme.LXSurfaceBlack
 import com.lx.tracklist.ui.theme.LXSurfaceElevated
+import com.lx.tracklist.ui.theme.LXSurfaceVariant
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
 
@@ -70,18 +80,20 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    // File picker for import
+    LaunchedEffect(Unit) {
+        viewModel.checkStorageStatus(context)
+    }
+
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        uri?.let { viewModel.importFile(context, it) }
+        uri?.let { viewModel.importFromUri(context, it) }
     }
 
-    // Document creator for export
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
-        uri?.let { viewModel.exportToJson(context, it) }
+        uri?.let { viewModel.exportToCustomUri(context, it) }
     }
 
     Scaffold(
@@ -91,90 +103,265 @@ fun SettingsScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Settings & Data",
+                        text = "Settings & Storage",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = LXTextPrimary
                     )
+                },
+                actions = {
+                    IconButton(onClick = { viewModel.checkStorageStatus(context) }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = LXPrimaryGreen)
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = LXBackgroundBlack)
             )
         }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(paddingValues),
+            contentAlignment = Alignment.TopCenter
         ) {
-            // Status Banner if any
-            if (state.statusMessage != null) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (state.isErrorMessage) LXErrorRed.copy(alpha = 0.15f) else LXPrimaryGreen.copy(alpha = 0.15f)
-                    ),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (state.isErrorMessage) LXErrorRed else LXPrimaryGreen
-                    ),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 840.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Status Notification Banner
+                if (state.statusMessage != null) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (state.isErrorMessage) LXErrorRed.copy(alpha = 0.15f) else LXPrimaryGreen.copy(alpha = 0.15f)
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (state.isErrorMessage) LXErrorRed else LXPrimaryGreen
+                        ),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = if (state.isErrorMessage) LXErrorRed else LXPrimaryGreen
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = state.statusMessage ?: "",
-                            color = LXTextPrimary,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = if (state.isErrorMessage) LXErrorRed else LXPrimaryGreen
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = state.statusMessage ?: "",
+                                color = LXTextPrimary,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     }
                 }
-            }
 
-            // Data Import Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-                border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                // Dedicated Home Folder Storage Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.FileUpload, contentDescription = null, tint = LXPrimaryGreen)
-                        Spacer(modifier = Modifier.width(10.dp))
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Folder, contentDescription = null, tint = LXPrimaryGreen)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Home Storage Folder",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = LXTextPrimary
+                                )
+                            }
+
+                            if (state.hasStoragePermission) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text("CONNECTED", color = LXPrimaryGreen, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
+                                }
+                            }
+                        }
+
                         Text(
-                            text = "Import Data",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextPrimary
+                            text = "Root: ${state.homeFolderPath}\n• Input: ${state.homeFolderPath}/input\n• Output: ${state.homeFolderPath}/output",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = LXTextSecondary
                         )
+
+                        if (!state.hasStoragePermission) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Security, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Storage Access Required", color = LXScoreGold, style = MaterialTheme.typography.titleSmall)
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        "Grant access so LX Track List can read from the input folder and export directly to output.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = LXTextSecondary
+                                    )
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Button(
+                                        onClick = { viewModel.requestStoragePermission(context) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = LXScoreGold, contentColor = LXBackgroundBlack),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text("Grant Storage Access", fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        } else {
+                            // Direct Export Button
+                            Button(
+                                onClick = { viewModel.exportToHomeOutput(context) },
+                                enabled = !state.isExporting,
+                                modifier = Modifier.fillMaxWidth().height(44.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                if (state.isExporting) {
+                                    CircularProgressIndicator(color = LXBackgroundBlack, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Exporting to output folder...")
+                                } else {
+                                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Export Backup to /output Folder", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            HorizontalDivider(color = LXBorder, thickness = 1.dp)
+
+                            // Files in input folder
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Files in /input folder (${state.inputFiles.size})",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXTextPrimary
+                                )
+
+                                if (state.inputFiles.isNotEmpty()) {
+                                    TextButton(
+                                        onClick = { viewModel.importAllLocalFiles(context) },
+                                        enabled = !state.isImporting
+                                    ) {
+                                        Text("Import All", color = LXPrimaryGreen, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            if (state.inputFiles.isEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(LXSurfaceElevated)
+                                        .padding(14.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "No files found in ${state.homeFolderPath}/input\nCopy your MAL XML/GZ, CSV, or JSON files there to import instantly.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = LXTextSecondary,
+                                        lineHeight = 18.sp
+                                    )
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    state.inputFiles.forEach { fileInfo ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(LXSurfaceElevated)
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = fileInfo.name,
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    color = LXTextPrimary
+                                                )
+                                                Text(
+                                                    text = "${fileInfo.fileType} • ${fileInfo.sizeFormatted} • ${fileInfo.lastModifiedFormatted}",
+                                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                                    color = LXTextSecondary
+                                                )
+                                            }
+
+                                            Button(
+                                                onClick = { viewModel.importLocalFile(context, fileInfo) },
+                                                enabled = !state.isImporting,
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                                                    contentColor = LXPrimaryGreen
+                                                ),
+                                                shape = RoundedCornerShape(6.dp),
+                                                modifier = Modifier.height(34.dp)
+                                            ) {
+                                                Text("Import", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
+                }
 
-                    Text(
-                        text = "Import anime/manga lists from MyAnimeList (.xml, .xml.gz) or generic CSV/JSON files. Fully local, no login required.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = LXTextSecondary
-                    )
+                // Conflict Resolution Strategy Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Conflict Resolution Strategy",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXPrimaryGreen
+                        )
+                        Text(
+                            text = "Determines how to handle existing entries when importing:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LXTextSecondary
+                        )
 
-                    // Conflict Strategy Selection
-                    Text(
-                        text = "Conflict Resolution Strategy",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = LXPrimaryGreen
-                    )
-
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         ConflictStrategy.entries.forEach { strategy ->
                             val isSelected = state.selectedConflictStrategy == strategy
                             val desc = when (strategy) {
@@ -188,29 +375,20 @@ fun SettingsScreen(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f) else LXSurfaceElevated)
-                                    .border(
-                                        1.dp,
-                                        if (isSelected) LXPrimaryGreen else LXBorder,
-                                        RoundedCornerShape(8.dp)
-                                    )
+                                    .border(1.dp, if (isSelected) LXPrimaryGreen else LXBorder, RoundedCornerShape(8.dp))
                                     .clickable { viewModel.setConflictStrategy(strategy) }
                                     .padding(horizontal = 12.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(20.dp)
+                                        .size(18.dp)
                                         .clip(CircleShape)
                                         .background(if (isSelected) LXPrimaryGreen else LXBorder),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (isSelected) {
-                                        Icon(
-                                            Icons.Default.Check,
-                                            contentDescription = null,
-                                            tint = LXBackgroundBlack,
-                                            modifier = Modifier.size(14.dp)
-                                        )
+                                        Icon(Icons.Default.Check, contentDescription = null, tint = LXBackgroundBlack, modifier = Modifier.size(12.dp))
                                     }
                                 }
 
@@ -231,134 +409,99 @@ fun SettingsScreen(
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Button(
-                        onClick = { importLauncher.launch("*/*") },
-                        enabled = !state.isImporting,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = LXPrimaryGreen,
-                            contentColor = LXBackgroundBlack
-                        ),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        if (state.isImporting) {
-                            CircularProgressIndicator(
-                                color = LXBackgroundBlack,
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Importing entries...")
-                        } else {
-                            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Select File to Import", fontWeight = FontWeight.Bold)
-                        }
-                    }
                 }
-            }
 
-            // Data Export Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-                border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                // Standard File Picker Options
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.FileDownload, contentDescription = null, tint = LXPrimaryGreen)
-                        Spacer(modifier = Modifier.width(10.dp))
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         Text(
-                            text = "Export Backup",
+                            text = "Other Storage Locations",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = LXTextPrimary
                         )
-                    }
 
-                    Text(
-                        text = "Export your entire database to a JSON backup file on your device. You can restore this file anytime.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = LXTextSecondary
-                    )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { importLauncher.launch("*/*") },
+                                modifier = Modifier.weight(1f).height(42.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextPrimary),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Pick File...", fontSize = 12.sp)
+                            }
 
-                    OutlinedButton(
-                        onClick = { exportLauncher.launch("LX_Track_List_Backup_${System.currentTimeMillis()}.json") },
-                        enabled = !state.isExporting,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        if (state.isExporting) {
-                            CircularProgressIndicator(
-                                color = LXPrimaryGreen,
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Exporting backup...")
-                        } else {
-                            Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Export JSON Backup", fontWeight = FontWeight.Bold)
+                            OutlinedButton(
+                                onClick = { exportLauncher.launch("LX_Track_List_Backup_${System.currentTimeMillis()}.json") },
+                                modifier = Modifier.weight(1f).height(42.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextPrimary),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Save As...", fontSize = 12.sp)
+                            }
                         }
                     }
                 }
-            }
 
-            // App & Logo Information Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-                border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // App Branding Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Image(
-                        painter = painterResource(R.drawable.lx_logo),
-                        contentDescription = "LX Logo",
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(CircleShape)
-                    )
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.lx_logo),
+                            contentDescription = "LX Logo",
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                        )
 
-                    Spacer(modifier = Modifier.width(16.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
 
-                    Column {
-                        Text(
-                            text = "LX Track List",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = LXPrimaryGreen
-                        )
-                        Text(
-                            text = "Version 1.0.0 (MVP)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = LXTextSecondary
-                        )
-                        Text(
-                            text = "Personal Media Tracker for Anime, Manga, Manhwa, Movies, Shows & Books",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = LXTextSecondary.copy(alpha = 0.8f)
-                        )
+                        Column {
+                            Text(
+                                text = "LX Track List",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = LXPrimaryGreen
+                            )
+                            Text(
+                                text = "Version 1.0.0 (Optimized for Phone & Tablet)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LXTextSecondary
+                            )
+                            Text(
+                                text = "OnePlus 12R (2780x1264) & OnePlus Pad (2800x2000) Ready",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary.copy(alpha = 0.8f)
+                            )
+                        }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(24.dp))
+            }
         }
     }
 }

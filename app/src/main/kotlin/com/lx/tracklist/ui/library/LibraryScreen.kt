@@ -1,6 +1,5 @@
 package com.lx.tracklist.ui.library
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,8 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -81,7 +82,7 @@ fun LibraryScreen(
             TextField(
                 value = state.searchQuery,
                 onValueChange = { viewModel.setSearchQuery(it) },
-                placeholder = { Text("Search all media...", color = LXTextSecondary) },
+                placeholder = { Text("Search all media across all categories...", color = LXTextSecondary) },
                 singleLine = true,
                 leadingIcon = {
                     Icon(Icons.Default.Search, contentDescription = null, tint = LXPrimaryGreen)
@@ -108,7 +109,7 @@ fun LibraryScreen(
                     .clip(RoundedCornerShape(10.dp))
             )
 
-            // Category and Favorite Filters
+            // Category and Favorite Filter Chips
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -167,10 +168,12 @@ fun LibraryScreen(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Entries List
-            LazyColumn(
+            // Responsive Adaptive Grid
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 360.dp),
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(

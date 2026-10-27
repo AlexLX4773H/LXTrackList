@@ -9,6 +9,8 @@ import com.lx.tracklist.data.exporter.JsonExporter
 import com.lx.tracklist.data.importer.CsvImporter
 import com.lx.tracklist.data.importer.JsonImporter
 import com.lx.tracklist.data.importer.MalXmlImporter
+import com.lx.tracklist.data.local.StorageFileInfo
+import com.lx.tracklist.data.local.StorageHelper
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.repository.ConflictStrategy
 import com.lx.tracklist.data.repository.MediaRepository
@@ -19,19 +21,41 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.InputStream
 
 data class SettingsUiState(
     val selectedConflictStrategy: ConflictStrategy = ConflictStrategy.MERGE,
     val isImporting: Boolean = false,
     val isExporting: Boolean = false,
     val statusMessage: String? = null,
-    val isErrorMessage: Boolean = false
+    val isErrorMessage: Boolean = false,
+    val hasStoragePermission: Boolean = false,
+    val inputFiles: List<StorageFileInfo> = emptyList(),
+    val homeFolderPath: String = ""
 )
 
 class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    fun checkStorageStatus(context: Context) {
+        val hasPerm = StorageHelper.hasStoragePermission(context)
+        val files = if (hasPerm) StorageHelper.listInputFiles() else emptyList()
+        val path = if (hasPerm) StorageHelper.getBaseDir().absolutePath else "/storage/emulated/0/LXTrackList"
+
+        _uiState.update {
+            it.copy(
+                hasStoragePermission = hasPerm,
+                inputFiles = files,
+                homeFolderPath = path
+            )
+        }
+    }
+
+    fun requestStoragePermission(context: Context) {
+        StorageHelper.requestStoragePermission(context)
+    }
 
     fun setConflictStrategy(strategy: ConflictStrategy) {
         _uiState.update { it.copy(selectedConflictStrategy = strategy) }
@@ -41,60 +65,16 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         _uiState.update { it.copy(statusMessage = null) }
     }
 
-    fun importFile(context: Context, uri: Uri) {
+    fun importLocalFile(context: Context, fileInfo: StorageFileInfo) {
         viewModelScope.launch {
             _uiState.update { it.copy(isImporting = true, statusMessage = null) }
             try {
                 val entries = withContext(Dispatchers.IO) {
-                    val stream = context.contentResolver.openInputStream(uri)
-                        ?: throw IllegalStateException("Cannot open selected file")
-
-                    val fileName = uri.lastPathSegment?.lowercase() ?: ""
-                    stream.use { s ->
-                        when {
-                            fileName.endsWith(".xml") || fileName.endsWith(".xml.gz") || fileName.endsWith(".gz") -> {
-                                MalXmlImporter.parse(s)
-                            }
-                            fileName.endsWith(".csv") -> {
-                                CsvImporter.parse(s)
-                            }
-                            fileName.endsWith(".json") -> {
-                                JsonImporter.parse(s)
-                            }
-                            else -> {
-                                // Attempt auto-detection: try MAL XML first, then JSON, then CSV
-                                try {
-                                    MalXmlImporter.parse(s)
-                                } catch (_: Exception) {
-                                    JsonImporter.parse(s)
-                                }
-                            }
-                        }
-                    }
+                    val stream = StorageHelper.openFileInputStream(fileInfo.file)
+                    parseFromStream(stream, fileInfo.name)
                 }
 
-                if (entries.isEmpty()) {
-                    _uiState.update {
-                        it.copy(
-                            isImporting = false,
-                            statusMessage = "No valid media entries found in file",
-                            isErrorMessage = true
-                        )
-                    }
-                    return@launch
-                }
-
-                val (inserted, updated) = withContext(Dispatchers.IO) {
-                    repository.importEntries(entries, _uiState.value.selectedConflictStrategy)
-                }
-
-                _uiState.update {
-                    it.copy(
-                        isImporting = false,
-                        statusMessage = "Successfully imported ${entries.size} entries ($inserted added, $updated updated)",
-                        isErrorMessage = false
-                    )
-                }
+                saveImportedEntries(entries, fileInfo.name)
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
@@ -107,7 +87,98 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         }
     }
 
-    fun exportToJson(context: Context, destinationUri: Uri) {
+    fun importAllLocalFiles(context: Context) {
+        val files = _uiState.value.inputFiles
+        if (files.isEmpty()) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isImporting = true, statusMessage = null) }
+            var totalImported = 0
+            var totalUpdated = 0
+            var successFiles = 0
+
+            withContext(Dispatchers.IO) {
+                for (fileInfo in files) {
+                    try {
+                        val stream = StorageHelper.openFileInputStream(fileInfo.file)
+                        val entries = parseFromStream(stream, fileInfo.name)
+                        if (entries.isNotEmpty()) {
+                            val (ins, upd) = repository.importEntries(entries, _uiState.value.selectedConflictStrategy)
+                            totalImported += ins
+                            totalUpdated += upd
+                            successFiles++
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+
+            _uiState.update {
+                it.copy(
+                    isImporting = false,
+                    statusMessage = "Processed $successFiles files: $totalImported added, $totalUpdated updated",
+                    isErrorMessage = false
+                )
+            }
+        }
+    }
+
+    fun exportToHomeOutput(context: Context) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExporting = true, statusMessage = null) }
+            try {
+                val allEntries = withContext(Dispatchers.IO) {
+                    repository.getAllEntriesSync()
+                }
+
+                val json = JsonExporter.exportToJson(allEntries)
+                val targetFile = withContext(Dispatchers.IO) {
+                    StorageHelper.exportToJsonFile(json)
+                }
+
+                _uiState.update {
+                    it.copy(
+                        isExporting = false,
+                        statusMessage = "Saved ${allEntries.size} entries to:\n${targetFile.absolutePath}",
+                        isErrorMessage = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isExporting = false,
+                        statusMessage = "Export failed: ${e.localizedMessage ?: "Unknown error"}",
+                        isErrorMessage = true
+                    )
+                }
+            }
+        }
+    }
+
+    fun importFromUri(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isImporting = true, statusMessage = null) }
+            try {
+                val entries = withContext(Dispatchers.IO) {
+                    val stream = context.contentResolver.openInputStream(uri)
+                        ?: throw IllegalStateException("Cannot open selected file")
+                    val fileName = uri.lastPathSegment?.lowercase() ?: ""
+                    parseFromStream(stream, fileName)
+                }
+
+                saveImportedEntries(entries, uri.lastPathSegment ?: "file")
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isImporting = false,
+                        statusMessage = "Import failed: ${e.localizedMessage ?: "Unknown error"}",
+                        isErrorMessage = true
+                    )
+                }
+            }
+        }
+    }
+
+    fun exportToCustomUri(context: Context, destinationUri: Uri) {
         viewModelScope.launch {
             _uiState.update { it.copy(isExporting = true, statusMessage = null) }
             try {
@@ -139,6 +210,55 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                     )
                 }
             }
+        }
+    }
+
+    private fun parseFromStream(stream: InputStream, name: String): List<MediaEntry> {
+        val fileName = name.lowercase()
+        return stream.use { s ->
+            when {
+                fileName.endsWith(".xml") || fileName.endsWith(".xml.gz") || fileName.endsWith(".gz") -> {
+                    MalXmlImporter.parse(s)
+                }
+                fileName.endsWith(".csv") -> {
+                    CsvImporter.parse(s)
+                }
+                fileName.endsWith(".json") -> {
+                    JsonImporter.parse(s)
+                }
+                else -> {
+                    try {
+                        MalXmlImporter.parse(s)
+                    } catch (_: Exception) {
+                        JsonImporter.parse(s)
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun saveImportedEntries(entries: List<MediaEntry>, sourceName: String) {
+        if (entries.isEmpty()) {
+            _uiState.update {
+                it.copy(
+                    isImporting = false,
+                    statusMessage = "No valid media entries found in $sourceName",
+                    isErrorMessage = true
+                )
+            }
+            return
+        }
+
+        val (inserted, updated) = withContext(Dispatchers.IO) {
+            repository.importEntries(entries, _uiState.value.selectedConflictStrategy)
+        }
+
+        _uiState.update {
+            it.copy(
+                isImporting = false,
+                statusMessage = "Imported ${entries.size} entries from $sourceName ($inserted added, $updated updated)",
+                isErrorMessage = false
+            )
         }
     }
 }

@@ -10,8 +10,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -58,7 +59,7 @@ fun HomeScreen(
                     onSearchQueryChange = { viewModel.setSearchQuery(it) },
                     isSearchActive = state.isSearchActive,
                     onToggleSearch = { viewModel.toggleSearch() },
-                    onRefresh = { /* UI flows are automatically reactive */ },
+                    onRefresh = { /* Flows auto-update */ },
                     selectedSort = state.selectedSort,
                     onSortSelected = { viewModel.selectSort(it) }
                 )
@@ -95,9 +96,12 @@ fun HomeScreen(
                     searchQuery = state.searchQuery
                 )
             } else {
-                LazyColumn(
+                // Adaptive Grid: 1 column on phone (400-500dp), 2 columns on tablet portrait (600-900dp), 3 columns on tablet landscape (>1000dp)
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 360.dp),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(
@@ -155,7 +159,7 @@ private fun EmptyState(
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Tap the + button to add one or import from Settings",
+            text = "Tap + to create an entry or import from Settings",
             style = MaterialTheme.typography.bodySmall,
             color = LXTextSecondary.copy(alpha = 0.7f)
         )
