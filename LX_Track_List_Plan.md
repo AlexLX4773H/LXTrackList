@@ -348,7 +348,7 @@ For **Manga / Manhwa / Books** (flexible — show whichever fields are populated
 | Tab        | Icon | Screen                                          |
 |------------|------|-------------------------------------------------|
 | **Home**   | 🏠   | Main list with category dropdown/drawer + status filters |
-| **Library**| 📑   | All entries in a grid/list view, searchable     |
+| **Library**| 📑   | All entries searchable with multi-select, bulk delete, advanced filters (status, score, priority, airing, custom categories), and 8 sort options |
 | **Stats**  | 📊   | Charts: entries per status, per category, scores|
 | **Settings**| ⚙️  | Import/Export, theme, about                     |
 

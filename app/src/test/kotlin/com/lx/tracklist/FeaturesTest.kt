@@ -4,8 +4,10 @@ import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.Priority
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.ui.library.LibrarySortOption
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -96,5 +98,48 @@ class FeaturesTest {
 
         assertEquals(setOf(20L, 40L, 50L), inverted)
     }
-}
 
+    @Test
+    fun testLibrarySortingLogic() {
+        val entry1 = MediaEntry(id = 1L, title = "Bleach", score = 8, currentEpisodes = 10, totalEpisodes = 20)
+        val entry2 = MediaEntry(id = 2L, title = "Attack on Titan", score = 10, currentEpisodes = 20, totalEpisodes = 20)
+        val entry3 = MediaEntry(id = 3L, title = "Chainsaw Man", score = 7, currentEpisodes = 1, totalEpisodes = 12)
+        val list = listOf(entry1, entry2, entry3)
+
+        // Title ASC
+        val byTitleAsc = list.sortedBy { it.title.lowercase() }
+        assertEquals(listOf("Attack on Titan", "Bleach", "Chainsaw Man"), byTitleAsc.map { it.title })
+
+        // Title DESC
+        val byTitleDesc = list.sortedByDescending { it.title.lowercase() }
+        assertEquals(listOf("Chainsaw Man", "Bleach", "Attack on Titan"), byTitleDesc.map { it.title })
+
+        // Score DESC
+        val byScoreDesc = list.sortedWith(compareByDescending<MediaEntry> { it.score ?: -1 }.thenByDescending { it.updatedAt })
+        assertEquals(listOf(10, 8, 7), byScoreDesc.map { it.score })
+
+        // Progress DESC
+        val byProgressDesc = list.sortedByDescending { it.progressFraction }
+        assertEquals(listOf(2L, 1L, 3L), byProgressDesc.map { it.id })
+    }
+
+    @Test
+    fun testLibraryFilterScoreAndAiring() {
+        val entries = listOf(
+            MediaEntry(id = 1L, title = "A", score = 9, isAiring = true, status = MediaStatus.WATCHING),
+            MediaEntry(id = 2L, title = "B", score = 6, isAiring = false, status = MediaStatus.COMPLETED),
+            MediaEntry(id = 3L, title = "C", score = null, isAiring = true, status = MediaStatus.PLAN_TO_WATCH)
+        )
+
+        val score8Plus = entries.filter { (it.score ?: 0) >= 8 }
+        assertEquals(1, score8Plus.size)
+        assertEquals("A", score8Plus.first().title)
+
+        val unrated = entries.filter { it.score == null || it.score == 0 }
+        assertEquals(1, unrated.size)
+        assertEquals("C", unrated.first().title)
+
+        val airingOnly = entries.filter { it.isAiring }
+        assertEquals(2, airingOnly.size)
+    }
+}
