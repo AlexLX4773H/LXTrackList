@@ -141,13 +141,15 @@ object StorageHelper {
                 lower.endsWith(".xml.gz") ||
                 lower.endsWith(".gz") ||
                 lower.endsWith(".csv") ||
-                lower.endsWith(".json")
+                lower.endsWith(".json") ||
+                lower.endsWith(".tachibk")
     }
 
     private fun detectType(name: String): String {
         val lower = name.lowercase()
         return when {
-            lower.endsWith(".xml.gz") || lower.endsWith(".gz") -> "MAL XML (GZ)"
+            lower.endsWith(".tachibk") || lower.endsWith(".proto.gz") -> "Tachiyomi (.tachibk)"
+            lower.endsWith(".xml.gz") || (lower.endsWith(".gz") && !lower.endsWith(".proto.gz")) -> "MAL XML (GZ)"
             lower.endsWith(".xml") -> "MAL XML"
             lower.endsWith(".csv") -> "CSV"
             lower.endsWith(".json") -> "JSON"

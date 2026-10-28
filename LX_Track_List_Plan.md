@@ -361,6 +361,7 @@ For **Manga / Manhwa / Books** (flexible — show whichever fields are populated
 | Source          | Format                       | File Extension        | Status       |
 |-----------------|------------------------------|----------------------|--------------|
 | MyAnimeList     | XML (gzipped)                | `.xml.gz` / `.xml`   | **Phase 1**  |
+| Tachiyomi/Mihon | Protobuf (gzipped) / JSON    | `.tachibk` / `.proto.gz` | **Phase 1** |
 | Generic CSV     | Comma-separated values       | `.csv`               | **Phase 1**  |
 | Generic JSON    | JSON array of entries        | `.json`              | **Phase 1**  |
 | AniList         | JSON                         | `.json`              | Phase 2      |
@@ -742,12 +743,13 @@ val exportLauncher = rememberLauncherForActivityResult(
 
 ### 11.2 MIME Types for Import
 
-| Format      | MIME Type                                   |
-|-------------|---------------------------------------------|
-| XML (gzip)  | `application/gzip`, `application/x-gzip`   |
-| XML         | `text/xml`, `application/xml`               |
-| CSV         | `text/csv`, `text/comma-separated-values`   |
-| JSON        | `application/json`                          |
+| Format            | MIME Type                                              |
+|-------------------|--------------------------------------------------------|
+| Tachiyomi/Mihon   | `application/gzip`, `application/octet-stream`, `*/*`  |
+| XML (gzip)        | `application/gzip`, `application/x-gzip`              |
+| XML               | `text/xml`, `application/xml`                          |
+| CSV               | `text/csv`, `text/comma-separated-values`              |
+| JSON              | `application/json`                                     |
 
 ### 11.3 Conflict Resolution on Import
 

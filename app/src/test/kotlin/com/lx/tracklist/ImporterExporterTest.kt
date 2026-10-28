@@ -3,15 +3,18 @@ package com.lx.tracklist
 import com.lx.tracklist.data.exporter.JsonExporter
 import com.lx.tracklist.data.importer.CsvImporter
 import com.lx.tracklist.data.importer.JsonImporter
+import com.lx.tracklist.data.importer.TachiyomiImporter
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.TrackingUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.util.zip.GZIPOutputStream
 
 class ImporterExporterTest {
 
@@ -84,5 +87,258 @@ class ImporterExporterTest {
         assertEquals(true, imported[0].isFavorite)
         assertEquals("Berserk", imported[1].title)
         assertEquals(375, imported[1].currentChapters)
+    }
+
+    @Test
+    fun testTachiyomiImporterProtobufMangaAndManhwa() {
+        val rootOut = ByteArrayOutputStream()
+
+        // 1. Categories: 0 -> Reading, 1 -> Manhwa
+        val cat0Out = ByteArrayOutputStream()
+        writeStringField(cat0Out, 1, "Reading")
+        writeVarintField(cat0Out, 2, 0L)
+        writeMessageField(rootOut, 2, cat0Out.toByteArray())
+
+        val cat1Out = ByteArrayOutputStream()
+        writeStringField(cat1Out, 1, "Manhwa")
+        writeVarintField(cat1Out, 2, 1L)
+        writeMessageField(rootOut, 2, cat1Out.toByteArray())
+
+        // 2. Sources: 1001 -> Asura Scans, 1002 -> MangaDex
+        val src1Out = ByteArrayOutputStream()
+        writeVarintField(src1Out, 1, 1001L)
+        writeStringField(src1Out, 2, "Asura Scans")
+        writeMessageField(rootOut, 101, src1Out.toByteArray())
+
+        val src2Out = ByteArrayOutputStream()
+        writeVarintField(src2Out, 1, 1002L)
+        writeStringField(src2Out, 2, "MangaDex")
+        writeMessageField(rootOut, 101, src2Out.toByteArray())
+
+        // 3. Manga 1: Solo Leveling (Manhwa)
+        val manga1Out = ByteArrayOutputStream()
+        writeVarintField(manga1Out, 1, 1001L) // source = Asura Scans
+        writeStringField(manga1Out, 2, "/manga/solo-leveling")
+        writeStringField(manga1Out, 3, "Solo Leveling")
+        writeStringField(manga1Out, 4, "DUBU")
+        writeStringField(manga1Out, 5, "Chugong")
+        writeStringField(manga1Out, 6, "In a world where hunters must battle deadly monsters...")
+        writeStringField(manga1Out, 7, "Action")
+        writeStringField(manga1Out, 7, "Fantasy")
+        writeStringField(manga1Out, 7, "Manhwa")
+        writeStringField(manga1Out, 7, "Webtoon")
+        writeVarintField(manga1Out, 8, 1L) // Status: Completed
+        writeStringField(manga1Out, 9, "https://example.com/covers/solo_leveling.jpg")
+        writeVarintField(manga1Out, 13, 1600000000000L) // dateAdded
+        writeVarintField(manga1Out, 17, 1L) // category: Manhwa
+
+        // Manga 1 Chapters: 179 read
+        for (ch in 1..5) {
+            val chOut = ByteArrayOutputStream()
+            writeStringField(chOut, 1, "/chapter/$ch")
+            writeStringField(chOut, 2, "Chapter $ch")
+            writeVarintField(chOut, 4, 1L) // read = true
+            writeFloatField(chOut, 9, ch.toFloat())
+            writeMessageField(manga1Out, 16, chOut.toByteArray())
+        }
+
+        // Manga 1 Tracking: MAL tracking
+        val track1Out = ByteArrayOutputStream()
+        writeVarintField(track1Out, 1, 1L) // syncId = 1 (MAL)
+        writeVarintField(track1Out, 2, 121496L) // libraryId
+        writeVarintField(track1Out, 3, 121496L) // mediaIdInt
+        writeFloatField(track1Out, 6, 179f) // lastChapterRead = 179
+        writeVarintField(track1Out, 7, 179L) // totalChapters = 179
+        writeFloatField(track1Out, 8, 9.5f) // score = 9.5
+        writeVarintField(track1Out, 9, 2L) // status = Completed in MAL
+        writeMessageField(manga1Out, 18, track1Out.toByteArray())
+
+        writeMessageField(rootOut, 1, manga1Out.toByteArray())
+
+        // 4. Manga 2: Berserk (Manga)
+        val manga2Out = ByteArrayOutputStream()
+        writeVarintField(manga2Out, 1, 1002L) // source = MangaDex
+        writeStringField(manga2Out, 2, "/manga/berserk")
+        writeStringField(manga2Out, 3, "Berserk")
+        writeStringField(manga2Out, 4, "Kentaro Miura")
+        writeStringField(manga2Out, 5, "Kentaro Miura")
+        writeStringField(manga2Out, 6, "Guts, a former mercenary known as the Black Swordsman...")
+        writeStringField(manga2Out, 7, "Dark Fantasy")
+        writeStringField(manga2Out, 7, "Seinen")
+        writeStringField(manga2Out, 7, "Action")
+        writeVarintField(manga2Out, 8, 2L) // Status: Ongoing
+        writeStringField(manga2Out, 9, "https://example.com/covers/berserk.jpg")
+        writeVarintField(manga2Out, 13, 1650000000000L)
+        writeVarintField(manga2Out, 17, 0L) // category: Reading
+
+        // Manga 2 Chapters: ch 1 read, ch 2 read, ch 3 unread
+        val bch1 = ByteArrayOutputStream()
+        writeStringField(bch1, 1, "/ch/1")
+        writeStringField(bch1, 2, "Chapter 1")
+        writeVarintField(bch1, 4, 1L) // read = true
+        writeFloatField(bch1, 9, 1f)
+        writeMessageField(manga2Out, 16, bch1.toByteArray())
+
+        val bch2 = ByteArrayOutputStream()
+        writeStringField(bch2, 1, "/ch/2")
+        writeStringField(bch2, 2, "Chapter 2")
+        writeVarintField(bch2, 4, 1L) // read = true
+        writeFloatField(bch2, 9, 2f)
+        writeMessageField(manga2Out, 16, bch2.toByteArray())
+
+        val bch3 = ByteArrayOutputStream()
+        writeStringField(bch3, 1, "/ch/3")
+        writeStringField(bch3, 2, "Chapter 3")
+        writeVarintField(bch3, 4, 0L) // read = false
+        writeFloatField(bch3, 9, 3f)
+        writeMessageField(manga2Out, 16, bch3.toByteArray())
+
+        // Manga 2 Tracking: AniList tracking with 375 chapters read
+        val track2Out = ByteArrayOutputStream()
+        writeVarintField(track2Out, 1, 2L) // syncId = 2 (AniList)
+        writeVarintField(track2Out, 2, 30002L)
+        writeVarintField(track2Out, 3, 30002L)
+        writeFloatField(track2Out, 6, 375f) // lastChapterRead
+        writeVarintField(track2Out, 7, 0L) // ongoing total = 0
+        writeFloatField(track2Out, 8, 100f) // AniList 100 scale -> score 10
+        writeVarintField(track2Out, 9, 1L) // status = 1 (Current / Reading)
+        writeMessageField(manga2Out, 18, track2Out.toByteArray())
+
+        writeMessageField(rootOut, 1, manga2Out.toByteArray())
+
+        // Gzip compress the protobuf stream to simulate a real .tachibk file
+        val tachibkBytes = gzipBytes(rootOut.toByteArray())
+        val entries = TachiyomiImporter.parse(ByteArrayInputStream(tachibkBytes))
+
+        assertEquals(2, entries.size)
+
+        // Validate Solo Leveling (Manhwa)
+        val solo = entries[0]
+        assertEquals("Solo Leveling", solo.title)
+        assertEquals(MediaType.MANHWA, solo.mediaType)
+        assertEquals(MediaStatus.COMPLETED, solo.status)
+        assertEquals(10, solo.score) // 9.5 rounded
+        assertEquals(179, solo.currentChapters)
+        assertEquals(179, solo.totalChapters)
+        assertEquals(TrackingUnit.CHAPTERS, solo.trackingUnit)
+        assertEquals("MAL", solo.externalSource)
+        assertEquals("121496", solo.externalId)
+        assertEquals("https://example.com/covers/solo_leveling.jpg", solo.coverImageUri)
+        assertTrue(solo.tags?.contains("Manhwa") == true)
+        assertTrue(solo.tags?.contains("Webtoon") == true)
+        assertTrue(solo.notes?.contains("Author: Chugong • Artist: DUBU") == true)
+
+        // Validate Berserk (Manga)
+        val berserk = entries[1]
+        assertEquals("Berserk", berserk.title)
+        assertEquals(MediaType.MANGA, berserk.mediaType)
+        assertEquals(MediaStatus.WATCHING, berserk.status) // Watching = Reading
+        assertEquals(10, berserk.score) // 100 / 10 = 10
+        assertEquals(375, berserk.currentChapters)
+        assertEquals(0, berserk.totalChapters)
+        assertEquals(TrackingUnit.CHAPTERS, berserk.trackingUnit)
+        assertEquals("ANILIST", berserk.externalSource)
+        assertEquals("30002", berserk.externalId)
+        assertTrue(berserk.tags?.contains("Dark Fantasy") == true)
+        assertTrue(berserk.notes?.contains("Author: Kentaro Miura") == true)
+    }
+
+    @Test
+    fun testTachiyomiImporterJsonFallback() {
+        val jsonData = """
+            {
+              "backupCategories": [
+                { "name": "Plan to Read", "order": 0 },
+                { "name": "Manhwa", "order": 1 }
+              ],
+              "backupManga": [
+                {
+                  "title": "Tower of God",
+                  "genre": ["Action", "Fantasy", "Manhwa", "Webtoon"],
+                  "status": 2,
+                  "categories": [1],
+                  "chapters": [
+                    { "chapterNumber": 1.0, "read": true },
+                    { "chapterNumber": 2.0, "read": true },
+                    { "chapterNumber": 3.0, "read": false }
+                  ]
+                },
+                {
+                  "title": "Vagabond",
+                  "genre": ["Action", "Historical", "Samurai"],
+                  "status": 3,
+                  "categories": [0],
+                  "chapters": [
+                    { "chapterNumber": 1.0, "read": false }
+                  ]
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val gzipped = gzipBytes(jsonData.toByteArray(Charsets.UTF_8))
+        val entries = TachiyomiImporter.parse(ByteArrayInputStream(gzipped))
+
+        assertEquals(2, entries.size)
+
+        val tog = entries[0]
+        assertEquals("Tower of God", tog.title)
+        assertEquals(MediaType.MANHWA, tog.mediaType)
+        assertEquals(MediaStatus.WATCHING, tog.status)
+        assertEquals(2, tog.currentChapters)
+
+        val vagabond = entries[1]
+        assertEquals("Vagabond", vagabond.title)
+        assertEquals(MediaType.MANGA, vagabond.mediaType)
+        assertEquals(MediaStatus.PLAN_TO_WATCH, vagabond.status)
+        assertEquals(0, vagabond.currentChapters)
+    }
+
+    @Test
+    fun testTachiyomiImporterEmptyAndCorrupted() {
+        assertEquals(0, TachiyomiImporter.parse(ByteArrayInputStream(ByteArray(0))).size)
+        assertEquals(0, TachiyomiImporter.parse(ByteArrayInputStream(byteArrayOf(0x01, 0x02, 0x03))).size)
+    }
+
+    private fun writeVarint(out: ByteArrayOutputStream, value: Long) {
+        var v = value
+        while ((v and 0x7FL.inv()) != 0L) {
+            out.write(((v and 0x7F) or 0x80).toInt())
+            v = v ushr 7
+        }
+        out.write((v and 0x7F).toInt())
+    }
+
+    private fun writeStringField(out: ByteArrayOutputStream, fieldNumber: Int, value: String) {
+        val b = value.toByteArray(Charsets.UTF_8)
+        writeVarint(out, ((fieldNumber shl 3) or 2).toLong())
+        writeVarint(out, b.size.toLong())
+        out.write(b)
+    }
+
+    private fun writeVarintField(out: ByteArrayOutputStream, fieldNumber: Int, value: Long) {
+        writeVarint(out, ((fieldNumber shl 3) or 0).toLong())
+        writeVarint(out, value)
+    }
+
+    private fun writeFloatField(out: ByteArrayOutputStream, fieldNumber: Int, value: Float) {
+        writeVarint(out, ((fieldNumber shl 3) or 5).toLong())
+        val bits = java.lang.Float.floatToIntBits(value)
+        out.write(bits and 0xFF)
+        out.write((bits ushr 8) and 0xFF)
+        out.write((bits ushr 16) and 0xFF)
+        out.write((bits ushr 24) and 0xFF)
+    }
+
+    private fun writeMessageField(out: ByteArrayOutputStream, fieldNumber: Int, messageBytes: ByteArray) {
+        writeVarint(out, ((fieldNumber shl 3) or 2).toLong())
+        writeVarint(out, messageBytes.size.toLong())
+        out.write(messageBytes)
+    }
+
+    private fun gzipBytes(data: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream()
+        GZIPOutputStream(out).use { it.write(data) }
+        return out.toByteArray()
     }
 }

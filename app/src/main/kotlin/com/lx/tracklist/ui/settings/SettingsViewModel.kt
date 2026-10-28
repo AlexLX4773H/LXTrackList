@@ -9,6 +9,7 @@ import com.lx.tracklist.data.exporter.JsonExporter
 import com.lx.tracklist.data.importer.CsvImporter
 import com.lx.tracklist.data.importer.JsonImporter
 import com.lx.tracklist.data.importer.MalXmlImporter
+import com.lx.tracklist.data.importer.TachiyomiImporter
 import com.lx.tracklist.data.local.StorageFileInfo
 import com.lx.tracklist.data.local.StorageHelper
 import com.lx.tracklist.data.model.MediaEntry
@@ -217,7 +218,10 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         val fileName = name.lowercase()
         return stream.use { s ->
             when {
-                fileName.endsWith(".xml") || fileName.endsWith(".xml.gz") || fileName.endsWith(".gz") -> {
+                fileName.endsWith(".tachibk") || fileName.endsWith(".proto.gz") -> {
+                    TachiyomiImporter.parse(s)
+                }
+                fileName.endsWith(".xml") || fileName.endsWith(".xml.gz") -> {
                     MalXmlImporter.parse(s)
                 }
                 fileName.endsWith(".csv") -> {
@@ -226,12 +230,33 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 fileName.endsWith(".json") -> {
                     JsonImporter.parse(s)
                 }
-                else -> {
-                    try {
-                        MalXmlImporter.parse(s)
+                fileName.endsWith(".gz") -> {
+                    val bytes = s.readBytes()
+                    val malResult = try {
+                        MalXmlImporter.parse(java.io.ByteArrayInputStream(bytes))
                     } catch (_: Exception) {
-                        JsonImporter.parse(s)
+                        emptyList()
                     }
+                    if (malResult.isNotEmpty()) malResult else TachiyomiImporter.parse(java.io.ByteArrayInputStream(bytes))
+                }
+                else -> {
+                    val bytes = s.readBytes()
+                    try {
+                        val tachibkResult = TachiyomiImporter.parse(java.io.ByteArrayInputStream(bytes))
+                        if (tachibkResult.isNotEmpty()) return@use tachibkResult
+                    } catch (_: Exception) {}
+
+                    try {
+                        val malResult = MalXmlImporter.parse(java.io.ByteArrayInputStream(bytes))
+                        if (malResult.isNotEmpty()) return@use malResult
+                    } catch (_: Exception) {}
+
+                    try {
+                        val jsonResult = JsonImporter.parse(java.io.ByteArrayInputStream(bytes))
+                        if (jsonResult.isNotEmpty()) return@use jsonResult
+                    } catch (_: Exception) {}
+
+                    CsvImporter.parse(java.io.ByteArrayInputStream(bytes))
                 }
             }
         }

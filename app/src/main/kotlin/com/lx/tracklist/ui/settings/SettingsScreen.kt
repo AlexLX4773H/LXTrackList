@@ -289,7 +289,7 @@ fun SettingsScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "No files found in ${state.homeFolderPath}/input\nCopy your MAL XML/GZ, CSV, or JSON files there to import instantly.",
+                                        text = "No files found in ${state.homeFolderPath}/input\nCopy your MAL XML/GZ, Tachiyomi (.tachibk), CSV, or JSON files there to import instantly.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = LXTextSecondary,
                                         lineHeight = 18.sp
