@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class LibraryUiState(
@@ -27,51 +28,51 @@ data class LibraryUiState(
     val isSelectionMode: Boolean get() = selectedIds.isNotEmpty()
 }
 
+private data class LibraryFilterState(
+    val query: String = "",
+    val categoryFilter: MediaType? = null,
+    val customCategoryFilter: String? = null,
+    val onlyFavorites: Boolean = false,
+    val selectedIds: Set<Long> = emptySet()
+)
+
 class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
 
-    private val _searchQuery = MutableStateFlow("")
-    private val _categoryFilter = MutableStateFlow<MediaType?>(null)
-    private val _customCategoryFilter = MutableStateFlow<String?>(null)
-    private val _onlyFavorites = MutableStateFlow(false)
-    private val _selectedIds = MutableStateFlow<Set<Long>>(emptySet())
+    private val _filterState = MutableStateFlow(LibraryFilterState())
 
     val uiState: StateFlow<LibraryUiState> = combine(
-        _searchQuery,
-        _categoryFilter,
-        _customCategoryFilter,
-        _onlyFavorites,
-        _selectedIds,
+        _filterState,
         repository.getAllEntries(),
         repository.customCategories
-    ) { query, catFilter, customCatFilter, favsOnly, selectedIds, allEntries, customCats ->
+    ) { filter, allEntries, customCats ->
         var list = allEntries
 
-        if (customCatFilter != null) {
-            list = list.filter { it.customCategory == customCatFilter }
-        } else if (catFilter != null) {
-            list = list.filter { it.mediaType == catFilter && it.customCategory == null }
+        if (filter.customCategoryFilter != null) {
+            list = list.filter { it.customCategory == filter.customCategoryFilter }
+        } else if (filter.categoryFilter != null) {
+            list = list.filter { it.mediaType == filter.categoryFilter && it.customCategory == null }
         }
 
-        if (favsOnly) {
+        if (filter.onlyFavorites) {
             list = list.filter { it.isFavorite }
         }
 
-        if (query.isNotBlank()) {
+        if (filter.query.isNotBlank()) {
             list = list.filter {
-                it.title.contains(query, ignoreCase = true) ||
-                        (it.alternateTitle?.contains(query, ignoreCase = true) == true) ||
-                        (it.tags?.contains(query, ignoreCase = true) == true)
+                it.title.contains(filter.query, ignoreCase = true) ||
+                        (it.alternateTitle?.contains(filter.query, ignoreCase = true) == true) ||
+                        (it.tags?.contains(filter.query, ignoreCase = true) == true)
             }
         }
 
         LibraryUiState(
             entries = list,
-            searchQuery = query,
-            selectedCategoryFilter = catFilter,
-            selectedCustomCategoryFilter = customCatFilter,
-            onlyFavorites = favsOnly,
+            searchQuery = filter.query,
+            selectedCategoryFilter = filter.categoryFilter,
+            selectedCustomCategoryFilter = filter.customCategoryFilter,
+            onlyFavorites = filter.onlyFavorites,
             totalCount = list.size,
-            selectedIds = selectedIds,
+            selectedIds = filter.selectedIds,
             customCategories = customCats
         )
     }.stateIn(
@@ -81,64 +82,65 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
     )
 
     fun setSearchQuery(query: String) {
-        _searchQuery.value = query
+        _filterState.update { it.copy(query = query) }
     }
 
     fun setCategoryFilter(category: MediaType?) {
-        _categoryFilter.value = category
-        _customCategoryFilter.value = null
+        _filterState.update { it.copy(categoryFilter = category, customCategoryFilter = null) }
     }
 
     fun setCustomCategoryFilter(customCat: String?) {
-        _customCategoryFilter.value = customCat
-        _categoryFilter.value = null
+        _filterState.update { it.copy(customCategoryFilter = customCat, categoryFilter = null) }
     }
 
     fun toggleFavoritesFilter() {
-        _onlyFavorites.value = !_onlyFavorites.value
+        _filterState.update { it.copy(onlyFavorites = !it.onlyFavorites) }
     }
 
     fun toggleSelect(id: Long) {
-        val current = _selectedIds.value
-        _selectedIds.value = if (current.contains(id)) {
-            current - id
-        } else {
-            current + id
+        _filterState.update { state ->
+            val current = state.selectedIds
+            val updated = if (current.contains(id)) current - id else current + id
+            state.copy(selectedIds = updated)
         }
     }
 
     fun selectAll(visibleIds: List<Long>) {
-        _selectedIds.value = visibleIds.toSet()
+        _filterState.update { it.copy(selectedIds = visibleIds.toSet()) }
     }
 
     fun selectRange(visibleIds: List<Long>) {
-        val current = _selectedIds.value
-        if (current.isEmpty()) return
-        val indices = visibleIds.mapIndexedNotNull { index, id ->
-            if (current.contains(id)) index else null
+        _filterState.update { state ->
+            val current = state.selectedIds
+            if (current.isEmpty()) return@update state
+            val indices = visibleIds.mapIndexedNotNull { index, id ->
+                if (current.contains(id)) index else null
+            }
+            if (indices.isEmpty()) return@update state
+            val minIdx = indices.minOrNull() ?: 0
+            val maxIdx = indices.maxOrNull() ?: (visibleIds.size - 1)
+            val rangeIds = visibleIds.subList(minIdx, (maxIdx + 1).coerceAtMost(visibleIds.size)).toSet()
+            state.copy(selectedIds = current + rangeIds)
         }
-        if (indices.isEmpty()) return
-        val minIdx = indices.minOrNull() ?: 0
-        val maxIdx = indices.maxOrNull() ?: (visibleIds.size - 1)
-        val rangeIds = visibleIds.subList(minIdx, (maxIdx + 1).coerceAtMost(visibleIds.size)).toSet()
-        _selectedIds.value = current + rangeIds
     }
 
     fun invertSelection(visibleIds: List<Long>) {
-        val current = _selectedIds.value
-        _selectedIds.value = visibleIds.filter { !current.contains(it) }.toSet()
+        _filterState.update { state ->
+            val current = state.selectedIds
+            state.copy(selectedIds = visibleIds.filter { !current.contains(it) }.toSet())
+        }
     }
 
     fun clearSelection() {
-        _selectedIds.value = emptySet()
+        _filterState.update { it.copy(selectedIds = emptySet()) }
     }
 
     fun deleteSelected() {
         viewModelScope.launch {
-            val toDelete = _selectedIds.value.toList()
+            val toDelete = _filterState.value.selectedIds.toList()
             if (toDelete.isNotEmpty()) {
                 repository.deleteEntries(toDelete)
-                _selectedIds.value = emptySet()
+                clearSelection()
             }
         }
     }
