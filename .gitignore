@@ -69,3 +69,9 @@ scratch/
 *.swp
 *.bak
 *~
+
+# Data and plan folders
+data/
+dat/
+plan/
+
