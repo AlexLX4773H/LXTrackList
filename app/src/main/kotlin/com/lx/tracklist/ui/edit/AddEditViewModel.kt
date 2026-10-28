@@ -20,6 +20,7 @@ data class AddEditUiState(
     val title: String = "",
     val alternateTitle: String = "",
     val mediaType: MediaType = MediaType.ANIME,
+    val customCategory: String? = null,
     val status: MediaStatus = MediaStatus.WATCHING,
     val score: Int? = null,
     val priority: Priority = Priority.MEDIUM,
@@ -66,6 +67,8 @@ class AddEditViewModel(
     private val _uiState = MutableStateFlow(AddEditUiState())
     val uiState: StateFlow<AddEditUiState> = _uiState.asStateFlow()
 
+    val customCategories = repository.customCategories
+
     init {
         if (entryId != null && entryId > 0) {
             viewModelScope.launch {
@@ -77,6 +80,7 @@ class AddEditViewModel(
                             title = entry.title,
                             alternateTitle = entry.alternateTitle ?: "",
                             mediaType = entry.mediaType,
+                            customCategory = entry.customCategory,
                             status = entry.status,
                             score = entry.score,
                             priority = entry.priority,
@@ -113,7 +117,8 @@ class AddEditViewModel(
 
     fun updateTitle(value: String) = _uiState.update { it.copy(title = value) }
     fun updateAlternateTitle(value: String) = _uiState.update { it.copy(alternateTitle = value) }
-    fun updateMediaType(value: MediaType) = _uiState.update { it.copy(mediaType = value) }
+    fun updateMediaType(value: MediaType) = _uiState.update { it.copy(mediaType = value, customCategory = null) }
+    fun updateCustomCategory(name: String?) = _uiState.update { it.copy(customCategory = name) }
     fun updateStatus(value: MediaStatus) = _uiState.update { it.copy(status = value) }
     fun updateScore(value: Int?) = _uiState.update { it.copy(score = value) }
     fun updatePriority(value: Priority) = _uiState.update { it.copy(priority = value) }
@@ -155,6 +160,7 @@ class AddEditViewModel(
                 title = s.title.trim(),
                 alternateTitle = s.alternateTitle.trim().ifBlank { null },
                 mediaType = s.mediaType,
+                customCategory = s.customCategory?.trim()?.ifBlank { null },
                 status = s.status,
                 score = s.score,
                 priority = s.priority,

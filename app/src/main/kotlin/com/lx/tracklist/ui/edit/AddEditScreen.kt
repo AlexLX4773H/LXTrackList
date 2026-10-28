@@ -1,5 +1,6 @@
 package com.lx.tracklist.ui.edit
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,8 +26,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -50,6 +54,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,10 +65,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.Priority
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.ui.components.CoverImageSearchDialog
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXErrorRed
@@ -80,6 +89,10 @@ fun AddEditScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
+    val customCategories by viewModel.customCategories.collectAsState(initial = emptyList())
+    var showCoverSearchDialog by remember { mutableStateOf(false) }
+
+    BackHandler(onBack = onNavigateBack)
 
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) {
@@ -150,10 +163,34 @@ fun AddEditScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 MediaType.entries.forEach { cat ->
+                    val isSelected = state.customCategory == null && state.mediaType == cat
                     FilterChip(
-                        selected = state.mediaType == cat,
+                        selected = isSelected,
                         onClick = { viewModel.updateMediaType(cat) },
                         label = { Text(cat.displayName) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LXPrimaryGreen,
+                            selectedLabelColor = LXBackgroundBlack,
+                            containerColor = LXSurfaceElevated,
+                            labelColor = LXTextSecondary
+                        )
+                    )
+                }
+
+                customCategories.forEach { customCat ->
+                    val isSelected = state.customCategory == customCat.name
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            viewModel.updateCustomCategory(customCat.name)
+                            if (customCat.isWatchType) {
+                                viewModel.updateMediaType(MediaType.SHOW)
+                            } else {
+                                viewModel.updateMediaType(MediaType.MANGA)
+                            }
+                            viewModel.updateTrackingUnit(customCat.trackingUnit)
+                        },
+                        label = { Text("✨ ${customCat.name}") },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = LXPrimaryGreen,
                             selectedLabelColor = LXBackgroundBlack,
@@ -444,15 +481,76 @@ fun AddEditScreen(
                 }
             }
 
-            // Cover Image URI
+            // Cover Image Section with Web Search Button & Preview
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Cover Image", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)
+                Button(
+                    onClick = { showCoverSearchDialog = true },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXPrimaryGreen.copy(alpha = 0.15f),
+                        contentColor = LXPrimaryGreen
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Search Web for Cover", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            if (state.coverImageUri.isNotBlank()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AsyncImage(
+                        model = state.coverImageUri,
+                        contentDescription = "Cover Preview",
+                        modifier = Modifier
+                            .size(60.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .border(1.dp, LXBorder, RoundedCornerShape(6.dp)),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Cover preview", color = LXPrimaryGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(state.coverImageUri, color = LXTextSecondary, fontSize = 11.sp, maxLines = 1)
+                    }
+                    IconButton(onClick = { viewModel.updateCoverUri("") }) {
+                        Icon(Icons.Default.Close, contentDescription = "Remove", tint = LXTextSecondary, modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+
             OutlinedTextField(
                 value = state.coverImageUri,
                 onValueChange = { viewModel.updateCoverUri(it) },
-                label = { Text("Cover Image URL / URI") },
+                label = { Text("Cover Image URL (or search above)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 colors = outlinedColors()
             )
+
+            if (showCoverSearchDialog) {
+                val q = (state.title.ifBlank { "manga" }) + " cover"
+                CoverImageSearchDialog(
+                    initialQuery = q,
+                    onImageSelected = { url ->
+                        viewModel.updateCoverUri(url)
+                        showCoverSearchDialog = false
+                    },
+                    onDismiss = { showCoverSearchDialog = false }
+                )
+            }
 
             // Tags
             OutlinedTextField(

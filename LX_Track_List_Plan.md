@@ -18,7 +18,7 @@
 | **Architecture**   | MVVM with Repository pattern                                                   |
 | **Theme**          | Dark theme — **Primary Green `#A7EF60`** on **Black `#000000` / Dark surfaces** |
 | **Logo**           | Cropped neon green circle with "**LX**" text on black bg (`plan/lx_logo.png`)  |
-| **Current Users**  | Single user (multi-user support planned for later)                             |
+| **Current Users**  | Multi-user profiles with fast switcher by tapping the LX Logo                 |
 | **Inspiration**    | [AnymeX](https://github.com/RyanYuuki/AnymeX) · [Anikku](https://github.com/komikku-app/anikku) · AnymeX UI layout (screenshot) |
 
 ---

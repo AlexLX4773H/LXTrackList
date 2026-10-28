@@ -1,8 +1,10 @@
 package com.lx.tracklist.ui.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,18 +26,22 @@ import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lx.tracklist.LXApplication
 import com.lx.tracklist.R
+import com.lx.tracklist.ui.components.UserSwitcherSheet
 import com.lx.tracklist.ui.detail.DetailScreen
 import com.lx.tracklist.ui.detail.DetailViewModel
 import com.lx.tracklist.ui.detail.DetailViewModelFactory
@@ -70,14 +76,49 @@ sealed class NavDestination {
 @Composable
 fun AppNavigation() {
     val repository = LXApplication.instance.repository
-    var currentDestination by remember { mutableStateOf<NavDestination>(NavDestination.Home) }
+    var backStack by remember { mutableStateOf(listOf<NavDestination>(NavDestination.Home)) }
+    val currentDestination = backStack.last()
 
     val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModelFactory(repository))
+    val homeState by homeViewModel.uiState.collectAsState()
+
     val libraryViewModel: LibraryViewModel = viewModel(factory = LibraryViewModelFactory(repository))
     val statsViewModel: com.lx.tracklist.ui.stats.StatsViewModel = viewModel(
         factory = com.lx.tracklist.ui.stats.StatsViewModelFactory(repository)
     )
     val settingsViewModel: SettingsViewModel = viewModel(factory = SettingsViewModelFactory(repository))
+
+    fun navigateTo(destination: NavDestination) {
+        if (destination == currentDestination) return
+        val isTopLevel = destination in listOf(
+            NavDestination.Home,
+            NavDestination.Library,
+            NavDestination.Stats,
+            NavDestination.Settings
+        )
+        backStack = if (isTopLevel) {
+            if (destination == NavDestination.Home) {
+                listOf(NavDestination.Home)
+            } else {
+                listOf(NavDestination.Home, destination)
+            }
+        } else {
+            backStack + destination
+        }
+    }
+
+    fun navigateBack(): Boolean {
+        if (backStack.size > 1) {
+            backStack = backStack.dropLast(1)
+            return true
+        }
+        return false
+    }
+
+    // Root back handler to navigate back down the stack until reaching Home
+    BackHandler(enabled = backStack.size > 1) {
+        navigateBack()
+    }
 
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 600
@@ -102,17 +143,17 @@ fun AppNavigation() {
             is NavDestination.Home -> {
                 HomeScreen(
                     viewModel = homeViewModel,
-                    onEntryClick = { entryId -> currentDestination = NavDestination.Detail(entryId) },
-                    onAddNewEntry = { currentDestination = NavDestination.AddEdit(null) },
-                    onEditEntry = { entryId -> currentDestination = NavDestination.AddEdit(entryId) }
+                    onEntryClick = { entryId -> navigateTo(NavDestination.Detail(entryId)) },
+                    onAddNewEntry = { navigateTo(NavDestination.AddEdit(null)) },
+                    onEditEntry = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) }
                 )
             }
 
             is NavDestination.Library -> {
                 LibraryScreen(
                     viewModel = libraryViewModel,
-                    onEntryClick = { entryId -> currentDestination = NavDestination.Detail(entryId) },
-                    onEditEntry = { entryId -> currentDestination = NavDestination.AddEdit(entryId) }
+                    onEntryClick = { entryId -> navigateTo(NavDestination.Detail(entryId)) },
+                    onEditEntry = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) }
                 )
             }
 
@@ -135,8 +176,8 @@ fun AppNavigation() {
                 )
                 DetailScreen(
                     viewModel = detailViewModel,
-                    onNavigateBack = { currentDestination = NavDestination.Home },
-                    onEdit = { entryId -> currentDestination = NavDestination.AddEdit(entryId) }
+                    onNavigateBack = { navigateBack() },
+                    onEdit = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) }
                 )
             }
 
@@ -147,16 +188,22 @@ fun AppNavigation() {
                 )
                 AddEditScreen(
                     viewModel = addEditViewModel,
-                    onNavigateBack = {
-                        currentDestination = if (dest.entryId != null && dest.entryId > 0) {
-                            NavDestination.Detail(dest.entryId)
-                        } else {
-                            NavDestination.Home
-                        }
-                    }
+                    onNavigateBack = { navigateBack() }
                 )
             }
         }
+    }
+
+    // Global User Switcher Bottom Sheet
+    if (homeState.isUserSwitcherOpen) {
+        UserSwitcherSheet(
+            activeUser = homeState.activeUser,
+            allUsers = homeState.allUsers,
+            onSelectUser = { homeViewModel.switchUser(it) },
+            onCreateUser = { name, color -> homeViewModel.createUser(name, color) },
+            onDeleteUser = { homeViewModel.deleteUser(it) },
+            onDismiss = { homeViewModel.setUserSwitcherOpen(false) }
+        )
     }
 
     if (isTablet && isTopLevelScreen) {
@@ -175,13 +222,27 @@ fun AppNavigation() {
                     .border(width = 1.dp, color = LXBorder),
                 header = {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Image(
-                        painter = painterResource(R.drawable.lx_logo),
-                        contentDescription = "LX Logo",
+                    Box(
                         modifier = Modifier
                             .size(46.dp)
                             .clip(CircleShape)
-                    )
+                            .clickable { homeViewModel.setUserSwitcherOpen(true) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.lx_logo),
+                            contentDescription = "Switch User (LX Logo)",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .align(Alignment.BottomEnd)
+                                .clip(CircleShape)
+                                .background(parseHexColor(homeState.activeUser.avatarColorHex))
+                                .border(1.5.dp, LXBackgroundBlack, CircleShape)
+                        )
+                    }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             ) {
@@ -189,7 +250,7 @@ fun AppNavigation() {
                     val isSelected = currentDestination == dest
                     NavigationRailItem(
                         selected = isSelected,
-                        onClick = { currentDestination = dest },
+                        onClick = { navigateTo(dest) },
                         icon = {
                             Icon(
                                 imageVector = screen.icon,
@@ -235,7 +296,7 @@ fun AppNavigation() {
                             val isSelected = currentDestination == dest
                             NavigationBarItem(
                                 selected = isSelected,
-                                onClick = { currentDestination = dest },
+                                onClick = { navigateTo(dest) },
                                 icon = {
                                     Icon(
                                         imageVector = screen.icon,
@@ -265,5 +326,19 @@ fun AppNavigation() {
                 ScreenContent()
             }
         }
+    }
+}
+
+private fun parseHexColor(hex: String): Color {
+    return try {
+        val clean = hex.removePrefix("#")
+        val colorInt = clean.toLong(16)
+        if (clean.length == 6) {
+            Color(colorInt or 0xFF000000)
+        } else {
+            Color(colorInt)
+        }
+    } catch (_: Exception) {
+        LXPrimaryGreen
     }
 }

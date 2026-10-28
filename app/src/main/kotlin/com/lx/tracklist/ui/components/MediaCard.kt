@@ -1,9 +1,11 @@
 package com.lx.tracklist.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
@@ -63,6 +66,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MediaCard(
     entry: MediaEntry,
@@ -71,7 +75,11 @@ fun MediaCard(
     onToggleFavorite: () -> Unit,
     onDelete: () -> Unit,
     onEdit: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val progressAnimated by animateFloatAsState(targetValue = entry.progressFraction, label = "progress")
@@ -80,9 +88,28 @@ fun MediaCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, LXBorder, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick),
-        color = LXSurfaceBlack
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) LXPrimaryGreen else LXBorder,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .combinedClickable(
+                onClick = {
+                    if (isSelectionMode) {
+                        onToggleSelect?.invoke()
+                    } else {
+                        onClick()
+                    }
+                },
+                onLongClick = {
+                    if (isSelectionMode) {
+                        onToggleSelect?.invoke()
+                    } else {
+                        onLongClick?.invoke()
+                    }
+                }
+            ),
+        color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.08f) else LXSurfaceBlack
     ) {
         Row(
             modifier = Modifier
@@ -90,6 +117,28 @@ fun MediaCard(
                 .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Selection Checkbox (Visible in Selection Mode)
+            if (isSelectionMode) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(if (isSelected) LXPrimaryGreen else Color.Transparent)
+                        .border(2.dp, if (isSelected) LXPrimaryGreen else LXBorder, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSelected) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = LXBackgroundBlack,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+            }
+
             // Cover Image Thumbnail
             Box(
                 modifier = Modifier
@@ -227,6 +276,17 @@ fun MediaCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        if (!entry.customCategory.isNullOrBlank()) {
+                            Text(
+                                text = entry.customCategory,
+                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                color = LXPrimaryGreen,
+                                modifier = Modifier
+                                    .background(LXPrimaryGreen.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
+
                         if (entry.isAiring) {
                             Text(
                                 text = "AIRING",

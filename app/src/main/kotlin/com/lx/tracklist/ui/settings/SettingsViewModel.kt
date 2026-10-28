@@ -12,7 +12,9 @@ import com.lx.tracklist.data.importer.MalXmlImporter
 import com.lx.tracklist.data.importer.TachiyomiImporter
 import com.lx.tracklist.data.local.StorageFileInfo
 import com.lx.tracklist.data.local.StorageHelper
+import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
+import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.repository.ConflictStrategy
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.Dispatchers
@@ -32,13 +34,58 @@ data class SettingsUiState(
     val isErrorMessage: Boolean = false,
     val hasStoragePermission: Boolean = false,
     val inputFiles: List<StorageFileInfo> = emptyList(),
-    val homeFolderPath: String = ""
+    val homeFolderPath: String = "",
+    val customCategories: List<CustomCategory> = emptyList()
 )
 
 class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            repository.customCategories.collect { cats ->
+                _uiState.update { it.copy(customCategories = cats) }
+            }
+        }
+    }
+
+    fun addCustomCategory(
+        name: String,
+        isWatchType: Boolean,
+        trackingUnit: TrackingUnit = TrackingUnit.CHAPTERS,
+        colorHex: String = "#A7EF60"
+    ) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            repository.addCustomCategory(
+                name = trimmed,
+                isWatchType = isWatchType,
+                trackingUnit = trackingUnit,
+                colorHex = colorHex
+            )
+            _uiState.update {
+                it.copy(
+                    statusMessage = "Created custom category \"$trimmed\"",
+                    isErrorMessage = false
+                )
+            }
+        }
+    }
+
+    fun deleteCustomCategory(category: CustomCategory) {
+        viewModelScope.launch {
+            repository.deleteCustomCategory(category)
+            _uiState.update {
+                it.copy(
+                    statusMessage = "Deleted category \"${category.name}\"",
+                    isErrorMessage = false
+                )
+            }
+        }
+    }
 
     fun checkStorageStatus(context: Context) {
         val hasPerm = StorageHelper.hasStoragePermission(context)

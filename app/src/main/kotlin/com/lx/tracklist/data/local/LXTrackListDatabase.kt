@@ -5,17 +5,21 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
+import com.lx.tracklist.data.model.UserProfile
 
 @Database(
-    entities = [MediaEntry::class],
-    version = 1,
+    entities = [MediaEntry::class, UserProfile::class, CustomCategory::class],
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class LXTrackListDatabase : RoomDatabase() {
 
     abstract fun mediaEntryDao(): MediaEntryDao
+    abstract fun userProfileDao(): UserProfileDao
+    abstract fun customCategoryDao(): CustomCategoryDao
 
     companion object {
         @Volatile

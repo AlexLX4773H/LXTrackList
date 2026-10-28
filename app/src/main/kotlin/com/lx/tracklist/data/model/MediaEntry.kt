@@ -11,12 +11,20 @@ import androidx.room.PrimaryKey
         Index("status"),
         Index("isFavorite"),
         Index("title"),
+        Index("userId"),
+        Index("customCategory"),
         Index(value = ["externalId", "externalSource"])
     ]
 )
 data class MediaEntry(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0L,
+
+    // User profile association
+    val userId: Long = 1L,
+
+    // Custom Category override
+    val customCategory: String? = null,
 
     // Common fields
     val title: String,

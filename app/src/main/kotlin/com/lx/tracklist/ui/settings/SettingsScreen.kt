@@ -18,29 +18,40 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -50,15 +61,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lx.tracklist.R
+import com.lx.tracklist.data.model.CustomCategory
+import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.repository.ConflictStrategy
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
@@ -80,6 +97,14 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
+    var showAddCategoryDialog by remember { mutableStateOf(false) }
+    var categoryToDelete by remember { mutableStateOf<CustomCategory?>(null) }
+    var newCategoryName by remember { mutableStateOf("") }
+    var newCategoryIsWatch by remember { mutableStateOf(false) }
+    var newCategoryTrackingUnit by remember { mutableStateOf(TrackingUnit.CHAPTERS) }
+    val colorOptions = listOf("#A7EF60", "#4DA8DA", "#BB86FC", "#FF7597", "#FFD700", "#00E5FF", "#FF8A65")
+    var selectedColor by remember { mutableStateOf(colorOptions.first()) }
+
     LaunchedEffect(Unit) {
         viewModel.checkStorageStatus(context)
     }
@@ -94,6 +119,179 @@ fun SettingsScreen(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         uri?.let { viewModel.exportToCustomUri(context, it) }
+    }
+
+    // Add Custom Category Dialog
+    if (showAddCategoryDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showAddCategoryDialog = false
+                newCategoryName = ""
+            },
+            title = {
+                Text("New Custom Category", color = LXTextPrimary, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Category Name", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
+                    OutlinedTextField(
+                        value = newCategoryName,
+                        onValueChange = { newCategoryName = it },
+                        placeholder = { Text("e.g. Donghua, Web Novels, Games...", color = LXTextSecondary) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = LXPrimaryGreen,
+                            unfocusedBorderColor = LXBorder,
+                            focusedTextColor = LXTextPrimary,
+                            unfocusedTextColor = LXTextPrimary,
+                            cursorColor = LXPrimaryGreen
+                        )
+                    )
+
+                    Text("Tracking Mode", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = !newCategoryIsWatch,
+                            onClick = { newCategoryIsWatch = false },
+                            label = { Text("Reading (Chapters/Vol)") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = LXPrimaryGreen,
+                                selectedLabelColor = LXBackgroundBlack,
+                                containerColor = LXSurfaceElevated,
+                                labelColor = LXTextSecondary
+                            )
+                        )
+                        FilterChip(
+                            selected = newCategoryIsWatch,
+                            onClick = { newCategoryIsWatch = true },
+                            label = { Text("Watching (Episodes)") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = LXPrimaryGreen,
+                                selectedLabelColor = LXBackgroundBlack,
+                                containerColor = LXSurfaceElevated,
+                                labelColor = LXTextSecondary
+                            )
+                        )
+                    }
+
+                    if (!newCategoryIsWatch) {
+                        Text("Reading Tracking Unit", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            TrackingUnit.entries.forEach { unit ->
+                                FilterChip(
+                                    selected = newCategoryTrackingUnit == unit,
+                                    onClick = { newCategoryTrackingUnit = unit },
+                                    label = { Text(unit.displayName, fontSize = 11.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    Text("Badge Color", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(colorOptions) { hex ->
+                            val color = parseHexColor(hex)
+                            val isChosen = selectedColor == hex
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(color)
+                                    .border(
+                                        width = if (isChosen) 3.dp else 1.dp,
+                                        color = if (isChosen) Color.White else Color.Transparent,
+                                        shape = CircleShape
+                                    )
+                                    .clickable { selectedColor = hex },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isChosen) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newCategoryName.isNotBlank()) {
+                            viewModel.addCustomCategory(
+                                name = newCategoryName,
+                                isWatchType = newCategoryIsWatch,
+                                trackingUnit = newCategoryTrackingUnit,
+                                colorHex = selectedColor
+                            )
+                            newCategoryName = ""
+                            showAddCategoryDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Create Category", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showAddCategoryDialog = false
+                    newCategoryName = ""
+                }) {
+                    Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
+    }
+
+    // Delete Custom Category Confirmation Dialog
+    if (categoryToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { categoryToDelete = null },
+            title = { Text("Delete Category?", color = LXTextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "Are you sure you want to delete custom category \"${categoryToDelete?.name}\"?",
+                    color = LXTextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        categoryToDelete?.let { viewModel.deleteCustomCategory(it) }
+                        categoryToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = LXErrorRed)
+                ) {
+                    Text("Delete", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { categoryToDelete = null }) {
+                    Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
     }
 
     Scaffold(
@@ -159,6 +357,131 @@ fun SettingsScreen(
                                 color = LXTextPrimary,
                                 style = MaterialTheme.typography.bodyMedium
                             )
+                        }
+                    }
+                }
+
+                // Custom Categories Management Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Bookmark, contentDescription = null, tint = LXPrimaryGreen)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Custom Categories (${state.customCategories.size})",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = LXTextPrimary
+                                )
+                            }
+
+                            Button(
+                                onClick = { showAddCategoryDialog = true },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = LXPrimaryGreen.copy(alpha = 0.15f),
+                                    contentColor = LXPrimaryGreen
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("+ Add Category", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Text(
+                            text = "Add personalized categories outside default ones (e.g. Donghua, Web Novels, Audiobooks, Visual Novels, Games) and track them with custom units.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LXTextSecondary
+                        )
+
+                        if (state.customCategories.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(LXSurfaceElevated)
+                                    .padding(14.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No custom categories created yet. Tap \"+ Add Category\" above to create one.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LXTextSecondary
+                                )
+                            }
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                state.customCategories.forEach { cat ->
+                                    val catColor = parseHexColor(cat.colorHex)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(LXSurfaceElevated)
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(32.dp)
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(catColor.copy(alpha = 0.2f))
+                                                    .border(1.dp, catColor.copy(alpha = 0.5f), RoundedCornerShape(6.dp)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (cat.isWatchType) Icons.Default.LiveTv else Icons.Default.Bookmark,
+                                                    contentDescription = null,
+                                                    tint = catColor,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+
+                                            Spacer(modifier = Modifier.width(10.dp))
+
+                                            Column {
+                                                Text(
+                                                    text = cat.name,
+                                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                                    color = LXTextPrimary
+                                                )
+                                                Text(
+                                                    text = if (cat.isWatchType) "Watch • Episodes" else "Read • ${cat.trackingUnit.displayName}",
+                                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                                    color = LXTextSecondary
+                                                )
+                                            }
+                                        }
+
+                                        IconButton(onClick = { categoryToDelete = cat }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Delete Category",
+                                                tint = LXTextSecondary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -503,5 +826,19 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
+    }
+}
+
+private fun parseHexColor(hex: String): Color {
+    return try {
+        val clean = hex.removePrefix("#")
+        val colorInt = clean.toLong(16)
+        if (clean.length == 6) {
+            Color(colorInt or 0xFF000000)
+        } else {
+            Color(colorInt)
+        }
+    } catch (_: Exception) {
+        LXPrimaryGreen
     }
 }

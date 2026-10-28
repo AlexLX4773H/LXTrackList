@@ -1,5 +1,6 @@
 package com.lx.tracklist.ui.home
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +34,7 @@ import com.lx.tracklist.ui.components.CategorySelectorSheet
 import com.lx.tracklist.ui.components.MediaCard
 import com.lx.tracklist.ui.components.StatusFilterTabs
 import com.lx.tracklist.ui.components.TopNavBar
+import com.lx.tracklist.ui.components.UserSwitcherSheet
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
 import com.lx.tracklist.ui.theme.LXTextSecondary
@@ -47,6 +49,15 @@ fun HomeScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
 
+    // Handle back button for search and category sheet
+    BackHandler(enabled = state.isSearchActive || state.isCategorySheetOpen) {
+        if (state.isCategorySheetOpen) {
+            viewModel.setCategorySheetOpen(false)
+        } else if (state.isSearchActive) {
+            viewModel.toggleSearch()
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = LXBackgroundBlack,
@@ -54,6 +65,7 @@ fun HomeScreen(
             Column {
                 TopNavBar(
                     selectedCategory = state.selectedCategory,
+                    customCategoryTitle = state.selectedCustomCategory,
                     onCategoryClick = { viewModel.setCategorySheetOpen(true) },
                     searchQuery = state.searchQuery,
                     onSearchQueryChange = { viewModel.setSearchQuery(it) },
@@ -61,7 +73,9 @@ fun HomeScreen(
                     onToggleSearch = { viewModel.toggleSearch() },
                     onRefresh = { /* Flows auto-update */ },
                     selectedSort = state.selectedSort,
-                    onSortSelected = { viewModel.selectSort(it) }
+                    onSortSelected = { viewModel.selectSort(it) },
+                    activeUser = state.activeUser,
+                    onLogoClick = { viewModel.setUserSwitcherOpen(true) }
                 )
 
                 StatusFilterTabs(
@@ -92,7 +106,7 @@ fun HomeScreen(
         ) {
             if (state.entries.isEmpty()) {
                 EmptyState(
-                    categoryName = state.selectedCategory.displayName,
+                    categoryName = state.selectedCustomCategory ?: state.selectedCategory.displayName,
                     searchQuery = state.searchQuery
                 )
             } else {
@@ -123,8 +137,12 @@ fun HomeScreen(
             if (state.isCategorySheetOpen) {
                 CategorySelectorSheet(
                     selectedCategory = state.selectedCategory,
+                    selectedCustomCategory = state.selectedCustomCategory,
                     categoryCounts = state.categoryCounts,
+                    customCategories = state.customCategories,
+                    customCategoryCounts = state.customCategoryCounts,
                     onSelectCategory = { viewModel.selectCategory(it) },
+                    onSelectCustomCategory = { viewModel.selectCustomCategory(it) },
                     onDismiss = { viewModel.setCategorySheetOpen(false) }
                 )
             }

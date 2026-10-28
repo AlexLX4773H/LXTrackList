@@ -3,9 +3,11 @@ package com.lx.tracklist.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.repository.MediaRepository
 import com.lx.tracklist.ui.components.SortOption
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,24 +20,32 @@ import kotlinx.coroutines.launch
 
 data class HomeUiState(
     val selectedCategory: MediaType = MediaType.ANIME,
+    val selectedCustomCategory: String? = null,
     val selectedStatus: MediaStatus? = null,
     val searchQuery: String = "",
     val isSearchActive: Boolean = false,
     val selectedSort: SortOption = SortOption.RECENTLY_UPDATED,
     val isCategorySheetOpen: Boolean = false,
+    val isUserSwitcherOpen: Boolean = false,
     val entries: List<MediaEntry> = emptyList(),
     val statusCounts: Map<MediaStatus, Int> = emptyMap(),
     val totalCount: Int = 0,
-    val categoryCounts: Map<MediaType, Int> = emptyMap()
+    val categoryCounts: Map<MediaType, Int> = emptyMap(),
+    val customCategories: List<CustomCategory> = emptyList(),
+    val customCategoryCounts: Map<String, Int> = emptyMap(),
+    val activeUser: UserProfile = UserProfile(id = 1L, name = "Main Profile", isDefault = true),
+    val allUsers: List<UserProfile> = emptyList()
 )
 
 private data class FilterState(
     val category: MediaType = MediaType.ANIME,
+    val customCategory: String? = null,
     val status: MediaStatus? = null,
     val query: String = "",
     val isSearching: Boolean = false,
     val sort: SortOption = SortOption.RECENTLY_UPDATED,
-    val isSheetOpen: Boolean = false
+    val isSheetOpen: Boolean = false,
+    val isUserSwitcherOpen: Boolean = false
 )
 
 class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
@@ -44,16 +54,28 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
 
     val uiState: StateFlow<HomeUiState> = combine(
         _filterState,
-        repository.getAllEntries()
-    ) { filter, allEntries ->
+        repository.getAllEntries(),
+        repository.customCategories,
+        repository.activeUser,
+        repository.allUsers
+    ) { filter, allEntries, customCats, activeUser, allUsers ->
 
-        // Category counts
+        // Default Category counts
         val catCounts = MediaType.entries.associateWith { cat ->
-            allEntries.count { it.mediaType == cat }
+            allEntries.count { it.mediaType == cat && it.customCategory == null }
         }
 
-        // Entries for selected category
-        val categoryEntries = allEntries.filter { it.mediaType == filter.category }
+        // Custom Category counts
+        val customCatCounts = customCats.associate { cat ->
+            cat.name to allEntries.count { it.customCategory == cat.name }
+        }
+
+        // Entries for selected category / custom category
+        val categoryEntries = if (filter.customCategory != null) {
+            allEntries.filter { it.customCategory == filter.customCategory }
+        } else {
+            allEntries.filter { it.mediaType == filter.category && it.customCategory == null }
+        }
 
         // Status counts for selected category
         val stCounts = MediaStatus.entries.associateWith { st ->
@@ -87,15 +109,21 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
 
         HomeUiState(
             selectedCategory = filter.category,
+            selectedCustomCategory = filter.customCategory,
             selectedStatus = filter.status,
             searchQuery = filter.query,
             isSearchActive = filter.isSearching,
             selectedSort = filter.sort,
             isCategorySheetOpen = filter.isSheetOpen,
+            isUserSwitcherOpen = filter.isUserSwitcherOpen,
             entries = sorted,
             statusCounts = stCounts,
             totalCount = categoryEntries.size,
-            categoryCounts = catCounts
+            categoryCounts = catCounts,
+            customCategories = customCats,
+            customCategoryCounts = customCatCounts,
+            activeUser = activeUser,
+            allUsers = allUsers
         )
     }.stateIn(
         scope = viewModelScope,
@@ -104,7 +132,11 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
     )
 
     fun selectCategory(category: MediaType) {
-        _filterState.update { it.copy(category = category, status = null) }
+        _filterState.update { it.copy(category = category, customCategory = null, status = null) }
+    }
+
+    fun selectCustomCategory(customCategoryName: String) {
+        _filterState.update { it.copy(customCategory = customCategoryName, status = null) }
     }
 
     fun selectStatus(status: MediaStatus?) {
@@ -128,6 +160,28 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun setCategorySheetOpen(open: Boolean) {
         _filterState.update { it.copy(isSheetOpen = open) }
+    }
+
+    fun setUserSwitcherOpen(open: Boolean) {
+        _filterState.update { it.copy(isUserSwitcherOpen = open) }
+    }
+
+    fun switchUser(profile: UserProfile) {
+        viewModelScope.launch {
+            repository.switchUser(profile)
+        }
+    }
+
+    fun createUser(name: String, colorHex: String) {
+        viewModelScope.launch {
+            repository.createUser(name, colorHex)
+        }
+    }
+
+    fun deleteUser(profile: UserProfile) {
+        viewModelScope.launch {
+            repository.deleteUser(profile)
+        }
     }
 
     fun incrementProgress(entry: MediaEntry) {

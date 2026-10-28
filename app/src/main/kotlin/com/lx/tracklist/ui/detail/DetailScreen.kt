@@ -1,5 +1,6 @@
 package com.lx.tracklist.ui.detail
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -98,6 +99,8 @@ fun DetailScreen(
             onNavigateBack()
         }
     }
+
+    BackHandler(onBack = onNavigateBack)
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -218,7 +221,11 @@ fun DetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            MetaChip(label = currentEntry.mediaType.displayName, color = LXPrimaryGreen)
+                            if (!currentEntry.customCategory.isNullOrBlank()) {
+                                MetaChip(label = currentEntry.customCategory, color = LXPrimaryGreen)
+                            } else {
+                                MetaChip(label = currentEntry.mediaType.displayName, color = LXPrimaryGreen)
+                            }
                             MetaChip(
                                 label = currentEntry.status.getDisplayLabel(currentEntry.mediaType),
                                 color = if (currentEntry.status == MediaStatus.COMPLETED) LXPrimaryGreen else LXTextSecondary
@@ -327,7 +334,11 @@ fun DetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            MetaChip(label = currentEntry.mediaType.displayName, color = LXPrimaryGreen)
+                            if (!currentEntry.customCategory.isNullOrBlank()) {
+                                MetaChip(label = currentEntry.customCategory, color = LXPrimaryGreen)
+                            } else {
+                                MetaChip(label = currentEntry.mediaType.displayName, color = LXPrimaryGreen)
+                            }
                             MetaChip(
                                 label = currentEntry.status.getDisplayLabel(currentEntry.mediaType),
                                 color = if (currentEntry.status == MediaStatus.COMPLETED) LXPrimaryGreen else LXTextSecondary
