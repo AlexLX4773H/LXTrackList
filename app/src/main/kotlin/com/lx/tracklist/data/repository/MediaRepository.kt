@@ -45,6 +45,14 @@ class MediaRepository(
     private val _activeUser = MutableStateFlow(defaultUser)
     val activeUser: StateFlow<UserProfile> = _activeUser.asStateFlow()
 
+    private val _isSwipeToSwitchTabsEnabled = MutableStateFlow(prefs?.getBoolean("swipe_to_switch_tabs", true) ?: true)
+    val isSwipeToSwitchTabsEnabled: StateFlow<Boolean> = _isSwipeToSwitchTabsEnabled.asStateFlow()
+
+    fun setSwipeToSwitchTabsEnabled(enabled: Boolean) {
+        _isSwipeToSwitchTabsEnabled.value = enabled
+        prefs?.edit()?.putBoolean("swipe_to_switch_tabs", enabled)?.apply()
+    }
+
     init {
         initUserProfile()
     }

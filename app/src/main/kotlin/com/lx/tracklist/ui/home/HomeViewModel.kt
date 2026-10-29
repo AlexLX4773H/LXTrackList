@@ -31,6 +31,7 @@ data class HomeUiState(
     val isUserSwitcherOpen: Boolean = false,
     val isAddSubCategoryDialogOpen: Boolean = false,
     val entries: List<MediaEntry> = emptyList(),
+    val categoryEntries: List<MediaEntry> = emptyList(),
     val statusCounts: Map<MediaStatus, Int> = emptyMap(),
     val totalCount: Int = 0,
     val categoryCounts: Map<MediaType, Int> = emptyMap(),
@@ -39,7 +40,8 @@ data class HomeUiState(
     val subCategories: List<SubCategory> = emptyList(),
     val subCategoryCounts: Map<String, Int> = emptyMap(),
     val activeUser: UserProfile = UserProfile(id = 1L, name = "Main Profile", isDefault = true),
-    val allUsers: List<UserProfile> = emptyList()
+    val allUsers: List<UserProfile> = emptyList(),
+    val isSwipeToSwitchTabsEnabled: Boolean = true
 )
 
 private data class FilterState(
@@ -55,27 +57,29 @@ private data class FilterState(
     val isAddSubCategoryDialogOpen: Boolean = false
 )
 
-private data class UserContext(
+private data class UserAndSettingsContext(
     val activeUser: UserProfile,
-    val allUsers: List<UserProfile>
+    val allUsers: List<UserProfile>,
+    val isSwipeEnabled: Boolean
 )
 
 class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
 
     private val _filterState = MutableStateFlow(FilterState())
 
-    private val userContextFlow = combine(
+    private val userAndSettingsContextFlow = combine(
         repository.activeUser,
-        repository.allUsers
-    ) { active, all -> UserContext(active, all) }
+        repository.allUsers,
+        repository.isSwipeToSwitchTabsEnabled
+    ) { active, all, swipe -> UserAndSettingsContext(active, all, swipe) }
 
     val uiState: StateFlow<HomeUiState> = combine(
         _filterState,
         repository.getAllEntries(),
         repository.customCategories,
         repository.allSubCategories,
-        userContextFlow
-    ) { filter, allEntries, customCats, allSubCats, userCtx ->
+        userAndSettingsContextFlow
+    ) { filter, allEntries, customCats, allSubCats, ctx ->
         val activeKey = filter.customCategory ?: filter.category.name
 
         // 1. Drawer category counts
@@ -120,30 +124,32 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
             categoryEntries.count { it.status == st }
         }
 
-        // 5. Filter entries by status or subcategory tab
-        var filtered = when {
-            filter.status != null -> categoryEntries.filter { it.status == filter.status }
-            !filter.subCategory.isNullOrBlank() -> categoryEntries.filter { it.subCategory.equals(filter.subCategory, ignoreCase = true) }
-            else -> categoryEntries
-        }
-
-        // 6. Filter by search query if active
-        if (filter.query.isNotBlank()) {
-            filtered = filtered.filter {
+        // 5. Query filtering on category entries
+        val queryFiltered = if (filter.query.isNotBlank()) {
+            categoryEntries.filter {
                 it.title.contains(filter.query, ignoreCase = true) ||
                         (it.alternateTitle?.contains(filter.query, ignoreCase = true) == true) ||
                         (it.tags?.contains(filter.query, ignoreCase = true) == true) ||
                         (it.subCategory?.contains(filter.query, ignoreCase = true) == true)
             }
+        } else {
+            categoryEntries
         }
 
-        // 7. Sort entries
-        val sorted = when (filter.sort) {
-            SortOption.RECENTLY_UPDATED -> filtered.sortedByDescending { it.updatedAt }
-            SortOption.TITLE_ASC -> filtered.sortedBy { it.title.lowercase() }
-            SortOption.TITLE_DESC -> filtered.sortedByDescending { it.title.lowercase() }
-            SortOption.SCORE_DESC -> filtered.sortedByDescending { it.score ?: -1 }
-            SortOption.PROGRESS_DESC -> filtered.sortedByDescending { it.progressFraction }
+        // 6. Sort all category entries
+        val sortedCategoryEntries = when (filter.sort) {
+            SortOption.RECENTLY_UPDATED -> queryFiltered.sortedByDescending { it.updatedAt }
+            SortOption.TITLE_ASC -> queryFiltered.sortedBy { it.title.lowercase() }
+            SortOption.TITLE_DESC -> queryFiltered.sortedByDescending { it.title.lowercase() }
+            SortOption.SCORE_DESC -> queryFiltered.sortedByDescending { it.score ?: -1 }
+            SortOption.PROGRESS_DESC -> queryFiltered.sortedByDescending { it.progressFraction }
+        }
+
+        // 7. Filter entries by active status or subcategory tab
+        val sortedActiveFiltered = when {
+            filter.status != null -> sortedCategoryEntries.filter { it.status == filter.status }
+            !filter.subCategory.isNullOrBlank() -> sortedCategoryEntries.filter { it.subCategory.equals(filter.subCategory, ignoreCase = true) }
+            else -> sortedCategoryEntries
         }
 
         HomeUiState(
@@ -157,7 +163,8 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
             isCategorySheetOpen = filter.isSheetOpen,
             isUserSwitcherOpen = filter.isUserSwitcherOpen,
             isAddSubCategoryDialogOpen = filter.isAddSubCategoryDialogOpen,
-            entries = sorted,
+            entries = sortedActiveFiltered,
+            categoryEntries = sortedCategoryEntries,
             statusCounts = stCounts,
             totalCount = categoryEntries.size,
             categoryCounts = catCounts,
@@ -165,8 +172,9 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
             customCategoryCounts = customCatCounts,
             subCategories = subCatsForActive,
             subCategoryCounts = subCatCounts,
-            activeUser = userCtx.activeUser,
-            allUsers = userCtx.allUsers
+            activeUser = ctx.activeUser,
+            allUsers = ctx.allUsers,
+            isSwipeToSwitchTabsEnabled = ctx.isSwipeEnabled
         )
     }.stateIn(
         scope = viewModelScope,

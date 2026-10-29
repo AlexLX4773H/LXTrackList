@@ -217,4 +217,45 @@ class FeaturesTest {
         assertNull(state.customCategory)
         assertEquals("Isekai", state.subCategory)
     }
+
+    @Test
+    fun testHomeFilterStateStatusSelection() {
+        var status: MediaStatus? = null
+        var subCat: String? = null
+
+        // Select WATCHING
+        status = MediaStatus.WATCHING
+        subCat = null
+
+        assertNotNull(status)
+        assertEquals(MediaStatus.WATCHING, status)
+        assertNull(subCat)
+
+        // Select subcategory
+        subCat = "Action"
+        status = null
+
+        assertNull(status)
+        assertEquals("Action", subCat)
+
+        // Reset to ALL
+        status = null
+        subCat = null
+
+        assertNull(status)
+        assertNull(subCat)
+    }
+
+    @Test
+    fun testSwipeToSwitchTabsState() {
+        val homeState = com.lx.tracklist.ui.home.HomeUiState(
+            isSwipeToSwitchTabsEnabled = true
+        )
+        assertTrue(homeState.isSwipeToSwitchTabsEnabled)
+
+        val settingsState = com.lx.tracklist.ui.settings.SettingsUiState(
+            isSwipeToSwitchTabsEnabled = true
+        )
+        assertTrue(settingsState.isSwipeToSwitchTabsEnabled)
+    }
 }

@@ -60,6 +60,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -502,7 +504,7 @@ fun SettingsScreen(
                                                 color = LXTextPrimary
                                             )
 
-                                            if (group.isCustomCategory) {
+                                            if (group.isSubCategory) {
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Box(
                                                     modifier = Modifier
@@ -516,7 +518,29 @@ fun SettingsScreen(
                                                         color = LXPrimaryGreen
                                                     )
                                                 }
+                                            } else if (group.isCustomCategory) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(LXPrimaryGreen.copy(alpha = 0.2f))
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Custom Category",
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                                        color = LXPrimaryGreen
+                                                    )
+                                                }
                                             }
+                                        }
+
+                                        if (!group.parentCategoryName.isNullOrBlank()) {
+                                            Text(
+                                                text = "in ${group.parentCategoryName}",
+                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                                color = LXTextSecondary
+                                            )
                                         }
                                     }
                                 }
@@ -811,7 +835,7 @@ fun SettingsScreen(
                                                 color = LXTextPrimary
                                             )
 
-                                            if (group.isCustomCategory) {
+                                            if (group.isSubCategory) {
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Box(
                                                     modifier = Modifier
@@ -825,7 +849,29 @@ fun SettingsScreen(
                                                         color = LXPrimaryGreen
                                                     )
                                                 }
+                                            } else if (group.isCustomCategory) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(LXPrimaryGreen.copy(alpha = 0.2f))
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Custom Category",
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                                        color = LXPrimaryGreen
+                                                    )
+                                                }
                                             }
+                                        }
+
+                                        if (!group.parentCategoryName.isNullOrBlank()) {
+                                            Text(
+                                                text = "in ${group.parentCategoryName}",
+                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                                color = LXTextSecondary
+                                            )
                                         }
                                     }
                                 }
@@ -1262,6 +1308,47 @@ fun SettingsScreen(
                                 }
                             }
                         }
+                    }
+                }
+
+                // Gestures & Navigation Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Swipe to Switch Tabs",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = LXTextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Swipe left or right on Home screen to switch between status and subcategory tabs",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LXTextSecondary
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Switch(
+                            checked = state.isSwipeToSwitchTabsEnabled,
+                            onCheckedChange = { viewModel.setSwipeToSwitchTabsEnabled(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = LXBackgroundBlack,
+                                checkedTrackColor = LXPrimaryGreen,
+                                uncheckedThumbColor = LXTextSecondary,
+                                uncheckedTrackColor = LXSurfaceElevated
+                            )
+                        )
                     }
                 }
 

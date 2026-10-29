@@ -30,9 +30,12 @@ import java.io.InputStream
 data class ImportCategoryGroup(
     val key: String,
     val displayName: String,
-    val isCustomCategory: Boolean,
+    val parentCategoryName: String? = null,
+    val isSubCategory: Boolean = false,
+    val isCustomCategory: Boolean = false,
     val mediaType: MediaType? = null,
     val customCategoryName: String? = null,
+    val subCategoryName: String? = null,
     val count: Int
 )
 
@@ -51,10 +54,15 @@ data class ImportPreviewState(
 }
 
 fun getCategoryKeyForEntry(entry: MediaEntry): String {
-    return if (!entry.customCategory.isNullOrBlank()) {
+    val baseKey = if (!entry.customCategory.isNullOrBlank()) {
         "CUSTOM:${entry.customCategory.trim()}"
     } else {
         "TYPE:${entry.mediaType.name}"
+    }
+    return if (!entry.subCategory.isNullOrBlank()) {
+        "$baseKey:SUB:${entry.subCategory.trim()}"
+    } else {
+        baseKey
     }
 }
 
@@ -63,18 +71,58 @@ fun buildCategoryGroups(entries: List<MediaEntry>): List<ImportCategoryGroup> {
 
     // 1. Built-in types
     for (type in MediaType.entries) {
-        val count = entries.count { it.customCategory.isNullOrBlank() && it.mediaType == type }
-        if (count > 0) {
+        val typeEntries = entries.filter { it.customCategory.isNullOrBlank() && it.mediaType == type }
+        if (typeEntries.isEmpty()) continue
+
+        val subCatNames = typeEntries.mapNotNull { it.subCategory?.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
+
+        if (subCatNames.isEmpty()) {
             groups.add(
                 ImportCategoryGroup(
                     key = "TYPE:${type.name}",
                     displayName = type.displayName,
                     isCustomCategory = false,
+                    isSubCategory = false,
                     mediaType = type,
                     customCategoryName = null,
-                    count = count
+                    count = typeEntries.size
                 )
             )
+        } else {
+            for (subName in subCatNames) {
+                val count = typeEntries.count { it.subCategory?.trim().equals(subName, ignoreCase = true) }
+                if (count > 0) {
+                    groups.add(
+                        ImportCategoryGroup(
+                            key = "TYPE:${type.name}:SUB:$subName",
+                            displayName = subName,
+                            parentCategoryName = type.displayName,
+                            isCustomCategory = false,
+                            isSubCategory = true,
+                            mediaType = type,
+                            subCategoryName = subName,
+                            count = count
+                        )
+                    )
+                }
+            }
+            val uncategorizedCount = typeEntries.count { it.subCategory.isNullOrBlank() }
+            if (uncategorizedCount > 0) {
+                groups.add(
+                    ImportCategoryGroup(
+                        key = "TYPE:${type.name}",
+                        displayName = "${type.displayName} (Uncategorized)",
+                        parentCategoryName = type.displayName,
+                        isCustomCategory = false,
+                        isSubCategory = false,
+                        mediaType = type,
+                        count = uncategorizedCount
+                    )
+                )
+            }
         }
     }
 
@@ -85,18 +133,58 @@ fun buildCategoryGroups(entries: List<MediaEntry>): List<ImportCategoryGroup> {
         .sortedWith(String.CASE_INSENSITIVE_ORDER)
 
     for (catName in customCatNames) {
-        val count = entries.count { it.customCategory?.trim().equals(catName, ignoreCase = true) }
-        if (count > 0) {
+        val catEntries = entries.filter { it.customCategory?.trim().equals(catName, ignoreCase = true) }
+        if (catEntries.isEmpty()) continue
+
+        val subCatNames = catEntries.mapNotNull { it.subCategory?.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
+
+        if (subCatNames.isEmpty()) {
             groups.add(
                 ImportCategoryGroup(
                     key = "CUSTOM:$catName",
                     displayName = catName,
                     isCustomCategory = true,
+                    isSubCategory = false,
                     mediaType = null,
                     customCategoryName = catName,
-                    count = count
+                    count = catEntries.size
                 )
             )
+        } else {
+            for (subName in subCatNames) {
+                val count = catEntries.count { it.subCategory?.trim().equals(subName, ignoreCase = true) }
+                if (count > 0) {
+                    groups.add(
+                        ImportCategoryGroup(
+                            key = "CUSTOM:$catName:SUB:$subName",
+                            displayName = subName,
+                            parentCategoryName = catName,
+                            isCustomCategory = true,
+                            isSubCategory = true,
+                            customCategoryName = catName,
+                            subCategoryName = subName,
+                            count = count
+                        )
+                    )
+                }
+            }
+            val uncategorizedCount = catEntries.count { it.subCategory.isNullOrBlank() }
+            if (uncategorizedCount > 0) {
+                groups.add(
+                    ImportCategoryGroup(
+                        key = "CUSTOM:$catName",
+                        displayName = "$catName (Uncategorized)",
+                        parentCategoryName = catName,
+                        isCustomCategory = true,
+                        isSubCategory = false,
+                        customCategoryName = catName,
+                        count = uncategorizedCount
+                    )
+                )
+            }
         }
     }
 
@@ -138,7 +226,8 @@ data class SettingsUiState(
     val hasStoragePermission: Boolean = false,
     val inputFiles: List<StorageFileInfo> = emptyList(),
     val homeFolderPath: String = "",
-    val customCategories: List<CustomCategory> = emptyList()
+    val customCategories: List<CustomCategory> = emptyList(),
+    val isSwipeToSwitchTabsEnabled: Boolean = true
 )
 
 class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
@@ -152,6 +241,15 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 _uiState.update { it.copy(customCategories = cats) }
             }
         }
+        viewModelScope.launch {
+            repository.isSwipeToSwitchTabsEnabled.collect { enabled ->
+                _uiState.update { it.copy(isSwipeToSwitchTabsEnabled = enabled) }
+            }
+        }
+    }
+
+    fun setSwipeToSwitchTabsEnabled(enabled: Boolean) {
+        repository.setSwipeToSwitchTabsEnabled(enabled)
     }
 
     fun addCustomCategory(

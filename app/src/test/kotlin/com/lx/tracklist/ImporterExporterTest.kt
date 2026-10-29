@@ -502,6 +502,122 @@ class ImporterExporterTest {
         assertTrue(filtered.none { it.mediaType == MediaType.MANHWA })
     }
 
+    @Test
+    fun testTachiyomiCategoriesImportedAsSubCategories() {
+        val rootOut = ByteArrayOutputStream()
+
+        // 1. Categories in .tachibk:
+        // 0 -> Reading
+        val cat0Out = ByteArrayOutputStream()
+        writeStringField(cat0Out, 1, "Reading")
+        writeVarintField(cat0Out, 2, 0L)
+        writeMessageField(rootOut, 2, cat0Out.toByteArray())
+
+        // 1 -> Completed
+        val cat1Out = ByteArrayOutputStream()
+        writeStringField(cat1Out, 1, "Completed")
+        writeVarintField(cat1Out, 2, 1L)
+        writeMessageField(rootOut, 2, cat1Out.toByteArray())
+
+        // 2 -> Favorites
+        val cat2Out = ByteArrayOutputStream()
+        writeStringField(cat2Out, 1, "Favorites")
+        writeVarintField(cat2Out, 2, 2L)
+        writeMessageField(rootOut, 2, cat2Out.toByteArray())
+
+        // Manga 1: Berserk (Reading category)
+        val m1 = ByteArrayOutputStream()
+        writeStringField(m1, 3, "Berserk")
+        writeVarintField(m1, 17, 0L) // category 0 = Reading
+        writeMessageField(rootOut, 1, m1.toByteArray())
+
+        // Manga 2: Attack on Titan (Completed category)
+        val m2 = ByteArrayOutputStream()
+        writeStringField(m2, 3, "Attack on Titan")
+        writeVarintField(m2, 17, 1L) // category 1 = Completed
+        writeMessageField(rootOut, 1, m2.toByteArray())
+
+        // Manga 3: Solo Leveling (Favorites category, manhwa)
+        val m3 = ByteArrayOutputStream()
+        writeStringField(m3, 3, "Solo Leveling (Manhwa)")
+        writeVarintField(m3, 17, 2L) // category 2 = Favorites
+        writeMessageField(rootOut, 1, m3.toByteArray())
+
+        val tachibkBytes = gzipBytes(rootOut.toByteArray())
+        val entries = TachiyomiImporter.parse(ByteArrayInputStream(tachibkBytes))
+
+        assertEquals(3, entries.size)
+
+        // Manga 1 should have subCategory = "Reading"
+        assertEquals("Berserk", entries[0].title)
+        assertEquals("Reading", entries[0].subCategory)
+        assertEquals(MediaType.MANGA, entries[0].mediaType)
+
+        // Manga 2 should have subCategory = "Completed"
+        assertEquals("Attack on Titan", entries[1].title)
+        assertEquals("Completed", entries[1].subCategory)
+        assertEquals(MediaType.MANGA, entries[1].mediaType)
+
+        // Manga 3 should have subCategory = "Favorites"
+        assertEquals("Solo Leveling (Manhwa)", entries[2].title)
+        assertEquals("Favorites", entries[2].subCategory)
+        assertEquals(MediaType.MANHWA, entries[2].mediaType)
+    }
+
+    @Test
+    fun testImportPreviewGroupsWithSubCategories() {
+        val entries = listOf(
+            MediaEntry(title = "Berserk", mediaType = MediaType.MANGA, subCategory = "Reading", status = MediaStatus.WATCHING),
+            MediaEntry(title = "Kingdom", mediaType = MediaType.MANGA, subCategory = "Reading", status = MediaStatus.WATCHING),
+            MediaEntry(title = "Attack on Titan", mediaType = MediaType.MANGA, subCategory = "Completed", status = MediaStatus.COMPLETED),
+            MediaEntry(title = "Monster", mediaType = MediaType.MANGA, subCategory = null, status = MediaStatus.COMPLETED),
+            MediaEntry(title = "Solo Leveling", mediaType = MediaType.MANHWA, subCategory = "Favorites", status = MediaStatus.COMPLETED)
+        )
+
+        val groups = buildCategoryGroups(entries)
+        assertEquals(4, groups.size)
+
+        val readingGroup = groups.first { it.key == "TYPE:MANGA:SUB:Reading" }
+        assertEquals("Reading", readingGroup.displayName)
+        assertEquals("Manga", readingGroup.parentCategoryName)
+        assertTrue(readingGroup.isSubCategory)
+        assertEquals(2, readingGroup.count)
+
+        val completedGroup = groups.first { it.key == "TYPE:MANGA:SUB:Completed" }
+        assertEquals("Completed", completedGroup.displayName)
+        assertEquals("Manga", completedGroup.parentCategoryName)
+        assertTrue(completedGroup.isSubCategory)
+        assertEquals(1, completedGroup.count)
+
+        val uncategorizedManga = groups.first { it.key == "TYPE:MANGA" }
+        assertEquals("Manga (Uncategorized)", uncategorizedManga.displayName)
+        org.junit.Assert.assertFalse(uncategorizedManga.isSubCategory)
+        assertEquals(1, uncategorizedManga.count)
+
+        val manhwaFavorites = groups.first { it.key == "TYPE:MANHWA:SUB:Favorites" }
+        assertEquals("Favorites", manhwaFavorites.displayName)
+        assertEquals("Manhwa", manhwaFavorites.parentCategoryName)
+        assertTrue(manhwaFavorites.isSubCategory)
+        assertEquals(1, manhwaFavorites.count)
+
+        // Test filtering by selecting only "Reading" subcategory
+        val preview = ImportPreviewState(
+            sourceName = "tachiyomi.tachibk",
+            allEntries = entries,
+            categoryGroups = groups,
+            selectedCategoryKeys = setOf("TYPE:MANGA:SUB:Reading")
+        )
+
+        assertEquals(5, preview.totalCount)
+        assertEquals(2, preview.selectedCount)
+
+        val filtered = preview.allEntries.filter {
+            preview.selectedCategoryKeys.contains(getCategoryKeyForEntry(it))
+        }
+        assertEquals(2, filtered.size)
+        assertTrue(filtered.all { it.subCategory == "Reading" })
+    }
+
     private fun writeVarint(out: ByteArrayOutputStream, value: Long) {
         var v = value
         while ((v and 0x7FL.inv()) != 0L) {

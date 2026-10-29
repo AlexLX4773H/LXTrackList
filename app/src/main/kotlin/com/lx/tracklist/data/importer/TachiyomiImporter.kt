@@ -555,11 +555,9 @@ object TachiyomiImporter {
         val resolvedCategories = manga.categories.mapNotNull { categoryMap[it] }.distinct()
         val sourceName = sourceMap[manga.source]
 
-        // Sub category identification from Tachiyomi user categories
-        val nonStatusCategories = resolvedCategories.filter { !isStatusCategory(it) }
-        val subCategory = nonStatusCategories.firstOrNull {
-            val lower = it.lowercase().trim()
-            !isGenericCategory(lower) && lower != "manga" && lower != "manhwa" && lower != "japanese manga"
+        // In .tachibk, categories mentioned in the file are equivalent to sub categories in the app
+        val subCategory = resolvedCategories.firstOrNull {
+            it.isNotBlank() && !isGenericCategory(it)
         }?.trim()
 
         // 1. Determine MediaType (MANGA vs MANHWA)
@@ -607,7 +605,7 @@ object TachiyomiImporter {
         }
 
         // 5. Tags & Notes
-        val allTags = (manga.genres + nonStatusCategories).map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        val allTags = (manga.genres + resolvedCategories).map { it.trim() }.filter { it.isNotBlank() }.distinct()
         val tags = allTags.joinToString(", ").takeIf { it.isNotBlank() }
 
         val noteParts = mutableListOf<String>()

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -22,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,8 +62,28 @@ fun StatusFilterTabs(
         MediaStatus.DROPPED
     )
 
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(selectedStatus, selectedSubCategory, subCategories) {
+        val targetIdx = when {
+            selectedSubCategory != null -> {
+                val subIdx = subCategories.indexOfFirst { it.name.equals(selectedSubCategory, ignoreCase = true) }
+                if (subIdx >= 0) 1 + statuses.size + 1 + subIdx else 0
+            }
+            selectedStatus != null -> {
+                val stIdx = statuses.indexOf(selectedStatus)
+                if (stIdx >= 0) 1 + stIdx else 0
+            }
+            else -> 0
+        }
+        if (targetIdx >= 0) {
+            listState.animateScrollToItem(targetIdx)
+        }
+    }
+
     Column(modifier = modifier.fillMaxWidth()) {
         LazyRow(
+            state = listState,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp),
@@ -75,7 +97,6 @@ fun StatusFilterTabs(
                     isSelected = selectedStatus == null && selectedSubCategory == null,
                     onClick = {
                         onStatusSelected(null)
-                        onSubCategorySelected(null)
                     }
                 )
             }
@@ -90,7 +111,6 @@ fun StatusFilterTabs(
                     isSelected = selectedStatus == status && selectedSubCategory == null,
                     onClick = {
                         onStatusSelected(status)
-                        onSubCategorySelected(null)
                     }
                 )
             }
