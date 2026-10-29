@@ -72,10 +72,15 @@ class MediaRepository(
         prefs?.edit()?.putLong("active_user_id", profile.id)?.apply()
     }
 
-    suspend fun createUser(name: String, avatarColorHex: String = "#A7EF60"): UserProfile {
+    suspend fun createUser(
+        name: String,
+        avatarColorHex: String = "#A7EF60",
+        avatarImageUri: String? = null
+    ): UserProfile {
         val newProfile = UserProfile(
             name = name.trim().ifBlank { "User" },
             avatarColorHex = avatarColorHex,
+            avatarImageUri = avatarImageUri,
             isDefault = false
         )
         val id = userProfileDao?.insert(newProfile) ?: 1L

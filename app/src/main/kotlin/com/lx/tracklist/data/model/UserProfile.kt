@@ -9,6 +9,7 @@ data class UserProfile(
     val id: Long = 0L,
     val name: String,
     val avatarColorHex: String = "#A7EF60",
+    val avatarImageUri: String? = null,
     val isDefault: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )

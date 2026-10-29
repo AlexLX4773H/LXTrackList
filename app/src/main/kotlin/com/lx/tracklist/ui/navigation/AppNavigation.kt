@@ -35,10 +35,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.lx.tracklist.LXApplication
 import com.lx.tracklist.R
 import com.lx.tracklist.ui.components.UserSwitcherSheet
@@ -200,7 +202,8 @@ fun AppNavigation() {
             activeUser = homeState.activeUser,
             allUsers = homeState.allUsers,
             onSelectUser = { homeViewModel.switchUser(it) },
-            onCreateUser = { name, color -> homeViewModel.createUser(name, color) },
+            onCreateUser = { name, color, avatarUri -> homeViewModel.createUser(name, color, avatarUri) },
+            onUpdateUser = { homeViewModel.updateUser(it) },
             onDeleteUser = { homeViewModel.deleteUser(it) },
             onDismiss = { homeViewModel.setUserSwitcherOpen(false) }
         )
@@ -229,19 +232,31 @@ fun AppNavigation() {
                             .clickable { homeViewModel.setUserSwitcherOpen(true) },
                         contentAlignment = Alignment.Center
                     ) {
-                        Image(
-                            painter = painterResource(R.drawable.lx_logo),
-                            contentDescription = "Switch User (LX Logo)",
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .align(Alignment.BottomEnd)
-                                .clip(CircleShape)
-                                .background(parseHexColor(homeState.activeUser.avatarColorHex))
-                                .border(1.5.dp, LXBackgroundBlack, CircleShape)
-                        )
+                        if (!homeState.activeUser.avatarImageUri.isNullOrBlank()) {
+                            AsyncImage(
+                                model = homeState.activeUser.avatarImageUri,
+                                contentDescription = "Switch User (${homeState.activeUser.name})",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                                    .border(2.dp, parseHexColor(homeState.activeUser.avatarColorHex), CircleShape)
+                            )
+                        } else {
+                            Image(
+                                painter = painterResource(R.drawable.lx_logo),
+                                contentDescription = "Switch User (LX Logo)",
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .align(Alignment.BottomEnd)
+                                    .clip(CircleShape)
+                                    .background(parseHexColor(homeState.activeUser.avatarColorHex))
+                                    .border(1.5.dp, LXBackgroundBlack, CircleShape)
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }

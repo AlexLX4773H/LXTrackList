@@ -86,6 +86,7 @@ import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.repository.ConflictStrategy
+import com.lx.tracklist.ui.settings.ExportDestination
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXErrorRed
@@ -127,7 +128,7 @@ fun SettingsScreen(
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
-        uri?.let { viewModel.exportToCustomUri(context, it) }
+        uri?.let { viewModel.exportPendingToCustomUri(context, it) }
     }
 
     // Add Custom Category Dialog
@@ -576,6 +577,324 @@ fun SettingsScreen(
         )
     }
 
+    // Preparing Export Progress Dialog
+    if (state.isPreparingExport) {
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {},
+            title = {
+                Text(
+                    text = "Preparing Export...",
+                    color = LXTextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = LXPrimaryGreen,
+                        modifier = Modifier.size(28.dp),
+                        strokeWidth = 2.5.dp
+                    )
+                    Text(
+                        text = "Loading library entries and categories...",
+                        color = LXTextSecondary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
+    }
+
+    // Export Preview and Confirmation Dialog
+    val exportPreview = state.exportPreview
+    if (exportPreview != null) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!exportPreview.isExporting) {
+                    viewModel.cancelExportPreview()
+                }
+            },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FileDownload,
+                        contentDescription = null,
+                        tint = LXPrimaryGreen,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Confirm Export",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                        Text(
+                            text = "Choose types and categories to include in backup",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = LXTextSecondary
+                        )
+                    }
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Export destination selection
+                    Text(
+                        text = "Export Destination:",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = LXTextSecondary
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = exportPreview.destination == ExportDestination.HOME_OUTPUT_FOLDER,
+                            onClick = { viewModel.setExportDestination(ExportDestination.HOME_OUTPUT_FOLDER) },
+                            enabled = state.hasStoragePermission && !exportPreview.isExporting,
+                            label = { Text("Home /output", fontSize = 12.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = LXPrimaryGreen,
+                                selectedLabelColor = LXBackgroundBlack,
+                                containerColor = LXSurfaceElevated,
+                                labelColor = LXTextSecondary
+                            )
+                        )
+
+                        FilterChip(
+                            selected = exportPreview.destination == ExportDestination.CUSTOM_FILE,
+                            onClick = { viewModel.setExportDestination(ExportDestination.CUSTOM_FILE) },
+                            enabled = !exportPreview.isExporting,
+                            label = { Text("Custom File (Save As...)", fontSize = 12.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = LXPrimaryGreen,
+                                selectedLabelColor = LXBackgroundBlack,
+                                containerColor = LXSurfaceElevated,
+                                labelColor = LXTextSecondary
+                            )
+                        )
+                    }
+
+                    // Summary Card
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "Total in library: ${exportPreview.totalCount} items",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LXTextSecondary
+                                )
+                                Text(
+                                    text = "${exportPreview.selectedCount} selected to export",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = if (exportPreview.selectedCount > 0) LXPrimaryGreen else LXErrorRed
+                                )
+                            }
+
+                            TextButton(
+                                onClick = {
+                                    if (exportPreview.selectedCategoryKeys.size == exportPreview.categoryGroups.size) {
+                                        viewModel.deselectAllExportCategories()
+                                    } else {
+                                        viewModel.selectAllExportCategories()
+                                    }
+                                },
+                                enabled = !exportPreview.isExporting
+                            ) {
+                                Text(
+                                    text = if (exportPreview.selectedCategoryKeys.size == exportPreview.categoryGroups.size) "Deselect All" else "Select All",
+                                    color = LXPrimaryGreen,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = "Categories to export:",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = LXTextSecondary
+                    )
+
+                    // Categories checklist
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        exportPreview.categoryGroups.forEach { group ->
+                            val isChecked = exportPreview.selectedCategoryKeys.contains(group.key)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isChecked) LXPrimaryGreen.copy(alpha = 0.12f) else LXSurfaceElevated)
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (isChecked) LXPrimaryGreen.copy(alpha = 0.6f) else LXBorder,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable(enabled = !exportPreview.isExporting) {
+                                        viewModel.toggleExportCategorySelection(group.key)
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Checkbox(
+                                        checked = isChecked,
+                                        onCheckedChange = { viewModel.toggleExportCategorySelection(group.key) },
+                                        enabled = !exportPreview.isExporting,
+                                        colors = CheckboxDefaults.colors(
+                                            checkedColor = LXPrimaryGreen,
+                                            checkmarkColor = LXBackgroundBlack,
+                                            uncheckedColor = LXTextSecondary
+                                        )
+                                    )
+
+                                    Spacer(modifier = Modifier.width(6.dp))
+
+                                    Icon(
+                                        imageVector = when {
+                                            group.isCustomCategory -> Icons.Default.Bookmark
+                                            group.mediaType == MediaType.ANIME -> Icons.Default.LiveTv
+                                            group.mediaType == MediaType.MANGA -> Icons.AutoMirrored.Filled.MenuBook
+                                            group.mediaType == MediaType.MANHWA -> Icons.Default.PhoneAndroid
+                                            group.mediaType == MediaType.MOVIE -> Icons.Default.Movie
+                                            group.mediaType == MediaType.SHOW -> Icons.Default.Tv
+                                            group.mediaType == MediaType.BOOK -> Icons.Default.Book
+                                            else -> Icons.Default.Bookmark
+                                        },
+                                        contentDescription = null,
+                                        tint = if (isChecked) LXPrimaryGreen else LXTextSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+
+                                    Spacer(modifier = Modifier.width(8.dp))
+
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = group.displayName,
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                                color = LXTextPrimary
+                                            )
+
+                                            if (group.isCustomCategory) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(LXPrimaryGreen.copy(alpha = 0.2f))
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Custom Category",
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                                        color = LXPrimaryGreen
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(LXSurfaceBlack)
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "${group.count} ${if (group.count == 1) "item" else "items"}",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium),
+                                        color = LXTextSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (exportPreview.destination == ExportDestination.HOME_OUTPUT_FOLDER) {
+                            viewModel.confirmExportToHomeOutput(context)
+                        } else {
+                            viewModel.startCustomExport {
+                                exportLauncher.launch("LX_Track_List_Backup_${System.currentTimeMillis()}.json")
+                            }
+                        }
+                    },
+                    enabled = exportPreview.selectedCount > 0 && !exportPreview.isExporting,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXPrimaryGreen,
+                        contentColor = LXBackgroundBlack,
+                        disabledContainerColor = LXSurfaceElevated,
+                        disabledContentColor = LXTextSecondary
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    if (exportPreview.isExporting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = LXBackgroundBlack,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Exporting...", fontWeight = FontWeight.Bold)
+                    } else {
+                        val actionLabel = if (exportPreview.destination == ExportDestination.HOME_OUTPUT_FOLDER) "Export" else "Save As..."
+                        Text(
+                            text = "$actionLabel (${exportPreview.selectedCount})",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.cancelExportPreview() },
+                    enabled = !exportPreview.isExporting
+                ) {
+                    Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = LXBackgroundBlack,
@@ -843,8 +1162,8 @@ fun SettingsScreen(
                         } else {
                             // Direct Export Button
                             Button(
-                                onClick = { viewModel.exportToHomeOutput(context) },
-                                enabled = !state.isExporting,
+                                onClick = { viewModel.prepareExport(ExportDestination.HOME_OUTPUT_FOLDER) },
+                                enabled = !state.isExporting && !state.isPreparingExport,
                                 modifier = Modifier.fillMaxWidth().height(44.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
                                 shape = RoundedCornerShape(8.dp)
@@ -1051,7 +1370,8 @@ fun SettingsScreen(
                             }
 
                             OutlinedButton(
-                                onClick = { exportLauncher.launch("LX_Track_List_Backup_${System.currentTimeMillis()}.json") },
+                                onClick = { viewModel.prepareExport(ExportDestination.CUSTOM_FILE) },
+                                enabled = !state.isExporting && !state.isPreparingExport,
                                 modifier = Modifier.weight(1f).height(42.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextPrimary),
                                 border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),

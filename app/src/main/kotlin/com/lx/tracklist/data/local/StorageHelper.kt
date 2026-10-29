@@ -135,6 +135,24 @@ object StorageHelper {
         return FileInputStream(file)
     }
 
+    fun saveAvatarImage(context: Context, sourceUri: Uri): String? {
+        return try {
+            val avatarsDir = File(context.filesDir, "avatars")
+            if (!avatarsDir.exists()) {
+                avatarsDir.mkdirs()
+            }
+            val targetFile = File(avatarsDir, "avatar_${System.currentTimeMillis()}.jpg")
+            context.contentResolver.openInputStream(sourceUri)?.use { input ->
+                FileOutputStream(targetFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            targetFile.absolutePath
+        } catch (_: Exception) {
+            sourceUri.toString()
+        }
+    }
+
     private fun isSupportedFormat(name: String): Boolean {
         val lower = name.lowercase()
         return lower.endsWith(".xml") ||

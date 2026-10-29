@@ -20,14 +20,20 @@ class FeaturesTest {
     fun testUserProfileDefaults() {
         val user1 = UserProfile(id = 1L, name = "Alex", avatarColorHex = "#A7EF60", isDefault = true)
         val user2 = UserProfile(id = 2L, name = "Guest", avatarColorHex = "#4DA8DA")
+        val user3 = UserProfile(id = 3L, name = "Otaku", avatarColorHex = "#BB86FC", avatarImageUri = "/storage/emulated/0/avatar.jpg")
 
         assertEquals("Alex", user1.name)
         assertTrue(user1.isDefault)
         assertEquals("#A7EF60", user1.avatarColorHex)
+        org.junit.Assert.assertNull(user1.avatarImageUri)
 
         assertEquals("Guest", user2.name)
         assertFalse(user2.isDefault)
         assertEquals("#4DA8DA", user2.avatarColorHex)
+        org.junit.Assert.assertNull(user2.avatarImageUri)
+
+        assertEquals("Otaku", user3.name)
+        assertEquals("/storage/emulated/0/avatar.jpg", user3.avatarImageUri)
     }
 
     @Test

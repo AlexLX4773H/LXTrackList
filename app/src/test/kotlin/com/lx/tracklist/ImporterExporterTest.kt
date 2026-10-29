@@ -8,6 +8,8 @@ import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.ui.settings.ExportDestination
+import com.lx.tracklist.ui.settings.ExportPreviewState
 import com.lx.tracklist.ui.settings.ImportPreviewState
 import com.lx.tracklist.ui.settings.buildCategoryGroups
 import com.lx.tracklist.ui.settings.getCategoryKeyForEntry
@@ -430,6 +432,49 @@ class ImporterExporterTest {
         assertTrue(filteredToImport.any { it.title == "Battle Through The Heavens" })
         assertTrue(filteredToImport.none { it.title == "Attack on Titan" })
         assertTrue(filteredToImport.none { it.title == "Shadow Slave" })
+    }
+
+    @Test
+    fun testExportPreviewGroupingAndFiltering() {
+        val libraryEntries = listOf(
+            MediaEntry(title = "Demon Slayer", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED),
+            MediaEntry(title = "Jujutsu Kaisen", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING),
+            MediaEntry(title = "Tower of God", mediaType = MediaType.MANHWA, status = MediaStatus.WATCHING),
+            MediaEntry(title = "Omniscient Reader", mediaType = MediaType.MANHWA, status = MediaStatus.WATCHING),
+            MediaEntry(title = "Martial Peak", mediaType = MediaType.MANGA, customCategory = "Manhua", status = MediaStatus.WATCHING),
+            MediaEntry(title = "Apotheosis", mediaType = MediaType.MANGA, customCategory = "Manhua", status = MediaStatus.WATCHING),
+            MediaEntry(title = "Tales of Demons and Gods", mediaType = MediaType.MANGA, customCategory = "Manhua", status = MediaStatus.WATCHING)
+        )
+
+        val groups = buildCategoryGroups(libraryEntries)
+        assertEquals(3, groups.size)
+
+        val animeGrp = groups.first { it.key == "TYPE:ANIME" }
+        assertEquals(2, animeGrp.count)
+
+        val manhwaGrp = groups.first { it.key == "TYPE:MANHWA" }
+        assertEquals(2, manhwaGrp.count)
+
+        val manhuaGrp = groups.first { it.key == "CUSTOM:Manhua" }
+        assertEquals(3, manhuaGrp.count)
+        assertTrue(manhuaGrp.isCustomCategory)
+
+        // Select only Manhua custom category for export
+        val exportPreview = ExportPreviewState(
+            destination = ExportDestination.CUSTOM_FILE,
+            allEntries = libraryEntries,
+            categoryGroups = groups,
+            selectedCategoryKeys = setOf("CUSTOM:Manhua")
+        )
+
+        assertEquals(7, exportPreview.totalCount)
+        assertEquals(3, exportPreview.selectedCount)
+
+        val filtered = exportPreview.getFilteredEntries()
+        assertEquals(3, filtered.size)
+        assertTrue(filtered.all { it.customCategory == "Manhua" })
+        assertTrue(filtered.none { it.mediaType == MediaType.ANIME })
+        assertTrue(filtered.none { it.mediaType == MediaType.MANHWA })
     }
 
     private fun writeVarint(out: ByteArrayOutputStream, value: Long) {

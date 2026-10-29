@@ -103,12 +103,36 @@ fun buildCategoryGroups(entries: List<MediaEntry>): List<ImportCategoryGroup> {
     return groups
 }
 
+enum class ExportDestination {
+    HOME_OUTPUT_FOLDER,
+    CUSTOM_FILE
+}
+
+data class ExportPreviewState(
+    val destination: ExportDestination = ExportDestination.HOME_OUTPUT_FOLDER,
+    val allEntries: List<MediaEntry>,
+    val categoryGroups: List<ImportCategoryGroup>,
+    val selectedCategoryKeys: Set<String> = emptySet(),
+    val isExporting: Boolean = false
+) {
+    val totalCount: Int get() = allEntries.size
+    val selectedCount: Int get() = allEntries.count { entry ->
+        val key = getCategoryKeyForEntry(entry)
+        selectedCategoryKeys.contains(key)
+    }
+    fun getFilteredEntries(): List<MediaEntry> = allEntries.filter { entry ->
+        selectedCategoryKeys.contains(getCategoryKeyForEntry(entry))
+    }
+}
+
 data class SettingsUiState(
     val selectedConflictStrategy: ConflictStrategy = ConflictStrategy.MERGE,
     val isImporting: Boolean = false,
     val isExporting: Boolean = false,
     val isPreparingImport: Boolean = false,
+    val isPreparingExport: Boolean = false,
     val importPreview: ImportPreviewState? = null,
+    val exportPreview: ExportPreviewState? = null,
     val statusMessage: String? = null,
     val isErrorMessage: Boolean = false,
     val hasStoragePermission: Boolean = false,
@@ -359,6 +383,196 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                         isImporting = false,
                         importPreview = null,
                         statusMessage = "Import failed: ${e.localizedMessage ?: "Unknown error"}",
+                        isErrorMessage = true
+                    )
+                }
+            }
+        }
+    }
+
+    private var pendingCustomExportEntries: List<MediaEntry>? = null
+
+    fun prepareExport(destination: ExportDestination) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isPreparingExport = true, statusMessage = null) }
+            try {
+                val allEntries = withContext(Dispatchers.IO) {
+                    repository.getAllEntriesSync()
+                }
+
+                if (allEntries.isEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            isPreparingExport = false,
+                            statusMessage = "No media entries found in library to export",
+                            isErrorMessage = true
+                        )
+                    }
+                    return@launch
+                }
+
+                val groups = buildCategoryGroups(allEntries)
+                val allKeys = groups.map { it.key }.toSet()
+                _uiState.update {
+                    it.copy(
+                        isPreparingExport = false,
+                        exportPreview = ExportPreviewState(
+                            destination = destination,
+                            allEntries = allEntries,
+                            categoryGroups = groups,
+                            selectedCategoryKeys = allKeys
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isPreparingExport = false,
+                        statusMessage = "Failed to load entries for export: ${e.localizedMessage ?: "Unknown error"}",
+                        isErrorMessage = true
+                    )
+                }
+            }
+        }
+    }
+
+    fun setExportDestination(destination: ExportDestination) {
+        _uiState.update { state ->
+            val preview = state.exportPreview ?: return@update state
+            state.copy(exportPreview = preview.copy(destination = destination))
+        }
+    }
+
+    fun toggleExportCategorySelection(categoryKey: String) {
+        _uiState.update { state ->
+            val preview = state.exportPreview ?: return@update state
+            val currentKeys = preview.selectedCategoryKeys
+            val newKeys = if (currentKeys.contains(categoryKey)) {
+                currentKeys - categoryKey
+            } else {
+                currentKeys + categoryKey
+            }
+            state.copy(exportPreview = preview.copy(selectedCategoryKeys = newKeys))
+        }
+    }
+
+    fun selectAllExportCategories() {
+        _uiState.update { state ->
+            val preview = state.exportPreview ?: return@update state
+            val allKeys = preview.categoryGroups.map { it.key }.toSet()
+            state.copy(exportPreview = preview.copy(selectedCategoryKeys = allKeys))
+        }
+    }
+
+    fun deselectAllExportCategories() {
+        _uiState.update { state ->
+            val preview = state.exportPreview ?: return@update state
+            state.copy(exportPreview = preview.copy(selectedCategoryKeys = emptySet()))
+        }
+    }
+
+    fun cancelExportPreview() {
+        _uiState.update { it.copy(exportPreview = null) }
+    }
+
+    fun confirmExportToHomeOutput(context: Context) {
+        val preview = _uiState.value.exportPreview ?: return
+        val filteredEntries = preview.getFilteredEntries()
+
+        if (filteredEntries.isEmpty()) {
+            _uiState.update {
+                it.copy(
+                    exportPreview = null,
+                    statusMessage = "No categories were selected for export",
+                    isErrorMessage = true
+                )
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { state ->
+                state.copy(
+                    isExporting = true,
+                    exportPreview = preview.copy(isExporting = true)
+                )
+            }
+            try {
+                val json = JsonExporter.exportToJson(filteredEntries)
+                val targetFile = withContext(Dispatchers.IO) {
+                    StorageHelper.exportToJsonFile(json)
+                }
+
+                _uiState.update {
+                    it.copy(
+                        isExporting = false,
+                        exportPreview = null,
+                        statusMessage = "Saved ${filteredEntries.size} entries to:\n${targetFile.absolutePath}",
+                        isErrorMessage = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isExporting = false,
+                        exportPreview = null,
+                        statusMessage = "Export failed: ${e.localizedMessage ?: "Unknown error"}",
+                        isErrorMessage = true
+                    )
+                }
+            }
+        }
+    }
+
+    fun startCustomExport(onLaunchPicker: () -> Unit) {
+        val preview = _uiState.value.exportPreview ?: return
+        val filteredEntries = preview.getFilteredEntries()
+        if (filteredEntries.isEmpty()) {
+            _uiState.update {
+                it.copy(
+                    exportPreview = null,
+                    statusMessage = "No categories were selected for export",
+                    isErrorMessage = true
+                )
+            }
+            return
+        }
+        pendingCustomExportEntries = filteredEntries
+        _uiState.update { it.copy(exportPreview = null) }
+        onLaunchPicker()
+    }
+
+    fun exportPendingToCustomUri(context: Context, destinationUri: Uri) {
+        val entries = pendingCustomExportEntries
+        if (entries == null) {
+            exportToCustomUri(context, destinationUri)
+            return
+        }
+        pendingCustomExportEntries = null
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExporting = true, statusMessage = null) }
+            try {
+                withContext(Dispatchers.IO) {
+                    val outputStream = context.contentResolver.openOutputStream(destinationUri)
+                        ?: throw IllegalStateException("Cannot write to destination file")
+                    outputStream.use { out ->
+                        JsonExporter.writeToStream(entries, out)
+                    }
+                }
+
+                _uiState.update {
+                    it.copy(
+                        isExporting = false,
+                        statusMessage = "Successfully exported ${entries.size} entries to JSON backup",
+                        isErrorMessage = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isExporting = false,
+                        statusMessage = "Export failed: ${e.localizedMessage ?: "Unknown error"}",
                         isErrorMessage = true
                     )
                 }
