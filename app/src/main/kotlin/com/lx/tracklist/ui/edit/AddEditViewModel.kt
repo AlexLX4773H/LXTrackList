@@ -7,11 +7,19 @@ import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.Priority
+import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.repository.MediaRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -21,6 +29,7 @@ data class AddEditUiState(
     val alternateTitle: String = "",
     val mediaType: MediaType = MediaType.ANIME,
     val customCategory: String? = null,
+    val subCategory: String? = null,
     val status: MediaStatus = MediaStatus.WATCHING,
     val score: Int? = null,
     val priority: Priority = Priority.MEDIUM,
@@ -67,7 +76,22 @@ class AddEditViewModel(
     private val _uiState = MutableStateFlow(AddEditUiState())
     val uiState: StateFlow<AddEditUiState> = _uiState.asStateFlow()
 
+    private val _savedEvent = Channel<Unit>(Channel.BUFFERED)
+    val savedEvent = _savedEvent.receiveAsFlow()
+
     val customCategories = repository.customCategories
+
+    val currentCategoryKey: String
+        get() {
+            val s = _uiState.value
+            return s.customCategory ?: s.mediaType.name
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val subCategories: Flow<List<SubCategory>> = _uiState
+        .map { it.customCategory ?: it.mediaType.name }
+        .distinctUntilChanged()
+        .flatMapLatest { key -> repository.getSubCategories(key) }
 
     init {
         loadEntry(entryId)
@@ -85,6 +109,7 @@ class AddEditViewModel(
                             alternateTitle = entry.alternateTitle ?: "",
                             mediaType = entry.mediaType,
                             customCategory = entry.customCategory,
+                            subCategory = entry.subCategory,
                             status = entry.status,
                             score = entry.score,
                             priority = entry.priority,
@@ -129,21 +154,21 @@ class AddEditViewModel(
 
     fun updateTitle(value: String) = _uiState.update { it.copy(title = value) }
     fun updateAlternateTitle(value: String) = _uiState.update { it.copy(alternateTitle = value) }
-    fun updateMediaType(value: MediaType) = _uiState.update { it.copy(mediaType = value) }
-    fun updateCustomCategory(name: String?) = _uiState.update { it.copy(customCategory = name) }
-    fun updateSubCategory(name: String?) = updateCustomCategory(name)
+    fun updateMediaType(value: MediaType) = _uiState.update { it.copy(mediaType = value, customCategory = null, subCategory = null) }
+    fun updateCustomCategory(name: String?) = _uiState.update { it.copy(customCategory = name, subCategory = null) }
+    fun selectCategory(mediaType: MediaType, customCategory: String? = null) = _uiState.update {
+        it.copy(mediaType = mediaType, customCategory = customCategory, subCategory = null)
+    }
+
+    fun updateSubCategory(name: String?) = _uiState.update { it.copy(subCategory = name?.trim()?.ifBlank { null }) }
 
     fun addSubCategory(name: String) {
         val trimmed = name.trim()
         if (trimmed.isBlank()) return
-        val currentType = _uiState.value.mediaType
+        val key = currentCategoryKey
         viewModelScope.launch {
-            repository.addCustomCategory(
-                name = trimmed,
-                mediaType = currentType,
-                isWatchType = currentType == MediaType.ANIME || currentType == MediaType.SHOW || currentType == MediaType.MOVIE
-            )
-            updateCustomCategory(trimmed)
+            repository.addSubCategory(key, trimmed)
+            updateSubCategory(trimmed)
         }
     }
     fun updateStatus(value: MediaStatus) = _uiState.update { it.copy(status = value) }
@@ -188,6 +213,7 @@ class AddEditViewModel(
                 alternateTitle = s.alternateTitle.trim().ifBlank { null },
                 mediaType = s.mediaType,
                 customCategory = s.customCategory?.trim()?.ifBlank { null },
+                subCategory = s.subCategory?.trim()?.ifBlank { null },
                 status = s.status,
                 score = s.score,
                 priority = s.priority,
@@ -225,6 +251,7 @@ class AddEditViewModel(
             }
 
             _uiState.update { it.copy(isSaved = true) }
+            _savedEvent.send(Unit)
         }
     }
 }

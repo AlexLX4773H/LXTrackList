@@ -7,9 +7,11 @@ import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.repository.MediaRepository
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlin.math.max
@@ -28,6 +30,9 @@ class DetailViewModel(
 
     private val _isDeleted = MutableStateFlow(false)
     val isDeleted: StateFlow<Boolean> = _isDeleted
+
+    private val _deletedEvent = Channel<Unit>(Channel.BUFFERED)
+    val deletedEvent = _deletedEvent.receiveAsFlow()
 
     fun resetDeletedState() {
         _isDeleted.value = false
@@ -72,6 +77,7 @@ class DetailViewModel(
         viewModelScope.launch {
             repository.delete(cur)
             _isDeleted.value = true
+            _deletedEvent.send(Unit)
         }
     }
 }

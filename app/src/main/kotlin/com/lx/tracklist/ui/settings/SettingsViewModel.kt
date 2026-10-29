@@ -173,7 +173,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
             )
             _uiState.update {
                 it.copy(
-                    statusMessage = "Created sub category \"$trimmed\"",
+                    statusMessage = "Created custom category \"$trimmed\"",
                     isErrorMessage = false
                 )
             }

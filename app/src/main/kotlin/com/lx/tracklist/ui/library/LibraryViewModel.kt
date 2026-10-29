@@ -8,6 +8,7 @@ import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.Priority
+import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -33,6 +34,7 @@ data class LibraryUiState(
     val searchQuery: String = "",
     val selectedCategoryFilter: MediaType? = null,
     val selectedCustomCategoryFilter: String? = null,
+    val selectedSubCategoryFilter: String? = null,
     val selectedStatusFilter: MediaStatus? = null,
     val minScore: Int? = null,
     val onlyUnrated: Boolean = false,
@@ -43,6 +45,7 @@ data class LibraryUiState(
     val totalCount: Int = 0,
     val selectedIds: Set<Long> = emptySet(),
     val customCategories: List<CustomCategory> = emptyList(),
+    val subCategories: List<SubCategory> = emptyList(),
     val isFilterSheetOpen: Boolean = false,
     val isSortMenuOpen: Boolean = false,
     val activeFilterCount: Int = 0
@@ -54,6 +57,7 @@ private data class LibraryFilterState(
     val query: String = "",
     val categoryFilter: MediaType? = null,
     val customCategoryFilter: String? = null,
+    val subCategoryFilter: String? = null,
     val statusFilter: MediaStatus? = null,
     val minScore: Int? = null,
     val onlyUnrated: Boolean = false,
@@ -70,6 +74,7 @@ private data class LibraryFilterState(
             var count = 0
             if (categoryFilter != null) count++
             if (customCategoryFilter != null) count++
+            if (subCategoryFilter != null) count++
             if (statusFilter != null) count++
             if (minScore != null || onlyUnrated) count++
             if (priorityFilter != null) count++
@@ -86,16 +91,20 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
     val uiState: StateFlow<LibraryUiState> = combine(
         _filterState,
         repository.getAllEntries(),
-        repository.customCategories
-    ) { filter, allEntries, customCats ->
+        repository.customCategories,
+        repository.allSubCategories
+    ) { filter, allEntries, customCats, subCats ->
         var list = allEntries
 
-        // 1. Category / Sub Category Filter
+        // 1. Category / Custom Category / Sub Category Filter
         if (filter.categoryFilter != null) {
             list = list.filter { it.mediaType == filter.categoryFilter }
         }
         if (filter.customCategoryFilter != null) {
             list = list.filter { it.customCategory.equals(filter.customCategoryFilter, ignoreCase = true) }
+        }
+        if (filter.subCategoryFilter != null) {
+            list = list.filter { it.subCategory.equals(filter.subCategoryFilter, ignoreCase = true) }
         }
 
         // 2. Status Filter
@@ -155,6 +164,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             searchQuery = filter.query,
             selectedCategoryFilter = filter.categoryFilter,
             selectedCustomCategoryFilter = filter.customCategoryFilter,
+            selectedSubCategoryFilter = filter.subCategoryFilter,
             selectedStatusFilter = filter.statusFilter,
             minScore = filter.minScore,
             onlyUnrated = filter.onlyUnrated,
@@ -165,6 +175,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             totalCount = sortedList.size,
             selectedIds = filter.selectedIds,
             customCategories = customCats,
+            subCategories = subCats,
             isFilterSheetOpen = filter.isFilterSheetOpen,
             isSortMenuOpen = filter.isSortMenuOpen,
             activeFilterCount = filter.activeFilterCount
@@ -185,6 +196,10 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun setCustomCategoryFilter(customCat: String?) {
         _filterState.update { it.copy(customCategoryFilter = customCat) }
+    }
+
+    fun setSubCategoryFilter(subCat: String?) {
+        _filterState.update { it.copy(subCategoryFilter = subCat) }
     }
 
     fun setStatusFilter(status: MediaStatus?) {
@@ -228,6 +243,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             it.copy(
                 categoryFilter = null,
                 customCategoryFilter = null,
+                subCategoryFilter = null,
                 statusFilter = null,
                 minScore = null,
                 onlyUnrated = false,

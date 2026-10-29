@@ -4,11 +4,13 @@ import android.content.Context
 import com.lx.tracklist.data.local.CustomCategoryDao
 import com.lx.tracklist.data.local.MediaEntryDao
 import com.lx.tracklist.data.local.StatusCount
+import com.lx.tracklist.data.local.SubCategoryDao
 import com.lx.tracklist.data.local.UserProfileDao
 import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
 import kotlinx.coroutines.CoroutineScope
@@ -33,6 +35,7 @@ class MediaRepository(
     private val dao: MediaEntryDao,
     private val userProfileDao: UserProfileDao? = null,
     private val customCategoryDao: CustomCategoryDao? = null,
+    private val subCategoryDao: SubCategoryDao? = null,
     private val context: Context? = null
 ) {
     private val repoScope = CoroutineScope(Dispatchers.IO)
@@ -138,6 +141,34 @@ class MediaRepository(
 
     suspend fun deleteCustomCategory(category: CustomCategory) {
         customCategoryDao?.delete(category)
+    }
+
+    // Sub Categories (specific to a category)
+    fun getSubCategories(categoryKey: String): Flow<List<SubCategory>> {
+        return subCategoryDao?.getSubCategoriesByCategory(categoryKey) ?: emptyFlow()
+    }
+
+    val allSubCategories: Flow<List<SubCategory>>
+        get() = subCategoryDao?.getAllSubCategories() ?: emptyFlow()
+
+    suspend fun addSubCategory(categoryKey: String, name: String, colorHex: String = "#A7EF60") {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        subCategoryDao?.insert(
+            SubCategory(
+                categoryKey = categoryKey,
+                name = trimmed,
+                colorHex = colorHex
+            )
+        )
+    }
+
+    suspend fun deleteSubCategory(subCategory: SubCategory) {
+        subCategoryDao?.delete(subCategory)
+    }
+
+    suspend fun deleteSubCategoryByName(categoryKey: String, name: String) {
+        subCategoryDao?.deleteByName(categoryKey, name)
     }
 
     // Media Entries Queries - Reactive to activeUser
@@ -252,7 +283,7 @@ class MediaRepository(
         var updated = 0
         val targetUserId = _activeUser.value.id
 
-        // Auto-create any missing custom categories / sub categories
+        // Auto-create any missing custom categories
         if (customCategoryDao != null) {
             val uniqueCustomCats = entries.mapNotNull { it.customCategory?.trim() }
                 .filter { it.isNotBlank() }
@@ -276,6 +307,29 @@ class MediaRepository(
                     )
                 } else if (existing.mediaType == null) {
                     customCategoryDao.update(existing.copy(mediaType = targetType))
+                }
+            }
+        }
+
+        // Auto-create any missing sub categories
+        if (subCategoryDao != null) {
+            for (rawEntry in entries) {
+                val subCat = rawEntry.subCategory?.trim()
+                if (!subCat.isNullOrBlank()) {
+                    val catKey = if (!rawEntry.customCategory.isNullOrBlank()) {
+                        rawEntry.customCategory.trim()
+                    } else {
+                        rawEntry.mediaType.name
+                    }
+                    val existing = subCategoryDao.getSubCategory(catKey, subCat)
+                    if (existing == null) {
+                        subCategoryDao.insert(
+                            SubCategory(
+                                categoryKey = catKey,
+                                name = subCat
+                            )
+                        )
+                    }
                 }
             }
         }
@@ -352,6 +406,7 @@ class MediaRepository(
             notes = if (!imported.notes.isNullOrBlank()) imported.notes else existing.notes,
             coverImageUri = imported.coverImageUri ?: existing.coverImageUri,
             customCategory = imported.customCategory ?: existing.customCategory,
+            subCategory = imported.subCategory ?: existing.subCategory,
             updatedAt = System.currentTimeMillis()
         )
     }

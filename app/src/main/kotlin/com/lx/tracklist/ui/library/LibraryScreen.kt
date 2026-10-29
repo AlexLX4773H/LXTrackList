@@ -479,13 +479,38 @@ fun LibraryScreen(
                     )
                 }
 
-                // Sub Categories Chips
+                // Custom Categories Chips
                 items(state.customCategories) { customCat ->
                     val isSelected = state.selectedCustomCategoryFilter.equals(customCat.name, ignoreCase = true)
                     FilterChip(
                         selected = isSelected,
                         onClick = { viewModel.setCustomCategoryFilter(if (isSelected) null else customCat.name) },
-                        label = { Text("✨ ${customCat.name}", fontSize = 12.sp) },
+                        label = { Text(customCat.name, fontSize = 12.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LXPrimaryGreen,
+                            selectedLabelColor = LXBackgroundBlack,
+                            containerColor = LXSurfaceElevated,
+                            labelColor = LXTextSecondary
+                        )
+                    )
+                }
+
+                // Sub Categories Chips (for currently selected category if any, or all)
+                val catFilter = state.selectedCategoryFilter
+                val customCatFilter = state.selectedCustomCategoryFilter
+                val relevantSubCats = if (catFilter != null) {
+                    state.subCategories.filter { it.categoryKey.equals(catFilter.name, ignoreCase = true) }
+                } else if (customCatFilter != null) {
+                    state.subCategories.filter { it.categoryKey.equals(customCatFilter, ignoreCase = true) }
+                } else {
+                    state.subCategories
+                }
+                items(relevantSubCats) { subCat ->
+                    val isSelected = state.selectedSubCategoryFilter.equals(subCat.name, ignoreCase = true)
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { viewModel.setSubCategoryFilter(if (isSelected) null else subCat.name) },
+                        label = { Text("🏷️ ${subCat.name}", fontSize = 12.sp) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = LXScoreGold,
                             selectedLabelColor = LXBackgroundBlack,
@@ -497,7 +522,7 @@ fun LibraryScreen(
             }
 
             // Active Filter Removable Badges (if filters active)
-            if (state.selectedCategoryFilter != null || state.selectedCustomCategoryFilter != null || state.selectedStatusFilter != null || state.minScore != null || state.onlyUnrated || state.selectedPriorityFilter != null || state.onlyAiring) {
+            if (state.selectedCategoryFilter != null || state.selectedCustomCategoryFilter != null || state.selectedSubCategoryFilter != null || state.selectedStatusFilter != null || state.minScore != null || state.onlyUnrated || state.selectedPriorityFilter != null || state.onlyAiring) {
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -513,11 +538,20 @@ fun LibraryScreen(
                         }
                     }
 
-                    state.selectedCustomCategoryFilter?.let { subCat ->
+                    state.selectedCustomCategoryFilter?.let { customCat ->
+                        item {
+                            RemovableFilterBadge(
+                                label = "Category: $customCat",
+                                onRemove = { viewModel.setCustomCategoryFilter(null) }
+                            )
+                        }
+                    }
+
+                    state.selectedSubCategoryFilter?.let { subCat ->
                         item {
                             RemovableFilterBadge(
                                 label = "Sub: $subCat",
-                                onRemove = { viewModel.setCustomCategoryFilter(null) }
+                                onRemove = { viewModel.setSubCategoryFilter(null) }
                             )
                         }
                     }

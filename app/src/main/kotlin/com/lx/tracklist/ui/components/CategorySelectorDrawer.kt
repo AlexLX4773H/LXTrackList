@@ -164,14 +164,14 @@ fun CategorySelectorSheet(
                 Spacer(modifier = Modifier.height(4.dp))
             }
 
-            // Sub Categories section
+            // Custom Categories section
             if (customCategories.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider(color = LXBorder, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Sub Categories",
+                    text = "Custom Categories",
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                     color = LXTextSecondary,
                     modifier = Modifier.padding(vertical = 4.dp)
@@ -181,7 +181,6 @@ fun CategorySelectorSheet(
                     val isSelected = selectedCustomCategory == customCat.name
                     val count = customCategoryCounts[customCat.name] ?: 0
                     val accentColor = parseHexColor(customCat.colorHex)
-                    val parentType = customCat.mediaType ?: selectedCategory
 
                     Row(
                         modifier = Modifier
@@ -189,7 +188,6 @@ fun CategorySelectorSheet(
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (isSelected) accentColor.copy(alpha = 0.15f) else Color.Transparent)
                             .clickable {
-                                onSelectCategory(parentType)
                                 onSelectCustomCategory?.invoke(customCat.name)
                                 onDismiss()
                             }
@@ -225,7 +223,7 @@ fun CategorySelectorSheet(
                                     color = if (isSelected) accentColor else LXTextPrimary
                                 )
                                 Text(
-                                    text = "Sub Category • ${parentType.displayName}",
+                                    text = if (customCat.isWatchType) "Watch • Episodes" else "Read • ${customCat.trackingUnit.displayName}",
                                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                     color = LXTextSecondary
                                 )
@@ -264,7 +262,7 @@ fun CategorySelectorSheet(
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Text(
-                    text = "💡 Sub categories can be custom added or imported from .tachibk, JSON & CSV",
+                    text = "💡 Create and manage custom categories in Settings",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                     color = LXTextSecondary
                 )

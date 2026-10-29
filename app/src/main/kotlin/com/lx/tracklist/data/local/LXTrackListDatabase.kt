@@ -9,11 +9,12 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
+import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.UserProfile
 
 @Database(
-    entities = [MediaEntry::class, UserProfile::class, CustomCategory::class],
-    version = 4,
+    entities = [MediaEntry::class, UserProfile::class, CustomCategory::class, SubCategory::class],
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -22,6 +23,7 @@ abstract class LXTrackListDatabase : RoomDatabase() {
     abstract fun mediaEntryDao(): MediaEntryDao
     abstract fun userProfileDao(): UserProfileDao
     abstract fun customCategoryDao(): CustomCategoryDao
+    abstract fun subCategoryDao(): SubCategoryDao
 
     companion object {
         @Volatile
@@ -39,6 +41,25 @@ abstract class LXTrackListDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_entries ADD COLUMN subCategory TEXT DEFAULT NULL")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS sub_categories (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        categoryKey TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        colorHex TEXT NOT NULL DEFAULT '#A7EF60',
+                        createdAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_sub_categories_categoryKey_name ON sub_categories(categoryKey, name)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_media_entries_subCategory ON media_entries(subCategory)")
+            }
+        }
+
         fun getDatabase(context: Context): LXTrackListDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -46,7 +67,7 @@ abstract class LXTrackListDatabase : RoomDatabase() {
                     LXTrackListDatabase::class.java,
                     "lx_track_list.db"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

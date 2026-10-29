@@ -63,7 +63,8 @@ object CsvImporter {
                 MediaEntry(
                     title = title,
                     mediaType = mediaType,
-                    customCategory = subCategory,
+                    customCategory = null,
+                    subCategory = subCategory,
                     status = status,
                     score = score,
                     currentEpisodes = currentEp,

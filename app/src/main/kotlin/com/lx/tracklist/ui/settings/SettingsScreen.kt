@@ -140,7 +140,7 @@ fun SettingsScreen(
                 newCategoryName = ""
             },
             title = {
-                Text("New Sub Category", color = LXTextPrimary, fontWeight = FontWeight.Bold)
+                Text("New Custom Category", color = LXTextPrimary, fontWeight = FontWeight.Bold)
             },
             text = {
                 Column(
@@ -149,11 +149,11 @@ fun SettingsScreen(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("Sub Category Name", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
+                    Text("Category Name", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
                     OutlinedTextField(
                         value = newCategoryName,
                         onValueChange = { newCategoryName = it },
-                        placeholder = { Text("e.g. Donghua, Web Novels, Favorites...", color = LXTextSecondary) },
+                        placeholder = { Text("e.g. Donghua, Web Novels, Audiobooks...", color = LXTextSecondary) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -164,45 +164,6 @@ fun SettingsScreen(
                             cursorColor = LXPrimaryGreen
                         )
                     )
-
-                    Text("Applies to Main Category", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        item {
-                            FilterChip(
-                                selected = newCategoryMediaType == null,
-                                onClick = { newCategoryMediaType = null },
-                                label = { Text("All Media", fontSize = 11.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = LXPrimaryGreen,
-                                    selectedLabelColor = LXBackgroundBlack,
-                                    containerColor = LXSurfaceElevated,
-                                    labelColor = LXTextSecondary
-                                )
-                            )
-                        }
-                        items(MediaType.entries) { type ->
-                            FilterChip(
-                                selected = newCategoryMediaType == type,
-                                onClick = {
-                                    newCategoryMediaType = type
-                                    newCategoryIsWatch = when (type) {
-                                        MediaType.ANIME, MediaType.MOVIE, MediaType.SHOW -> true
-                                        else -> false
-                                    }
-                                },
-                                label = { Text(type.displayName, fontSize = 11.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = LXPrimaryGreen,
-                                    selectedLabelColor = LXBackgroundBlack,
-                                    containerColor = LXSurfaceElevated,
-                                    labelColor = LXTextSecondary
-                                )
-                            )
-                        }
-                    }
 
                     Text("Tracking Mode", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
                     Row(
@@ -289,8 +250,7 @@ fun SettingsScreen(
                                 name = newCategoryName,
                                 isWatchType = newCategoryIsWatch,
                                 trackingUnit = newCategoryTrackingUnit,
-                                colorHex = selectedColor,
-                                mediaType = newCategoryMediaType
+                                colorHex = selectedColor
                             )
                             newCategoryName = ""
                             showAddCategoryDialog = false
@@ -299,7 +259,7 @@ fun SettingsScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Create Sub Category", fontWeight = FontWeight.Bold)
+                    Text("Create Category", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -1023,7 +983,7 @@ fun SettingsScreen(
                                 Icon(Icons.Default.Bookmark, contentDescription = null, tint = LXPrimaryGreen)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Sub Categories (${state.customCategories.size})",
+                                    text = "Custom Categories (${state.customCategories.size})",
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                     color = LXTextPrimary
                                 )
@@ -1039,12 +999,12 @@ fun SettingsScreen(
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("+ Add Sub Category", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("+ Add Category", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
 
                         Text(
-                            text = "Add custom sub categories (e.g. Donghua, Web Novels, Favorites) under Manga, Manhwa, Anime, etc., and track them with custom units.",
+                            text = "Add personalized categories outside default ones (e.g. Donghua, Web Novels, Audiobooks, Visual Novels, Games) and track them with custom units.",
                             style = MaterialTheme.typography.bodySmall,
                             color = LXTextSecondary
                         )
@@ -1059,7 +1019,7 @@ fun SettingsScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "No sub categories created yet. Tap \"+ Add Sub Category\" above to create one.",
+                                    text = "No custom categories created yet. Tap \"+ Add Category\" above to create one.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = LXTextSecondary
                                 )
@@ -1106,7 +1066,7 @@ fun SettingsScreen(
                                                     color = LXTextPrimary
                                                 )
                                                 Text(
-                                                    text = "${cat.mediaType?.displayName ?: "All Media"} • " + (if (cat.isWatchType) "Watch • Episodes" else "Read • ${cat.trackingUnit.displayName}"),
+                                                    text = if (cat.isWatchType) "Watch • Episodes" else "Read • ${cat.trackingUnit.displayName}",
                                                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                                     color = LXTextSecondary
                                                 )

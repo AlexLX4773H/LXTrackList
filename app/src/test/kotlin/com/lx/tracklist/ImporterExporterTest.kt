@@ -66,12 +66,12 @@ class ImporterExporterTest {
         assertEquals(2, entries.size)
         assertEquals("Nano Machine", entries[0].title)
         assertEquals(MediaType.MANHWA, entries[0].mediaType)
-        assertEquals("Murim", entries[0].customCategory)
+        assertNull(entries[0].customCategory)
         assertEquals("Murim", entries[0].subCategory)
 
         assertEquals("Chainsaw Man", entries[1].title)
         assertEquals(MediaType.MANGA, entries[1].mediaType)
-        assertEquals("Favorites", entries[1].customCategory)
+        assertNull(entries[1].customCategory)
         assertEquals("Favorites", entries[1].subCategory)
     }
 
@@ -388,12 +388,14 @@ class ImporterExporterTest {
 
         val lotm = entries[1]
         assertEquals("Lord of the Mysteries", lotm.title)
-        assertEquals("Web Novels", lotm.customCategory)
+        assertNull(lotm.customCategory)
+        assertEquals("Web Novels", lotm.subCategory)
         assertEquals(MediaType.MANGA, lotm.mediaType)
 
         val soulLand = entries[2]
         assertEquals("Soul Land", soulLand.title)
-        assertEquals("Donghua", soulLand.customCategory)
+        assertNull(soulLand.customCategory)
+        assertEquals("Donghua", soulLand.subCategory)
         assertEquals(MediaType.MANGA, soulLand.mediaType)
     }
 

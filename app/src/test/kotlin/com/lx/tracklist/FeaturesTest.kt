@@ -11,6 +11,7 @@ import com.lx.tracklist.ui.library.LibrarySortOption
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -71,6 +72,7 @@ class FeaturesTest {
             title = "Soul Land",
             mediaType = MediaType.SHOW,
             customCategory = "Donghua",
+            subCategory = "Cultivation",
             status = MediaStatus.WATCHING,
             currentEpisodes = 120,
             totalEpisodes = 250
@@ -78,7 +80,7 @@ class FeaturesTest {
 
         assertEquals(2L, entry.userId)
         assertEquals("Donghua", entry.customCategory)
-        assertEquals("Donghua", entry.subCategory)
+        assertEquals("Cultivation", entry.subCategory)
         assertEquals("120/250 ep", entry.displayProgress)
         assertEquals(120f / 250f, entry.progressFraction, 0.001f)
     }
@@ -169,5 +171,50 @@ class FeaturesTest {
         assertEquals(10L, dest1.entryId)
         assertEquals(10L, dest2.entryId)
         assertTrue(dest1.sessionId != dest2.sessionId)
+    }
+
+    @Test
+    fun testSubCategoryEntityAndNonSharedKeys() {
+        val mangaIsekai = com.lx.tracklist.data.model.SubCategory(
+            categoryKey = "MANGA",
+            name = "Isekai",
+            colorHex = "#FF7597"
+        )
+        val manhwaMurim = com.lx.tracklist.data.model.SubCategory(
+            categoryKey = "MANHWA",
+            name = "Murim",
+            colorHex = "#4DA8DA"
+        )
+
+        assertEquals("MANGA", mangaIsekai.categoryKey)
+        assertEquals("Isekai", mangaIsekai.name)
+        assertEquals("MANHWA", manhwaMurim.categoryKey)
+        assertEquals("Murim", manhwaMurim.name)
+
+        val allSubCategories = listOf(mangaIsekai, manhwaMurim)
+
+        // Manga subcategories should only contain Isekai, NOT Murim
+        val mangaSubs = allSubCategories.filter { it.categoryKey.equals(MediaType.MANGA.name, ignoreCase = true) }
+        assertEquals(1, mangaSubs.size)
+        assertEquals("Isekai", mangaSubs[0].name)
+
+        // Manhwa subcategories should only contain Murim, NOT Isekai
+        val manhwaSubs = allSubCategories.filter { it.categoryKey.equals(MediaType.MANHWA.name, ignoreCase = true) }
+        assertEquals(1, manhwaSubs.size)
+        assertEquals("Murim", manhwaSubs[0].name)
+    }
+
+    @Test
+    fun testAddEditSubCategoryState() {
+        val state = com.lx.tracklist.ui.edit.AddEditUiState(
+            title = "Mushoku Tensei",
+            mediaType = MediaType.MANGA,
+            customCategory = null,
+            subCategory = "Isekai"
+        )
+        assertEquals("Mushoku Tensei", state.title)
+        assertEquals(MediaType.MANGA, state.mediaType)
+        assertNull(state.customCategory)
+        assertEquals("Isekai", state.subCategory)
     }
 }

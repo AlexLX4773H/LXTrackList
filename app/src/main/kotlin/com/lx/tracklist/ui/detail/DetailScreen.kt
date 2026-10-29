@@ -94,6 +94,12 @@ fun DetailScreen(
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 720
 
+    LaunchedEffect(Unit) {
+        viewModel.deletedEvent.collect {
+            onNavigateBack()
+        }
+    }
+
     LaunchedEffect(isDeleted) {
         if (isDeleted) {
             viewModel.resetDeletedState()
@@ -226,6 +232,9 @@ fun DetailScreen(
                             if (!currentEntry.customCategory.isNullOrBlank()) {
                                 MetaChip(label = currentEntry.customCategory, color = LXScoreGold)
                             }
+                            if (!currentEntry.subCategory.isNullOrBlank()) {
+                                MetaChip(label = currentEntry.subCategory, color = LXScoreGold)
+                            }
                             MetaChip(
                                 label = currentEntry.status.getDisplayLabel(currentEntry.mediaType),
                                 color = if (currentEntry.status == MediaStatus.COMPLETED) LXPrimaryGreen else LXTextSecondary
@@ -337,6 +346,9 @@ fun DetailScreen(
                             MetaChip(label = currentEntry.mediaType.displayName, color = LXPrimaryGreen)
                             if (!currentEntry.customCategory.isNullOrBlank()) {
                                 MetaChip(label = currentEntry.customCategory, color = LXScoreGold)
+                            }
+                            if (!currentEntry.subCategory.isNullOrBlank()) {
+                                MetaChip(label = currentEntry.subCategory, color = LXScoreGold)
                             }
                             MetaChip(
                                 label = currentEntry.status.getDisplayLabel(currentEntry.mediaType),

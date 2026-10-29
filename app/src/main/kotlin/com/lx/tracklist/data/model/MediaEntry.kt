@@ -13,6 +13,7 @@ import androidx.room.PrimaryKey
         Index("title"),
         Index("userId"),
         Index("customCategory"),
+        Index("subCategory"),
         Index(value = ["externalId", "externalSource"])
     ]
 )
@@ -23,8 +24,11 @@ data class MediaEntry(
     // User profile association
     val userId: Long = 1L,
 
-    // Custom Category override
+    // Custom Category override (Top-level custom category, e.g. "Donghua", "Web Novels")
     val customCategory: String? = null,
+
+    // Sub-category (e.g. "Isekai", "Murim", specific to this category)
+    val subCategory: String? = null,
 
     // Common fields
     val title: String,
@@ -68,9 +72,6 @@ data class MediaEntry(
     val movieSeriesName: String? = null,
     val durationMinutes: Int? = null
 ) {
-    val subCategory: String?
-        get() = customCategory
-
     val displayProgress: String
         get() = when (mediaType) {
             MediaType.ANIME, MediaType.SHOW -> {

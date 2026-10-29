@@ -12,6 +12,7 @@ class LXApplication : Application() {
             dao = database.mediaEntryDao(),
             userProfileDao = database.userProfileDao(),
             customCategoryDao = database.customCategoryDao(),
+            subCategoryDao = database.subCategoryDao(),
             context = applicationContext
         )
     }

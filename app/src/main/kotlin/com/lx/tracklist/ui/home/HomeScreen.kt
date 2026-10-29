@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.ui.components.CategorySelectorSheet
 import com.lx.tracklist.ui.components.MediaCard
 import com.lx.tracklist.ui.components.StatusFilterTabs
@@ -63,6 +64,7 @@ import com.lx.tracklist.ui.components.TopNavBar
 import com.lx.tracklist.ui.components.UserSwitcherSheet
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
+import com.lx.tracklist.ui.theme.LXErrorRed
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
 import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXTextPrimary
@@ -77,6 +79,7 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
+    var subCategoryToDelete by remember { mutableStateOf<SubCategory?>(null) }
 
     // Handle back button for search and category sheet
     BackHandler(enabled = state.isSearchActive || state.isCategorySheetOpen) {
@@ -94,7 +97,7 @@ fun HomeScreen(
             Column {
                 TopNavBar(
                     selectedCategory = state.selectedCategory,
-                    customCategoryTitle = state.selectedSubCategory,
+                    customCategoryTitle = state.selectedCustomCategory,
                     onCategoryClick = { viewModel.setCategorySheetOpen(true) },
                     searchQuery = state.searchQuery,
                     onSearchQueryChange = { viewModel.setSearchQuery(it) },
@@ -107,23 +110,18 @@ fun HomeScreen(
                     onLogoClick = { viewModel.setUserSwitcherOpen(true) }
                 )
 
-                // Sub Category Filter Row
-                SubCategoryFilterRow(
-                    selectedCategory = state.selectedCategory,
-                    selectedSubCategory = state.selectedSubCategory,
-                    subCategories = state.subCategories,
-                    subCategoryCounts = state.subCategoryCounts,
-                    totalCategoryCount = state.categoryCounts[state.selectedCategory] ?: 0,
-                    onSelectSubCategory = { viewModel.selectSubCategory(it) },
-                    onAddSubCategoryClick = { viewModel.setAddSubCategoryDialogOpen(true) }
-                )
-
                 StatusFilterTabs(
                     selectedCategory = state.selectedCategory,
                     selectedStatus = state.selectedStatus,
+                    selectedSubCategory = state.selectedSubCategory,
                     statusCounts = state.statusCounts,
+                    subCategories = state.subCategories,
+                    subCategoryCounts = state.subCategoryCounts,
                     totalCount = state.totalCount,
-                    onStatusSelected = { viewModel.selectStatus(it) }
+                    onStatusSelected = { viewModel.selectStatus(it) },
+                    onSubCategorySelected = { viewModel.selectSubCategory(it) },
+                    onAddSubCategoryClick = { viewModel.setAddSubCategoryDialogOpen(true) },
+                    onDeleteSubCategory = { subCategoryToDelete = it }
                 )
             }
         },
@@ -177,113 +175,56 @@ fun HomeScreen(
             if (state.isCategorySheetOpen) {
                 CategorySelectorSheet(
                     selectedCategory = state.selectedCategory,
-                    selectedCustomCategory = state.selectedSubCategory,
+                    selectedCustomCategory = state.selectedCustomCategory,
                     categoryCounts = state.categoryCounts,
-                    customCategories = state.subCategories,
-                    customCategoryCounts = state.subCategoryCounts,
+                    customCategories = state.customCategories,
+                    customCategoryCounts = state.customCategoryCounts,
                     onSelectCategory = { viewModel.selectCategory(it) },
-                    onSelectCustomCategory = { viewModel.selectSubCategory(it) },
+                    onSelectCustomCategory = { viewModel.selectCustomCategory(it) },
                     onDismiss = { viewModel.setCategorySheetOpen(false) }
                 )
             }
 
             if (state.isAddSubCategoryDialogOpen) {
                 AddSubCategoryDialog(
-                    categoryName = state.selectedCategory.displayName,
+                    categoryName = state.selectedCustomCategory ?: state.selectedCategory.displayName,
                     onConfirm = { name, color -> viewModel.addSubCategory(name, color) },
                     onDismiss = { viewModel.setAddSubCategoryDialogOpen(false) }
                 )
             }
-        }
-    }
-}
 
-@Composable
-fun SubCategoryFilterRow(
-    selectedCategory: MediaType,
-    selectedSubCategory: String?,
-    subCategories: List<CustomCategory>,
-    subCategoryCounts: Map<String, Int>,
-    totalCategoryCount: Int,
-    onSelectSubCategory: (String?) -> Unit,
-    onAddSubCategoryClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    LazyRow(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // "All" chip
-        item {
-            FilterChip(
-                selected = selectedSubCategory == null,
-                onClick = { onSelectSubCategory(null) },
-                label = { Text("All ($totalCategoryCount)", fontSize = 11.sp, fontWeight = if (selectedSubCategory == null) FontWeight.Bold else FontWeight.Medium) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                    selectedLabelColor = LXPrimaryGreen,
-                    containerColor = LXSurfaceElevated,
-                    labelColor = LXTextSecondary
-                ),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = selectedSubCategory == null,
-                    borderColor = LXBorder,
-                    selectedBorderColor = LXPrimaryGreen
+            subCategoryToDelete?.let { subCat ->
+                AlertDialog(
+                    onDismissRequest = { subCategoryToDelete = null },
+                    title = {
+                        Text("Delete Sub Category", color = LXTextPrimary, fontWeight = FontWeight.Bold)
+                    },
+                    text = {
+                        Text(
+                            text = "Delete \"${subCat.name}\" from ${state.selectedCustomCategory ?: state.selectedCategory.displayName}?",
+                            color = LXTextSecondary
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.deleteSubCategory(subCat)
+                                subCategoryToDelete = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = LXErrorRed, contentColor = Color.White),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Delete", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { subCategoryToDelete = null }) {
+                            Text("Cancel", color = LXTextSecondary)
+                        }
+                    },
+                    containerColor = LXSurfaceElevated
                 )
-            )
-        }
-
-        // Subcategory items
-        items(subCategories, key = { it.name }) { subCat ->
-            val isSelected = selectedSubCategory.equals(subCat.name, ignoreCase = true)
-            val count = subCategoryCounts[subCat.name] ?: 0
-            val accentColor = parseHexColor(subCat.colorHex)
-
-            FilterChip(
-                selected = isSelected,
-                onClick = { onSelectSubCategory(if (isSelected) null else subCat.name) },
-                label = { Text("${subCat.name} ($count)", fontSize = 11.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = accentColor.copy(alpha = 0.2f),
-                    selectedLabelColor = accentColor,
-                    containerColor = LXSurfaceElevated,
-                    labelColor = LXTextSecondary
-                ),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = isSelected,
-                    borderColor = LXBorder,
-                    selectedBorderColor = accentColor
-                )
-            )
-        }
-
-        // "+ Sub Category" chip
-        item {
-            FilterChip(
-                selected = false,
-                onClick = onAddSubCategoryClick,
-                label = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(13.dp), tint = LXPrimaryGreen)
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text("+ Sub", fontSize = 11.sp, color = LXPrimaryGreen, fontWeight = FontWeight.Bold)
-                    }
-                },
-                colors = FilterChipDefaults.filterChipColors(
-                    containerColor = LXSurfaceElevated,
-                    labelColor = LXPrimaryGreen
-                ),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = false,
-                    borderColor = LXPrimaryGreen.copy(alpha = 0.4f)
-                )
-            )
+            }
         }
     }
 }

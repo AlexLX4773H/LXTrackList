@@ -90,9 +90,17 @@ fun AddEditScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val customCategories by viewModel.customCategories.collectAsState(initial = emptyList())
+    val subCategories by viewModel.subCategories.collectAsState(initial = emptyList())
+    var newSubCategoryText by remember { mutableStateOf("") }
     var showCoverSearchDialog by remember { mutableStateOf(false) }
 
     BackHandler(onBack = onNavigateBack)
+
+    LaunchedEffect(Unit) {
+        viewModel.savedEvent.collect {
+            onNavigateBack()
+        }
+    }
 
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) {
@@ -164,11 +172,27 @@ fun AddEditScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 MediaType.entries.forEach { cat ->
-                    val isSelected = state.mediaType == cat
+                    val isSelected = state.customCategory == null && state.mediaType == cat
                     FilterChip(
                         selected = isSelected,
-                        onClick = { viewModel.updateMediaType(cat) },
+                        onClick = { viewModel.selectCategory(cat, null) },
                         label = { Text(cat.displayName) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LXPrimaryGreen,
+                            selectedLabelColor = LXBackgroundBlack,
+                            containerColor = LXSurfaceElevated,
+                            labelColor = LXTextSecondary
+                        )
+                    )
+                }
+                customCategories.forEach { customCat ->
+                    val isSelected = state.customCategory.equals(customCat.name, ignoreCase = true)
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            viewModel.selectCategory(customCat.mediaType ?: state.mediaType, customCat.name)
+                        },
+                        label = { Text(customCat.name) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = LXPrimaryGreen,
                             selectedLabelColor = LXBackgroundBlack,
@@ -180,15 +204,14 @@ fun AddEditScreen(
             }
 
             // Sub Category (Optional)
-            val relevantSubCats = customCategories.filter { it.mediaType == null || it.mediaType == state.mediaType }
             Text("Sub Category (Optional)", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilterChip(
-                    selected = state.customCategory.isNullOrBlank(),
-                    onClick = { viewModel.updateCustomCategory(null) },
+                    selected = state.subCategory.isNullOrBlank(),
+                    onClick = { viewModel.updateSubCategory(null) },
                     label = { Text("None") },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = LXPrimaryGreen,
@@ -198,12 +221,26 @@ fun AddEditScreen(
                     )
                 )
 
-                relevantSubCats.forEach { subCat ->
-                    val isSelected = state.customCategory.equals(subCat.name, ignoreCase = true)
+                subCategories.forEach { subCat ->
+                    val isSelected = state.subCategory.equals(subCat.name, ignoreCase = true)
                     FilterChip(
                         selected = isSelected,
-                        onClick = { viewModel.updateCustomCategory(if (isSelected) null else subCat.name) },
+                        onClick = { viewModel.updateSubCategory(if (isSelected) null else subCat.name) },
                         label = { Text(subCat.name) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LXPrimaryGreen,
+                            selectedLabelColor = LXBackgroundBlack,
+                            containerColor = LXSurfaceElevated,
+                            labelColor = LXTextSecondary
+                        )
+                    )
+                }
+
+                if (!state.subCategory.isNullOrBlank() && subCategories.none { it.name.equals(state.subCategory, ignoreCase = true) }) {
+                    FilterChip(
+                        selected = true,
+                        onClick = { viewModel.updateSubCategory(null) },
+                        label = { Text(state.subCategory ?: "") },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = LXPrimaryGreen,
                             selectedLabelColor = LXBackgroundBlack,
@@ -214,15 +251,37 @@ fun AddEditScreen(
                 }
             }
 
-            OutlinedTextField(
-                value = state.customCategory ?: "",
-                onValueChange = { viewModel.updateCustomCategory(it.ifBlank { null }) },
-                label = { Text("Sub Category Name (or type new custom sub category)") },
-                placeholder = { Text("e.g. Favorites, Shounen, Isekai, Webtoons, Manhua...") },
-                singleLine = true,
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                colors = outlinedColors()
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = newSubCategoryText,
+                    onValueChange = { newSubCategoryText = it },
+                    label = { Text("Add Sub Category to this Category") },
+                    placeholder = { Text("e.g. Isekai, Murim, Romance...") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    colors = outlinedColors()
+                )
+                Button(
+                    onClick = {
+                        if (newSubCategoryText.isNotBlank()) {
+                            viewModel.addSubCategory(newSubCategoryText)
+                            newSubCategoryText = ""
+                        }
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXPrimaryGreen,
+                        contentColor = LXBackgroundBlack
+                    ),
+                    modifier = Modifier.height(56.dp)
+                ) {
+                    Text("+ Add", fontWeight = FontWeight.Bold)
+                }
+            }
 
             // Title
             OutlinedTextField(

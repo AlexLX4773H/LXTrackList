@@ -557,7 +557,7 @@ object TachiyomiImporter {
 
         // Sub category identification from Tachiyomi user categories
         val nonStatusCategories = resolvedCategories.filter { !isStatusCategory(it) }
-        val customCategory = nonStatusCategories.firstOrNull {
+        val subCategory = nonStatusCategories.firstOrNull {
             val lower = it.lowercase().trim()
             !isGenericCategory(lower) && lower != "manga" && lower != "manhwa" && lower != "japanese manga"
         }?.trim()
@@ -656,14 +656,15 @@ object TachiyomiImporter {
         val isFavorite = manga.favorite || manga.dateAdded > 0L
 
         val trackingUnit = when {
-            customCategory != null && (customCategory.contains("volume", ignoreCase = true) || customCategory.contains("tankobon", ignoreCase = true)) -> TrackingUnit.VOLUMES
+            subCategory != null && (subCategory.contains("volume", ignoreCase = true) || subCategory.contains("tankobon", ignoreCase = true)) -> TrackingUnit.VOLUMES
             else -> TrackingUnit.CHAPTERS
         }
 
         return MediaEntry(
             title = title,
             mediaType = mediaType,
-            customCategory = customCategory,
+            customCategory = null,
+            subCategory = subCategory,
             status = status,
             score = score,
             startDate = startDate,
