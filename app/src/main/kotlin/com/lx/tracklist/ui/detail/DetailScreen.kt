@@ -215,12 +215,15 @@ fun DetailScreen(
                             color = LXTextPrimary
                         )
 
-                        if (!currentEntry.alternateTitle.isNullOrBlank()) {
-                            Text(
-                                text = currentEntry.alternateTitle,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = LXTextSecondary
-                            )
+                        val altTitles = currentEntry.getAlternateTitles()
+                        if (altTitles.isNotEmpty()) {
+                            altTitles.forEach { alt ->
+                                Text(
+                                    text = alt,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = LXTextSecondary
+                                )
+                            }
                         }
 
                         // Badges
@@ -331,12 +334,15 @@ fun DetailScreen(
                             color = LXTextPrimary
                         )
 
-                        if (!currentEntry.alternateTitle.isNullOrBlank()) {
-                            Text(
-                                text = currentEntry.alternateTitle,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = LXTextSecondary
-                            )
+                        val altTitles = currentEntry.getAlternateTitles()
+                        if (altTitles.isNotEmpty()) {
+                            altTitles.forEach { alt ->
+                                Text(
+                                    text = alt,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = LXTextSecondary
+                                )
+                            }
                         }
 
                         Row(

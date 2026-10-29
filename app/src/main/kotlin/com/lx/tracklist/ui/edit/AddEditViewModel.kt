@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 data class AddEditUiState(
     val id: Long = 0L,
     val title: String = "",
+    val alternateTitles: List<String> = emptyList(),
     val alternateTitle: String = "",
     val mediaType: MediaType = MediaType.ANIME,
     val customCategory: String? = null,
@@ -102,10 +103,12 @@ class AddEditViewModel(
             viewModelScope.launch {
                 val entry = repository.getEntryByIdSync(id)
                 if (entry != null) {
+                    val altTitles = entry.getAlternateTitles()
                     _uiState.update {
                         it.copy(
                             id = entry.id,
                             title = entry.title,
+                            alternateTitles = altTitles,
                             alternateTitle = entry.alternateTitle ?: "",
                             mediaType = entry.mediaType,
                             customCategory = entry.customCategory,
@@ -153,7 +156,35 @@ class AddEditViewModel(
     }
 
     fun updateTitle(value: String) = _uiState.update { it.copy(title = value) }
-    fun updateAlternateTitle(value: String) = _uiState.update { it.copy(alternateTitle = value) }
+    fun updateAlternateTitle(value: String) {
+        val split = value.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+        _uiState.update { it.copy(alternateTitle = value, alternateTitles = split) }
+    }
+    fun addAlternateTitle(value: String = "") {
+        _uiState.update { it.copy(alternateTitles = it.alternateTitles + value) }
+    }
+    fun updateAlternateTitle(index: Int, value: String) {
+        _uiState.update { state ->
+            val list = state.alternateTitles.toMutableList()
+            if (index in list.indices) {
+                list[index] = value
+                state.copy(alternateTitles = list, alternateTitle = list.filter { it.isNotBlank() }.joinToString("\n"))
+            } else {
+                state
+            }
+        }
+    }
+    fun removeAlternateTitle(index: Int) {
+        _uiState.update { state ->
+            val list = state.alternateTitles.toMutableList()
+            if (index in list.indices) {
+                list.removeAt(index)
+                state.copy(alternateTitles = list, alternateTitle = list.filter { it.isNotBlank() }.joinToString("\n"))
+            } else {
+                state
+            }
+        }
+    }
     fun updateMediaType(value: MediaType) = _uiState.update { it.copy(mediaType = value, customCategory = null, subCategory = null) }
     fun updateCustomCategory(name: String?) = _uiState.update { it.copy(customCategory = name, subCategory = null) }
     fun selectCategory(mediaType: MediaType, customCategory: String? = null) = _uiState.update {
@@ -207,10 +238,15 @@ class AddEditViewModel(
         }
 
         viewModelScope.launch {
+            val formattedAltTitle = MediaEntry.formatAlternateTitles(
+                if (s.alternateTitles.isNotEmpty()) s.alternateTitles
+                else if (s.alternateTitle.isNotBlank()) listOf(s.alternateTitle)
+                else emptyList()
+            )
             val entry = MediaEntry(
                 id = s.id,
                 title = s.title.trim(),
-                alternateTitle = s.alternateTitle.trim().ifBlank { null },
+                alternateTitle = formattedAltTitle,
                 mediaType = s.mediaType,
                 customCategory = s.customCategory?.trim()?.ifBlank { null },
                 subCategory = s.subCategory?.trim()?.ifBlank { null },

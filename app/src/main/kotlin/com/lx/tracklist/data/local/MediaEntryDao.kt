@@ -130,6 +130,18 @@ interface MediaEntryDao {
     @Delete
     suspend fun delete(entry: MediaEntry)
 
+    @Query("UPDATE media_entries SET mediaType = :mediaType, customCategory = :customCategory, subCategory = NULL, updatedAt = :updatedAt WHERE id IN (:ids)")
+    suspend fun updateCategoryForIds(ids: List<Long>, mediaType: MediaType, customCategory: String?, updatedAt: Long)
+
+    @Query("UPDATE media_entries SET subCategory = :subCategory, updatedAt = :updatedAt WHERE id IN (:ids)")
+    suspend fun updateSubCategoryForIds(ids: List<Long>, subCategory: String?, updatedAt: Long)
+
+    @Query("UPDATE media_entries SET status = :status, updatedAt = :updatedAt WHERE id IN (:ids)")
+    suspend fun updateStatusForIds(ids: List<Long>, status: MediaStatus, updatedAt: Long)
+
+    @Query("UPDATE media_entries SET isFavorite = :isFavorite, updatedAt = :updatedAt WHERE id IN (:ids)")
+    suspend fun updateFavoriteForIds(ids: List<Long>, isFavorite: Boolean, updatedAt: Long)
+
     @Query("DELETE FROM media_entries WHERE id = :id")
     suspend fun deleteById(id: Long)
 

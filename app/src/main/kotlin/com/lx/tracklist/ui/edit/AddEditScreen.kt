@@ -1,6 +1,7 @@
 package com.lx.tracklist.ui.edit
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +26,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
@@ -42,12 +44,14 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -91,7 +95,6 @@ fun AddEditScreen(
     val state by viewModel.uiState.collectAsState()
     val customCategories by viewModel.customCategories.collectAsState(initial = emptyList())
     val subCategories by viewModel.subCategories.collectAsState(initial = emptyList())
-    var newSubCategoryText by remember { mutableStateOf("") }
     var showCoverSearchDialog by remember { mutableStateOf(false) }
 
     BackHandler(onBack = onNavigateBack)
@@ -251,36 +254,12 @@ fun AddEditScreen(
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = newSubCategoryText,
-                    onValueChange = { newSubCategoryText = it },
-                    label = { Text("Add Sub Category to this Category") },
-                    placeholder = { Text("e.g. Isekai, Murim, Romance...") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    colors = outlinedColors()
+            if (subCategories.isEmpty() && state.subCategory.isNullOrBlank()) {
+                Text(
+                    text = "No sub categories available for this category. Sub categories can be created from the Home screen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
                 )
-                Button(
-                    onClick = {
-                        if (newSubCategoryText.isNotBlank()) {
-                            viewModel.addSubCategory(newSubCategoryText)
-                            newSubCategoryText = ""
-                        }
-                    },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = LXPrimaryGreen,
-                        contentColor = LXBackgroundBlack
-                    ),
-                    modifier = Modifier.height(56.dp)
-                ) {
-                    Text("+ Add", fontWeight = FontWeight.Bold)
-                }
             }
 
             // Title
@@ -293,15 +272,66 @@ fun AddEditScreen(
                 colors = outlinedColors()
             )
 
-            // Alternate Title
-            OutlinedTextField(
-                value = state.alternateTitle,
-                onValueChange = { viewModel.updateAlternateTitle(it) },
-                label = { Text("Alternate Title (e.g. Japanese / Korean)") },
-                singleLine = true,
+            // Alternate Titles (Support for multiple alternate titles)
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                colors = outlinedColors()
-            )
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Alternate Titles (Optional)",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = LXTextPrimary
+                    )
+                    TextButton(onClick = { viewModel.addAlternateTitle() }) {
+                        Text(
+                            text = "+ Add Alternate Title",
+                            color = LXPrimaryGreen,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+
+                if (state.alternateTitles.isEmpty()) {
+                    OutlinedButton(
+                        onClick = { viewModel.addAlternateTitle() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                        border = BorderStroke(1.dp, LXBorder),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("+ Add Alternate Title (e.g. Japanese, Korean)", color = LXTextPrimary)
+                    }
+                } else {
+                    state.alternateTitles.forEachIndexed { index, altTitle ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = altTitle,
+                                onValueChange = { viewModel.updateAlternateTitle(index, it) },
+                                label = { Text("Alternate Title ${index + 1}") },
+                                placeholder = { Text("e.g. Shingeki no Kyojin, 進撃の巨人...") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                                colors = outlinedColors()
+                            )
+                            IconButton(onClick = { viewModel.removeAlternateTitle(index) }) {
+                                Icon(Icons.Default.Close, contentDescription = "Remove", tint = LXErrorRed)
+                            }
+                        }
+                    }
+                }
+            }
 
             // Status Chips
             Text("Status", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)

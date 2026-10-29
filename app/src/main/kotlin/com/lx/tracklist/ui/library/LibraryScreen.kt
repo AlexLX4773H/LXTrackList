@@ -1,6 +1,7 @@
 package com.lx.tracklist.ui.library
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +32,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
@@ -39,6 +43,7 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
@@ -57,6 +62,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -76,6 +82,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -104,6 +111,10 @@ fun LibraryScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showCategoryBatchDialog by remember { mutableStateOf(false) }
+    var showSubCategoryBatchDialog by remember { mutableStateOf(false) }
+    var showStatusBatchDialog by remember { mutableStateOf(false) }
+    var showFavoriteBatchDialog by remember { mutableStateOf(false) }
 
     val visibleIds = remember(state.entries) { state.entries.map { it.id } }
 
@@ -146,6 +157,258 @@ fun LibraryScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
+    }
+
+    // Change Category Batch Dialog
+    if (showCategoryBatchDialog) {
+        AlertDialog(
+            onDismissRequest = { showCategoryBatchDialog = false },
+            title = {
+                Text(
+                    text = "Change Category (${state.selectedIds.size} selected)",
+                    color = LXTextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Box(modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Standard Categories", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
+                        MediaType.entries.forEach { mediaType ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(LXSurfaceBlack)
+                                    .clickable {
+                                        viewModel.batchUpdateCategory(mediaType, null)
+                                        showCategoryBatchDialog = false
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(mediaType.displayName, color = LXTextPrimary, fontWeight = FontWeight.Medium)
+                            }
+                        }
+
+                        if (state.customCategories.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Custom Categories", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
+                            state.customCategories.forEach { customCat ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(LXSurfaceBlack)
+                                        .clickable {
+                                            val targetType = customCat.mediaType ?: if (customCat.isWatchType) MediaType.ANIME else MediaType.MANGA
+                                            viewModel.batchUpdateCategory(targetType, customCat.name)
+                                            showCategoryBatchDialog = false
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(customCat.name, color = LXPrimaryGreen, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showCategoryBatchDialog = false }) {
+                    Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
+    }
+
+    // Set Sub Category Batch Dialog
+    if (showSubCategoryBatchDialog) {
+        val distinctSubCats = remember(state.subCategories) {
+            state.subCategories.distinctBy { it.name.lowercase() }
+        }
+        AlertDialog(
+            onDismissRequest = { showSubCategoryBatchDialog = false },
+            title = {
+                Text(
+                    text = "Set Sub Category (${state.selectedIds.size} selected)",
+                    color = LXTextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Box(modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(LXSurfaceBlack)
+                                .clickable {
+                                    viewModel.batchUpdateSubCategory(null)
+                                    showSubCategoryBatchDialog = false
+                                }
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("None (Clear Sub Category)", color = LXErrorRed, fontWeight = FontWeight.Medium)
+                        }
+
+                        if (distinctSubCats.isEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "No sub categories found. Sub categories can be created from the Home screen.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LXTextSecondary
+                            )
+                        } else {
+                            distinctSubCats.forEach { subCat ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(LXSurfaceBlack)
+                                        .clickable {
+                                            viewModel.batchUpdateSubCategory(subCat.name)
+                                            showSubCategoryBatchDialog = false
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(subCat.name, color = LXTextPrimary, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showSubCategoryBatchDialog = false }) {
+                    Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
+    }
+
+    // Set Status Batch Dialog
+    if (showStatusBatchDialog) {
+        AlertDialog(
+            onDismissRequest = { showStatusBatchDialog = false },
+            title = {
+                Text(
+                    text = "Set Status (${state.selectedIds.size} selected)",
+                    color = LXTextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MediaStatus.entries.forEach { st ->
+                        val statusLabel = when (st) {
+                            MediaStatus.WATCHING -> "Watching / Reading"
+                            MediaStatus.PLAN_TO_WATCH -> "Plan to Watch / Read"
+                            MediaStatus.COMPLETED -> "Completed"
+                            MediaStatus.ON_HOLD -> "On Hold"
+                            MediaStatus.DROPPED -> "Dropped"
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(LXSurfaceBlack)
+                                .clickable {
+                                    viewModel.batchUpdateStatus(st)
+                                    showStatusBatchDialog = false
+                                }
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(statusLabel, color = LXTextPrimary, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showStatusBatchDialog = false }) {
+                    Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
+    }
+
+    // Set Favorite Batch Dialog
+    if (showFavoriteBatchDialog) {
+        AlertDialog(
+            onDismissRequest = { showFavoriteBatchDialog = false },
+            title = {
+                Text(
+                    text = "Favorite (${state.selectedIds.size} selected)",
+                    color = LXTextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            viewModel.batchUpdateFavorite(true)
+                            showFavoriteBatchDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Mark as Favorite", fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            viewModel.batchUpdateFavorite(false)
+                            showFavoriteBatchDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = LXSurfaceVariant, contentColor = LXTextPrimary),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Remove from Favorites", fontWeight = FontWeight.Medium)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showFavoriteBatchDialog = false }) {
                     Text("Cancel", color = LXTextSecondary)
                 }
             },
@@ -294,6 +557,44 @@ fun LibraryScreen(
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = LXBackgroundBlack)
                 )
+            }
+        },
+        bottomBar = {
+            if (state.isSelectionMode) {
+                Surface(
+                    color = LXSurfaceElevated,
+                    tonalElevation = 8.dp,
+                    border = BorderStroke(1.dp, LXBorder)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        BatchActionButton(
+                            icon = Icons.Default.Category,
+                            label = "Category",
+                            onClick = { showCategoryBatchDialog = true }
+                        )
+                        BatchActionButton(
+                            icon = Icons.Default.Style,
+                            label = "Sub Category",
+                            onClick = { showSubCategoryBatchDialog = true }
+                        )
+                        BatchActionButton(
+                            icon = Icons.Default.Bookmarks,
+                            label = "Status",
+                            onClick = { showStatusBatchDialog = true }
+                        )
+                        BatchActionButton(
+                            icon = Icons.Default.Favorite,
+                            label = "Favorite",
+                            onClick = { showFavoriteBatchDialog = true }
+                        )
+                    }
+                }
             }
         }
     ) { paddingValues ->
@@ -494,31 +795,6 @@ fun LibraryScreen(
                         )
                     )
                 }
-
-                // Sub Categories Chips (for currently selected category if any, or all)
-                val catFilter = state.selectedCategoryFilter
-                val customCatFilter = state.selectedCustomCategoryFilter
-                val relevantSubCats = if (catFilter != null) {
-                    state.subCategories.filter { it.categoryKey.equals(catFilter.name, ignoreCase = true) }
-                } else if (customCatFilter != null) {
-                    state.subCategories.filter { it.categoryKey.equals(customCatFilter, ignoreCase = true) }
-                } else {
-                    state.subCategories
-                }
-                items(relevantSubCats) { subCat ->
-                    val isSelected = state.selectedSubCategoryFilter.equals(subCat.name, ignoreCase = true)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.setSubCategoryFilter(if (isSelected) null else subCat.name) },
-                        label = { Text("🏷️ ${subCat.name}", fontSize = 12.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXScoreGold,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
-                }
             }
 
             // Active Filter Removable Badges (if filters active)
@@ -696,6 +972,26 @@ private fun RemovableFilterBadge(
     }
 }
 
+@Composable
+private fun BatchActionButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(icon, contentDescription = label, tint = LXPrimaryGreen, modifier = Modifier.size(22.dp))
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = LXTextPrimary, fontSize = 11.sp)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun AdvancedFilterSheet(
@@ -788,6 +1084,64 @@ private fun AdvancedFilterSheet(
                                 labelColor = LXTextSecondary
                             )
                         )
+                    }
+                }
+            }
+
+            // Sub Category Filter Section (Advanced Filter)
+            val catFilter = state.selectedCategoryFilter
+            val customCatFilter = state.selectedCustomCategoryFilter
+            val relevantSubCats = remember(state.subCategories, catFilter, customCatFilter) {
+                if (catFilter != null) {
+                    state.subCategories.filter { it.categoryKey.equals(catFilter.name, ignoreCase = true) }
+                } else if (customCatFilter != null) {
+                    state.subCategories.filter { it.categoryKey.equals(customCatFilter, ignoreCase = true) }
+                } else {
+                    state.subCategories.distinctBy { it.name.lowercase() }
+                }
+            }
+
+            if (relevantSubCats.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Style, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Sub Category",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                    }
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = state.selectedSubCategoryFilter == null,
+                            onClick = { viewModel.setSubCategoryFilter(null) },
+                            label = { Text("All Sub Categories") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = LXPrimaryGreen,
+                                selectedLabelColor = LXBackgroundBlack,
+                                containerColor = LXSurfaceElevated,
+                                labelColor = LXTextSecondary
+                            )
+                        )
+
+                        relevantSubCats.forEach { subCat ->
+                            val isSelected = state.selectedSubCategoryFilter.equals(subCat.name, ignoreCase = true)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.setSubCategoryFilter(if (isSelected) null else subCat.name) },
+                                label = { Text(subCat.name) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = LXScoreGold,
+                                    selectedLabelColor = LXBackgroundBlack,
+                                    containerColor = LXSurfaceElevated,
+                                    labelColor = LXTextSecondary
+                                )
+                            )
+                        }
                     }
                 }
             }

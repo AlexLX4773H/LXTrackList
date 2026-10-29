@@ -138,7 +138,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         if (filter.query.isNotBlank()) {
             list = list.filter {
                 it.title.contains(filter.query, ignoreCase = true) ||
-                        (it.alternateTitle?.contains(filter.query, ignoreCase = true) == true) ||
+                        it.getAlternateTitles().any { alt -> alt.contains(filter.query, ignoreCase = true) } ||
                         (it.tags?.contains(filter.query, ignoreCase = true) == true)
             }
         }
@@ -300,6 +300,42 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                 repository.deleteEntries(toDelete)
                 clearSelection()
             }
+        }
+    }
+
+    fun batchUpdateCategory(mediaType: MediaType, customCategory: String? = null) {
+        val selected = _filterState.value.selectedIds.toList()
+        if (selected.isEmpty()) return
+        viewModelScope.launch {
+            repository.batchUpdateCategory(selected, mediaType, customCategory)
+            clearSelection()
+        }
+    }
+
+    fun batchUpdateSubCategory(subCategory: String?) {
+        val selected = _filterState.value.selectedIds.toList()
+        if (selected.isEmpty()) return
+        viewModelScope.launch {
+            repository.batchUpdateSubCategory(selected, subCategory)
+            clearSelection()
+        }
+    }
+
+    fun batchUpdateStatus(status: MediaStatus) {
+        val selected = _filterState.value.selectedIds.toList()
+        if (selected.isEmpty()) return
+        viewModelScope.launch {
+            repository.batchUpdateStatus(selected, status)
+            clearSelection()
+        }
+    }
+
+    fun batchUpdateFavorite(isFavorite: Boolean) {
+        val selected = _filterState.value.selectedIds.toList()
+        if (selected.isEmpty()) return
+        viewModelScope.launch {
+            repository.batchUpdateFavorite(selected, isFavorite)
+            clearSelection()
         }
     }
 

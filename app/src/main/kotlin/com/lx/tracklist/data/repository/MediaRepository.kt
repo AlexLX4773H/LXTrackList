@@ -273,6 +273,26 @@ class MediaRepository(
 
     suspend fun deleteEntries(ids: List<Long>) = dao.deleteEntriesByIds(ids)
 
+    suspend fun batchUpdateCategory(ids: List<Long>, mediaType: MediaType, customCategory: String?) {
+        if (ids.isEmpty()) return
+        dao.updateCategoryForIds(ids, mediaType, customCategory, System.currentTimeMillis())
+    }
+
+    suspend fun batchUpdateSubCategory(ids: List<Long>, subCategory: String?) {
+        if (ids.isEmpty()) return
+        dao.updateSubCategoryForIds(ids, subCategory, System.currentTimeMillis())
+    }
+
+    suspend fun batchUpdateStatus(ids: List<Long>, status: MediaStatus) {
+        if (ids.isEmpty()) return
+        dao.updateStatusForIds(ids, status, System.currentTimeMillis())
+    }
+
+    suspend fun batchUpdateFavorite(ids: List<Long>, isFavorite: Boolean) {
+        if (ids.isEmpty()) return
+        dao.updateFavoriteForIds(ids, isFavorite, System.currentTimeMillis())
+    }
+
     suspend fun toggleFavorite(entry: MediaEntry) {
         dao.update(entry.copy(isFavorite = !entry.isFavorite, updatedAt = System.currentTimeMillis()))
     }

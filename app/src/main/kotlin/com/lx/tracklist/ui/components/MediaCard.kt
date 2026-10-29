@@ -246,7 +246,7 @@ fun MediaCard(
                 // Subtitle / Date / Alternate title
                 val dateInfo = formatDateRange(entry.startDate, entry.finishDate)
                 val subtitleText = when {
-                    !entry.alternateTitle.isNullOrBlank() -> entry.alternateTitle
+                    !entry.alternateTitle.isNullOrBlank() -> entry.getAlternateTitles().joinToString(" • ")
                     dateInfo.isNotBlank() -> dateInfo
                     else -> entry.mediaType.displayName
                 }

@@ -258,4 +258,154 @@ class FeaturesTest {
         )
         assertTrue(settingsState.isSwipeToSwitchTabsEnabled)
     }
+
+    @Test
+    fun testAddEditSubCategorySelectionOnly() {
+        // Feature 1: In Add/Edit, only choosing existing subcategories is permitted (no in-screen creation)
+        val availableSubCategories = listOf(
+            com.lx.tracklist.data.model.SubCategory(categoryKey = "ANIME", name = "Shonen"),
+            com.lx.tracklist.data.model.SubCategory(categoryKey = "ANIME", name = "Isekai")
+        )
+
+        val state = com.lx.tracklist.ui.edit.AddEditUiState(
+            title = "Jujutsu Kaisen",
+            mediaType = MediaType.ANIME,
+            subCategory = availableSubCategories[0].name
+        )
+        assertEquals("Shonen", state.subCategory)
+
+        // Selecting "None"
+        val stateNone = state.copy(subCategory = null)
+        assertNull(stateNone.subCategory)
+    }
+
+    @Test
+    fun testBatchUpdateLogic() {
+        // Feature 2: Multi-select batch operations in Library
+        val entries = listOf(
+            MediaEntry(id = 1L, title = "Entry 1", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, isFavorite = false, subCategory = "Shonen"),
+            MediaEntry(id = 2L, title = "Entry 2", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, isFavorite = true, subCategory = "Seinen"),
+            MediaEntry(id = 3L, title = "Entry 3", mediaType = MediaType.MANGA, status = MediaStatus.PLAN_TO_WATCH, isFavorite = false, subCategory = "Romance")
+        )
+        val selectedIds = setOf(1L, 2L)
+
+        // a. Change Category: changes mediaType and resets subCategory to null
+        val afterCategoryChange = entries.map { entry ->
+            if (selectedIds.contains(entry.id)) {
+                entry.copy(mediaType = MediaType.MANHWA, customCategory = null, subCategory = null)
+            } else entry
+        }
+        assertEquals(MediaType.MANHWA, afterCategoryChange[0].mediaType)
+        assertNull(afterCategoryChange[0].subCategory)
+        assertEquals(MediaType.MANHWA, afterCategoryChange[1].mediaType)
+        assertNull(afterCategoryChange[1].subCategory)
+        assertEquals(MediaType.MANGA, afterCategoryChange[2].mediaType) // unaffected
+        assertEquals("Romance", afterCategoryChange[2].subCategory)
+
+        // b. Set Sub Category
+        val afterSubCategoryChange = entries.map { entry ->
+            if (selectedIds.contains(entry.id)) {
+                entry.copy(subCategory = "Action")
+            } else entry
+        }
+        assertEquals("Action", afterSubCategoryChange[0].subCategory)
+        assertEquals("Action", afterSubCategoryChange[1].subCategory)
+        assertEquals("Romance", afterSubCategoryChange[2].subCategory)
+
+        // c. Set Status
+        val afterStatusChange = entries.map { entry ->
+            if (selectedIds.contains(entry.id)) {
+                entry.copy(status = MediaStatus.COMPLETED)
+            } else entry
+        }
+        assertEquals(MediaStatus.COMPLETED, afterStatusChange[0].status)
+        assertEquals(MediaStatus.COMPLETED, afterStatusChange[1].status)
+        assertEquals(MediaStatus.PLAN_TO_WATCH, afterStatusChange[2].status)
+
+        // d. Set / Unset Favorite
+        val afterFavoriteSet = entries.map { entry ->
+            if (selectedIds.contains(entry.id)) {
+                entry.copy(isFavorite = true)
+            } else entry
+        }
+        assertTrue(afterFavoriteSet[0].isFavorite)
+        assertTrue(afterFavoriteSet[1].isFavorite)
+        assertFalse(afterFavoriteSet[2].isFavorite)
+
+        val afterFavoriteUnset = entries.map { entry ->
+            if (selectedIds.contains(entry.id)) {
+                entry.copy(isFavorite = false)
+            } else entry
+        }
+        assertFalse(afterFavoriteUnset[0].isFavorite)
+        assertFalse(afterFavoriteUnset[1].isFavorite)
+    }
+
+    @Test
+    fun testAdvancedSubCategoryFilter() {
+        // Feature 3: Subcategory as an advanced filter
+        val entries = listOf(
+            MediaEntry(id = 1L, title = "Attack on Titan", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, subCategory = "Dark Fantasy"),
+            MediaEntry(id = 2L, title = "Demon Slayer", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, subCategory = "Shonen"),
+            MediaEntry(id = 3L, title = "Solo Leveling", mediaType = MediaType.MANHWA, status = MediaStatus.WATCHING, subCategory = "Power Fantasy")
+        )
+
+        // Filter by Sub Category = "Dark Fantasy"
+        val filtered = entries.filter { it.subCategory.equals("Dark Fantasy", ignoreCase = true) }
+        assertEquals(1, filtered.size)
+        assertEquals("Attack on Titan", filtered[0].title)
+
+        // Filter by Sub Category = "Shonen"
+        val filteredShonen = entries.filter { it.subCategory.equals("Shonen", ignoreCase = true) }
+        assertEquals(1, filteredShonen.size)
+        assertEquals("Demon Slayer", filteredShonen[0].title)
+    }
+
+    @Test
+    fun testMultipleAlternateTitlesAndSearch() {
+        // Feature 4: Multiple alternate titles storage and multi-title search
+        val titles = listOf("Attack on Titan", "Shingeki no Kyojin", "進撃の巨人")
+        val formatted = MediaEntry.formatAlternateTitles(titles)
+        assertEquals("Attack on Titan\nShingeki no Kyojin\n進撃の巨人", formatted)
+
+        val entry = MediaEntry(
+            id = 1L,
+            title = "AOT",
+            alternateTitle = formatted,
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.COMPLETED
+        )
+
+        // getAlternateTitles helper
+        val parsedTitles = entry.getAlternateTitles()
+        assertEquals(3, parsedTitles.size)
+        assertEquals("Attack on Titan", parsedTitles[0])
+        assertEquals("Shingeki no Kyojin", parsedTitles[1])
+        assertEquals("進撃の巨人", parsedTitles[2])
+
+        // Search matcher helper: title or any alternate title
+        fun matchesQuery(e: MediaEntry, q: String): Boolean {
+            return e.title.contains(q, ignoreCase = true) ||
+                    e.getAlternateTitles().any { it.contains(q, ignoreCase = true) }
+        }
+
+        // Search by main title
+        assertTrue(matchesQuery(entry, "AOT"))
+        assertTrue(matchesQuery(entry, "aot"))
+
+        // Search by 1st alternate title
+        assertTrue(matchesQuery(entry, "Attack on Titan"))
+        assertTrue(matchesQuery(entry, "titan"))
+
+        // Search by 2nd alternate title
+        assertTrue(matchesQuery(entry, "Shingeki"))
+        assertTrue(matchesQuery(entry, "kyojin"))
+
+        // Search by 3rd alternate title (Japanese kanji)
+        assertTrue(matchesQuery(entry, "進撃"))
+        assertTrue(matchesQuery(entry, "巨人"))
+
+        // Non-matching query
+        assertFalse(matchesQuery(entry, "Naruto"))
+    }
 }

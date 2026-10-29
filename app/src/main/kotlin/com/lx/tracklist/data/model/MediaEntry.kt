@@ -206,4 +206,19 @@ data class MediaEntry(
             }
         }
     }
+
+    fun getAlternateTitles(): List<String> {
+        return alternateTitle
+            ?.split("\n")
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+    }
+
+    companion object {
+        fun formatAlternateTitles(titles: List<String>): String? {
+            val cleaned = titles.map { it.trim() }.filter { it.isNotBlank() }
+            return if (cleaned.isEmpty()) null else cleaned.joinToString("\n")
+        }
+    }
 }

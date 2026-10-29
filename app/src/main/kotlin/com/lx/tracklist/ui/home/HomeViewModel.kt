@@ -128,7 +128,7 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
         val queryFiltered = if (filter.query.isNotBlank()) {
             categoryEntries.filter {
                 it.title.contains(filter.query, ignoreCase = true) ||
-                        (it.alternateTitle?.contains(filter.query, ignoreCase = true) == true) ||
+                        it.getAlternateTitles().any { alt -> alt.contains(filter.query, ignoreCase = true) } ||
                         (it.tags?.contains(filter.query, ignoreCase = true) == true) ||
                         (it.subCategory?.contains(filter.query, ignoreCase = true) == true)
             }
