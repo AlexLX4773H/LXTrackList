@@ -8,8 +8,12 @@ import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.ui.settings.ImportPreviewState
+import com.lx.tracklist.ui.settings.buildCategoryGroups
+import com.lx.tracklist.ui.settings.getCategoryKeyForEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
@@ -298,6 +302,134 @@ class ImporterExporterTest {
     fun testTachiyomiImporterEmptyAndCorrupted() {
         assertEquals(0, TachiyomiImporter.parse(ByteArrayInputStream(ByteArray(0))).size)
         assertEquals(0, TachiyomiImporter.parse(ByteArrayInputStream(byteArrayOf(0x01, 0x02, 0x03))).size)
+    }
+
+    @Test
+    fun testTachiyomiCustomCategoriesInProtobuf() {
+        val rootOut = ByteArrayOutputStream()
+
+        // Categories:
+        // 0 -> Reading (status)
+        val cat0Out = ByteArrayOutputStream()
+        writeStringField(cat0Out, 1, "Reading")
+        writeVarintField(cat0Out, 2, 0L)
+        writeMessageField(rootOut, 2, cat0Out.toByteArray())
+
+        // 1 -> Manhwa (built-in)
+        val cat1Out = ByteArrayOutputStream()
+        writeStringField(cat1Out, 1, "Manhwa")
+        writeVarintField(cat1Out, 2, 1L)
+        writeMessageField(rootOut, 2, cat1Out.toByteArray())
+
+        // 2 -> Web Novels (custom category)
+        val cat2Out = ByteArrayOutputStream()
+        writeStringField(cat2Out, 1, "Web Novels")
+        writeVarintField(cat2Out, 2, 2L)
+        writeMessageField(rootOut, 2, cat2Out.toByteArray())
+
+        // 3 -> Donghua (custom category)
+        val cat3Out = ByteArrayOutputStream()
+        writeStringField(cat3Out, 1, "Donghua")
+        writeVarintField(cat3Out, 2, 3L)
+        writeMessageField(rootOut, 2, cat3Out.toByteArray())
+
+        // Manga 1: Solo Leveling (Manhwa built-in)
+        val m1Out = ByteArrayOutputStream()
+        writeStringField(m1Out, 3, "Solo Leveling")
+        writeVarintField(m1Out, 17, 1L) // category 1 (Manhwa)
+        writeMessageField(rootOut, 1, m1Out.toByteArray())
+
+        // Manga 2: Lord of the Mysteries (Web Novels custom)
+        val m2Out = ByteArrayOutputStream()
+        writeStringField(m2Out, 3, "Lord of the Mysteries")
+        writeVarintField(m2Out, 17, 2L) // category 2 (Web Novels)
+        writeMessageField(rootOut, 1, m2Out.toByteArray())
+
+        // Manga 3: Soul Land (Donghua custom)
+        val m3Out = ByteArrayOutputStream()
+        writeStringField(m3Out, 3, "Soul Land")
+        writeVarintField(m3Out, 17, 3L) // category 3 (Donghua)
+        writeMessageField(rootOut, 1, m3Out.toByteArray())
+
+        val gzipped = gzipBytes(rootOut.toByteArray())
+        val entries = TachiyomiImporter.parse(ByteArrayInputStream(gzipped))
+
+        assertEquals(3, entries.size)
+
+        val solo = entries[0]
+        assertEquals("Solo Leveling", solo.title)
+        assertEquals(MediaType.MANHWA, solo.mediaType)
+        assertNull(solo.customCategory)
+
+        val lotm = entries[1]
+        assertEquals("Lord of the Mysteries", lotm.title)
+        assertEquals("Web Novels", lotm.customCategory)
+        assertEquals(MediaType.BOOK, lotm.mediaType)
+
+        val soulLand = entries[2]
+        assertEquals("Soul Land", soulLand.title)
+        assertEquals("Donghua", soulLand.customCategory)
+        assertEquals(MediaType.ANIME, soulLand.mediaType)
+    }
+
+    @Test
+    fun testCategoryGroupingAndSelection() {
+        val entries = listOf(
+            MediaEntry(title = "Attack on Titan", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED),
+            MediaEntry(title = "Bleach", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING),
+            MediaEntry(title = "Berserk", mediaType = MediaType.MANGA, status = MediaStatus.WATCHING),
+            MediaEntry(title = "Kingdom", mediaType = MediaType.MANGA, status = MediaStatus.WATCHING),
+            MediaEntry(title = "One Piece", mediaType = MediaType.MANGA, status = MediaStatus.WATCHING),
+            MediaEntry(title = "Battle Through The Heavens", mediaType = MediaType.ANIME, customCategory = "Donghua", status = MediaStatus.WATCHING),
+            MediaEntry(title = "Shadow Slave", mediaType = MediaType.BOOK, customCategory = "Web Novels", status = MediaStatus.WATCHING),
+            MediaEntry(title = "Reverend Insanity", mediaType = MediaType.BOOK, customCategory = "Web Novels", status = MediaStatus.WATCHING)
+        )
+
+        val groups = buildCategoryGroups(entries)
+        assertEquals(4, groups.size)
+
+        val animeGroup = groups.first { it.key == "TYPE:ANIME" }
+        assertEquals("Anime", animeGroup.displayName)
+        assertEquals(false, animeGroup.isCustomCategory)
+        assertEquals(2, animeGroup.count)
+
+        val mangaGroup = groups.first { it.key == "TYPE:MANGA" }
+        assertEquals("Manga", mangaGroup.displayName)
+        assertEquals(false, mangaGroup.isCustomCategory)
+        assertEquals(3, mangaGroup.count)
+
+        val donghuaGroup = groups.first { it.key == "CUSTOM:Donghua" }
+        assertEquals("Donghua", donghuaGroup.displayName)
+        assertEquals(true, donghuaGroup.isCustomCategory)
+        assertEquals(1, donghuaGroup.count)
+
+        val novelGroup = groups.first { it.key == "CUSTOM:Web Novels" }
+        assertEquals("Web Novels", novelGroup.displayName)
+        assertEquals(true, novelGroup.isCustomCategory)
+        assertEquals(2, novelGroup.count)
+
+        // Test Preview State with partial selection
+        val allKeys = groups.map { it.key }.toSet()
+        val preview = ImportPreviewState(
+            sourceName = "test.tachibk",
+            allEntries = entries,
+            categoryGroups = groups,
+            selectedCategoryKeys = setOf("TYPE:MANGA", "CUSTOM:Donghua")
+        )
+
+        assertEquals(8, preview.totalCount)
+        assertEquals(4, preview.selectedCount) // 3 Manga + 1 Donghua
+
+        val filteredToImport = preview.allEntries.filter {
+            preview.selectedCategoryKeys.contains(getCategoryKeyForEntry(it))
+        }
+        assertEquals(4, filteredToImport.size)
+        assertTrue(filteredToImport.any { it.title == "Berserk" })
+        assertTrue(filteredToImport.any { it.title == "Kingdom" })
+        assertTrue(filteredToImport.any { it.title == "One Piece" })
+        assertTrue(filteredToImport.any { it.title == "Battle Through The Heavens" })
+        assertTrue(filteredToImport.none { it.title == "Attack on Titan" })
+        assertTrue(filteredToImport.none { it.title == "Shadow Slave" })
     }
 
     private fun writeVarint(out: ByteArrayOutputStream, value: Long) {

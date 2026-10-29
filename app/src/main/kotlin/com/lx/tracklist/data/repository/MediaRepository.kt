@@ -245,6 +245,30 @@ class MediaRepository(
         var updated = 0
         val targetUserId = _activeUser.value.id
 
+        // Auto-create any missing custom categories
+        if (customCategoryDao != null) {
+            val uniqueCustomCats = entries.mapNotNull { it.customCategory?.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+            for (catName in uniqueCustomCats) {
+                val existing = customCategoryDao.getCategoryByName(catName)
+                if (existing == null) {
+                    val sample = entries.firstOrNull { it.customCategory?.trim().equals(catName, ignoreCase = true) }
+                    val isWatch = sample?.let {
+                        it.mediaType == MediaType.ANIME || it.mediaType == MediaType.SHOW || it.mediaType == MediaType.MOVIE
+                    } ?: false
+                    val unit = sample?.trackingUnit ?: TrackingUnit.CHAPTERS
+                    customCategoryDao.insert(
+                        CustomCategory(
+                            name = catName,
+                            isWatchType = isWatch,
+                            trackingUnit = unit
+                        )
+                    )
+                }
+            }
+        }
+
         for (rawEntry in entries) {
             val entry = rawEntry.copy(userId = targetUserId)
             val existing = if (entry.externalId != null && entry.externalSource != null) {

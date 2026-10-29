@@ -101,9 +101,9 @@ class FeaturesTest {
 
     @Test
     fun testLibrarySortingLogic() {
-        val entry1 = MediaEntry(id = 1L, title = "Bleach", score = 8, currentEpisodes = 10, totalEpisodes = 20)
-        val entry2 = MediaEntry(id = 2L, title = "Attack on Titan", score = 10, currentEpisodes = 20, totalEpisodes = 20)
-        val entry3 = MediaEntry(id = 3L, title = "Chainsaw Man", score = 7, currentEpisodes = 1, totalEpisodes = 12)
+        val entry1 = MediaEntry(id = 1L, title = "Bleach", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, score = 8, currentEpisodes = 10, totalEpisodes = 20)
+        val entry2 = MediaEntry(id = 2L, title = "Attack on Titan", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, score = 10, currentEpisodes = 20, totalEpisodes = 20)
+        val entry3 = MediaEntry(id = 3L, title = "Chainsaw Man", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, score = 7, currentEpisodes = 1, totalEpisodes = 12)
         val list = listOf(entry1, entry2, entry3)
 
         // Title ASC
@@ -126,9 +126,9 @@ class FeaturesTest {
     @Test
     fun testLibraryFilterScoreAndAiring() {
         val entries = listOf(
-            MediaEntry(id = 1L, title = "A", score = 9, isAiring = true, status = MediaStatus.WATCHING),
-            MediaEntry(id = 2L, title = "B", score = 6, isAiring = false, status = MediaStatus.COMPLETED),
-            MediaEntry(id = 3L, title = "C", score = null, isAiring = true, status = MediaStatus.PLAN_TO_WATCH)
+            MediaEntry(id = 1L, title = "A", mediaType = MediaType.ANIME, score = 9, isAiring = true, status = MediaStatus.WATCHING),
+            MediaEntry(id = 2L, title = "B", mediaType = MediaType.ANIME, score = 6, isAiring = false, status = MediaStatus.COMPLETED),
+            MediaEntry(id = 3L, title = "C", mediaType = MediaType.ANIME, score = null, isAiring = true, status = MediaStatus.PLAN_TO_WATCH)
         )
 
         val score8Plus = entries.filter { (it.score ?: 0) >= 8 }

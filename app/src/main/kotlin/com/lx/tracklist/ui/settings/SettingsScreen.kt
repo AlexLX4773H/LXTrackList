@@ -25,7 +25,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -34,13 +36,18 @@ import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -71,10 +78,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lx.tracklist.R
 import com.lx.tracklist.data.model.CustomCategory
+import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.repository.ConflictStrategy
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
@@ -287,6 +296,279 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { categoryToDelete = null }) {
+                    Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
+    }
+
+    // Analyzing File Progress Dialog
+    if (state.isPreparingImport) {
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {},
+            title = {
+                Text(
+                    text = "Analyzing File...",
+                    color = LXTextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = LXPrimaryGreen,
+                        modifier = Modifier.size(28.dp),
+                        strokeWidth = 2.5.dp
+                    )
+                    Text(
+                        text = "Reading entries and detecting categories...",
+                        color = LXTextSecondary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
+    }
+
+    // Import Preview and Confirmation Dialog
+    val preview = state.importPreview
+    if (preview != null) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!preview.isImporting) {
+                    viewModel.cancelImportPreview()
+                }
+            },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FileDownload,
+                        contentDescription = null,
+                        tint = LXPrimaryGreen,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Confirm Import",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                        Text(
+                            text = preview.sourceName,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = LXTextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Summary card
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "Total in file: ${preview.totalCount} items",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LXTextSecondary
+                                )
+                                Text(
+                                    text = "${preview.selectedCount} selected to import",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = if (preview.selectedCount > 0) LXPrimaryGreen else LXErrorRed
+                                )
+                            }
+
+                            TextButton(
+                                onClick = {
+                                    if (preview.selectedCategoryKeys.size == preview.categoryGroups.size) {
+                                        viewModel.deselectAllCategories()
+                                    } else {
+                                        viewModel.selectAllCategories()
+                                    }
+                                },
+                                enabled = !preview.isImporting
+                            ) {
+                                Text(
+                                    text = if (preview.selectedCategoryKeys.size == preview.categoryGroups.size) "Deselect All" else "Select All",
+                                    color = LXPrimaryGreen,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = "Choose types / categories to import:",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = LXTextSecondary
+                    )
+
+                    // Categories list
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        preview.categoryGroups.forEach { group ->
+                            val isChecked = preview.selectedCategoryKeys.contains(group.key)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isChecked) LXPrimaryGreen.copy(alpha = 0.12f) else LXSurfaceElevated)
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (isChecked) LXPrimaryGreen.copy(alpha = 0.6f) else LXBorder,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable(enabled = !preview.isImporting) {
+                                        viewModel.toggleCategorySelection(group.key)
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Checkbox(
+                                        checked = isChecked,
+                                        onCheckedChange = { viewModel.toggleCategorySelection(group.key) },
+                                        enabled = !preview.isImporting,
+                                        colors = CheckboxDefaults.colors(
+                                            checkedColor = LXPrimaryGreen,
+                                            checkmarkColor = LXBackgroundBlack,
+                                            uncheckedColor = LXTextSecondary
+                                        )
+                                    )
+
+                                    Spacer(modifier = Modifier.width(6.dp))
+
+                                    Icon(
+                                        imageVector = when {
+                                            group.isCustomCategory -> Icons.Default.Bookmark
+                                            group.mediaType == MediaType.ANIME -> Icons.Default.LiveTv
+                                            group.mediaType == MediaType.MANGA -> Icons.AutoMirrored.Filled.MenuBook
+                                            group.mediaType == MediaType.MANHWA -> Icons.Default.PhoneAndroid
+                                            group.mediaType == MediaType.MOVIE -> Icons.Default.Movie
+                                            group.mediaType == MediaType.SHOW -> Icons.Default.Tv
+                                            group.mediaType == MediaType.BOOK -> Icons.Default.Book
+                                            else -> Icons.Default.Bookmark
+                                        },
+                                        contentDescription = null,
+                                        tint = if (isChecked) LXPrimaryGreen else LXTextSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+
+                                    Spacer(modifier = Modifier.width(8.dp))
+
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = group.displayName,
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                                color = LXTextPrimary
+                                            )
+
+                                            if (group.isCustomCategory) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(LXPrimaryGreen.copy(alpha = 0.2f))
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Custom Category",
+                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                                        color = LXPrimaryGreen
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(LXSurfaceBlack)
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "${group.count} ${if (group.count == 1) "item" else "items"}",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium),
+                                        color = LXTextSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.confirmImport() },
+                    enabled = preview.selectedCount > 0 && !preview.isImporting,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXPrimaryGreen,
+                        contentColor = LXBackgroundBlack,
+                        disabledContainerColor = LXSurfaceElevated,
+                        disabledContentColor = LXTextSecondary
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    if (preview.isImporting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = LXBackgroundBlack,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Importing...", fontWeight = FontWeight.Bold)
+                    } else {
+                        Text(
+                            text = "Import (${preview.selectedCount})",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.cancelImportPreview() },
+                    enabled = !preview.isImporting
+                ) {
                     Text("Cancel", color = LXTextSecondary)
                 }
             },
@@ -595,7 +877,7 @@ fun SettingsScreen(
                                 if (state.inputFiles.isNotEmpty()) {
                                     TextButton(
                                         onClick = { viewModel.importAllLocalFiles(context) },
-                                        enabled = !state.isImporting
+                                        enabled = !state.isImporting && !state.isPreparingImport
                                     ) {
                                         Text("Import All", color = LXPrimaryGreen, fontWeight = FontWeight.Bold)
                                     }
@@ -645,7 +927,7 @@ fun SettingsScreen(
 
                                             Button(
                                                 onClick = { viewModel.importLocalFile(context, fileInfo) },
-                                                enabled = !state.isImporting,
+                                                enabled = !state.isImporting && !state.isPreparingImport,
                                                 colors = ButtonDefaults.buttonColors(
                                                     containerColor = LXPrimaryGreen.copy(alpha = 0.2f),
                                                     contentColor = LXPrimaryGreen
@@ -757,6 +1039,7 @@ fun SettingsScreen(
                         ) {
                             OutlinedButton(
                                 onClick = { importLauncher.launch("*/*") },
+                                enabled = !state.isImporting && !state.isPreparingImport,
                                 modifier = Modifier.weight(1f).height(42.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextPrimary),
                                 border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),

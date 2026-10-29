@@ -71,7 +71,7 @@ scratch/
 *~
 
 # Data and plan folders
-data/
-dat/
-plan/
+/data/
+/dat/
+/plan/
 
