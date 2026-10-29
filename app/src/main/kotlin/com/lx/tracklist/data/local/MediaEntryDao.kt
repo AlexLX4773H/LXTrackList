@@ -28,8 +28,11 @@ interface MediaEntryDao {
     @Query("SELECT * FROM media_entries WHERE mediaType = :mediaType ORDER BY updatedAt DESC")
     fun getEntriesByCategory(mediaType: MediaType): Flow<List<MediaEntry>>
 
-    @Query("SELECT * FROM media_entries WHERE userId = :userId AND mediaType = :mediaType AND customCategory IS NULL ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM media_entries WHERE userId = :userId AND mediaType = :mediaType ORDER BY updatedAt DESC")
     fun getEntriesByUserAndCategory(userId: Long, mediaType: MediaType): Flow<List<MediaEntry>>
+
+    @Query("SELECT * FROM media_entries WHERE userId = :userId AND mediaType = :mediaType AND customCategory = :customCategory ORDER BY updatedAt DESC")
+    fun getEntriesByUserCategoryAndSubCategory(userId: Long, mediaType: MediaType, customCategory: String): Flow<List<MediaEntry>>
 
     @Query("SELECT * FROM media_entries WHERE userId = :userId AND customCategory = :customCategory ORDER BY updatedAt DESC")
     fun getEntriesByUserAndCustomCategory(userId: Long, customCategory: String): Flow<List<MediaEntry>>
@@ -37,8 +40,11 @@ interface MediaEntryDao {
     @Query("SELECT * FROM media_entries WHERE mediaType = :mediaType AND status = :status ORDER BY updatedAt DESC")
     fun getEntriesByCategoryAndStatus(mediaType: MediaType, status: MediaStatus): Flow<List<MediaEntry>>
 
-    @Query("SELECT * FROM media_entries WHERE userId = :userId AND mediaType = :mediaType AND status = :status AND customCategory IS NULL ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM media_entries WHERE userId = :userId AND mediaType = :mediaType AND status = :status ORDER BY updatedAt DESC")
     fun getEntriesByUserAndCategoryAndStatus(userId: Long, mediaType: MediaType, status: MediaStatus): Flow<List<MediaEntry>>
+
+    @Query("SELECT * FROM media_entries WHERE userId = :userId AND mediaType = :mediaType AND customCategory = :customCategory AND status = :status ORDER BY updatedAt DESC")
+    fun getEntriesByUserCategorySubCategoryAndStatus(userId: Long, mediaType: MediaType, customCategory: String, status: MediaStatus): Flow<List<MediaEntry>>
 
     @Query("SELECT * FROM media_entries WHERE userId = :userId AND customCategory = :customCategory AND status = :status ORDER BY updatedAt DESC")
     fun getEntriesByUserAndCustomCategoryAndStatus(userId: Long, customCategory: String, status: MediaStatus): Flow<List<MediaEntry>>
@@ -79,8 +85,11 @@ interface MediaEntryDao {
     @Query("SELECT status, COUNT(*) as count FROM media_entries WHERE mediaType = :mediaType GROUP BY status")
     fun getStatusCountsByCategory(mediaType: MediaType): Flow<List<StatusCount>>
 
-    @Query("SELECT status, COUNT(*) as count FROM media_entries WHERE userId = :userId AND mediaType = :mediaType AND customCategory IS NULL GROUP BY status")
+    @Query("SELECT status, COUNT(*) as count FROM media_entries WHERE userId = :userId AND mediaType = :mediaType GROUP BY status")
     fun getStatusCountsByUserAndCategory(userId: Long, mediaType: MediaType): Flow<List<StatusCount>>
+
+    @Query("SELECT status, COUNT(*) as count FROM media_entries WHERE userId = :userId AND mediaType = :mediaType AND customCategory = :customCategory GROUP BY status")
+    fun getStatusCountsByUserCategoryAndSubCategory(userId: Long, mediaType: MediaType, customCategory: String): Flow<List<StatusCount>>
 
     @Query("SELECT status, COUNT(*) as count FROM media_entries WHERE userId = :userId AND customCategory = :customCategory GROUP BY status")
     fun getStatusCountsByUserAndCustomCategory(userId: Long, customCategory: String): Flow<List<StatusCount>>
@@ -88,8 +97,11 @@ interface MediaEntryDao {
     @Query("SELECT COUNT(*) FROM media_entries WHERE mediaType = :mediaType")
     fun getTotalCountByCategory(mediaType: MediaType): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM media_entries WHERE userId = :userId AND mediaType = :mediaType AND customCategory IS NULL")
+    @Query("SELECT COUNT(*) FROM media_entries WHERE userId = :userId AND mediaType = :mediaType")
     fun getTotalCountByUserAndCategory(userId: Long, mediaType: MediaType): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM media_entries WHERE userId = :userId AND mediaType = :mediaType AND customCategory = :customCategory")
+    fun getTotalCountByUserCategoryAndSubCategory(userId: Long, mediaType: MediaType, customCategory: String): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM media_entries WHERE userId = :userId AND customCategory = :customCategory")
     fun getTotalCountByUserAndCustomCategory(userId: Long, customCategory: String): Flow<Int>

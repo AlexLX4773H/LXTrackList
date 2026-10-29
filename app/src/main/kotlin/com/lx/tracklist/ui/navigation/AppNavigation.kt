@@ -71,8 +71,8 @@ sealed class NavDestination {
     data object Library : NavDestination()
     data object Stats : NavDestination()
     data object Settings : NavDestination()
-    data class Detail(val entryId: Long) : NavDestination()
-    data class AddEdit(val entryId: Long? = null) : NavDestination()
+    data class Detail(val entryId: Long, val sessionId: Long = System.nanoTime()) : NavDestination()
+    data class AddEdit(val entryId: Long? = null, val sessionId: Long = System.nanoTime()) : NavDestination()
 }
 
 @Composable
@@ -92,6 +92,9 @@ fun AppNavigation() {
 
     fun navigateTo(destination: NavDestination) {
         if (destination == currentDestination) return
+        if (destination is NavDestination.AddEdit && currentDestination is NavDestination.AddEdit && destination.entryId == currentDestination.entryId) return
+        if (destination is NavDestination.Detail && currentDestination is NavDestination.Detail && destination.entryId == currentDestination.entryId) return
+
         val isTopLevel = destination in listOf(
             NavDestination.Home,
             NavDestination.Library,
@@ -173,7 +176,7 @@ fun AppNavigation() {
 
             is NavDestination.Detail -> {
                 val detailViewModel: DetailViewModel = viewModel(
-                    key = "detail_${dest.entryId}",
+                    key = "detail_${dest.entryId}_${dest.sessionId}",
                     factory = DetailViewModelFactory(repository, dest.entryId)
                 )
                 DetailScreen(
@@ -185,7 +188,7 @@ fun AppNavigation() {
 
             is NavDestination.AddEdit -> {
                 val addEditViewModel: AddEditViewModel = viewModel(
-                    key = "add_edit_${dest.entryId ?: 0L}",
+                    key = "add_edit_${dest.entryId ?: 0L}_${dest.sessionId}",
                     factory = AddEditViewModelFactory(repository, dest.entryId)
                 )
                 AddEditScreen(

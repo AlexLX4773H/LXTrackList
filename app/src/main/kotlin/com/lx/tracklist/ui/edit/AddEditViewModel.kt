@@ -70,9 +70,13 @@ class AddEditViewModel(
     val customCategories = repository.customCategories
 
     init {
-        if (entryId != null && entryId > 0) {
+        loadEntry(entryId)
+    }
+
+    fun loadEntry(id: Long?) {
+        if (id != null && id > 0) {
             viewModelScope.launch {
-                val entry = repository.getEntryByIdSync(entryId)
+                val entry = repository.getEntryByIdSync(id)
                 if (entry != null) {
                     _uiState.update {
                         it.copy(
@@ -107,18 +111,41 @@ class AddEditViewModel(
                             totalPages = entry.totalPages,
                             movieSeriesName = entry.movieSeriesName ?: "",
                             movieSeriesNumber = entry.movieSeriesNumber,
-                            durationMinutes = entry.durationMinutes
+                            durationMinutes = entry.durationMinutes,
+                            isSaved = false,
+                            errorMessage = null
                         )
                     }
                 }
             }
+        } else {
+            _uiState.value = AddEditUiState(isSaved = false, errorMessage = null)
         }
+    }
+
+    fun resetSavedState() {
+        _uiState.update { it.copy(isSaved = false) }
     }
 
     fun updateTitle(value: String) = _uiState.update { it.copy(title = value) }
     fun updateAlternateTitle(value: String) = _uiState.update { it.copy(alternateTitle = value) }
-    fun updateMediaType(value: MediaType) = _uiState.update { it.copy(mediaType = value, customCategory = null) }
+    fun updateMediaType(value: MediaType) = _uiState.update { it.copy(mediaType = value) }
     fun updateCustomCategory(name: String?) = _uiState.update { it.copy(customCategory = name) }
+    fun updateSubCategory(name: String?) = updateCustomCategory(name)
+
+    fun addSubCategory(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        val currentType = _uiState.value.mediaType
+        viewModelScope.launch {
+            repository.addCustomCategory(
+                name = trimmed,
+                mediaType = currentType,
+                isWatchType = currentType == MediaType.ANIME || currentType == MediaType.SHOW || currentType == MediaType.MOVIE
+            )
+            updateCustomCategory(trimmed)
+        }
+    }
     fun updateStatus(value: MediaStatus) = _uiState.update { it.copy(status = value) }
     fun updateScore(value: Int?) = _uiState.update { it.copy(score = value) }
     fun updatePriority(value: Priority) = _uiState.update { it.copy(priority = value) }

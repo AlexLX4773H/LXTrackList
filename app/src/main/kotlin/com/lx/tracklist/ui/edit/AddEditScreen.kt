@@ -96,6 +96,7 @@ fun AddEditScreen(
 
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) {
+            viewModel.resetSavedState()
             onNavigateBack()
         }
     }
@@ -156,14 +157,14 @@ fun AddEditScreen(
                 )
             }
 
-            // Category Chips
-            Text("Category", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)
+            // Main Category
+            Text("Main Category", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 MediaType.entries.forEach { cat ->
-                    val isSelected = state.customCategory == null && state.mediaType == cat
+                    val isSelected = state.mediaType == cat
                     FilterChip(
                         selected = isSelected,
                         onClick = { viewModel.updateMediaType(cat) },
@@ -176,21 +177,33 @@ fun AddEditScreen(
                         )
                     )
                 }
+            }
 
-                customCategories.forEach { customCat ->
-                    val isSelected = state.customCategory == customCat.name
+            // Sub Category (Optional)
+            val relevantSubCats = customCategories.filter { it.mediaType == null || it.mediaType == state.mediaType }
+            Text("Sub Category (Optional)", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = state.customCategory.isNullOrBlank(),
+                    onClick = { viewModel.updateCustomCategory(null) },
+                    label = { Text("None") },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = LXPrimaryGreen,
+                        selectedLabelColor = LXBackgroundBlack,
+                        containerColor = LXSurfaceElevated,
+                        labelColor = LXTextSecondary
+                    )
+                )
+
+                relevantSubCats.forEach { subCat ->
+                    val isSelected = state.customCategory.equals(subCat.name, ignoreCase = true)
                     FilterChip(
                         selected = isSelected,
-                        onClick = {
-                            viewModel.updateCustomCategory(customCat.name)
-                            if (customCat.isWatchType) {
-                                viewModel.updateMediaType(MediaType.SHOW)
-                            } else {
-                                viewModel.updateMediaType(MediaType.MANGA)
-                            }
-                            viewModel.updateTrackingUnit(customCat.trackingUnit)
-                        },
-                        label = { Text("✨ ${customCat.name}") },
+                        onClick = { viewModel.updateCustomCategory(if (isSelected) null else subCat.name) },
+                        label = { Text(subCat.name) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = LXPrimaryGreen,
                             selectedLabelColor = LXBackgroundBlack,
@@ -200,6 +213,16 @@ fun AddEditScreen(
                     )
                 }
             }
+
+            OutlinedTextField(
+                value = state.customCategory ?: "",
+                onValueChange = { viewModel.updateCustomCategory(it.ifBlank { null }) },
+                label = { Text("Sub Category Name (or type new custom sub category)") },
+                placeholder = { Text("e.g. Favorites, Shounen, Isekai, Webtoons, Manhua...") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = outlinedColors()
+            )
 
             // Title
             OutlinedTextField(

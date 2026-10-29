@@ -96,6 +96,7 @@ fun DetailScreen(
 
     LaunchedEffect(isDeleted) {
         if (isDeleted) {
+            viewModel.resetDeletedState()
             onNavigateBack()
         }
     }
@@ -221,10 +222,9 @@ fun DetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            MetaChip(label = currentEntry.mediaType.displayName, color = LXPrimaryGreen)
                             if (!currentEntry.customCategory.isNullOrBlank()) {
-                                MetaChip(label = currentEntry.customCategory, color = LXPrimaryGreen)
-                            } else {
-                                MetaChip(label = currentEntry.mediaType.displayName, color = LXPrimaryGreen)
+                                MetaChip(label = currentEntry.customCategory, color = LXScoreGold)
                             }
                             MetaChip(
                                 label = currentEntry.status.getDisplayLabel(currentEntry.mediaType),
@@ -334,10 +334,9 @@ fun DetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            MetaChip(label = currentEntry.mediaType.displayName, color = LXPrimaryGreen)
                             if (!currentEntry.customCategory.isNullOrBlank()) {
-                                MetaChip(label = currentEntry.customCategory, color = LXPrimaryGreen)
-                            } else {
-                                MetaChip(label = currentEntry.mediaType.displayName, color = LXPrimaryGreen)
+                                MetaChip(label = currentEntry.customCategory, color = LXScoreGold)
                             }
                             MetaChip(
                                 label = currentEntry.status.getDisplayLabel(currentEntry.mediaType),

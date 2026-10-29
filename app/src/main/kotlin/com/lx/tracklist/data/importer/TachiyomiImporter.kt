@@ -555,18 +555,19 @@ object TachiyomiImporter {
         val resolvedCategories = manga.categories.mapNotNull { categoryMap[it] }.distinct()
         val sourceName = sourceMap[manga.source]
 
-        // Custom category identification from Tachiyomi user categories
+        // Sub category identification from Tachiyomi user categories
         val nonStatusCategories = resolvedCategories.filter { !isStatusCategory(it) }
         val customCategory = nonStatusCategories.firstOrNull {
-            !isBuiltInTypeCategory(it) && !isGenericCategory(it)
+            val lower = it.lowercase().trim()
+            !isGenericCategory(lower) && lower != "manga" && lower != "manhwa" && lower != "japanese manga"
         }?.trim()
 
-        // 1. Determine MediaType (MANGA vs MANHWA vs BOOK vs ANIME)
-        val mediaType = when {
-            isManhwa(manga, resolvedCategories, sourceName) -> MediaType.MANHWA
-            customCategory != null && (customCategory.contains("novel", ignoreCase = true) || customCategory.contains("book", ignoreCase = true)) -> MediaType.BOOK
-            customCategory != null && (customCategory.contains("donghua", ignoreCase = true) || customCategory.contains("anime", ignoreCase = true)) -> MediaType.ANIME
-            else -> MediaType.MANGA
+        // 1. Determine MediaType (MANGA vs MANHWA)
+        // In .tachibk, entries are manga/manhwa; Tachiyomi categories are sub-categories under Manga or Manhwa
+        val mediaType = if (isManhwa(manga, resolvedCategories, sourceName)) {
+            MediaType.MANHWA
+        } else {
+            MediaType.MANGA
         }
 
         // 2. Determine Progress (Current & Total Chapters/Episodes)
@@ -654,9 +655,7 @@ object TachiyomiImporter {
 
         val isFavorite = manga.favorite || manga.dateAdded > 0L
 
-        val isWatchType = mediaType == MediaType.ANIME || mediaType == MediaType.SHOW || mediaType == MediaType.MOVIE
         val trackingUnit = when {
-            mediaType == MediaType.BOOK -> TrackingUnit.CHAPTERS
             customCategory != null && (customCategory.contains("volume", ignoreCase = true) || customCategory.contains("tankobon", ignoreCase = true)) -> TrackingUnit.VOLUMES
             else -> TrackingUnit.CHAPTERS
         }
@@ -678,10 +677,10 @@ object TachiyomiImporter {
             externalSource = externalSource,
             createdAt = createdAt,
             updatedAt = updatedAt,
-            currentEpisodes = if (isWatchType) currentChapters else 0,
-            totalEpisodes = if (isWatchType) totalChapters else 0,
-            currentChapters = if (!isWatchType) currentChapters else 0,
-            totalChapters = if (!isWatchType) totalChapters else 0,
+            currentEpisodes = 0,
+            totalEpisodes = 0,
+            currentChapters = currentChapters,
+            totalChapters = totalChapters,
             trackingUnit = trackingUnit
         )
     }

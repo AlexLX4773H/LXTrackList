@@ -43,20 +43,24 @@ class FeaturesTest {
             name = "Donghua",
             isWatchType = true,
             trackingUnit = TrackingUnit.CHAPTERS,
-            colorHex = "#FF7597"
+            colorHex = "#FF7597",
+            mediaType = MediaType.ANIME
         )
 
         assertEquals("Donghua", cat.name)
         assertTrue(cat.isWatchType)
         assertEquals("#FF7597", cat.colorHex)
+        assertEquals(MediaType.ANIME, cat.mediaType)
 
         val novelCat = CustomCategory(
             name = "Web Novels",
             isWatchType = false,
-            trackingUnit = TrackingUnit.CHAPTERS
+            trackingUnit = TrackingUnit.CHAPTERS,
+            mediaType = MediaType.MANGA
         )
         assertFalse(novelCat.isWatchType)
         assertEquals(TrackingUnit.CHAPTERS, novelCat.trackingUnit)
+        assertEquals(MediaType.MANGA, novelCat.mediaType)
     }
 
     @Test
@@ -74,6 +78,7 @@ class FeaturesTest {
 
         assertEquals(2L, entry.userId)
         assertEquals("Donghua", entry.customCategory)
+        assertEquals("Donghua", entry.subCategory)
         assertEquals("120/250 ep", entry.displayProgress)
         assertEquals(120f / 250f, entry.progressFraction, 0.001f)
     }
@@ -147,5 +152,22 @@ class FeaturesTest {
 
         val airingOnly = entries.filter { it.isAiring }
         assertEquals(2, airingOnly.size)
+    }
+
+    @Test
+    fun testAddEditResetSavedState() {
+        val state = com.lx.tracklist.ui.edit.AddEditUiState(isSaved = true)
+        assertTrue(state.isSaved)
+        val reset = state.copy(isSaved = false)
+        assertFalse(reset.isSaved)
+    }
+
+    @Test
+    fun testNavDestinationAddEditUniqueSessions() {
+        val dest1 = com.lx.tracklist.ui.navigation.NavDestination.AddEdit(entryId = 10L, sessionId = 100L)
+        val dest2 = com.lx.tracklist.ui.navigation.NavDestination.AddEdit(entryId = 10L, sessionId = 200L)
+        assertEquals(10L, dest1.entryId)
+        assertEquals(10L, dest2.entryId)
+        assertTrue(dest1.sessionId != dest2.sessionId)
     }
 }

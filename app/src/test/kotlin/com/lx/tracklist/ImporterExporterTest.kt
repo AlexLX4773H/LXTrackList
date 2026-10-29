@@ -53,6 +53,29 @@ class ImporterExporterTest {
     }
 
     @Test
+    fun testCsvImporterWithSubCategory() {
+        val csvData = """
+            title,mediaType,status,subCategory
+            "Nano Machine",MANHWA,WATCHING,"Murim"
+            "Chainsaw Man",MANGA,WATCHING,"Favorites"
+        """.trimIndent()
+
+        val stream = ByteArrayInputStream(csvData.toByteArray(Charsets.UTF_8))
+        val entries = CsvImporter.parse(stream)
+
+        assertEquals(2, entries.size)
+        assertEquals("Nano Machine", entries[0].title)
+        assertEquals(MediaType.MANHWA, entries[0].mediaType)
+        assertEquals("Murim", entries[0].customCategory)
+        assertEquals("Murim", entries[0].subCategory)
+
+        assertEquals("Chainsaw Man", entries[1].title)
+        assertEquals(MediaType.MANGA, entries[1].mediaType)
+        assertEquals("Favorites", entries[1].customCategory)
+        assertEquals("Favorites", entries[1].subCategory)
+    }
+
+    @Test
     fun testJsonExportAndImportRoundTrip() {
         val originalEntries = listOf(
             MediaEntry(
@@ -366,12 +389,12 @@ class ImporterExporterTest {
         val lotm = entries[1]
         assertEquals("Lord of the Mysteries", lotm.title)
         assertEquals("Web Novels", lotm.customCategory)
-        assertEquals(MediaType.BOOK, lotm.mediaType)
+        assertEquals(MediaType.MANGA, lotm.mediaType)
 
         val soulLand = entries[2]
         assertEquals("Soul Land", soulLand.title)
         assertEquals("Donghua", soulLand.customCategory)
-        assertEquals(MediaType.ANIME, soulLand.mediaType)
+        assertEquals(MediaType.MANGA, soulLand.mediaType)
     }
 
     @Test

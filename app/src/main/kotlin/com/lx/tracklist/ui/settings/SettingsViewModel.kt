@@ -158,7 +158,8 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         name: String,
         isWatchType: Boolean,
         trackingUnit: TrackingUnit = TrackingUnit.CHAPTERS,
-        colorHex: String = "#A7EF60"
+        colorHex: String = "#A7EF60",
+        mediaType: MediaType? = null
     ) {
         val trimmed = name.trim()
         if (trimmed.isBlank()) return
@@ -167,11 +168,12 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 name = trimmed,
                 isWatchType = isWatchType,
                 trackingUnit = trackingUnit,
-                colorHex = colorHex
+                colorHex = colorHex,
+                mediaType = mediaType
             )
             _uiState.update {
                 it.copy(
-                    statusMessage = "Created custom category \"$trimmed\"",
+                    statusMessage = "Created sub category \"$trimmed\"",
                     isErrorMessage = false
                 )
             }

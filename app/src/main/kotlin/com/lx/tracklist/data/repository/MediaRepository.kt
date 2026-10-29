@@ -117,12 +117,14 @@ class MediaRepository(
 
     suspend fun addCustomCategory(
         name: String,
+        mediaType: MediaType? = null,
         isWatchType: Boolean = false,
         trackingUnit: TrackingUnit = TrackingUnit.CHAPTERS,
         colorHex: String = "#A7EF60"
     ): Long {
         val cat = CustomCategory(
             name = name.trim(),
+            mediaType = mediaType,
             isWatchType = isWatchType,
             trackingUnit = trackingUnit,
             colorHex = colorHex
@@ -250,15 +252,16 @@ class MediaRepository(
         var updated = 0
         val targetUserId = _activeUser.value.id
 
-        // Auto-create any missing custom categories
+        // Auto-create any missing custom categories / sub categories
         if (customCategoryDao != null) {
             val uniqueCustomCats = entries.mapNotNull { it.customCategory?.trim() }
                 .filter { it.isNotBlank() }
                 .distinct()
             for (catName in uniqueCustomCats) {
+                val sample = entries.firstOrNull { it.customCategory?.trim().equals(catName, ignoreCase = true) }
+                val targetType = sample?.mediaType ?: MediaType.MANGA
                 val existing = customCategoryDao.getCategoryByName(catName)
                 if (existing == null) {
-                    val sample = entries.firstOrNull { it.customCategory?.trim().equals(catName, ignoreCase = true) }
                     val isWatch = sample?.let {
                         it.mediaType == MediaType.ANIME || it.mediaType == MediaType.SHOW || it.mediaType == MediaType.MOVIE
                     } ?: false
@@ -266,10 +269,13 @@ class MediaRepository(
                     customCategoryDao.insert(
                         CustomCategory(
                             name = catName,
+                            mediaType = targetType,
                             isWatchType = isWatch,
                             trackingUnit = unit
                         )
                     )
+                } else if (existing.mediaType == null) {
+                    customCategoryDao.update(existing.copy(mediaType = targetType))
                 }
             }
         }

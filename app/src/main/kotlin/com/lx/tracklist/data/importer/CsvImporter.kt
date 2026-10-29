@@ -20,7 +20,8 @@ object CsvImporter {
         val titleIdx = header.indexOfFirst { it == "title" || it == "name" }
         if (titleIdx == -1) return emptyList()
 
-        val typeIdx = header.indexOfFirst { it.contains("type") || it.contains("category") }
+        val typeIdx = header.indexOfFirst { (it.contains("type") || it.contains("category")) && !it.contains("sub") }
+        val subCategoryIdx = header.indexOfFirst { it.contains("sub_category") || it.contains("subcategory") || it.contains("sub category") || it.contains("sub-category") }
         val statusIdx = header.indexOfFirst { it.contains("status") }
         val scoreIdx = header.indexOfFirst { it.contains("score") || it.contains("rating") }
         val currentEpIdx = header.indexOfFirst { it.contains("currentepisode") || it.contains("progress") || it.contains("episodes") }
@@ -44,6 +45,7 @@ object CsvImporter {
             if (title.isBlank()) continue
 
             val mediaType = if (typeIdx in cols.indices) MediaType.fromString(cols[typeIdx]) else MediaType.ANIME
+            val subCategory = if (subCategoryIdx in cols.indices) cols[subCategoryIdx].trim().takeIf { it.isNotBlank() } else null
             val status = if (statusIdx in cols.indices) MediaStatus.fromString(cols[statusIdx]) else MediaStatus.WATCHING
             val score = if (scoreIdx in cols.indices) cols[scoreIdx].toIntOrNull()?.takeIf { it in 0..10 } else null
 
@@ -61,6 +63,7 @@ object CsvImporter {
                 MediaEntry(
                     title = title,
                     mediaType = mediaType,
+                    customCategory = subCategory,
                     status = status,
                     score = score,
                     currentEpisodes = currentEp,

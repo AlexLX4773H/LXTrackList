@@ -68,7 +68,8 @@ private data class LibraryFilterState(
     val activeFilterCount: Int
         get() {
             var count = 0
-            if (categoryFilter != null || customCategoryFilter != null) count++
+            if (categoryFilter != null) count++
+            if (customCategoryFilter != null) count++
             if (statusFilter != null) count++
             if (minScore != null || onlyUnrated) count++
             if (priorityFilter != null) count++
@@ -89,11 +90,12 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
     ) { filter, allEntries, customCats ->
         var list = allEntries
 
-        // 1. Category / Custom Category Filter
+        // 1. Category / Sub Category Filter
+        if (filter.categoryFilter != null) {
+            list = list.filter { it.mediaType == filter.categoryFilter }
+        }
         if (filter.customCategoryFilter != null) {
-            list = list.filter { it.customCategory == filter.customCategoryFilter }
-        } else if (filter.categoryFilter != null) {
-            list = list.filter { it.mediaType == filter.categoryFilter && it.customCategory == null }
+            list = list.filter { it.customCategory.equals(filter.customCategoryFilter, ignoreCase = true) }
         }
 
         // 2. Status Filter
@@ -178,11 +180,11 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
     }
 
     fun setCategoryFilter(category: MediaType?) {
-        _filterState.update { it.copy(categoryFilter = category, customCategoryFilter = null) }
+        _filterState.update { it.copy(categoryFilter = category) }
     }
 
     fun setCustomCategoryFilter(customCat: String?) {
-        _filterState.update { it.copy(customCategoryFilter = customCat, categoryFilter = null) }
+        _filterState.update { it.copy(customCategoryFilter = customCat) }
     }
 
     fun setStatusFilter(status: MediaStatus?) {

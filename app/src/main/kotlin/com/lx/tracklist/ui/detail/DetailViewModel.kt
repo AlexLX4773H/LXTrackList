@@ -29,6 +29,10 @@ class DetailViewModel(
     private val _isDeleted = MutableStateFlow(false)
     val isDeleted: StateFlow<Boolean> = _isDeleted
 
+    fun resetDeletedState() {
+        _isDeleted.value = false
+    }
+
     fun increment() {
         val cur = entry.value ?: return
         viewModelScope.launch {

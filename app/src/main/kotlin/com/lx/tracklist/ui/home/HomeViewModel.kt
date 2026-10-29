@@ -20,32 +20,38 @@ import kotlinx.coroutines.launch
 
 data class HomeUiState(
     val selectedCategory: MediaType = MediaType.ANIME,
-    val selectedCustomCategory: String? = null,
+    val selectedSubCategory: String? = null,
     val selectedStatus: MediaStatus? = null,
     val searchQuery: String = "",
     val isSearchActive: Boolean = false,
     val selectedSort: SortOption = SortOption.RECENTLY_UPDATED,
     val isCategorySheetOpen: Boolean = false,
     val isUserSwitcherOpen: Boolean = false,
+    val isAddSubCategoryDialogOpen: Boolean = false,
     val entries: List<MediaEntry> = emptyList(),
     val statusCounts: Map<MediaStatus, Int> = emptyMap(),
     val totalCount: Int = 0,
     val categoryCounts: Map<MediaType, Int> = emptyMap(),
-    val customCategories: List<CustomCategory> = emptyList(),
-    val customCategoryCounts: Map<String, Int> = emptyMap(),
+    val subCategories: List<CustomCategory> = emptyList(),
+    val subCategoryCounts: Map<String, Int> = emptyMap(),
     val activeUser: UserProfile = UserProfile(id = 1L, name = "Main Profile", isDefault = true),
     val allUsers: List<UserProfile> = emptyList()
-)
+) {
+    val selectedCustomCategory: String? get() = selectedSubCategory
+    val customCategories: List<CustomCategory> get() = subCategories
+    val customCategoryCounts: Map<String, Int> get() = subCategoryCounts
+}
 
 private data class FilterState(
     val category: MediaType = MediaType.ANIME,
-    val customCategory: String? = null,
+    val subCategory: String? = null,
     val status: MediaStatus? = null,
     val query: String = "",
     val isSearching: Boolean = false,
     val sort: SortOption = SortOption.RECENTLY_UPDATED,
     val isSheetOpen: Boolean = false,
-    val isUserSwitcherOpen: Boolean = false
+    val isUserSwitcherOpen: Boolean = false,
+    val isAddSubCategoryDialogOpen: Boolean = false
 )
 
 class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
@@ -60,45 +66,69 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
         repository.allUsers
     ) { filter, allEntries, customCats, activeUser, allUsers ->
 
-        // Default Category counts
+        // 1. Main Category counts (All entries for each media type, including those with sub-categories)
         val catCounts = MediaType.entries.associateWith { cat ->
-            allEntries.count { it.mediaType == cat && it.customCategory == null }
+            allEntries.count { it.mediaType == cat }
         }
 
-        // Custom Category counts
-        val customCatCounts = customCats.associate { cat ->
-            cat.name to allEntries.count { it.customCategory == cat.name }
+        // 2. All entries for the active main category (e.g. Manga, Manhwa, etc.)
+        val mainCategoryEntries = allEntries.filter { it.mediaType == filter.category }
+
+        // 3. Sub categories applicable to the active main category
+        val subCatsForType = customCats
+            .filter { it.mediaType == null || it.mediaType == filter.category }
+            .toMutableList()
+        val existingNames = subCatsForType.map { it.name.lowercase().trim() }.toSet()
+
+        // Also discover any subcategories present in the imported/stored entries
+        mainCategoryEntries.mapNotNull { it.customCategory?.trim() }
+            .filter { it.isNotBlank() && !existingNames.contains(it.lowercase()) }
+            .distinct()
+            .forEach { newName ->
+                subCatsForType.add(
+                    CustomCategory(
+                        name = newName,
+                        mediaType = filter.category,
+                        isWatchType = filter.category == MediaType.ANIME || filter.category == MediaType.SHOW || filter.category == MediaType.MOVIE
+                    )
+                )
+            }
+
+        // Subcategory counts for the current main category
+        val subCatCounts = subCatsForType.associate { subCat ->
+            subCat.name to mainCategoryEntries.count { it.customCategory.equals(subCat.name, ignoreCase = true) }
         }
 
-        // Entries for selected category / custom category
-        val categoryEntries = if (filter.customCategory != null) {
-            allEntries.filter { it.customCategory == filter.customCategory }
+        // 4. Filter entries by subcategory if one is selected
+        val entriesInSubCategory = if (!filter.subCategory.isNullOrBlank()) {
+            mainCategoryEntries.filter { it.customCategory.equals(filter.subCategory, ignoreCase = true) }
         } else {
-            allEntries.filter { it.mediaType == filter.category && it.customCategory == null }
+            mainCategoryEntries
         }
 
-        // Status counts for selected category
+        // 5. Status counts for the current selection
         val stCounts = MediaStatus.entries.associateWith { st ->
-            categoryEntries.count { it.status == st }
+            entriesInSubCategory.count { it.status == st }
         }
 
-        // Filter by status if selected
+        // 6. Filter by status if selected
         var filtered = if (filter.status != null) {
-            categoryEntries.filter { it.status == filter.status }
+            entriesInSubCategory.filter { it.status == filter.status }
         } else {
-            categoryEntries
+            entriesInSubCategory
         }
 
-        // Filter by search query if active
+        // 7. Filter by search query if active
         if (filter.query.isNotBlank()) {
             filtered = filtered.filter {
                 it.title.contains(filter.query, ignoreCase = true) ||
                         (it.alternateTitle?.contains(filter.query, ignoreCase = true) == true) ||
-                        (it.tags?.contains(filter.query, ignoreCase = true) == true)
+                        (it.tags?.contains(filter.query, ignoreCase = true) == true) ||
+                        (it.customCategory?.contains(filter.query, ignoreCase = true) == true)
             }
         }
 
-        // Sort entries
+        // 8. Sort entries
         val sorted = when (filter.sort) {
             SortOption.RECENTLY_UPDATED -> filtered.sortedByDescending { it.updatedAt }
             SortOption.TITLE_ASC -> filtered.sortedBy { it.title.lowercase() }
@@ -109,19 +139,20 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
 
         HomeUiState(
             selectedCategory = filter.category,
-            selectedCustomCategory = filter.customCategory,
+            selectedSubCategory = filter.subCategory,
             selectedStatus = filter.status,
             searchQuery = filter.query,
             isSearchActive = filter.isSearching,
             selectedSort = filter.sort,
             isCategorySheetOpen = filter.isSheetOpen,
             isUserSwitcherOpen = filter.isUserSwitcherOpen,
+            isAddSubCategoryDialogOpen = filter.isAddSubCategoryDialogOpen,
             entries = sorted,
             statusCounts = stCounts,
-            totalCount = categoryEntries.size,
+            totalCount = entriesInSubCategory.size,
             categoryCounts = catCounts,
-            customCategories = customCats,
-            customCategoryCounts = customCatCounts,
+            subCategories = subCatsForType,
+            subCategoryCounts = subCatCounts,
             activeUser = activeUser,
             allUsers = allUsers
         )
@@ -132,11 +163,35 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
     )
 
     fun selectCategory(category: MediaType) {
-        _filterState.update { it.copy(category = category, customCategory = null, status = null) }
+        _filterState.update { it.copy(category = category, subCategory = null, status = null) }
     }
 
-    fun selectCustomCategory(customCategoryName: String) {
-        _filterState.update { it.copy(customCategory = customCategoryName, status = null) }
+    fun selectSubCategory(subCategoryName: String?) {
+        _filterState.update { it.copy(subCategory = subCategoryName, status = null) }
+    }
+
+    fun selectCustomCategory(customCategoryName: String?) {
+        selectSubCategory(customCategoryName)
+    }
+
+    fun setAddSubCategoryDialogOpen(open: Boolean) {
+        _filterState.update { it.copy(isAddSubCategoryDialogOpen = open) }
+    }
+
+    fun addSubCategory(name: String, colorHex: String = "#A7EF60") {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        val currentCategory = _filterState.value.category
+        viewModelScope.launch {
+            repository.addCustomCategory(
+                name = trimmed,
+                mediaType = currentCategory,
+                isWatchType = currentCategory == MediaType.ANIME || currentCategory == MediaType.SHOW || currentCategory == MediaType.MOVIE,
+                colorHex = colorHex
+            )
+            selectSubCategory(trimmed)
+            setAddSubCategoryDialogOpen(false)
+        }
     }
 
     fun selectStatus(status: MediaStatus?) {

@@ -68,6 +68,9 @@ data class MediaEntry(
     val movieSeriesName: String? = null,
     val durationMinutes: Int? = null
 ) {
+    val subCategory: String?
+        get() = customCategory
+
     val displayProgress: String
         get() = when (mediaType) {
             MediaType.ANIME, MediaType.SHOW -> {

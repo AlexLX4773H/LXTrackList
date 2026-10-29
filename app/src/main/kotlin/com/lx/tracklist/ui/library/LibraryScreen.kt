@@ -465,9 +465,10 @@ fun LibraryScreen(
                 }
 
                 items(MediaType.entries) { cat ->
+                    val isSelected = state.selectedCategoryFilter == cat
                     FilterChip(
-                        selected = state.selectedCategoryFilter == cat && state.selectedCustomCategoryFilter == null,
-                        onClick = { viewModel.setCategoryFilter(cat) },
+                        selected = isSelected,
+                        onClick = { viewModel.setCategoryFilter(if (isSelected) null else cat) },
                         label = { Text(cat.displayName, fontSize = 12.sp) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = LXPrimaryGreen,
@@ -478,14 +479,15 @@ fun LibraryScreen(
                     )
                 }
 
-                // Custom Categories Chips
+                // Sub Categories Chips
                 items(state.customCategories) { customCat ->
+                    val isSelected = state.selectedCustomCategoryFilter.equals(customCat.name, ignoreCase = true)
                     FilterChip(
-                        selected = state.selectedCustomCategoryFilter == customCat.name,
-                        onClick = { viewModel.setCustomCategoryFilter(customCat.name) },
+                        selected = isSelected,
+                        onClick = { viewModel.setCustomCategoryFilter(if (isSelected) null else customCat.name) },
                         label = { Text("✨ ${customCat.name}", fontSize = 12.sp) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
+                            selectedContainerColor = LXScoreGold,
                             selectedLabelColor = LXBackgroundBlack,
                             containerColor = LXSurfaceElevated,
                             labelColor = LXTextSecondary
@@ -494,14 +496,31 @@ fun LibraryScreen(
                 }
             }
 
-            // Active Filter Removable Badges (if advanced filters active)
-            if (state.selectedStatusFilter != null || state.minScore != null || state.onlyUnrated || state.selectedPriorityFilter != null || state.onlyAiring) {
+            // Active Filter Removable Badges (if filters active)
+            if (state.selectedCategoryFilter != null || state.selectedCustomCategoryFilter != null || state.selectedStatusFilter != null || state.minScore != null || state.onlyUnrated || state.selectedPriorityFilter != null || state.onlyAiring) {
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    state.selectedCategoryFilter?.let { cat ->
+                        item {
+                            RemovableFilterBadge(
+                                label = "Category: ${cat.displayName}",
+                                onRemove = { viewModel.setCategoryFilter(null) }
+                            )
+                        }
+                    }
+
+                    state.selectedCustomCategoryFilter?.let { subCat ->
+                        item {
+                            RemovableFilterBadge(
+                                label = "Sub: $subCat",
+                                onRemove = { viewModel.setCustomCategoryFilter(null) }
+                            )
+                        }
+                    }
                     state.selectedStatusFilter?.let { status ->
                         item {
                             RemovableFilterBadge(
