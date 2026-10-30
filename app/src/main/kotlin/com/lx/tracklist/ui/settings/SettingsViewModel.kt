@@ -44,7 +44,9 @@ data class ImportPreviewState(
     val allEntries: List<MediaEntry>,
     val categoryGroups: List<ImportCategoryGroup>,
     val selectedCategoryKeys: Set<String> = emptySet(),
-    val isImporting: Boolean = false
+    val isImporting: Boolean = false,
+    val isTachiyomiSource: Boolean = false,
+    val importFavorites: Boolean = false
 ) {
     val totalCount: Int get() = allEntries.size
     val selectedCount: Int get() = allEntries.count { entry ->
@@ -227,7 +229,8 @@ data class SettingsUiState(
     val inputFiles: List<StorageFileInfo> = emptyList(),
     val homeFolderPath: String = "",
     val customCategories: List<CustomCategory> = emptyList(),
-    val isSwipeToSwitchTabsEnabled: Boolean = true
+    val isSwipeToSwitchTabsEnabled: Boolean = true,
+    val isTachiyomiImportAsFavorites: Boolean = false
 )
 
 class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
@@ -246,10 +249,30 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 _uiState.update { it.copy(isSwipeToSwitchTabsEnabled = enabled) }
             }
         }
+        viewModelScope.launch {
+            repository.isTachiyomiImportAsFavorites.collect { enabled ->
+                _uiState.update { it.copy(isTachiyomiImportAsFavorites = enabled) }
+            }
+        }
     }
 
     fun setSwipeToSwitchTabsEnabled(enabled: Boolean) {
         repository.setSwipeToSwitchTabsEnabled(enabled)
+    }
+
+    fun setTachiyomiImportAsFavorites(enabled: Boolean) {
+        repository.setTachiyomiImportAsFavorites(enabled)
+    }
+
+    fun setImportFavorites(enabled: Boolean) {
+        repository.setTachiyomiImportAsFavorites(enabled)
+        _uiState.update { state ->
+            val preview = state.importPreview ?: return@update state
+            state.copy(
+                isTachiyomiImportAsFavorites = enabled,
+                importPreview = preview.copy(importFavorites = enabled)
+            )
+        }
     }
 
     fun addCustomCategory(
@@ -338,6 +361,11 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
                 val groups = buildCategoryGroups(entries)
                 val allKeys = groups.map { it.key }.toSet()
+                val isTachiyomi = fileInfo.name.endsWith(".tachibk", ignoreCase = true) ||
+                        fileInfo.name.endsWith(".proto.gz", ignoreCase = true) ||
+                        fileInfo.fileType.contains("Tachiyomi", ignoreCase = true) ||
+                        entries.any { it.externalSource == "TACHIYOMI" }
+
                 _uiState.update {
                     it.copy(
                         isPreparingImport = false,
@@ -345,7 +373,9 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                             sourceName = fileInfo.name,
                             allEntries = entries,
                             categoryGroups = groups,
-                            selectedCategoryKeys = allKeys
+                            selectedCategoryKeys = allKeys,
+                            isTachiyomiSource = isTachiyomi,
+                            importFavorites = _uiState.value.isTachiyomiImportAsFavorites
                         )
                     )
                 }
@@ -392,6 +422,12 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
             val groups = buildCategoryGroups(allParsedEntries)
             val allKeys = groups.map { it.key }.toSet()
+            val isTachiyomi = files.any {
+                it.name.endsWith(".tachibk", ignoreCase = true) ||
+                it.name.endsWith(".proto.gz", ignoreCase = true) ||
+                it.fileType.contains("Tachiyomi", ignoreCase = true)
+            } || allParsedEntries.any { it.externalSource == "TACHIYOMI" }
+
             _uiState.update {
                 it.copy(
                     isPreparingImport = false,
@@ -399,7 +435,9 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                         sourceName = "All ${files.size} input files",
                         allEntries = allParsedEntries,
                         categoryGroups = groups,
-                        selectedCategoryKeys = allKeys
+                        selectedCategoryKeys = allKeys,
+                        isTachiyomiSource = isTachiyomi,
+                        importFavorites = _uiState.value.isTachiyomiImportAsFavorites
                     )
                 )
             }
@@ -441,9 +479,15 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
     fun confirmImport() {
         val preview = _uiState.value.importPreview ?: return
         val selectedKeys = preview.selectedCategoryKeys
-        val filteredEntries = preview.allEntries.filter { entry ->
-            selectedKeys.contains(getCategoryKeyForEntry(entry))
-        }
+        val filteredEntries = preview.allEntries
+            .filter { entry -> selectedKeys.contains(getCategoryKeyForEntry(entry)) }
+            .map { entry ->
+                if (preview.isTachiyomiSource) {
+                    entry.copy(isFavorite = preview.importFavorites)
+                } else {
+                    entry
+                }
+            }
 
         if (filteredEntries.isEmpty()) {
             _uiState.update {
@@ -736,6 +780,10 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
                 val groups = buildCategoryGroups(entries)
                 val allKeys = groups.map { it.key }.toSet()
+                val isTachiyomi = fileName.endsWith(".tachibk", ignoreCase = true) ||
+                        fileName.endsWith(".proto.gz", ignoreCase = true) ||
+                        entries.any { it.externalSource == "TACHIYOMI" }
+
                 _uiState.update {
                     it.copy(
                         isPreparingImport = false,
@@ -743,7 +791,9 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                             sourceName = fileName,
                             allEntries = entries,
                             categoryGroups = groups,
-                            selectedCategoryKeys = allKeys
+                            selectedCategoryKeys = allKeys,
+                            isTachiyomiSource = isTachiyomi,
+                            importFavorites = _uiState.value.isTachiyomiImportAsFavorites
                         )
                     )
                 }
@@ -799,7 +849,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         return stream.use { s ->
             when {
                 fileName.endsWith(".tachibk") || fileName.endsWith(".proto.gz") -> {
-                    TachiyomiImporter.parse(s)
+                    TachiyomiImporter.parse(s, importAsFavorites = _uiState.value.isTachiyomiImportAsFavorites)
                 }
                 fileName.endsWith(".xml") || fileName.endsWith(".xml.gz") -> {
                     MalXmlImporter.parse(s)
@@ -817,12 +867,12 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                     } catch (_: Exception) {
                         emptyList()
                     }
-                    if (malResult.isNotEmpty()) malResult else TachiyomiImporter.parse(java.io.ByteArrayInputStream(bytes))
+                    if (malResult.isNotEmpty()) malResult else TachiyomiImporter.parse(java.io.ByteArrayInputStream(bytes), importAsFavorites = _uiState.value.isTachiyomiImportAsFavorites)
                 }
                 else -> {
                     val bytes = s.readBytes()
                     try {
-                        val tachibkResult = TachiyomiImporter.parse(java.io.ByteArrayInputStream(bytes))
+                        val tachibkResult = TachiyomiImporter.parse(java.io.ByteArrayInputStream(bytes), importAsFavorites = _uiState.value.isTachiyomiImportAsFavorites)
                         if (tachibkResult.isNotEmpty()) return@use tachibkResult
                     } catch (_: Exception) {}
 

@@ -273,6 +273,33 @@ class ImporterExporterTest {
     }
 
     @Test
+    fun testTachiyomiImporterFavoritesOption() {
+        val rootOut = ByteArrayOutputStream()
+        val mangaOut = ByteArrayOutputStream()
+        writeStringField(mangaOut, 3, "Test Manga")
+        writeVarintField(mangaOut, 100, 1L) // favorite = true
+        writeVarintField(mangaOut, 13, 1600000000000L) // dateAdded > 0
+        writeMessageField(rootOut, 1, mangaOut.toByteArray())
+
+        val tachibkBytes = gzipBytes(rootOut.toByteArray())
+
+        // Default: importAsFavorites = false -> isFavorite should be false
+        val defaultEntries = TachiyomiImporter.parse(ByteArrayInputStream(tachibkBytes))
+        assertEquals(1, defaultEntries.size)
+        assertFalse(defaultEntries[0].isFavorite)
+
+        // Explicit: importAsFavorites = false -> isFavorite should be false
+        val normalEntries = TachiyomiImporter.parse(ByteArrayInputStream(tachibkBytes), importAsFavorites = false)
+        assertEquals(1, normalEntries.size)
+        assertFalse(normalEntries[0].isFavorite)
+
+        // Explicit: importAsFavorites = true -> isFavorite should be true
+        val favoriteEntries = TachiyomiImporter.parse(ByteArrayInputStream(tachibkBytes), importAsFavorites = true)
+        assertEquals(1, favoriteEntries.size)
+        assertTrue(favoriteEntries[0].isFavorite)
+    }
+
+    @Test
     fun testTachiyomiImporterJsonFallback() {
         val jsonData = """
             {

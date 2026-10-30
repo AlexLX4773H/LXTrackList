@@ -260,6 +260,27 @@ class FeaturesTest {
     }
 
     @Test
+    fun testTachiyomiImportAsFavoritesState() {
+        val defaultSettingsState = com.lx.tracklist.ui.settings.SettingsUiState()
+        assertFalse(defaultSettingsState.isTachiyomiImportAsFavorites)
+
+        val customSettingsState = com.lx.tracklist.ui.settings.SettingsUiState(
+            isTachiyomiImportAsFavorites = true
+        )
+        assertTrue(customSettingsState.isTachiyomiImportAsFavorites)
+
+        val defaultPreview = com.lx.tracklist.ui.settings.ImportPreviewState(
+            sourceName = "backup.tachibk",
+            allEntries = emptyList(),
+            categoryGroups = emptyList(),
+            isTachiyomiSource = true,
+            importFavorites = false
+        )
+        assertTrue(defaultPreview.isTachiyomiSource)
+        assertFalse(defaultPreview.importFavorites)
+    }
+
+    @Test
     fun testAddEditSubCategorySelectionOnly() {
         // Feature 1: In Add/Edit, only choosing existing subcategories is permitted (no in-screen creation)
         val availableSubCategories = listOf(

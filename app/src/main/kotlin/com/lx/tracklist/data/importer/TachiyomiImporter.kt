@@ -187,7 +187,7 @@ internal class ProtoReader(
 
 object TachiyomiImporter {
 
-    fun parse(inputStream: InputStream): List<MediaEntry> {
+    fun parse(inputStream: InputStream, importAsFavorites: Boolean = false): List<MediaEntry> {
         val rawBytes = try {
             inputStream.readBytes()
         } catch (_: Exception) {
@@ -215,20 +215,20 @@ object TachiyomiImporter {
         if (trimmedFirstChar == '{' || trimmedFirstChar == '[') {
             try {
                 val jsonString = String(decompressedBytes, Charsets.UTF_8).trim()
-                val jsonEntries = parseJson(jsonString)
+                val jsonEntries = parseJson(jsonString, importAsFavorites)
                 if (jsonEntries.isNotEmpty()) return jsonEntries
             } catch (_: Exception) {}
         }
 
         // 3. Parse Protobuf
         return try {
-            parseProtobuf(decompressedBytes)
+            parseProtobuf(decompressedBytes, importAsFavorites)
         } catch (_: Exception) {
             emptyList()
         }
     }
 
-    private fun parseProtobuf(bytes: ByteArray): List<MediaEntry> {
+    private fun parseProtobuf(bytes: ByteArray, importAsFavorites: Boolean = false): List<MediaEntry> {
         val reader = ProtoReader(bytes)
         val mangaList = mutableListOf<TachiyomiManga>()
         val categoryMap = mutableMapOf<Long, String>()
@@ -275,7 +275,7 @@ object TachiyomiImporter {
         }
 
         return mangaList.mapNotNull { manga ->
-            mangaToMediaEntry(manga, categoryMap, sourceMap)
+            mangaToMediaEntry(manga, categoryMap, sourceMap, importAsFavorites)
         }
     }
 
@@ -547,7 +547,8 @@ object TachiyomiImporter {
     private fun mangaToMediaEntry(
         manga: TachiyomiManga,
         categoryMap: Map<Long, String>,
-        sourceMap: Map<Long, String>
+        sourceMap: Map<Long, String>,
+        importAsFavorites: Boolean = false
     ): MediaEntry? {
         val title = manga.title.trim()
         if (title.isBlank()) return null
@@ -653,7 +654,7 @@ object TachiyomiImporter {
         val lastRead = manga.history.mapNotNull { normalizeDate(it.lastRead) }.maxOrNull()
         val updatedAt = lastRead ?: createdAt
 
-        val isFavorite = manga.favorite || manga.dateAdded > 0L
+        val isFavorite = if (importAsFavorites) (manga.favorite || manga.dateAdded > 0L) else false
 
         val trackingUnit = when {
             subCategory != null && (subCategory.contains("volume", ignoreCase = true) || subCategory.contains("tankobon", ignoreCase = true)) -> TrackingUnit.VOLUMES
@@ -791,7 +792,7 @@ object TachiyomiImporter {
         return if (timestamp < 100_000_000_000L) timestamp * 1000L else timestamp
     }
 
-    private fun parseJson(content: String): List<MediaEntry> {
+    private fun parseJson(content: String, importAsFavorites: Boolean = false): List<MediaEntry> {
         val element = JsonParser.parseString(content)
         if (!element.isJsonObject) return emptyList()
         val obj = element.asJsonObject
@@ -878,7 +879,7 @@ object TachiyomiImporter {
                 chapters = chList
             )
 
-            mangaToMediaEntry(tManga, categoryMap, emptyMap())?.let { entries.add(it) }
+            mangaToMediaEntry(tManga, categoryMap, emptyMap(), importAsFavorites)?.let { entries.add(it) }
         }
 
         return entries

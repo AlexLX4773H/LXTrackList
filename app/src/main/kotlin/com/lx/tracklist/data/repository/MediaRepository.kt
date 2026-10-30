@@ -53,6 +53,14 @@ class MediaRepository(
         prefs?.edit()?.putBoolean("swipe_to_switch_tabs", enabled)?.apply()
     }
 
+    private val _isTachiyomiImportAsFavorites = MutableStateFlow(prefs?.getBoolean("tachiyomi_import_as_favorites", false) ?: false)
+    val isTachiyomiImportAsFavorites: StateFlow<Boolean> = _isTachiyomiImportAsFavorites.asStateFlow()
+
+    fun setTachiyomiImportAsFavorites(enabled: Boolean) {
+        _isTachiyomiImportAsFavorites.value = enabled
+        prefs?.edit()?.putBoolean("tachiyomi_import_as_favorites", enabled)?.apply()
+    }
+
     init {
         initUserProfile()
     }

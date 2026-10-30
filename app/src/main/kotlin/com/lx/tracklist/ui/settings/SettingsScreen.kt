@@ -1,5 +1,6 @@
 package com.lx.tracklist.ui.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -11,6 +12,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,12 +28,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Folder
@@ -40,6 +47,8 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -60,6 +69,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -72,11 +82,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -100,6 +113,14 @@ import com.lx.tracklist.ui.theme.LXSurfaceVariant
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
 
+enum class SettingsSubMenu(val title: String) {
+    CATEGORIES("Custom Categories"),
+    STORAGE("Backup & Storage"),
+    CONFLICTS("Conflict Resolution"),
+    PREFERENCES("Gestures & Navigation"),
+    ABOUT("About")
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -108,6 +129,10 @@ fun SettingsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val isTablet = configuration.screenWidthDp >= 600
+
+    var activeSubMenu by rememberSaveable { mutableStateOf<SettingsSubMenu?>(null) }
 
     var showAddCategoryDialog by remember { mutableStateOf(false) }
     var categoryToDelete by remember { mutableStateOf<CustomCategory?>(null) }
@@ -429,6 +454,82 @@ fun SettingsScreen(
                                     color = LXPrimaryGreen,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+
+                    // Tachiyomi Favorites Toggle Option
+                    if (preview.isTachiyomiSource) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(enabled = !preview.isImporting) {
+                                        viewModel.setImportFavorites(!preview.importFavorites)
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = 8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(
+                                                if (preview.importFavorites) LXErrorRed.copy(alpha = 0.15f)
+                                                else LXSurfaceElevated
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = if (preview.importFavorites) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                            contentDescription = null,
+                                            tint = if (preview.importFavorites) LXErrorRed else LXTextSecondary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    Column {
+                                        Text(
+                                            text = "Import as Favorites",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                            color = LXTextPrimary
+                                        )
+                                        Text(
+                                            text = if (preview.importFavorites)
+                                                "Entries will be starred as favorites"
+                                            else
+                                                "Import as normal items (not favorites)",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                            color = if (preview.importFavorites) LXPrimaryGreen else LXTextSecondary
+                                        )
+                                    }
+                                }
+
+                                Switch(
+                                    checked = preview.importFavorites,
+                                    onCheckedChange = { viewModel.setImportFavorites(it) },
+                                    enabled = !preview.isImporting,
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = LXBackgroundBlack,
+                                        checkedTrackColor = LXPrimaryGreen,
+                                        uncheckedThumbColor = LXTextSecondary,
+                                        uncheckedTrackColor = LXSurfaceElevated
+                                    )
                                 )
                             }
                         }
@@ -942,583 +1043,1199 @@ fun SettingsScreen(
         )
     }
 
+    BackHandler(enabled = !isTablet && activeSubMenu != null) {
+        activeSubMenu = null
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = LXBackgroundBlack,
+        contentWindowInsets = if (isTablet) ScaffoldDefaults.contentWindowInsets else WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        text = "Settings & Storage",
+                        text = if (!isTablet && activeSubMenu != null) activeSubMenu!!.title else "Settings & Storage",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = LXTextPrimary
                     )
                 },
+                navigationIcon = {
+                    if (!isTablet && activeSubMenu != null) {
+                        IconButton(onClick = { activeSubMenu = null }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = LXPrimaryGreen
+                            )
+                        }
+                    }
+                },
                 actions = {
-                    IconButton(onClick = { viewModel.checkStorageStatus(context) }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = LXPrimaryGreen)
+                    if (!isTablet && activeSubMenu == SettingsSubMenu.CATEGORIES) {
+                        IconButton(onClick = { showAddCategoryDialog = true }) {
+                            Icon(Icons.Default.Add, contentDescription = "Add Category", tint = LXPrimaryGreen)
+                        }
+                    } else if (!isTablet && activeSubMenu == SettingsSubMenu.STORAGE) {
+                        IconButton(onClick = { viewModel.checkStorageStatus(context) }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = LXPrimaryGreen)
+                        }
+                    } else if (activeSubMenu == null || isTablet) {
+                        IconButton(onClick = { viewModel.checkStorageStatus(context) }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = LXPrimaryGreen)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = LXBackgroundBlack)
             )
         }
     ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-            contentAlignment = Alignment.TopCenter
-        ) {
-            Column(
+        if (isTablet) {
+            // Adaptive Two-Pane Layout for Tablets
+            val currentSelection = activeSubMenu ?: SettingsSubMenu.CATEGORIES
+            Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 840.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Status Notification Banner
-                if (state.statusMessage != null) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (state.isErrorMessage) LXErrorRed.copy(alpha = 0.15f) else LXPrimaryGreen.copy(alpha = 0.15f)
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (state.isErrorMessage) LXErrorRed else LXPrimaryGreen
-                        ),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = if (state.isErrorMessage) LXErrorRed else LXPrimaryGreen
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = state.statusMessage ?: "",
-                                color = LXTextPrimary,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-                }
-
-                // Custom Categories Management Card
+                // Left Master Pane: Settings Navigation Menu
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .width(340.dp)
+                        .fillMaxHeight(),
                     colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
                     border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(14.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Bookmark, contentDescription = null, tint = LXPrimaryGreen)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Custom Categories (${state.customCategories.size})",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = LXTextPrimary
-                                )
-                            }
-
-                            Button(
-                                onClick = { showAddCategoryDialog = true },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = LXPrimaryGreen.copy(alpha = 0.15f),
-                                    contentColor = LXPrimaryGreen
-                                ),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("+ Add Category", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        Text(
-                            text = "Add personalized categories outside default ones (e.g. Donghua, Web Novels, Audiobooks, Visual Novels, Games) and track them with custom units.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = LXTextSecondary
-                        )
-
-                        if (state.customCategories.isEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(LXSurfaceElevated)
-                                    .padding(14.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "No custom categories created yet. Tap \"+ Add Category\" above to create one.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = LXTextSecondary
-                                )
-                            }
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                state.customCategories.forEach { cat ->
-                                    val catColor = parseHexColor(cat.colorHex)
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(LXSurfaceElevated)
-                                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.weight(1f)
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(32.dp)
-                                                    .clip(RoundedCornerShape(6.dp))
-                                                    .background(catColor.copy(alpha = 0.2f))
-                                                    .border(1.dp, catColor.copy(alpha = 0.5f), RoundedCornerShape(6.dp)),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (cat.isWatchType) Icons.Default.LiveTv else Icons.Default.Bookmark,
-                                                    contentDescription = null,
-                                                    tint = catColor,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
-
-                                            Spacer(modifier = Modifier.width(10.dp))
-
-                                            Column {
-                                                Text(
-                                                    text = cat.name,
-                                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                                    color = LXTextPrimary
-                                                )
-                                                Text(
-                                                    text = if (cat.isWatchType) "Watch • Episodes" else "Read • ${cat.trackingUnit.displayName}",
-                                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                                    color = LXTextSecondary
-                                                )
-                                            }
-                                        }
-
-                                        IconButton(onClick = { categoryToDelete = cat }) {
-                                            Icon(
-                                                imageVector = Icons.Default.Delete,
-                                                contentDescription = "Delete Category",
-                                                tint = LXTextSecondary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    SettingsMainMenu(
+                        state = state,
+                        selectedSubMenu = currentSelection,
+                        onSelectSubMenu = { activeSubMenu = it }
+                    )
                 }
 
-                // Dedicated Home Folder Storage Card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-                    shape = RoundedCornerShape(12.dp)
+                // Right Detail Pane: Active Sub-Menu Content
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Folder, contentDescription = null, tint = LXPrimaryGreen)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Home Storage Folder",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = LXTextPrimary
-                                )
-                            }
-
-                            if (state.hasStoragePermission) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text("CONNECTED", color = LXPrimaryGreen, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
-                                }
-                            }
-                        }
-
-                        Text(
-                            text = "Root: ${state.homeFolderPath}\n• Input: ${state.homeFolderPath}/input\n• Output: ${state.homeFolderPath}/output",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = LXTextSecondary
+                    when (currentSelection) {
+                        SettingsSubMenu.CATEGORIES -> CustomCategoriesContent(
+                            customCategories = state.customCategories,
+                            onAddCategoryClick = { showAddCategoryDialog = true },
+                            onDeleteCategoryClick = { categoryToDelete = it }
                         )
-
-                        if (!state.hasStoragePermission) {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Security, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Storage Access Required", color = LXScoreGold, style = MaterialTheme.typography.titleSmall)
-                                    }
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text(
-                                        "Grant access so LX Track List can read from the input folder and export directly to output.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = LXTextSecondary
-                                    )
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Button(
-                                        onClick = { viewModel.requestStoragePermission(context) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = LXScoreGold, contentColor = LXBackgroundBlack),
-                                        shape = RoundedCornerShape(6.dp)
-                                    ) {
-                                        Text("Grant Storage Access", fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                        } else {
-                            // Direct Export Button
-                            Button(
-                                onClick = { viewModel.prepareExport(ExportDestination.HOME_OUTPUT_FOLDER) },
-                                enabled = !state.isExporting && !state.isPreparingExport,
-                                modifier = Modifier.fillMaxWidth().height(44.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                if (state.isExporting) {
-                                    CircularProgressIndicator(color = LXBackgroundBlack, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Exporting to output folder...")
-                                } else {
-                                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Export Backup to /output Folder", fontWeight = FontWeight.Bold)
-                                }
-                            }
-
-                            HorizontalDivider(color = LXBorder, thickness = 1.dp)
-
-                            // Files in input folder
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Files in /input folder (${state.inputFiles.size})",
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = LXTextPrimary
-                                )
-
-                                if (state.inputFiles.isNotEmpty()) {
-                                    TextButton(
-                                        onClick = { viewModel.importAllLocalFiles(context) },
-                                        enabled = !state.isImporting && !state.isPreparingImport
-                                    ) {
-                                        Text("Import All", color = LXPrimaryGreen, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-
-                            if (state.inputFiles.isEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(LXSurfaceElevated)
-                                        .padding(14.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "No files found in ${state.homeFolderPath}/input\nCopy your MAL XML/GZ, Tachiyomi (.tachibk), CSV, or JSON files there to import instantly.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = LXTextSecondary,
-                                        lineHeight = 18.sp
-                                    )
-                                }
-                            } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    state.inputFiles.forEach { fileInfo ->
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(LXSurfaceElevated)
-                                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = fileInfo.name,
-                                                    style = MaterialTheme.typography.titleSmall,
-                                                    color = LXTextPrimary
-                                                )
-                                                Text(
-                                                    text = "${fileInfo.fileType} • ${fileInfo.sizeFormatted} • ${fileInfo.lastModifiedFormatted}",
-                                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                                    color = LXTextSecondary
-                                                )
-                                            }
-
-                                            Button(
-                                                onClick = { viewModel.importLocalFile(context, fileInfo) },
-                                                enabled = !state.isImporting && !state.isPreparingImport,
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                                                    contentColor = LXPrimaryGreen
-                                                ),
-                                                shape = RoundedCornerShape(6.dp),
-                                                modifier = Modifier.height(34.dp)
-                                            ) {
-                                                Text("Import", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Gestures & Navigation Card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Swipe to Switch Tabs",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = LXTextPrimary
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Swipe left or right on Home screen to switch between status and subcategory tabs",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = LXTextSecondary
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Switch(
-                            checked = state.isSwipeToSwitchTabsEnabled,
-                            onCheckedChange = { viewModel.setSwipeToSwitchTabsEnabled(it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = LXBackgroundBlack,
-                                checkedTrackColor = LXPrimaryGreen,
-                                uncheckedThumbColor = LXTextSecondary,
-                                uncheckedTrackColor = LXSurfaceElevated
-                            )
+                        SettingsSubMenu.STORAGE -> BackupStorageContent(
+                            state = state,
+                            onCheckStorageStatus = { viewModel.checkStorageStatus(context) },
+                            onRequestStoragePermission = { viewModel.requestStoragePermission(context) },
+                            onExportToHomeOutput = { viewModel.prepareExport(ExportDestination.HOME_OUTPUT_FOLDER) },
+                            onImportAllLocalFiles = { viewModel.importAllLocalFiles(context) },
+                            onImportLocalFile = { viewModel.importLocalFile(context, it) },
+                            onPickFile = { importLauncher.launch("*/*") },
+                            onSaveAs = { viewModel.prepareExport(ExportDestination.CUSTOM_FILE) },
+                            onSetTachiyomiImportAsFavorites = { viewModel.setTachiyomiImportAsFavorites(it) }
+                        )
+                        SettingsSubMenu.CONFLICTS -> ConflictResolutionContent(
+                            selectedStrategy = state.selectedConflictStrategy,
+                            onSelectStrategy = { viewModel.setConflictStrategy(it) }
+                        )
+                        SettingsSubMenu.PREFERENCES -> PreferencesContent(
+                            isSwipeToSwitchTabsEnabled = state.isSwipeToSwitchTabsEnabled,
+                            onSetSwipeToSwitchTabsEnabled = { viewModel.setSwipeToSwitchTabsEnabled(it) }
+                        )
+                        SettingsSubMenu.ABOUT -> AboutContent(
+                            state = state
                         )
                     }
                 }
-
-                // Conflict Resolution Strategy Card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            text = "Conflict Resolution Strategy",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = LXPrimaryGreen
+            }
+        } else {
+            // Phone Single-Pane Layout with Sub-menus
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                when (val subMenu = activeSubMenu) {
+                    null -> {
+                        SettingsMainMenu(
+                            state = state,
+                            selectedSubMenu = null,
+                            onSelectSubMenu = { activeSubMenu = it },
+                            modifier = Modifier.widthIn(max = 840.dp)
                         )
-                        Text(
-                            text = "Determines how to handle existing entries when importing:",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = LXTextSecondary
+                    }
+                    SettingsSubMenu.CATEGORIES -> {
+                        CustomCategoriesContent(
+                            customCategories = state.customCategories,
+                            onAddCategoryClick = { showAddCategoryDialog = true },
+                            onDeleteCategoryClick = { categoryToDelete = it },
+                            modifier = Modifier.widthIn(max = 840.dp)
                         )
-
-                        ConflictStrategy.entries.forEach { strategy ->
-                            val isSelected = state.selectedConflictStrategy == strategy
-                            val desc = when (strategy) {
-                                ConflictStrategy.SKIP -> "Keep existing entry, ignore imported"
-                                ConflictStrategy.OVERWRITE -> "Replace existing with imported data"
-                                ConflictStrategy.MERGE -> "Keep higher progress, newer dates, merge tags"
-                            }
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f) else LXSurfaceElevated)
-                                    .border(1.dp, if (isSelected) LXPrimaryGreen else LXBorder, RoundedCornerShape(8.dp))
-                                    .clickable { viewModel.setConflictStrategy(strategy) }
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(18.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isSelected) LXPrimaryGreen else LXBorder),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (isSelected) {
-                                        Icon(Icons.Default.Check, contentDescription = null, tint = LXBackgroundBlack, modifier = Modifier.size(12.dp))
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.width(10.dp))
-
-                                Column {
-                                    Text(
-                                        text = strategy.name,
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = if (isSelected) LXPrimaryGreen else LXTextPrimary
-                                    )
-                                    Text(
-                                        text = desc,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                        color = LXTextSecondary
-                                    )
-                                }
-                            }
-                        }
+                    }
+                    SettingsSubMenu.STORAGE -> {
+                        BackupStorageContent(
+                            state = state,
+                            onCheckStorageStatus = { viewModel.checkStorageStatus(context) },
+                            onRequestStoragePermission = { viewModel.requestStoragePermission(context) },
+                            onExportToHomeOutput = { viewModel.prepareExport(ExportDestination.HOME_OUTPUT_FOLDER) },
+                            onImportAllLocalFiles = { viewModel.importAllLocalFiles(context) },
+                            onImportLocalFile = { viewModel.importLocalFile(context, it) },
+                            onPickFile = { importLauncher.launch("*/*") },
+                            onSaveAs = { viewModel.prepareExport(ExportDestination.CUSTOM_FILE) },
+                            onSetTachiyomiImportAsFavorites = { viewModel.setTachiyomiImportAsFavorites(it) },
+                            modifier = Modifier.widthIn(max = 840.dp)
+                        )
+                    }
+                    SettingsSubMenu.CONFLICTS -> {
+                        ConflictResolutionContent(
+                            selectedStrategy = state.selectedConflictStrategy,
+                            onSelectStrategy = { viewModel.setConflictStrategy(it) },
+                            modifier = Modifier.widthIn(max = 840.dp)
+                        )
+                    }
+                    SettingsSubMenu.PREFERENCES -> {
+                        PreferencesContent(
+                            isSwipeToSwitchTabsEnabled = state.isSwipeToSwitchTabsEnabled,
+                            onSetSwipeToSwitchTabsEnabled = { viewModel.setSwipeToSwitchTabsEnabled(it) },
+                            modifier = Modifier.widthIn(max = 840.dp)
+                        )
+                    }
+                    SettingsSubMenu.ABOUT -> {
+                        AboutContent(
+                            state = state,
+                            modifier = Modifier.widthIn(max = 840.dp)
+                        )
                     }
                 }
-
-                // Standard File Picker Options
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = "Other Storage Locations",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextPrimary
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { importLauncher.launch("*/*") },
-                                enabled = !state.isImporting && !state.isPreparingImport,
-                                modifier = Modifier.weight(1f).height(42.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextPrimary),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Pick File...", fontSize = 12.sp)
-                            }
-
-                            OutlinedButton(
-                                onClick = { viewModel.prepareExport(ExportDestination.CUSTOM_FILE) },
-                                enabled = !state.isExporting && !state.isPreparingExport,
-                                modifier = Modifier.weight(1f).height(42.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextPrimary),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Save As...", fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-
-                // App Branding Card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Image(
-                            painter = painterResource(R.drawable.lx_logo),
-                            contentDescription = "LX Logo",
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(CircleShape)
-                        )
-
-                        Spacer(modifier = Modifier.width(16.dp))
-
-                        Column {
-                            Text(
-                                text = "LX Track List",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = LXPrimaryGreen
-                            )
-                            Text(
-                                text = "Version 1.0.0 (Optimized for Phone & Tablet)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = LXTextSecondary
-                            )
-                            Text(
-                                text = "OnePlus 12R (2780x1264) & OnePlus Pad (2800x2000) Ready",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = LXTextSecondary.copy(alpha = 0.8f)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }
 }
+
+@Composable
+private fun SettingsMainMenu(
+    state: SettingsUiState,
+    selectedSubMenu: SettingsSubMenu?,
+    onSelectSubMenu: (SettingsSubMenu) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Status Notification Banner (if any)
+        if (state.statusMessage != null) {
+            StatusMessageBanner(
+                message = state.statusMessage,
+                isError = state.isErrorMessage
+            )
+        }
+
+        // Section: Content & Organization
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SettingsSectionHeader("Content & Organization")
+            SettingsMenuItem(
+                icon = Icons.Default.Bookmark,
+                iconBackgroundColor = LXPrimaryGreen.copy(alpha = 0.15f),
+                iconTintColor = LXPrimaryGreen,
+                title = "Custom Categories",
+                subtitle = if (state.customCategories.isEmpty()) "No custom categories created"
+                else "${state.customCategories.size} custom categories created",
+                badgeText = if (state.customCategories.isNotEmpty()) "${state.customCategories.size}" else null,
+                badgeColor = LXPrimaryGreen,
+                isSelected = selectedSubMenu == SettingsSubMenu.CATEGORIES,
+                onClick = { onSelectSubMenu(SettingsSubMenu.CATEGORIES) }
+            )
+        }
+
+        // Section: Data & Storage
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SettingsSectionHeader("Data & Storage")
+            SettingsMenuItem(
+                icon = Icons.Default.Folder,
+                iconBackgroundColor = Color(0xFF4DA8DA).copy(alpha = 0.15f),
+                iconTintColor = Color(0xFF4DA8DA),
+                title = "Backup & Storage",
+                subtitle = if (state.hasStoragePermission) "Connected • ${state.inputFiles.size} input files"
+                else "Storage access required",
+                badgeText = if (state.hasStoragePermission) "CONNECTED" else "ACCESS NEEDED",
+                badgeColor = if (state.hasStoragePermission) LXPrimaryGreen else LXScoreGold,
+                isSelected = selectedSubMenu == SettingsSubMenu.STORAGE,
+                onClick = { onSelectSubMenu(SettingsSubMenu.STORAGE) }
+            )
+            SettingsMenuItem(
+                icon = Icons.Default.Sync,
+                iconBackgroundColor = LXScoreGold.copy(alpha = 0.15f),
+                iconTintColor = LXScoreGold,
+                title = "Conflict Resolution",
+                subtitle = when (state.selectedConflictStrategy) {
+                    ConflictStrategy.SKIP -> "Skip: Keep existing entries"
+                    ConflictStrategy.OVERWRITE -> "Overwrite: Replace with imported"
+                    ConflictStrategy.MERGE -> "Merge: Smartly merge entries"
+                },
+                badgeText = state.selectedConflictStrategy.name,
+                badgeColor = LXScoreGold,
+                isSelected = selectedSubMenu == SettingsSubMenu.CONFLICTS,
+                onClick = { onSelectSubMenu(SettingsSubMenu.CONFLICTS) }
+            )
+        }
+
+        // Section: Preferences
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SettingsSectionHeader("Preferences")
+            SettingsMenuItem(
+                icon = Icons.Default.TouchApp,
+                iconBackgroundColor = Color(0xFFBB86FC).copy(alpha = 0.15f),
+                iconTintColor = Color(0xFFBB86FC),
+                title = "Gestures & Navigation",
+                subtitle = if (state.isSwipeToSwitchTabsEnabled) "Swipe between tabs enabled"
+                else "Swipe between tabs disabled",
+                badgeText = if (state.isSwipeToSwitchTabsEnabled) "ON" else "OFF",
+                badgeColor = if (state.isSwipeToSwitchTabsEnabled) LXPrimaryGreen else LXTextSecondary,
+                isSelected = selectedSubMenu == SettingsSubMenu.PREFERENCES,
+                onClick = { onSelectSubMenu(SettingsSubMenu.PREFERENCES) }
+            )
+        }
+
+        // Section: System & About
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SettingsSectionHeader("System & About")
+            SettingsMenuItem(
+                icon = Icons.Default.Info,
+                iconBackgroundColor = Color(0xFF00E5FF).copy(alpha = 0.15f),
+                iconTintColor = Color(0xFF00E5FF),
+                title = "About LX Track List",
+                subtitle = "Version 1.0.0 • Device & storage details",
+                badgeText = "v1.0.0",
+                badgeColor = Color(0xFF00E5FF),
+                isSelected = selectedSubMenu == SettingsSubMenu.ABOUT,
+                onClick = { onSelectSubMenu(SettingsSubMenu.ABOUT) }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun SettingsSectionHeader(title: String) {
+    Text(
+        text = title.uppercase(),
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+            fontSize = 11.sp
+        ),
+        color = LXPrimaryGreen,
+        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp)
+    )
+}
+
+@Composable
+private fun SettingsMenuItem(
+    icon: ImageVector,
+    iconBackgroundColor: Color,
+    iconTintColor: Color,
+    title: String,
+    subtitle: String,
+    badgeText: String? = null,
+    badgeColor: Color = LXPrimaryGreen,
+    isSelected: Boolean = false,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f) else LXSurfaceBlack)
+            .border(
+                width = 1.dp,
+                color = if (isSelected) LXPrimaryGreen else LXBorder,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(iconBackgroundColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTintColor,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp
+                    ),
+                    color = LXTextPrimary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                    color = LXTextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (badgeText != null) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(badgeColor.copy(alpha = 0.15f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = badgeText,
+                        color = badgeColor,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp
+                        )
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                contentDescription = null,
+                tint = if (isSelected) LXPrimaryGreen else LXTextSecondary.copy(alpha = 0.6f),
+                modifier = Modifier.size(14.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusMessageBanner(
+    message: String,
+    isError: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isError) LXErrorRed.copy(alpha = 0.15f) else LXPrimaryGreen.copy(alpha = 0.15f)
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isError) LXErrorRed else LXPrimaryGreen
+        ),
+        shape = RoundedCornerShape(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                tint = if (isError) LXErrorRed else LXPrimaryGreen
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = message,
+                color = LXTextPrimary,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@Composable
+private fun CustomCategoriesContent(
+    customCategories: List<CustomCategory>,
+    onAddCategoryClick: () -> Unit,
+    onDeleteCategoryClick: (CustomCategory) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Bookmark, contentDescription = null, tint = LXPrimaryGreen)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Custom Categories (${customCategories.size})",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                    }
+
+                    Button(
+                        onClick = onAddCategoryClick,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LXPrimaryGreen.copy(alpha = 0.15f),
+                            contentColor = LXPrimaryGreen
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("+ Add Category", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Text(
+                    text = "Add personalized categories outside default ones (e.g. Donghua, Web Novels, Audiobooks, Visual Novels, Games) and track them with custom units.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                if (customCategories.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Bookmark,
+                                contentDescription = null,
+                                tint = LXTextSecondary.copy(alpha = 0.5f),
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Text(
+                                text = "No custom categories created yet.",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = LXTextPrimary
+                            )
+                            Text(
+                                text = "Tap "+ Add Category" above to create one.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LXTextSecondary
+                            )
+                        }
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        customCategories.forEach { cat ->
+                            val catColor = parseHexColor(cat.colorHex)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(LXSurfaceElevated)
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(34.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(catColor.copy(alpha = 0.2f))
+                                            .border(1.dp, catColor.copy(alpha = 0.5f), RoundedCornerShape(6.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = if (cat.isWatchType) Icons.Default.LiveTv else Icons.Default.Bookmark,
+                                            contentDescription = null,
+                                            tint = catColor,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    Column {
+                                        Text(
+                                            text = cat.name,
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = LXTextPrimary
+                                        )
+                                        Text(
+                                            text = if (cat.isWatchType) "Watch • Episodes" else "Read • ${cat.trackingUnit.displayName}",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                            color = LXTextSecondary
+                                        )
+                                    }
+                                }
+
+                                IconButton(onClick = { onDeleteCategoryClick(cat) }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete Category",
+                                        tint = LXTextSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun BackupStorageContent(
+    state: SettingsUiState,
+    onCheckStorageStatus: () -> Unit,
+    onRequestStoragePermission: () -> Unit,
+    onExportToHomeOutput: () -> Unit,
+    onImportAllLocalFiles: () -> Unit,
+    onImportLocalFile: (StorageFileInfo) -> Unit,
+    onPickFile: () -> Unit,
+    onSaveAs: () -> Unit,
+    onSetTachiyomiImportAsFavorites: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        if (state.statusMessage != null) {
+            StatusMessageBanner(message = state.statusMessage, isError = state.isErrorMessage)
+        }
+
+        // Dedicated Home Folder Storage Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Folder, contentDescription = null, tint = LXPrimaryGreen)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Home Storage Folder",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                    }
+
+                    if (state.hasStoragePermission) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("CONNECTED", color = LXPrimaryGreen, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Root: ${state.homeFolderPath}
+• Input: ${state.homeFolderPath}/input
+• Output: ${state.homeFolderPath}/output",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = LXTextSecondary
+                )
+
+                if (!state.hasStoragePermission) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Security, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Storage Access Required", color = LXScoreGold, style = MaterialTheme.typography.titleSmall)
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Grant access so LX Track List can read from the input folder and export directly to output.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LXTextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Button(
+                                onClick = onRequestStoragePermission,
+                                colors = ButtonDefaults.buttonColors(containerColor = LXScoreGold, contentColor = LXBackgroundBlack),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text("Grant Storage Access", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                } else {
+                    // Direct Export Button
+                    Button(
+                        onClick = onExportToHomeOutput,
+                        enabled = !state.isExporting && !state.isPreparingExport,
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        if (state.isExporting) {
+                            CircularProgressIndicator(color = LXBackgroundBlack, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Exporting to output folder...")
+                        } else {
+                            Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Export Backup to /output Folder", fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    HorizontalDivider(color = LXBorder, thickness = 1.dp)
+
+                    // Files in input folder
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Files in /input folder (${state.inputFiles.size})",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+
+                        if (state.inputFiles.isNotEmpty()) {
+                            TextButton(
+                                onClick = onImportAllLocalFiles,
+                                enabled = !state.isImporting && !state.isPreparingImport
+                            ) {
+                                Text("Import All", color = LXPrimaryGreen, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    if (state.inputFiles.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(LXSurfaceElevated)
+                                .padding(14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No files found in ${state.homeFolderPath}/input
+Copy your MAL XML/GZ, Tachiyomi (.tachibk), CSV, or JSON files there to import instantly.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LXTextSecondary,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            state.inputFiles.forEach { fileInfo ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(LXSurfaceElevated)
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = fileInfo.name,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = LXTextPrimary
+                                        )
+                                        Text(
+                                            text = "${fileInfo.fileType} • ${fileInfo.sizeFormatted} • ${fileInfo.lastModifiedFormatted}",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                            color = LXTextSecondary
+                                        )
+                                    }
+
+                                    Button(
+                                        onClick = { onImportLocalFile(fileInfo) },
+                                        enabled = !state.isImporting && !state.isPreparingImport,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                                            contentColor = LXPrimaryGreen
+                                        ),
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.height(34.dp)
+                                    ) {
+                                        Text("Import", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Standard File Picker Options
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Manual File Import & Export",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextPrimary
+                )
+
+                Text(
+                    text = "Select backup files anywhere on your device or cloud storage to import or export.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onPickFile,
+                        enabled = !state.isImporting && !state.isPreparingImport,
+                        modifier = Modifier.weight(1f).height(42.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextPrimary),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Pick File...", fontSize = 12.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = onSaveAs,
+                        enabled = !state.isExporting && !state.isPreparingExport,
+                        modifier = Modifier.weight(1f).height(42.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextPrimary),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Save As...", fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        // Tachiyomi Import Options
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.FavoriteBorder,
+                        contentDescription = null,
+                        tint = LXPrimaryGreen,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Tachiyomi Import Options",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextPrimary
+                    )
+                }
+
+                Text(
+                    text = "Tachiyomi and Mihon mark all library items as favorites by default. Choose how you want them imported into LX Track List.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .clickable { onSetTachiyomiImportAsFavorites(!state.isTachiyomiImportAsFavorites) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                        Text(
+                            text = "Import as Favorites by Default",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = LXTextPrimary
+                        )
+                        Text(
+                            text = if (state.isTachiyomiImportAsFavorites)
+                                "Tachiyomi entries will be starred as favorites"
+                            else
+                                "Tachiyomi entries will be imported as normal library items",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = if (state.isTachiyomiImportAsFavorites) LXPrimaryGreen else LXTextSecondary
+                        )
+                    }
+
+                    Switch(
+                        checked = state.isTachiyomiImportAsFavorites,
+                        onCheckedChange = onSetTachiyomiImportAsFavorites,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = LXBackgroundBlack,
+                            checkedTrackColor = LXPrimaryGreen,
+                            uncheckedThumbColor = LXTextSecondary,
+                            uncheckedTrackColor = LXSurfaceElevated
+                        )
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun ConflictResolutionContent(
+    selectedStrategy: ConflictStrategy,
+    onSelectStrategy: (ConflictStrategy) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Sync, contentDescription = null, tint = LXScoreGold)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Conflict Resolution Strategy",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextPrimary
+                    )
+                }
+
+                Text(
+                    text = "Determines how to handle existing entries when importing from backup files, MAL XML, or Tachiyomi backups:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                ConflictStrategy.entries.forEach { strategy ->
+                    val isSelected = selectedStrategy == strategy
+                    val desc = when (strategy) {
+                        ConflictStrategy.SKIP -> "Keep existing entry, ignore imported version"
+                        ConflictStrategy.OVERWRITE -> "Replace existing entry completely with imported data"
+                        ConflictStrategy.MERGE -> "Keep higher progress, newer dates, and merge subcategories/tags"
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f) else LXSurfaceElevated)
+                            .border(1.dp, if (isSelected) LXPrimaryGreen else LXBorder, RoundedCornerShape(8.dp))
+                            .clickable { onSelectStrategy(strategy) }
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(if (isSelected) LXPrimaryGreen else LXBorder),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isSelected) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = LXBackgroundBlack, modifier = Modifier.size(14.dp))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = strategy.name,
+                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = if (isSelected) LXPrimaryGreen else LXTextPrimary
+                                )
+                                if (strategy == ConflictStrategy.MERGE) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(LXPrimaryGreen.copy(alpha = 0.2f))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "RECOMMENDED",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                            color = LXPrimaryGreen
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = desc,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun PreferencesContent(
+    isSwipeToSwitchTabsEnabled: Boolean,
+    onSetSwipeToSwitchTabsEnabled: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Swipe to Switch Tabs",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Swipe left or right on Home screen to switch between status and subcategory tabs",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LXTextSecondary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Switch(
+                        checked = isSwipeToSwitchTabsEnabled,
+                        onCheckedChange = onSetSwipeToSwitchTabsEnabled,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = LXBackgroundBlack,
+                            checkedTrackColor = LXPrimaryGreen,
+                            uncheckedThumbColor = LXTextSecondary,
+                            uncheckedTrackColor = LXSurfaceElevated
+                        )
+                    )
+                }
+
+                HorizontalDivider(color = LXBorder, thickness = 1.dp)
+
+                Text(
+                    text = "Tip: When enabled, swiping across the Home screen smoothly navigates through All, Watching, Completed, On Hold, and custom subcategories.",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = LXTextSecondary.copy(alpha = 0.8f)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun AboutContent(
+    state: SettingsUiState,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // App Branding Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.lx_logo),
+                    contentDescription = "LX Logo",
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                )
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column {
+                    Text(
+                        text = "LX Track List",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXPrimaryGreen
+                    )
+                    Text(
+                        text = "Version 1.0.0 (Optimized for Phone & Tablet)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LXTextSecondary
+                    )
+                    Text(
+                        text = "Xiaomi 11T Pro, OnePlus 12R & OnePlus Pad Ready",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = LXTextSecondary.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        }
+
+        // Details Specifications Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "System Information",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextPrimary
+                )
+
+                InfoRow(label = "Storage Folder", value = state.homeFolderPath.ifBlank { "Not configured" })
+                InfoRow(label = "Input Folder", value = "${state.homeFolderPath}/input")
+                InfoRow(label = "Output Folder", value = "${state.homeFolderPath}/output")
+                InfoRow(label = "Custom Categories", value = "${state.customCategories.size} created")
+                InfoRow(label = "Import Strategy", value = state.selectedConflictStrategy.name)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = label, style = MaterialTheme.typography.bodySmall, color = LXTextSecondary)
+        Text(text = value, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold), color = LXTextPrimary)
+    }
+}
+
 
 private fun parseHexColor(hex: String): Color {
     return try {
