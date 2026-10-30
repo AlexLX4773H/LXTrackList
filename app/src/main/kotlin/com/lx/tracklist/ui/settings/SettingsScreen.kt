@@ -10,9 +10,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -92,11 +94,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lx.tracklist.R
+import com.lx.tracklist.data.local.StorageFileInfo
 import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.TrackingUnit
@@ -1103,7 +1107,7 @@ fun SettingsScreen(
                 // Left Master Pane: Settings Navigation Menu
                 Card(
                     modifier = Modifier
-                        .width(340.dp)
+                        .width(290.dp)
                         .fillMaxHeight(),
                     colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
                     border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
@@ -1503,7 +1507,10 @@ private fun CustomCategoriesContent(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    ) {
                         Icon(Icons.Default.Bookmark, contentDescription = null, tint = LXPrimaryGreen)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
@@ -1515,6 +1522,8 @@ private fun CustomCategoriesContent(
 
                     Button(
                         onClick = onAddCategoryClick,
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = LXPrimaryGreen.copy(alpha = 0.15f),
                             contentColor = LXPrimaryGreen
@@ -1523,7 +1532,12 @@ private fun CustomCategoriesContent(
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("+ Add Category", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "Add",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
                     }
                 }
 
@@ -1558,10 +1572,26 @@ private fun CustomCategoriesContent(
                                 color = LXTextPrimary
                             )
                             Text(
-                                text = "Tap "+ Add Category" above to create one.",
+                                text = "Create custom categories to organize and track media with custom units.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = LXTextSecondary
                             )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Button(
+                                onClick = onAddCategoryClick,
+                                modifier = Modifier.height(36.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = LXPrimaryGreen.copy(alpha = 0.15f),
+                                    contentColor = LXPrimaryGreen
+                                ),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.4f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Add Category", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 } else {
@@ -1671,13 +1701,18 @@ private fun BackupStorageContent(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    ) {
                         Icon(Icons.Default.Folder, contentDescription = null, tint = LXPrimaryGreen)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Home Storage Folder",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextPrimary
+                            color = LXTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
@@ -1688,18 +1723,67 @@ private fun BackupStorageContent(
                                 .background(LXPrimaryGreen.copy(alpha = 0.15f))
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Text("CONNECTED", color = LXPrimaryGreen, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold))
+                            Text(
+                                text = "CONNECTED",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1
+                            )
                         }
                     }
                 }
 
-                Text(
-                    text = "Root: ${state.homeFolderPath}
-• Input: ${state.homeFolderPath}/input
-• Output: ${state.homeFolderPath}/output",
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                    color = LXTextSecondary
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Root: ",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = LXPrimaryGreen
+                        )
+                        Text(
+                            text = state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" },
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
+                            color = LXTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Input: ",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextSecondary
+                        )
+                        Text(
+                            text = "${state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }}/input",
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
+                            color = LXTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Output: ",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextSecondary
+                        )
+                        Text(
+                            text = "${state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }}/output",
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
+                            color = LXTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
 
                 if (!state.hasStoragePermission) {
                     Card(
@@ -1734,18 +1818,27 @@ private fun BackupStorageContent(
                     Button(
                         onClick = onExportToHomeOutput,
                         enabled = !state.isExporting && !state.isPreparingExport,
-                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = 44.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         if (state.isExporting) {
                             CircularProgressIndicator(color = LXBackgroundBlack, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Exporting to output folder...")
+                            Text("Exporting to output folder...", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         } else {
                             Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Export Backup to /output Folder", fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "Export Backup to /output Folder",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
 
@@ -1783,8 +1876,7 @@ private fun BackupStorageContent(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "No files found in ${state.homeFolderPath}/input
-Copy your MAL XML/GZ, Tachiyomi (.tachibk), CSV, or JSON files there to import instantly.",
+                                text = "No files found in ${state.homeFolderPath}/input\nCopy your MAL XML/GZ, Tachiyomi (.tachibk), CSV, or JSON files there to import instantly.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = LXTextSecondary,
                                 lineHeight = 18.sp
@@ -1865,27 +1957,45 @@ Copy your MAL XML/GZ, Tachiyomi (.tachibk), CSV, or JSON files there to import i
                     OutlinedButton(
                         onClick = onPickFile,
                         enabled = !state.isImporting && !state.isPreparingImport,
-                        modifier = Modifier.weight(1f).height(42.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 44.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextPrimary),
                         border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Pick File...", fontSize = 12.sp)
+                        Text(
+                            text = "Pick File...",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
 
                     OutlinedButton(
                         onClick = onSaveAs,
                         enabled = !state.isExporting && !state.isPreparingExport,
-                        modifier = Modifier.weight(1f).height(42.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 44.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextPrimary),
                         border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Save As...", fontSize = 12.sp)
+                        Text(
+                            text = "Save As...",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }
@@ -2204,23 +2314,73 @@ private fun AboutContent(
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "System Information",
+                    text = "Storage Locations",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = LXTextPrimary
                 )
 
-                InfoRow(label = "Storage Folder", value = state.homeFolderPath.ifBlank { "Not configured" })
-                InfoRow(label = "Input Folder", value = "${state.homeFolderPath}/input")
-                InfoRow(label = "Output Folder", value = "${state.homeFolderPath}/output")
+                StorageLocationItem(
+                    label = "Root Storage Folder",
+                    path = state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }
+                )
+                StorageLocationItem(
+                    label = "Input Folder",
+                    path = "${state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }}/input"
+                )
+                StorageLocationItem(
+                    label = "Output Folder",
+                    path = "${state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }}/output"
+                )
+
+                HorizontalDivider(color = LXBorder, thickness = 1.dp)
+
+                Text(
+                    text = "App Configuration",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextPrimary
+                )
+
                 InfoRow(label = "Custom Categories", value = "${state.customCategories.size} created")
                 InfoRow(label = "Import Strategy", value = state.selectedConflictStrategy.name)
             }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun StorageLocationItem(label: String, path: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(LXSurfaceElevated)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 11.sp
+            ),
+            color = LXTextSecondary
+        )
+        Text(
+            text = path,
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            ),
+            color = LXPrimaryGreen,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
