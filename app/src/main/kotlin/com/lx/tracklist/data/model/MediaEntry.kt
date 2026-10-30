@@ -3,6 +3,9 @@ package com.lx.tracklist.data.model
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Entity(
     tableName = "media_entries",
@@ -36,8 +39,14 @@ data class MediaEntry(
     val mediaType: MediaType,
     val status: MediaStatus,
     val score: Int? = null,
+    // User personal viewing / reading dates
     val startDate: Long? = null,
     val finishDate: Long? = null,
+
+    // Official media release / broadcast dates (when the show / manga aired / published)
+    val airedStartDate: Long? = null,
+    val airedEndDate: Long? = null,
+
     val notes: String? = null,
     val tags: String? = null,
     val coverImageUri: String? = null,
@@ -52,6 +61,7 @@ data class MediaEntry(
     // Video / Watch fields (Anime, Show, Movie)
     val currentEpisodes: Int = 0,
     val totalEpisodes: Int = 0,
+    val airedEpisodes: Int = 0,
     val seasonNumber: Int = 1,
     val currentSeasons: Int = 1,
     val totalSeasons: Int = 1,
@@ -63,6 +73,7 @@ data class MediaEntry(
     val totalVolumes: Int = 0,
     val currentChapters: Int = 0,
     val totalChapters: Int = 0,
+    val airedChapters: Int = 0,
     val currentPages: Int = 0,
     val totalPages: Int = 0,
     val trackingUnit: TrackingUnit = TrackingUnit.CHAPTERS,
@@ -77,9 +88,17 @@ data class MediaEntry(
             MediaType.ANIME, MediaType.SHOW -> {
                 val totalStr = if (totalEpisodes > 0) "$totalEpisodes" else "?"
                 if (mediaType == MediaType.SHOW && (totalSeasons > 1 || currentSeasons > 1)) {
-                    "S$currentSeasons • Ep $currentEpisodes/$totalStr"
+                    if (isAiring && airedEpisodes > 0) {
+                        "S$currentSeasons • Ep $currentEpisodes/$airedEpisodes ($totalStr)"
+                    } else {
+                        "S$currentSeasons • Ep $currentEpisodes/$totalStr"
+                    }
                 } else {
-                    "$currentEpisodes/$totalStr ep"
+                    if (isAiring && airedEpisodes > 0) {
+                        "$currentEpisodes/$airedEpisodes ($totalStr) ep"
+                    } else {
+                        "$currentEpisodes/$totalStr ep"
+                    }
                 }
             }
             MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> {
@@ -97,22 +116,35 @@ data class MediaEntry(
                         if (currentVolumes > 0 || totalVolumes > 0) {
                             parts.add("Vol $currentVolumes" + if (totalVolumes > 0) "/$totalVolumes" else "")
                         }
-                        if (currentChapters > 0 || totalChapters > 0) {
-                            parts.add("Ch $currentChapters" + if (totalChapters > 0) "/$totalChapters" else "")
+                        if (currentChapters > 0 || totalChapters > 0 || airedChapters > 0) {
+                            val chStr = if (isAiring && airedChapters > 0) {
+                                "Ch $currentChapters/$airedChapters" + if (totalChapters > 0) " ($totalChapters)" else ""
+                            } else {
+                                "Ch $currentChapters" + if (totalChapters > 0) "/$totalChapters" else ""
+                            }
+                            parts.add(chStr)
                         }
                         if (currentPages > 0 || totalPages > 0) {
                             parts.add("$currentPages" + if (totalPages > 0) "/$totalPages" else "" + "p")
                         }
                         if (parts.isEmpty()) {
                             val totalStr = if (totalChapters > 0) "$totalChapters" else "?"
-                            "Ch $currentChapters/$totalStr"
+                            if (isAiring && airedChapters > 0) {
+                                "Ch $currentChapters/$airedChapters ($totalStr)"
+                            } else {
+                                "Ch $currentChapters/$totalStr"
+                            }
                         } else {
                             parts.joinToString(" • ")
                         }
                     }
                     TrackingUnit.CHAPTERS -> {
                         val totalStr = if (totalChapters > 0) "$totalChapters" else "?"
-                        "Ch $currentChapters/$totalStr"
+                        if (isAiring && airedChapters > 0) {
+                            "Ch $currentChapters/$airedChapters ($totalStr)"
+                        } else {
+                            "Ch $currentChapters/$totalStr"
+                        }
                     }
                 }
             }
@@ -213,6 +245,22 @@ data class MediaEntry(
             ?.map { it.trim() }
             ?.filter { it.isNotBlank() }
             ?: emptyList()
+    }
+
+    fun formatAiredDateRange(): String {
+        if (airedStartDate == null && airedEndDate == null) return ""
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val startStr = airedStartDate?.let { sdf.format(Date(it)) } ?: "?"
+        val endStr = if (isAiring && airedEndDate == null) "Present" else (airedEndDate?.let { sdf.format(Date(it)) } ?: "")
+        return if (endStr.isNotBlank()) "$startStr - $endStr" else startStr
+    }
+
+    fun formatUserDateRange(): String {
+        if (startDate == null && finishDate == null) return ""
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val startStr = startDate?.let { sdf.format(Date(it)) } ?: "?"
+        val finishStr = finishDate?.let { sdf.format(Date(it)) } ?: ""
+        return if (finishStr.isNotBlank()) "$startStr - $finishStr" else startStr
     }
 
     companion object {

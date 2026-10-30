@@ -593,6 +593,8 @@ object TachiyomiImporter {
 
         // 3. Determine Status
         val status = determineStatus(manga, resolvedCategories, currentChapters, totalChapters)
+        val isOngoing = manga.status == 2 || (status != MediaStatus.COMPLETED && manga.status != 1)
+        val airedChapters = if (isOngoing && maxChapterFromList > 0) maxChapterFromList else 0
 
         // 4. Score
         val rawScore = manga.tracking.map { it.score }.firstOrNull { it > 0f }
@@ -680,6 +682,8 @@ object TachiyomiImporter {
             totalEpisodes = 0,
             currentChapters = currentChapters,
             totalChapters = totalChapters,
+            airedChapters = airedChapters,
+            isAiring = isOngoing,
             trackingUnit = trackingUnit
         )
     }

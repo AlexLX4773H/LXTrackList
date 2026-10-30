@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
+import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.ui.components.CategorySelectorSheet
 import com.lx.tracklist.ui.components.MediaCard
@@ -81,7 +82,7 @@ private sealed interface HomeTab {
 fun HomeScreen(
     viewModel: HomeViewModel,
     onEntryClick: (Long) -> Unit,
-    onAddNewEntry: () -> Unit,
+    onAddNewEntry: (mediaType: MediaType, customCategory: String?, subCategory: String?, status: MediaStatus) -> Unit,
     onEditEntry: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -219,7 +220,23 @@ fun HomeScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onAddNewEntry,
+                onClick = {
+                    val currentTab = homeTabs.getOrNull(pagerState.currentPage) ?: HomeTab.All
+                    val initialStatus = when (currentTab) {
+                        is HomeTab.Status -> currentTab.status
+                        else -> state.selectedStatus ?: MediaStatus.WATCHING
+                    }
+                    val initialSubCategory = when (currentTab) {
+                        is HomeTab.SubCat -> currentTab.subCategory.name
+                        else -> state.selectedSubCategory
+                    }
+                    onAddNewEntry(
+                        state.selectedCategory,
+                        state.selectedCustomCategory,
+                        initialSubCategory,
+                        initialStatus
+                    )
+                },
                 containerColor = LXPrimaryGreen,
                 contentColor = LXBackgroundBlack,
                 shape = CircleShape,

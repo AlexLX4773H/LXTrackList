@@ -43,6 +43,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.lx.tracklist.LXApplication
 import com.lx.tracklist.R
+import com.lx.tracklist.data.model.MediaStatus
+import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.ui.components.UserSwitcherSheet
 import com.lx.tracklist.ui.detail.DetailScreen
 import com.lx.tracklist.ui.detail.DetailViewModel
@@ -72,7 +74,14 @@ sealed class NavDestination {
     data object Stats : NavDestination()
     data object Settings : NavDestination()
     data class Detail(val entryId: Long, val sessionId: Long = System.nanoTime()) : NavDestination()
-    data class AddEdit(val entryId: Long? = null, val sessionId: Long = System.nanoTime()) : NavDestination()
+    data class AddEdit(
+        val entryId: Long? = null,
+        val initialMediaType: MediaType? = null,
+        val initialCustomCategory: String? = null,
+        val initialSubCategory: String? = null,
+        val initialStatus: MediaStatus? = null,
+        val sessionId: Long = System.nanoTime()
+    ) : NavDestination()
 }
 
 @Composable
@@ -152,7 +161,17 @@ fun AppNavigation() {
                 HomeScreen(
                     viewModel = homeViewModel,
                     onEntryClick = { entryId -> navigateTo(NavDestination.Detail(entryId)) },
-                    onAddNewEntry = { navigateTo(NavDestination.AddEdit(null)) },
+                    onAddNewEntry = { mediaType, customCategory, subCategory, status ->
+                        navigateTo(
+                            NavDestination.AddEdit(
+                                entryId = null,
+                                initialMediaType = mediaType,
+                                initialCustomCategory = customCategory,
+                                initialSubCategory = subCategory,
+                                initialStatus = status
+                            )
+                        )
+                    },
                     onEditEntry = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) }
                 )
             }
@@ -161,7 +180,18 @@ fun AppNavigation() {
                 LibraryScreen(
                     viewModel = libraryViewModel,
                     onEntryClick = { entryId -> navigateTo(NavDestination.Detail(entryId)) },
-                    onEditEntry = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) }
+                    onEditEntry = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) },
+                    onAddNewEntry = { mediaType, customCategory, subCategory, status ->
+                        navigateTo(
+                            NavDestination.AddEdit(
+                                entryId = null,
+                                initialMediaType = mediaType,
+                                initialCustomCategory = customCategory,
+                                initialSubCategory = subCategory,
+                                initialStatus = status
+                            )
+                        )
+                    }
                 )
             }
 
@@ -192,7 +222,14 @@ fun AppNavigation() {
             is NavDestination.AddEdit -> {
                 val addEditViewModel: AddEditViewModel = viewModel(
                     key = "add_edit_${dest.entryId ?: 0L}_${dest.sessionId}",
-                    factory = AddEditViewModelFactory(repository, dest.entryId)
+                    factory = AddEditViewModelFactory(
+                        repository = repository,
+                        entryId = dest.entryId,
+                        initialMediaType = dest.initialMediaType,
+                        initialCustomCategory = dest.initialCustomCategory,
+                        initialSubCategory = dest.initialSubCategory,
+                        initialStatus = dest.initialStatus
+                    )
                 )
                 AddEditScreen(
                     viewModel = addEditViewModel,

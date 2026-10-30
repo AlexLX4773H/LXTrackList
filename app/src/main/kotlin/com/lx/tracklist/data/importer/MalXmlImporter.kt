@@ -63,6 +63,9 @@ object MalXmlImporter {
         var status = MediaStatus.WATCHING
         var startDate: Long? = null
         var finishDate: Long? = null
+        var airedStartDate: Long? = null
+        var airedEndDate: Long? = null
+        var isAiring = false
         var comments: String? = null
         var tags: String? = null
 
@@ -73,6 +76,12 @@ object MalXmlImporter {
                 "series_title" -> title = readText(parser)
                 "series_type" -> seriesType = readText(parser)
                 "series_episodes" -> totalEpisodes = readText(parser)?.toIntOrNull() ?: 0
+                "series_start" -> airedStartDate = parseDate(readText(parser))
+                "series_end" -> airedEndDate = parseDate(readText(parser))
+                "series_status" -> {
+                    val raw = readText(parser) ?: ""
+                    isAiring = raw == "1" || raw.contains("Airing", ignoreCase = true)
+                }
                 "my_watched_episodes" -> watchedEpisodes = readText(parser)?.toIntOrNull() ?: 0
                 "my_score" -> score = readText(parser)?.toIntOrNull()?.takeIf { it in 1..10 }
                 "my_status" -> {
@@ -99,8 +108,11 @@ object MalXmlImporter {
             score = score,
             currentEpisodes = watchedEpisodes,
             totalEpisodes = totalEpisodes,
+            isAiring = isAiring,
             startDate = startDate,
             finishDate = finishDate,
+            airedStartDate = airedStartDate,
+            airedEndDate = airedEndDate,
             notes = comments?.takeIf { it.isNotBlank() },
             tags = tags?.takeIf { it.isNotBlank() },
             externalId = externalId,
@@ -120,6 +132,9 @@ object MalXmlImporter {
         var status = MediaStatus.WATCHING
         var startDate: Long? = null
         var finishDate: Long? = null
+        var airedStartDate: Long? = null
+        var airedEndDate: Long? = null
+        var isAiring = false
         var comments: String? = null
         var tags: String? = null
 
@@ -130,6 +145,12 @@ object MalXmlImporter {
                 "manga_title" -> title = readText(parser)
                 "manga_volumes" -> totalVolumes = readText(parser)?.toIntOrNull() ?: 0
                 "manga_chapters" -> totalChapters = readText(parser)?.toIntOrNull() ?: 0
+                "manga_start", "series_start" -> airedStartDate = parseDate(readText(parser))
+                "manga_end", "series_end" -> airedEndDate = parseDate(readText(parser))
+                "manga_status", "series_status" -> {
+                    val raw = readText(parser) ?: ""
+                    isAiring = raw == "1" || raw.contains("Publishing", ignoreCase = true) || raw.contains("Airing", ignoreCase = true)
+                }
                 "my_read_volumes" -> readVolumes = readText(parser)?.toIntOrNull() ?: 0
                 "my_read_chapters" -> readChapters = readText(parser)?.toIntOrNull() ?: 0
                 "my_score" -> score = readText(parser)?.toIntOrNull()?.takeIf { it in 1..10 }
@@ -162,8 +183,11 @@ object MalXmlImporter {
             currentChapters = readChapters,
             totalChapters = totalChapters,
             trackingUnit = trackingUnit,
+            isAiring = isAiring,
             startDate = startDate,
             finishDate = finishDate,
+            airedStartDate = airedStartDate,
+            airedEndDate = airedEndDate,
             notes = comments?.takeIf { it.isNotBlank() },
             tags = tags?.takeIf { it.isNotBlank() },
             externalId = externalId,

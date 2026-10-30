@@ -408,4 +408,168 @@ class FeaturesTest {
         // Non-matching query
         assertFalse(matchesQuery(entry, "Naruto"))
     }
+
+    @Test
+    fun testAiringProgressBreakdown() {
+        // Airing anime with watched 8, aired 12, total 24
+        val airingAnime = MediaEntry(
+            id = 10L,
+            title = "Jujutsu Kaisen Season 2",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.WATCHING,
+            currentEpisodes = 8,
+            airedEpisodes = 12,
+            totalEpisodes = 24,
+            isAiring = true
+        )
+        assertEquals("8/12 (24) ep", airingAnime.displayProgress)
+
+        // Airing anime with unknown total episodes
+        val airingUnknownTotal = MediaEntry(
+            id = 11L,
+            title = "One Piece",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.WATCHING,
+            currentEpisodes = 1100,
+            airedEpisodes = 1120,
+            totalEpisodes = 0,
+            isAiring = true
+        )
+        assertEquals("1100/1120 (?) ep", airingUnknownTotal.displayProgress)
+
+        // Non-airing completed or standard anime
+        val completedAnime = MediaEntry(
+            id = 12L,
+            title = "Frieren",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.COMPLETED,
+            currentEpisodes = 28,
+            totalEpisodes = 28,
+            isAiring = false
+        )
+        assertEquals("28/28 ep", completedAnime.displayProgress)
+
+        // Airing TV Show with seasons
+        val airingShow = MediaEntry(
+            id = 13L,
+            title = "House of the Dragon",
+            mediaType = MediaType.SHOW,
+            status = MediaStatus.WATCHING,
+            currentSeasons = 2,
+            totalSeasons = 2,
+            currentEpisodes = 4,
+            airedEpisodes = 8,
+            totalEpisodes = 8,
+            isAiring = true
+        )
+        assertEquals("S2 • Ep 4/8 (8)", airingShow.displayProgress)
+
+        // Ongoing Manga with chapters
+        val ongoingManga = MediaEntry(
+            id = 14L,
+            title = "Chainsaw Man",
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.WATCHING,
+            trackingUnit = TrackingUnit.CHAPTERS,
+            currentChapters = 140,
+            airedChapters = 165,
+            totalChapters = 200,
+            isAiring = true
+        )
+        assertEquals("Ch 140/165 (200)", ongoingManga.displayProgress)
+    }
+
+    @Test
+    fun testAiredAndUserDateRanges() {
+        val cal = java.util.Calendar.getInstance()
+        cal.set(2023, java.util.Calendar.APRIL, 1, 0, 0, 0)
+        val airedStart = cal.timeInMillis
+        cal.set(2023, java.util.Calendar.SEPTEMBER, 30, 0, 0, 0)
+        val airedEnd = cal.timeInMillis
+
+        cal.set(2023, java.util.Calendar.MAY, 10, 0, 0, 0)
+        val userStart = cal.timeInMillis
+        cal.set(2023, java.util.Calendar.OCTOBER, 5, 0, 0, 0)
+        val userFinish = cal.timeInMillis
+
+        val entry = MediaEntry(
+            id = 20L,
+            title = "Demon Slayer: Swordsmith Village Arc",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.COMPLETED,
+            airedStartDate = airedStart,
+            airedEndDate = airedEnd,
+            startDate = userStart,
+            finishDate = userFinish,
+            isAiring = false
+        )
+
+        val airedRange = entry.formatAiredDateRange()
+        assertTrue(airedRange.contains("2023-04-01"))
+        assertTrue(airedRange.contains("2023-09-30"))
+
+        val userRange = entry.formatUserDateRange()
+        assertTrue(userRange.contains("2023-05-10"))
+        assertTrue(userRange.contains("2023-10-05"))
+
+        // Airing entry with no end date yet -> "Present"
+        val ongoingEntry = MediaEntry(
+            id = 21L,
+            title = "Currently Airing Show",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.WATCHING,
+            airedStartDate = airedStart,
+            airedEndDate = null,
+            isAiring = true
+        )
+        val ongoingAired = ongoingEntry.formatAiredDateRange()
+        assertTrue(ongoingAired.contains("2023-04-01"))
+        assertTrue(ongoingAired.contains("Present"))
+
+        // Entry with no dates
+        val emptyDates = MediaEntry(
+            id = 22L,
+            title = "No Dates Entry",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.PLAN_TO_WATCH
+        )
+        assertEquals("", emptyDates.formatAiredDateRange())
+        assertEquals("", emptyDates.formatUserDateRange())
+    }
+
+    @Test
+    fun testAddEditInitialStatePreselection() {
+        // Preselection: Manga & Completed
+        val state1 = com.lx.tracklist.ui.edit.AddEditUiState(
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.COMPLETED,
+            subCategory = null
+        )
+        assertEquals(MediaType.MANGA, state1.mediaType)
+        assertEquals(MediaStatus.COMPLETED, state1.status)
+        assertNull(state1.subCategory)
+
+        // Preselection: Manga with Sub Category "Shonen" and status "Reading"
+        val state2 = com.lx.tracklist.ui.edit.AddEditUiState(
+            mediaType = MediaType.MANGA,
+            customCategory = null,
+            subCategory = "Shonen",
+            status = MediaStatus.WATCHING
+        )
+        assertEquals(MediaType.MANGA, state2.mediaType)
+        assertEquals("Shonen", state2.subCategory)
+        assertEquals(MediaStatus.WATCHING, state2.status)
+
+        // Preselection: Custom Category "Donghua" with status "Plan to Watch"
+        val state3 = com.lx.tracklist.ui.edit.AddEditUiState(
+            mediaType = MediaType.ANIME,
+            customCategory = "Donghua",
+            subCategory = "Cultivation",
+            status = MediaStatus.PLAN_TO_WATCH
+        )
+        assertEquals(MediaType.ANIME, state3.mediaType)
+        assertEquals("Donghua", state3.customCategory)
+        assertEquals("Cultivation", state3.subCategory)
+        assertEquals(MediaStatus.PLAN_TO_WATCH, state3.status)
+    }
 }

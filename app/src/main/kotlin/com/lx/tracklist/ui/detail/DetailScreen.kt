@@ -34,6 +34,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -66,6 +67,7 @@ import coil.compose.SubcomposeAsyncImageContent
 import com.lx.tracklist.R
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
+import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.ui.theme.LXAiringBlue
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
@@ -488,6 +490,83 @@ private fun DetailProgressCard(
                 )
             }
 
+            // If it is an airing show/anime, display user's episodes watched, aired episodes and total episodes
+            if (entry.isAiring && (entry.mediaType == MediaType.ANIME || entry.mediaType == MediaType.SHOW)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Watched", color = LXTextSecondary, style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            text = "${entry.currentEpisodes}",
+                            color = LXPrimaryGreen,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Aired", color = LXTextSecondary, style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            text = if (entry.airedEpisodes > 0) "${entry.airedEpisodes}" else "-",
+                            color = LXAiringBlue,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Total", color = LXTextSecondary, style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            text = if (entry.totalEpisodes > 0) "${entry.totalEpisodes}" else "?",
+                            color = LXTextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            } else if (entry.isAiring && (entry.mediaType == MediaType.MANGA || entry.mediaType == MediaType.MANHWA)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceAround
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Read", color = LXTextSecondary, style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            text = "${entry.currentChapters}",
+                            color = LXPrimaryGreen,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Released", color = LXTextSecondary, style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            text = if (entry.airedChapters > 0) "${entry.airedChapters}" else "-",
+                            color = LXAiringBlue,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Total", color = LXTextSecondary, style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            text = if (entry.totalChapters > 0) "${entry.totalChapters}" else "?",
+                            color = LXTextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -537,30 +616,78 @@ private fun DetailProgressCard(
 
 @Composable
 private fun DetailDatesCard(entry: MediaEntry) {
-    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    val startStr = entry.startDate?.let { sdf.format(Date(it)) }
-    val finishStr = entry.finishDate?.let { sdf.format(Date(it)) }
+    val sdf = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
+    val userStartStr = entry.startDate?.let { sdf.format(Date(it)) }
+    val userFinishStr = entry.finishDate?.let { sdf.format(Date(it)) }
 
-    if (startStr != null || finishStr != null) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-            shape = RoundedCornerShape(12.dp)
+    val airedStartStr = entry.airedStartDate?.let { sdf.format(Date(it)) }
+    val airedEndStr = if (entry.isAiring && entry.airedEndDate == null) "Present" else entry.airedEndDate?.let { sdf.format(Date(it)) }
+
+    val hasUserData = userStartStr != null || userFinishStr != null
+    val hasAiredData = airedStartStr != null || airedEndStr != null
+
+    if (!hasUserData && !hasAiredData) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+        border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(14.dp),
-                horizontalArrangement = Arrangement.SpaceAround
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Started", color = LXTextSecondary, style = MaterialTheme.typography.bodySmall)
-                    Text(startStr ?: "-", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+            if (hasAiredData) {
+                val airedTitle = when (entry.mediaType) {
+                    MediaType.ANIME, MediaType.SHOW -> "Aired / Broadcast Dates"
+                    MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "Publishing Period"
+                    MediaType.MOVIE -> "Release Date"
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Finished", color = LXTextSecondary, style = MaterialTheme.typography.bodySmall)
-                    Text(finishStr ?: "-", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(airedTitle, color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("From", color = LXTextSecondary, style = MaterialTheme.typography.bodySmall)
+                            Text(airedStartStr ?: "-", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("To", color = LXTextSecondary, style = MaterialTheme.typography.bodySmall)
+                            Text(airedEndStr ?: "-", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            if (hasUserData && hasAiredData) {
+                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+            }
+
+            if (hasUserData) {
+                val userTitle = when (entry.mediaType) {
+                    MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "My Reading Dates"
+                    else -> "My Watch Dates"
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(userTitle, color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Started", color = LXTextSecondary, style = MaterialTheme.typography.bodySmall)
+                            Text(userStartStr ?: "-", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Completed", color = LXTextSecondary, style = MaterialTheme.typography.bodySmall)
+                            Text(userFinishStr ?: "-", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }

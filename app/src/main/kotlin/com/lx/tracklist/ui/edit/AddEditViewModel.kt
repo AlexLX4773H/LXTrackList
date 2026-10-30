@@ -41,10 +41,13 @@ data class AddEditUiState(
     val tags: String = "",
     val startDate: Long? = null,
     val finishDate: Long? = null,
+    val airedStartDate: Long? = null,
+    val airedEndDate: Long? = null,
 
     // Watch fields
     val currentEpisodes: Int = 0,
     val totalEpisodes: Int = 0,
+    val airedEpisodes: Int = 0,
     val seasonNumber: Int = 1,
     val currentSeasons: Int = 1,
     val totalSeasons: Int = 1,
@@ -57,6 +60,7 @@ data class AddEditUiState(
     val totalVolumes: Int = 0,
     val currentChapters: Int = 0,
     val totalChapters: Int = 0,
+    val airedChapters: Int = 0,
     val currentPages: Int = 0,
     val totalPages: Int = 0,
 
@@ -71,10 +75,21 @@ data class AddEditUiState(
 
 class AddEditViewModel(
     private val repository: MediaRepository,
-    private val entryId: Long?
+    private val entryId: Long?,
+    private val initialMediaType: MediaType? = null,
+    private val initialCustomCategory: String? = null,
+    private val initialSubCategory: String? = null,
+    private val initialStatus: MediaStatus? = null
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(AddEditUiState())
+    private val _uiState = MutableStateFlow(
+        AddEditUiState(
+            mediaType = initialMediaType ?: MediaType.ANIME,
+            customCategory = initialCustomCategory,
+            subCategory = initialSubCategory,
+            status = initialStatus ?: MediaStatus.WATCHING
+        )
+    )
     val uiState: StateFlow<AddEditUiState> = _uiState.asStateFlow()
 
     private val _savedEvent = Channel<Unit>(Channel.BUFFERED)
@@ -123,8 +138,11 @@ class AddEditViewModel(
                             tags = entry.tags ?: "",
                             startDate = entry.startDate,
                             finishDate = entry.finishDate,
+                            airedStartDate = entry.airedStartDate,
+                            airedEndDate = entry.airedEndDate,
                             currentEpisodes = entry.currentEpisodes,
                             totalEpisodes = entry.totalEpisodes,
+                            airedEpisodes = entry.airedEpisodes,
                             seasonNumber = entry.seasonNumber,
                             currentSeasons = entry.currentSeasons,
                             totalSeasons = entry.totalSeasons,
@@ -135,6 +153,7 @@ class AddEditViewModel(
                             totalVolumes = entry.totalVolumes,
                             currentChapters = entry.currentChapters,
                             totalChapters = entry.totalChapters,
+                            airedChapters = entry.airedChapters,
                             currentPages = entry.currentPages,
                             totalPages = entry.totalPages,
                             movieSeriesName = entry.movieSeriesName ?: "",
@@ -147,7 +166,14 @@ class AddEditViewModel(
                 }
             }
         } else {
-            _uiState.value = AddEditUiState(isSaved = false, errorMessage = null)
+            _uiState.value = AddEditUiState(
+                mediaType = initialMediaType ?: MediaType.ANIME,
+                customCategory = initialCustomCategory,
+                subCategory = initialSubCategory,
+                status = initialStatus ?: MediaStatus.WATCHING,
+                isSaved = false,
+                errorMessage = null
+            )
         }
     }
 
@@ -211,9 +237,12 @@ class AddEditViewModel(
     fun updateTags(value: String) = _uiState.update { it.copy(tags = value) }
     fun updateStartDate(value: Long?) = _uiState.update { it.copy(startDate = value) }
     fun updateFinishDate(value: Long?) = _uiState.update { it.copy(finishDate = value) }
+    fun updateAiredStartDate(value: Long?) = _uiState.update { it.copy(airedStartDate = value) }
+    fun updateAiredEndDate(value: Long?) = _uiState.update { it.copy(airedEndDate = value) }
 
     fun updateCurrentEpisodes(value: Int) = _uiState.update { it.copy(currentEpisodes = value) }
     fun updateTotalEpisodes(value: Int) = _uiState.update { it.copy(totalEpisodes = value) }
+    fun updateAiredEpisodes(value: Int) = _uiState.update { it.copy(airedEpisodes = value) }
     fun updateCurrentSeasons(value: Int) = _uiState.update { it.copy(currentSeasons = value) }
     fun updateTotalSeasons(value: Int) = _uiState.update { it.copy(totalSeasons = value) }
     fun updateIsAiring(value: Boolean) = _uiState.update { it.copy(isAiring = value) }
@@ -223,6 +252,7 @@ class AddEditViewModel(
     fun updateTotalVolumes(value: Int) = _uiState.update { it.copy(totalVolumes = value) }
     fun updateCurrentChapters(value: Int) = _uiState.update { it.copy(currentChapters = value) }
     fun updateTotalChapters(value: Int) = _uiState.update { it.copy(totalChapters = value) }
+    fun updateAiredChapters(value: Int) = _uiState.update { it.copy(airedChapters = value) }
     fun updateCurrentPages(value: Int) = _uiState.update { it.copy(currentPages = value) }
     fun updateTotalPages(value: Int) = _uiState.update { it.copy(totalPages = value) }
 
@@ -260,8 +290,11 @@ class AddEditViewModel(
                 tags = s.tags.trim().ifBlank { null },
                 startDate = s.startDate,
                 finishDate = s.finishDate,
+                airedStartDate = s.airedStartDate,
+                airedEndDate = s.airedEndDate,
                 currentEpisodes = s.currentEpisodes,
                 totalEpisodes = s.totalEpisodes,
+                airedEpisodes = s.airedEpisodes,
                 seasonNumber = s.seasonNumber,
                 currentSeasons = s.currentSeasons,
                 totalSeasons = s.totalSeasons,
@@ -272,6 +305,7 @@ class AddEditViewModel(
                 totalVolumes = s.totalVolumes,
                 currentChapters = s.currentChapters,
                 totalChapters = s.totalChapters,
+                airedChapters = s.airedChapters,
                 currentPages = s.currentPages,
                 totalPages = s.totalPages,
                 movieSeriesName = s.movieSeriesName.trim().ifBlank { null },
@@ -294,12 +328,23 @@ class AddEditViewModel(
 
 class AddEditViewModelFactory(
     private val repository: MediaRepository,
-    private val entryId: Long?
+    private val entryId: Long?,
+    private val initialMediaType: MediaType? = null,
+    private val initialCustomCategory: String? = null,
+    private val initialSubCategory: String? = null,
+    private val initialStatus: MediaStatus? = null
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AddEditViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return AddEditViewModel(repository, entryId) as T
+            return AddEditViewModel(
+                repository = repository,
+                entryId = entryId,
+                initialMediaType = initialMediaType,
+                initialCustomCategory = initialCustomCategory,
+                initialSubCategory = initialSubCategory,
+                initialStatus = initialStatus
+            ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

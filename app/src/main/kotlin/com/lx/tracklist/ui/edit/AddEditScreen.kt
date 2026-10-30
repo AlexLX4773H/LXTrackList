@@ -1,5 +1,6 @@
 package com.lx.tracklist.ui.edit
 
+import android.app.DatePickerDialog
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -27,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
@@ -41,6 +43,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -65,11 +68,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.Priority
@@ -425,6 +433,16 @@ fun AddEditScreen(
                                     modifier = Modifier.weight(1f),
                                     colors = outlinedColors()
                                 )
+                                if (state.isAiring) {
+                                    OutlinedTextField(
+                                        value = if (state.airedEpisodes > 0) state.airedEpisodes.toString() else "",
+                                        onValueChange = { viewModel.updateAiredEpisodes(it.toIntOrNull() ?: 0) },
+                                        label = { Text("Aired Ep") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        modifier = Modifier.weight(1f),
+                                        colors = outlinedColors()
+                                    )
+                                }
                                 OutlinedTextField(
                                     value = if (state.totalEpisodes > 0) state.totalEpisodes.toString() else "",
                                     onValueChange = { viewModel.updateTotalEpisodes(it.toIntOrNull() ?: 0) },
@@ -507,6 +525,16 @@ fun AddEditScreen(
                                         modifier = Modifier.weight(1f),
                                         colors = outlinedColors()
                                     )
+                                    if (state.isAiring) {
+                                        OutlinedTextField(
+                                            value = if (state.airedChapters > 0) state.airedChapters.toString() else "",
+                                            onValueChange = { viewModel.updateAiredChapters(it.toIntOrNull() ?: 0) },
+                                            label = { Text("Aired Ch") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            modifier = Modifier.weight(1f),
+                                            colors = outlinedColors()
+                                        )
+                                    }
                                     OutlinedTextField(
                                         value = if (state.totalChapters > 0) state.totalChapters.toString() else "",
                                         onValueChange = { viewModel.updateTotalChapters(it.toIntOrNull() ?: 0) },
@@ -565,6 +593,22 @@ fun AddEditScreen(
                                     )
                                 }
                             }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Currently Publishing / Ongoing?", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
+                                Switch(
+                                    checked = state.isAiring,
+                                    onCheckedChange = { viewModel.updateIsAiring(it) },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = LXBackgroundBlack,
+                                        checkedTrackColor = LXPrimaryGreen
+                                    )
+                                )
+                            }
                         }
 
                         MediaType.MOVIE -> {
@@ -589,6 +633,88 @@ fun AddEditScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+
+            // Dates & Schedule Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                border = BorderStroke(1.dp, LXBorder),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Dates & Schedule",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = LXPrimaryGreen
+                    )
+
+                    // Personal Watch / Reading Dates
+                    val personalLabel = when (state.mediaType) {
+                        MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "My Reading Dates"
+                        else -> "My Watch Dates"
+                    }
+                    Text(
+                        text = personalLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = LXTextPrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        DatePickerField(
+                            label = "Started Date",
+                            timestamp = state.startDate,
+                            onDateSelected = { viewModel.updateStartDate(it) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        DatePickerField(
+                            label = "Completed Date",
+                            timestamp = state.finishDate,
+                            onDateSelected = { viewModel.updateFinishDate(it) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    HorizontalDivider(color = LXBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+
+                    // Broadcast / Publishing Dates
+                    val airedLabel = when (state.mediaType) {
+                        MediaType.ANIME, MediaType.SHOW -> "Airing / Broadcast Dates"
+                        MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "Publishing Dates"
+                        MediaType.MOVIE -> "Theatrical / Release Dates"
+                    }
+                    Text(
+                        text = airedLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = LXTextPrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        DatePickerField(
+                            label = "Aired / Release From",
+                            timestamp = state.airedStartDate,
+                            onDateSelected = { viewModel.updateAiredStartDate(it) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        DatePickerField(
+                            label = "Aired / Release To",
+                            timestamp = state.airedEndDate,
+                            onDateSelected = { viewModel.updateAiredEndDate(it) },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
@@ -736,3 +862,86 @@ private fun outlinedColors() = OutlinedTextFieldDefaults.colors(
     unfocusedTextColor = LXTextPrimary,
     cursorColor = LXPrimaryGreen
 )
+
+@Composable
+private fun DatePickerField(
+    label: String,
+    timestamp: Long?,
+    onDateSelected: (Long?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
+    val displayValue = remember(timestamp) {
+        timestamp?.let { sdf.format(Date(it)) } ?: ""
+    }
+
+    val calendar = remember(timestamp) {
+        Calendar.getInstance().apply {
+            if (timestamp != null && timestamp > 0L) {
+                timeInMillis = timestamp
+            }
+        }
+    }
+
+    val showDialog = {
+        val y = calendar.get(Calendar.YEAR)
+        val m = calendar.get(Calendar.MONTH)
+        val d = calendar.get(Calendar.DAY_OF_MONTH)
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val selectedCal = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, year)
+                    set(Calendar.MONTH, month)
+                    set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                onDateSelected(selectedCal.timeInMillis)
+            },
+            y, m, d
+        ).show()
+    }
+
+    Box(modifier = modifier) {
+        OutlinedTextField(
+            value = displayValue,
+            onValueChange = {},
+            label = { Text(label) },
+            readOnly = true,
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            leadingIcon = {
+                Icon(
+                    Icons.Default.CalendarToday,
+                    contentDescription = "Select Date",
+                    tint = LXPrimaryGreen,
+                    modifier = Modifier.size(20.dp)
+                )
+            },
+            trailingIcon = {
+                if (timestamp != null) {
+                    IconButton(onClick = { onDateSelected(null) }) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Clear Date",
+                            tint = LXTextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            },
+            colors = outlinedColors()
+        )
+        // Click overlay over text field (except clear button area if visible)
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .padding(end = if (timestamp != null) 48.dp else 0.dp)
+                .clickable(onClick = showDialog)
+        )
+    }
+}
