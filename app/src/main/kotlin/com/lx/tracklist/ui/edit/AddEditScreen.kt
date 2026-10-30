@@ -36,11 +36,15 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -104,6 +108,10 @@ fun AddEditScreen(
     val customCategories by viewModel.customCategories.collectAsState(initial = emptyList())
     val subCategories by viewModel.subCategories.collectAsState(initial = emptyList())
     var showCoverSearchDialog by remember { mutableStateOf(false) }
+    var mainCategoryExpanded by remember { mutableStateOf(false) }
+    var subCategoryExpanded by remember { mutableStateOf(false) }
+    var pendingMainCategory by remember { mutableStateOf<MainCategoryItem?>(null) }
+    var pendingSubCategoryChange by remember { mutableStateOf<PendingSubCategoryChange?>(null) }
 
     BackHandler(onBack = onNavigateBack)
 
@@ -173,100 +181,6 @@ fun AddEditScreen(
                     text = state.errorMessage ?: "",
                     color = LXErrorRed,
                     style = MaterialTheme.typography.bodyMedium
-                )
-            }
-
-            // Main Category
-            Text("Main Category", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                MediaType.entries.forEach { cat ->
-                    val isSelected = state.customCategory == null && state.mediaType == cat
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.selectCategory(cat, null) },
-                        label = { Text(cat.displayName) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
-                }
-                customCategories.forEach { customCat ->
-                    val isSelected = state.customCategory.equals(customCat.name, ignoreCase = true)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            viewModel.selectCategory(customCat.mediaType ?: state.mediaType, customCat.name)
-                        },
-                        label = { Text(customCat.name) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
-                }
-            }
-
-            // Sub Category (Optional)
-            Text("Sub Category (Optional)", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = state.subCategory.isNullOrBlank(),
-                    onClick = { viewModel.updateSubCategory(null) },
-                    label = { Text("None") },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = LXPrimaryGreen,
-                        selectedLabelColor = LXBackgroundBlack,
-                        containerColor = LXSurfaceElevated,
-                        labelColor = LXTextSecondary
-                    )
-                )
-
-                subCategories.forEach { subCat ->
-                    val isSelected = state.subCategory.equals(subCat.name, ignoreCase = true)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.updateSubCategory(if (isSelected) null else subCat.name) },
-                        label = { Text(subCat.name) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
-                }
-
-                if (!state.subCategory.isNullOrBlank() && subCategories.none { it.name.equals(state.subCategory, ignoreCase = true) }) {
-                    FilterChip(
-                        selected = true,
-                        onClick = { viewModel.updateSubCategory(null) },
-                        label = { Text(state.subCategory ?: "") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
-                }
-            }
-
-            if (subCategories.isEmpty() && state.subCategory.isNullOrBlank()) {
-                Text(
-                    text = "No sub categories available for this category. Sub categories can be created from the Home screen.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = LXTextSecondary
                 )
             }
 
@@ -828,6 +742,300 @@ fun AddEditScreen(
                 Text("Mark as Favorite", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
             }
 
+            // Confirmation Dialog for Main Category
+            if (pendingMainCategory != null) {
+                val target = pendingMainCategory!!
+                val currentCategoryDisplayName = state.customCategory ?: state.mediaType.displayName
+                val message = if (state.subCategory.isNullOrBlank()) {
+                    "Are you sure you want to change the category from \"$currentCategoryDisplayName\" to \"${target.displayName}\"?"
+                } else {
+                    "Are you sure you want to change the category from \"$currentCategoryDisplayName\" to \"${target.displayName}\"? This will reset the sub category."
+                }
+                AlertDialog(
+                    onDismissRequest = { pendingMainCategory = null },
+                    title = {
+                        Text(
+                            text = "Change Main Category?",
+                            color = LXTextPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = message,
+                            color = LXTextSecondary
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.selectCategory(target.mediaType, target.customCategory)
+                                pendingMainCategory = null
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack
+                            )
+                        ) {
+                            Text("Change", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingMainCategory = null }) {
+                            Text("Cancel", color = LXTextSecondary)
+                        }
+                    },
+                    containerColor = LXSurfaceElevated
+                )
+            }
+
+            // Confirmation Dialog for Sub Category
+            if (pendingSubCategoryChange != null) {
+                val targetName = pendingSubCategoryChange!!.name
+                val currentSubName = if (state.subCategory.isNullOrBlank()) "None" else state.subCategory!!
+                val targetDisplay = targetName ?: "None"
+                val dialogMessage = if (targetName == null) {
+                    "Are you sure you want to remove the sub category \"$currentSubName\"?"
+                } else if (state.subCategory.isNullOrBlank()) {
+                    "Are you sure you want to set the sub category to \"$targetDisplay\"?"
+                } else {
+                    "Are you sure you want to change the sub category from \"$currentSubName\" to \"$targetDisplay\"?"
+                }
+
+                AlertDialog(
+                    onDismissRequest = { pendingSubCategoryChange = null },
+                    title = {
+                        Text(
+                            text = "Change Sub Category?",
+                            color = LXTextPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = dialogMessage,
+                            color = LXTextSecondary
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.updateSubCategory(targetName)
+                                pendingSubCategoryChange = null
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack
+                            )
+                        ) {
+                            Text("Change", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingSubCategoryChange = null }) {
+                            Text("Cancel", color = LXTextSecondary)
+                        }
+                    },
+                    containerColor = LXSurfaceElevated
+                )
+            }
+
+            // Main Category Dropdown
+            val allMainCategories = remember(customCategories, state.mediaType) {
+                val list = mutableListOf<MainCategoryItem>()
+                MediaType.entries.forEach { cat ->
+                    list.add(MainCategoryItem(displayName = cat.displayName, mediaType = cat, customCategory = null))
+                }
+                customCategories.forEach { customCat ->
+                    list.add(
+                        MainCategoryItem(
+                            displayName = customCat.name,
+                            mediaType = customCat.mediaType ?: state.mediaType,
+                            customCategory = customCat.name
+                        )
+                    )
+                }
+                list
+            }
+            val currentCategoryDisplayName = state.customCategory ?: state.mediaType.displayName
+
+            ExposedDropdownMenuBox(
+                expanded = mainCategoryExpanded,
+                onExpandedChange = { mainCategoryExpanded = it },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = currentCategoryDisplayName,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Main Category") },
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = mainCategoryExpanded)
+                    },
+                    colors = outlinedColors(),
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                )
+                ExposedDropdownMenu(
+                    expanded = mainCategoryExpanded,
+                    onDismissRequest = { mainCategoryExpanded = false },
+                    modifier = Modifier.background(LXSurfaceElevated)
+                ) {
+                    allMainCategories.forEach { item ->
+                        val isSelected = if (item.customCategory != null) {
+                            state.customCategory.equals(item.customCategory, ignoreCase = true)
+                        } else {
+                            state.customCategory == null && state.mediaType == item.mediaType
+                        }
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = item.displayName,
+                                    color = if (isSelected) LXPrimaryGreen else LXTextPrimary,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            onClick = {
+                                mainCategoryExpanded = false
+                                if (!isSelected) {
+                                    pendingMainCategory = item
+                                }
+                            },
+                            trailingIcon = if (isSelected) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = LXPrimaryGreen,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            } else null
+                        )
+                    }
+                }
+            }
+
+            // Sub Category (Optional) Dropdown
+            val currentSubCategoryDisplayName = if (state.subCategory.isNullOrBlank()) "None" else state.subCategory!!
+
+            ExposedDropdownMenuBox(
+                expanded = subCategoryExpanded,
+                onExpandedChange = { subCategoryExpanded = it },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = currentSubCategoryDisplayName,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Sub Category (Optional)") },
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = subCategoryExpanded)
+                    },
+                    colors = outlinedColors(),
+                    modifier = Modifier
+                        .menuAnchor()
+                        .fillMaxWidth()
+                )
+                ExposedDropdownMenu(
+                    expanded = subCategoryExpanded,
+                    onDismissRequest = { subCategoryExpanded = false },
+                    modifier = Modifier.background(LXSurfaceElevated)
+                ) {
+                    // "None" option
+                    val isNoneSelected = state.subCategory.isNullOrBlank()
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = "None",
+                                color = if (isNoneSelected) LXPrimaryGreen else LXTextPrimary,
+                                fontWeight = if (isNoneSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        onClick = {
+                            subCategoryExpanded = false
+                            if (!isNoneSelected) {
+                                pendingSubCategoryChange = PendingSubCategoryChange(null)
+                            }
+                        },
+                        trailingIcon = if (isNoneSelected) {
+                            {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        } else null
+                    )
+
+                    // Sub categories from repository
+                    subCategories.forEach { subCat ->
+                        val isSelected = state.subCategory.equals(subCat.name, ignoreCase = true)
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = subCat.name,
+                                    color = if (isSelected) LXPrimaryGreen else LXTextPrimary,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            onClick = {
+                                subCategoryExpanded = false
+                                if (!isSelected) {
+                                    pendingSubCategoryChange = PendingSubCategoryChange(subCat.name)
+                                }
+                            },
+                            trailingIcon = if (isSelected) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = LXPrimaryGreen,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            } else null
+                        )
+                    }
+
+                    // Existing sub category if currently set on the entry but not in repository subCategories list
+                    if (!state.subCategory.isNullOrBlank() && subCategories.none { it.name.equals(state.subCategory, ignoreCase = true) }) {
+                        val customSubName = state.subCategory!!
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = customSubName,
+                                    color = LXPrimaryGreen,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            },
+                            onClick = {
+                                subCategoryExpanded = false
+                            },
+                            trailingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+
+            if (subCategories.isEmpty() && state.subCategory.isNullOrBlank()) {
+                Text(
+                    text = "No sub categories available for this category. Sub categories can be created from the Home screen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+            }
+
             // Save Button
             Button(
                 onClick = { viewModel.saveEntry() },
@@ -860,7 +1068,19 @@ private fun outlinedColors() = OutlinedTextFieldDefaults.colors(
     unfocusedLabelColor = LXTextSecondary,
     focusedTextColor = LXTextPrimary,
     unfocusedTextColor = LXTextPrimary,
-    cursorColor = LXPrimaryGreen
+    cursorColor = LXPrimaryGreen,
+    focusedTrailingIconColor = LXPrimaryGreen,
+    unfocusedTrailingIconColor = LXTextSecondary
+)
+
+private data class MainCategoryItem(
+    val displayName: String,
+    val mediaType: MediaType,
+    val customCategory: String?
+)
+
+private data class PendingSubCategoryChange(
+    val name: String?
 )
 
 @Composable
