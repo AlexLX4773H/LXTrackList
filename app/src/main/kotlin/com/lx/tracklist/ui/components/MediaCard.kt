@@ -47,9 +47,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
 import com.lx.tracklist.R
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
@@ -150,23 +153,23 @@ fun MediaCard(
                 contentAlignment = Alignment.Center
             ) {
                 if (!entry.coverImageUri.isNullOrBlank()) {
-                    AsyncImage(
+                    SubcomposeAsyncImage(
                         model = entry.coverImageUri,
                         contentDescription = entry.title,
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
-                        error = painterResource(R.drawable.lx_logo),
-                        placeholder = painterResource(R.drawable.lx_logo)
+                        success = {
+                            SubcomposeAsyncImageContent()
+                        },
+                        loading = {
+                            SmallLogoPlaceholder(size = 48.dp)
+                        },
+                        error = {
+                            SmallLogoPlaceholder(size = 48.dp)
+                        }
                     )
                 } else {
-                    androidx.compose.foundation.Image(
-                        painter = painterResource(R.drawable.lx_logo),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape),
-                        contentScale = ContentScale.Fit
-                    )
+                    SmallLogoPlaceholder(size = 48.dp)
                 }
             }
 
@@ -378,4 +381,21 @@ private fun formatDateRange(start: Long?, finish: Long?): String {
     val startStr = start?.let { sdf.format(Date(it)) } ?: "???"
     val finishStr = finish?.let { sdf.format(Date(it)) } ?: if (start != null) "???" else ""
     return if (finishStr.isNotBlank()) "$startStr - $finishStr" else startStr
+}
+
+@Composable
+private fun SmallLogoPlaceholder(size: Dp) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.foundation.Image(
+            painter = painterResource(R.drawable.lx_logo),
+            contentDescription = null,
+            modifier = Modifier
+                .size(size)
+                .clip(CircleShape),
+            contentScale = ContentScale.Fit
+        )
+    }
 }

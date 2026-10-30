@@ -135,6 +135,9 @@ fun AppNavigation() {
         NavDestination.Settings
     )
 
+    val libraryState by libraryViewModel.uiState.collectAsState()
+    val isMultiSelectActive = currentDestination == NavDestination.Library && libraryState.isSelectionMode
+
     val navItems = listOf(
         Screen.Home to NavDestination.Home,
         Screen.Library to NavDestination.Library,
@@ -302,7 +305,7 @@ fun AppNavigation() {
             modifier = Modifier.fillMaxSize(),
             containerColor = LXBackgroundBlack,
             bottomBar = {
-                if (isTopLevelScreen) {
+                if (isTopLevelScreen && !isMultiSelectActive) {
                     NavigationBar(
                         containerColor = LXSurfaceBlack,
                         contentColor = LXTextPrimary,

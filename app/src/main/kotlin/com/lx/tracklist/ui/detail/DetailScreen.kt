@@ -61,6 +61,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
 import com.lx.tracklist.R
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
@@ -191,19 +193,36 @@ fun DetailScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             if (!currentEntry.coverImageUri.isNullOrBlank()) {
-                                AsyncImage(
+                                SubcomposeAsyncImage(
                                     model = currentEntry.coverImageUri,
                                     contentDescription = currentEntry.title,
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Crop,
-                                    error = painterResource(R.drawable.lx_logo),
-                                    placeholder = painterResource(R.drawable.lx_logo)
+                                    success = {
+                                        SubcomposeAsyncImageContent()
+                                    },
+                                    loading = {
+                                        androidx.compose.foundation.Image(
+                                            painter = painterResource(R.drawable.lx_logo),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(110.dp).clip(CircleShape),
+                                            contentScale = ContentScale.Fit
+                                        )
+                                    },
+                                    error = {
+                                        androidx.compose.foundation.Image(
+                                            painter = painterResource(R.drawable.lx_logo),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(110.dp).clip(CircleShape),
+                                            contentScale = ContentScale.Fit
+                                        )
+                                    }
                                 )
                             } else {
                                 androidx.compose.foundation.Image(
                                     painter = painterResource(R.drawable.lx_logo),
                                     contentDescription = null,
-                                    modifier = Modifier.size(120.dp).clip(CircleShape),
+                                    modifier = Modifier.size(110.dp).clip(CircleShape),
                                     contentScale = ContentScale.Fit
                                 )
                             }
@@ -293,13 +312,30 @@ fun DetailScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         if (!currentEntry.coverImageUri.isNullOrBlank()) {
-                            AsyncImage(
+                            SubcomposeAsyncImage(
                                 model = currentEntry.coverImageUri,
                                 contentDescription = currentEntry.title,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop,
-                                error = painterResource(R.drawable.lx_logo),
-                                placeholder = painterResource(R.drawable.lx_logo)
+                                success = {
+                                    SubcomposeAsyncImageContent()
+                                },
+                                loading = {
+                                    androidx.compose.foundation.Image(
+                                        painter = painterResource(R.drawable.lx_logo),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(110.dp).clip(CircleShape),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                },
+                                error = {
+                                    androidx.compose.foundation.Image(
+                                        painter = painterResource(R.drawable.lx_logo),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(110.dp).clip(CircleShape),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                }
                             )
                         } else {
                             androidx.compose.foundation.Image(

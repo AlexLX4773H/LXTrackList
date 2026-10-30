@@ -8,6 +8,7 @@
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowSplashScreenBackground">@color/lx_launcher_bg</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/lx_logo</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
     </style>
 </resources>
 
