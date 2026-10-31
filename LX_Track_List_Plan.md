@@ -464,7 +464,7 @@ Export is **JSON** only (for now). The output file contains the full database:
 ```json
 {
   "exportDate": "2026-10-27T16:30:00+05:30",
-  "appVersion": "1.0.0",
+  "appVersion": "0.1.0",
   "totalEntries": 274,
   "entries": [
     {

@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FileDownload
@@ -1351,8 +1352,8 @@ private fun SettingsMainMenu(
                 iconBackgroundColor = Color(0xFF00E5FF).copy(alpha = 0.15f),
                 iconTintColor = Color(0xFF00E5FF),
                 title = "About LX Track List",
-                subtitle = "Version 1.0.0 • Device & storage details",
-                badgeText = "v1.0.0",
+                subtitle = "Version 0.1.0 • Device & storage details",
+                badgeText = "v0.1.0",
                 badgeColor = Color(0xFF00E5FF),
                 isSelected = selectedSubMenu == SettingsSubMenu.ABOUT,
                 onClick = { onSelectSubMenu(SettingsSubMenu.ABOUT) }
@@ -2601,7 +2602,7 @@ private fun AboutContent(
                         color = LXPrimaryGreen
                     )
                     Text(
-                        text = "Version 1.0.0 (Optimized for Phone & Tablet)",
+                        text = "Version 0.1.0 (Optimized for Phone & Tablet)",
                         style = MaterialTheme.typography.bodySmall,
                         color = LXTextSecondary
                     )
@@ -2802,7 +2803,10 @@ private fun ExportGuidesContent(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(32.dp)
@@ -2825,6 +2829,8 @@ private fun ExportGuidesContent(
                         )
                     }
 
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
@@ -2835,7 +2841,9 @@ private fun ExportGuidesContent(
                         Text(
                             text = "XML / GZ",
                             color = LXPrimaryGreen,
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
@@ -2980,7 +2988,10 @@ private fun ExportGuidesContent(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(32.dp)
@@ -3003,6 +3014,8 @@ private fun ExportGuidesContent(
                         )
                     }
 
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
@@ -3013,7 +3026,9 @@ private fun ExportGuidesContent(
                         Text(
                             text = "JSON",
                             color = Color(0xFF02A9FF),
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
@@ -3140,7 +3155,10 @@ private fun ExportGuidesContent(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(32.dp)
@@ -3163,6 +3181,8 @@ private fun ExportGuidesContent(
                         )
                     }
 
+                    Spacer(modifier = Modifier.width(8.dp))
+
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
@@ -3171,9 +3191,11 @@ private fun ExportGuidesContent(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "TACHIBK",
+                            text = ".tachibk",
                             color = LXScoreGold,
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
@@ -3205,13 +3227,58 @@ private fun ExportGuidesContent(
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "Custom CSV & JSON Spreadsheets",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = LXTextPrimary
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFBA68C8).copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Description,
+                                contentDescription = null,
+                                tint = Color(0xFFBA68C8),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Custom Spreadsheets",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFBA68C8).copy(alpha = 0.15f))
+                            .border(1.dp, Color(0xFFBA68C8).copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "CSV / JSON",
+                            color = Color(0xFFBA68C8),
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
                 Text(
                     text = "You can also import custom CSV files or previously exported LX Track List JSON backups. Supported columns in CSV include: title, mediaType, status, score, currentEpisodes, totalEpisodes, notes, tags, and startDate.",
                     style = MaterialTheme.typography.bodyMedium,
