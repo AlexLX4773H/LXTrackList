@@ -412,6 +412,10 @@ class MediaRepository(
         }
     }
 
+    suspend fun getAllEntriesAllUsersSync(): List<MediaEntry> {
+        return dao.getAllEntriesSync()
+    }
+
     private fun mergeEntries(existing: MediaEntry, imported: MediaEntry): MediaEntry {
         val maxEpisodes = max(existing.currentEpisodes, imported.currentEpisodes)
         val maxTotalEp = if (existing.totalEpisodes > 0) existing.totalEpisodes else imported.totalEpisodes

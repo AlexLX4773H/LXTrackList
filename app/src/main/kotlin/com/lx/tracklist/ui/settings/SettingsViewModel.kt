@@ -10,6 +10,7 @@ import com.lx.tracklist.data.importer.CsvImporter
 import com.lx.tracklist.data.importer.JsonImporter
 import com.lx.tracklist.data.importer.MalXmlImporter
 import com.lx.tracklist.data.importer.TachiyomiImporter
+import com.lx.tracklist.data.local.CoverCacheManager
 import com.lx.tracklist.data.local.StorageFileInfo
 import com.lx.tracklist.data.local.StorageHelper
 import com.lx.tracklist.data.model.CustomCategory
@@ -230,7 +231,12 @@ data class SettingsUiState(
     val homeFolderPath: String = "",
     val customCategories: List<CustomCategory> = emptyList(),
     val isSwipeToSwitchTabsEnabled: Boolean = true,
-    val isTachiyomiImportAsFavorites: Boolean = false
+    val isTachiyomiImportAsFavorites: Boolean = false,
+    val coverCacheSizeFormatted: String = "0 B",
+    val coverCacheCount: Int = 0,
+    val isReindexingCovers: Boolean = false,
+    val reindexProgress: Float = 0f,
+    val reindexStatusText: String? = null
 )
 
 class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
@@ -324,6 +330,99 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 inputFiles = files,
                 homeFolderPath = path
             )
+        }
+        refreshCoverCacheStats(context)
+    }
+
+    fun refreshCoverCacheStats(context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val sizeBytes = CoverCacheManager.getCacheSizeBytes(context)
+            val count = CoverCacheManager.getCachedFileCount(context)
+            val formatted = CoverCacheManager.formatBytes(sizeBytes)
+            _uiState.update {
+                it.copy(
+                    coverCacheSizeFormatted = formatted,
+                    coverCacheCount = count
+                )
+            }
+        }
+    }
+
+    fun clearCoverCache(context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            CoverCacheManager.clearCache(context)
+            val sizeBytes = CoverCacheManager.getCacheSizeBytes(context)
+            val count = CoverCacheManager.getCachedFileCount(context)
+            val formatted = CoverCacheManager.formatBytes(sizeBytes)
+            _uiState.update {
+                it.copy(
+                    coverCacheSizeFormatted = formatted,
+                    coverCacheCount = count,
+                    statusMessage = "Cover image cache cleared",
+                    isErrorMessage = false
+                )
+            }
+        }
+    }
+
+    fun reindexCoverImages(context: Context) {
+        if (_uiState.value.isReindexingCovers) return
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isReindexingCovers = true,
+                    reindexProgress = 0f,
+                    reindexStatusText = "Scanning entries...",
+                    statusMessage = null
+                )
+            }
+
+            try {
+                val allEntries = withContext(Dispatchers.IO) {
+                    repository.getAllEntriesAllUsersSync()
+                }
+
+                val result = CoverCacheManager.reindexCovers(context, allEntries) { current, total, success, failed ->
+                    val progress = if (total > 0) current.toFloat() / total.toFloat() else 1f
+                    _uiState.update {
+                        it.copy(
+                            reindexProgress = progress,
+                            reindexStatusText = "Reindexing: $current / $total ($success cached${if (failed > 0) ", $failed failed" else ""})"
+                        )
+                    }
+                }
+
+                val sizeBytes = withContext(Dispatchers.IO) { CoverCacheManager.getCacheSizeBytes(context) }
+                val count = withContext(Dispatchers.IO) { CoverCacheManager.getCachedFileCount(context) }
+                val formatted = CoverCacheManager.formatBytes(sizeBytes)
+
+                _uiState.update {
+                    it.copy(
+                        isReindexingCovers = false,
+                        reindexProgress = 1f,
+                        reindexStatusText = null,
+                        coverCacheSizeFormatted = formatted,
+                        coverCacheCount = count,
+                        statusMessage = if (result.total == 0) {
+                            "No entries with web cover URLs found to reindex"
+                        } else {
+                            "Reindexed covers: ${result.succeeded} cached successfully${if (result.failed > 0) ", ${result.failed} failed/unreachable" else ""}"
+                        },
+                        isErrorMessage = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isReindexingCovers = false,
+                        reindexProgress = 0f,
+                        reindexStatusText = null,
+                        statusMessage = "Reindex failed: ${e.localizedMessage ?: "Unknown error"}",
+                        isErrorMessage = true
+                    )
+                }
+            }
         }
     }
 

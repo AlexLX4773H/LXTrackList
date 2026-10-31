@@ -593,4 +593,86 @@ class FeaturesTest {
         assertEquals("Cultivation", state3.subCategory)
         assertEquals(MediaStatus.PLAN_TO_WATCH, state3.status)
     }
+
+    @Test
+    fun testCoverCacheManagerFormatBytes() {
+        assertEquals("0 B", com.lx.tracklist.data.local.CoverCacheManager.formatBytes(-5L))
+        assertEquals("0 B", com.lx.tracklist.data.local.CoverCacheManager.formatBytes(0L))
+        assertEquals("500 B", com.lx.tracklist.data.local.CoverCacheManager.formatBytes(500L))
+        assertEquals("1.5 KB", com.lx.tracklist.data.local.CoverCacheManager.formatBytes(1536L))
+        assertEquals("10.0 MB", com.lx.tracklist.data.local.CoverCacheManager.formatBytes(10L * 1024L * 1024L))
+        assertEquals("1.50 GB", com.lx.tracklist.data.local.CoverCacheManager.formatBytes((1.5 * 1024 * 1024 * 1024).toLong()))
+    }
+
+    @Test
+    fun testCoverCacheManagerFilterEligibleUrls() {
+        val entry1 = MediaEntry(
+            id = 1L,
+            title = "Solo Leveling",
+            mediaType = MediaType.MANHWA,
+            status = MediaStatus.COMPLETED,
+            coverImageUri = "https://example.com/solo.jpg"
+        )
+        val entry2 = MediaEntry(
+            id = 2L,
+            title = "Solo Leveling Alt",
+            mediaType = MediaType.MANHWA,
+            status = MediaStatus.COMPLETED,
+            coverImageUri = "  https://example.com/solo.jpg  " // duplicate and whitespace
+        )
+        val entry3 = MediaEntry(
+            id = 3L,
+            title = "HTTP Image",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.PLAN_TO_WATCH,
+            coverImageUri = "http://example.com/anime.png"
+        )
+        val entry4 = MediaEntry(
+            id = 4L,
+            title = "Data URI Image",
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.READING,
+            coverImageUri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA"
+        )
+        val entry5 = MediaEntry(
+            id = 5L,
+            title = "No Cover",
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.READING,
+            coverImageUri = null
+        )
+        val entry6 = MediaEntry(
+            id = 6L,
+            title = "Blank Cover",
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.READING,
+            coverImageUri = "   "
+        )
+        val entry7 = MediaEntry(
+            id = 7L,
+            title = "Invalid Protocol",
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.READING,
+            coverImageUri = "ftp://example.com/manga.jpg"
+        )
+
+        val entries = listOf(entry1, entry2, entry3, entry4, entry5, entry6, entry7)
+        val eligible = com.lx.tracklist.data.local.CoverCacheManager.filterEligibleUrls(entries)
+
+        assertEquals(3, eligible.size)
+        assertTrue(eligible.contains("https://example.com/solo.jpg"))
+        assertTrue(eligible.contains("http://example.com/anime.png"))
+        assertTrue(eligible.contains("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA"))
+        assertFalse(eligible.contains("ftp://example.com/manga.jpg"))
+    }
+
+    @Test
+    fun testSettingsUiStateCoverCacheDefaults() {
+        val state = com.lx.tracklist.ui.settings.SettingsUiState()
+        assertEquals("0 B", state.coverCacheSizeFormatted)
+        assertEquals(0, state.coverCacheCount)
+        assertFalse(state.isReindexingCovers)
+        assertEquals(0f, state.reindexProgress, 0.001f)
+        assertNull(state.reindexStatusText)
+    }
 }

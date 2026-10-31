@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
@@ -1141,7 +1142,9 @@ fun SettingsScreen(
                             onImportLocalFile = { viewModel.importLocalFile(context, it) },
                             onPickFile = { importLauncher.launch("*/*") },
                             onSaveAs = { viewModel.prepareExport(ExportDestination.CUSTOM_FILE) },
-                            onSetTachiyomiImportAsFavorites = { viewModel.setTachiyomiImportAsFavorites(it) }
+                            onSetTachiyomiImportAsFavorites = { viewModel.setTachiyomiImportAsFavorites(it) },
+                            onReindexCovers = { viewModel.reindexCoverImages(context) },
+                            onClearCoverCache = { viewModel.clearCoverCache(context) }
                         )
                         SettingsSubMenu.CONFLICTS -> ConflictResolutionContent(
                             selectedStrategy = state.selectedConflictStrategy,
@@ -1193,6 +1196,8 @@ fun SettingsScreen(
                             onPickFile = { importLauncher.launch("*/*") },
                             onSaveAs = { viewModel.prepareExport(ExportDestination.CUSTOM_FILE) },
                             onSetTachiyomiImportAsFavorites = { viewModel.setTachiyomiImportAsFavorites(it) },
+                            onReindexCovers = { viewModel.reindexCoverImages(context) },
+                            onClearCoverCache = { viewModel.clearCoverCache(context) },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -1268,8 +1273,8 @@ private fun SettingsMainMenu(
                 iconBackgroundColor = Color(0xFF4DA8DA).copy(alpha = 0.15f),
                 iconTintColor = Color(0xFF4DA8DA),
                 title = "Backup & Storage",
-                subtitle = if (state.hasStoragePermission) "Connected • ${state.inputFiles.size} input files"
-                else "Storage access required",
+                subtitle = if (state.hasStoragePermission) "Connected • ${state.inputFiles.size} input files • ${state.coverCacheSizeFormatted} covers"
+                else "Storage access required • ${state.coverCacheSizeFormatted} covers",
                 badgeText = if (state.hasStoragePermission) "CONNECTED" else "ACCESS NEEDED",
                 badgeColor = if (state.hasStoragePermission) LXPrimaryGreen else LXScoreGold,
                 isSelected = selectedSubMenu == SettingsSubMenu.STORAGE,
@@ -1673,8 +1678,12 @@ private fun BackupStorageContent(
     onPickFile: () -> Unit,
     onSaveAs: () -> Unit,
     onSetTachiyomiImportAsFavorites: (Boolean) -> Unit,
+    onReindexCovers: () -> Unit,
+    onClearCoverCache: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var showReindexConfirmDialog by remember { mutableStateOf(false) }
+    var showClearCacheConfirmDialog by remember { mutableStateOf(false) }
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
@@ -2071,6 +2080,224 @@ private fun BackupStorageContent(
                     )
                 }
             }
+        }
+
+        // Cover Image Cache & Offline Storage Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Image,
+                        contentDescription = null,
+                        tint = LXPrimaryGreen,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Cover Image Cache",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextPrimary
+                    )
+                }
+
+                Text(
+                    text = "Images with working URLs are stored in persistent local cache so they remain available offline and won't be cleared by the OS. Use 'Reindex Images' to refresh the cache and re-download fresh covers.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                // Cache Stats Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Local Cache Size",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = LXTextSecondary
+                        )
+                        Text(
+                            text = state.coverCacheSizeFormatted,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXPrimaryGreen
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "Cached Covers",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = LXTextSecondary
+                        )
+                        Text(
+                            text = "${state.coverCacheCount} files",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                    }
+                }
+
+                if (state.isReindexingCovers) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = state.reindexStatusText ?: "Reindexing covers...",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                color = LXPrimaryGreen,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "${(state.reindexProgress * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                color = LXTextSecondary
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(LXSurfaceElevated)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(state.reindexProgress.coerceIn(0f, 1f))
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(LXPrimaryGreen)
+                            )
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = { showReindexConfirmDialog = true },
+                            enabled = !state.isReindexingCovers && !state.isImporting && !state.isExporting,
+                            modifier = Modifier
+                                .weight(1f)
+                                .defaultMinSize(minHeight = 44.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Reindex Images",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { showClearCacheConfirmDialog = true },
+                            enabled = !state.isReindexingCovers && state.coverCacheCount > 0,
+                            modifier = Modifier.defaultMinSize(minHeight = 44.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXErrorRed),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LXErrorRed.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp), tint = LXErrorRed)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Clear", color = LXErrorRed, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showReindexConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showReindexConfirmDialog = false },
+                title = { Text("Reindex Cover Images", color = LXTextPrimary, fontWeight = FontWeight.Bold) },
+                text = {
+                    Text(
+                        "This will clear your local cover image cache and re-download fresh images for all entries with valid URLs.\n\nEntries whose URLs are broken or unreachable will simply remain uncached until re-checked.",
+                        color = LXTextSecondary,
+                        fontSize = 13.sp
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showReindexConfirmDialog = false
+                            onReindexCovers()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack)
+                    ) {
+                        Text("Reindex Now", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showReindexConfirmDialog = false }) {
+                        Text("Cancel", color = LXTextSecondary)
+                    }
+                },
+                containerColor = LXSurfaceBlack,
+                shape = RoundedCornerShape(12.dp)
+            )
+        }
+
+        if (showClearCacheConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showClearCacheConfirmDialog = false },
+                title = { Text("Clear Cover Cache", color = LXTextPrimary, fontWeight = FontWeight.Bold) },
+                text = {
+                    Text(
+                        "This will delete all cached cover images from local storage. The images will reload when you view entries again while online.",
+                        color = LXTextSecondary,
+                        fontSize = 13.sp
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showClearCacheConfirmDialog = false
+                            onClearCoverCache()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = LXErrorRed, contentColor = Color.White)
+                    ) {
+                        Text("Clear Cache", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearCacheConfirmDialog = false }) {
+                        Text("Cancel", color = LXTextSecondary)
+                    }
+                },
+                containerColor = LXSurfaceBlack,
+                shape = RoundedCornerShape(12.dp)
+            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
