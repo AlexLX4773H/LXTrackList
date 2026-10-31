@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -57,6 +58,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -75,6 +77,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -580,23 +583,14 @@ fun AddEditScreen(
                         fontWeight = FontWeight.SemiBold
                     )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        DatePickerField(
-                            label = "Started Date",
-                            timestamp = state.startDate,
-                            onDateSelected = { viewModel.updateStartDate(it) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        DatePickerField(
-                            label = "Completed Date",
-                            timestamp = state.finishDate,
-                            onDateSelected = { viewModel.updateFinishDate(it) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    AdaptiveDateRow(
+                        startLabel = "Started",
+                        startTimestamp = state.startDate,
+                        onStartDateSelected = { viewModel.updateStartDate(it) },
+                        endLabel = "Completed",
+                        endTimestamp = state.finishDate,
+                        onEndDateSelected = { viewModel.updateFinishDate(it) }
+                    )
 
                     HorizontalDivider(color = LXBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
 
@@ -613,23 +607,14 @@ fun AddEditScreen(
                         fontWeight = FontWeight.SemiBold
                     )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        DatePickerField(
-                            label = "Aired / Release From",
-                            timestamp = state.airedStartDate,
-                            onDateSelected = { viewModel.updateAiredStartDate(it) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        DatePickerField(
-                            label = "Aired / Release To",
-                            timestamp = state.airedEndDate,
-                            onDateSelected = { viewModel.updateAiredEndDate(it) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    AdaptiveDateRow(
+                        startLabel = "From",
+                        startTimestamp = state.airedStartDate,
+                        onStartDateSelected = { viewModel.updateAiredStartDate(it) },
+                        endLabel = "To",
+                        endTimestamp = state.airedEndDate,
+                        onEndDateSelected = { viewModel.updateAiredEndDate(it) }
+                    )
                 }
             }
 
@@ -1084,6 +1069,57 @@ private data class PendingSubCategoryChange(
 )
 
 @Composable
+private fun AdaptiveDateRow(
+    startLabel: String,
+    startTimestamp: Long?,
+    onStartDateSelected: (Long?) -> Unit,
+    endLabel: String,
+    endTimestamp: Long?,
+    onEndDateSelected: (Long?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        if (maxWidth < 280.dp) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                DatePickerField(
+                    label = startLabel,
+                    timestamp = startTimestamp,
+                    onDateSelected = onStartDateSelected,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                DatePickerField(
+                    label = endLabel,
+                    timestamp = endTimestamp,
+                    onDateSelected = onEndDateSelected,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                DatePickerField(
+                    label = startLabel,
+                    timestamp = startTimestamp,
+                    onDateSelected = onStartDateSelected,
+                    modifier = Modifier.weight(1f)
+                )
+                DatePickerField(
+                    label = endLabel,
+                    timestamp = endTimestamp,
+                    onDateSelected = onEndDateSelected,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun DatePickerField(
     label: String,
     timestamp: Long?,
@@ -1126,42 +1162,82 @@ private fun DatePickerField(
         ).show()
     }
 
-    Box(modifier = modifier) {
-        OutlinedTextField(
-            value = displayValue,
-            onValueChange = {},
-            label = { Text(label) },
-            readOnly = true,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            leadingIcon = {
-                Icon(
-                    Icons.Default.CalendarToday,
-                    contentDescription = "Select Date",
-                    tint = LXPrimaryGreen,
-                    modifier = Modifier.size(20.dp)
-                )
-            },
-            trailingIcon = {
-                if (timestamp != null) {
-                    IconButton(onClick = { onDateSelected(null) }) {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Clear Date",
-                            tint = LXTextSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-            },
-            colors = outlinedColors()
+    Surface(
+        modifier = modifier
+            .height(56.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = showDialog),
+        shape = RoundedCornerShape(8.dp),
+        color = LXSurfaceElevated.copy(alpha = 0.5f),
+        border = BorderStroke(
+            1.dp,
+            if (timestamp != null) LXPrimaryGreen.copy(alpha = 0.6f) else LXBorder
         )
-        // Click overlay over text field (except clear button area if visible)
-        Box(
+    ) {
+        Row(
             modifier = Modifier
-                .matchParentSize()
-                .padding(end = if (timestamp != null) 48.dp else 0.dp)
-                .clickable(onClick = showDialog)
-        )
+                .fillMaxSize()
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.CalendarToday,
+                contentDescription = null,
+                tint = if (timestamp != null) LXPrimaryGreen else LXPrimaryGreen.copy(alpha = 0.7f),
+                modifier = Modifier.size(18.dp)
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    color = if (timestamp != null) LXPrimaryGreen else LXTextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = displayValue.ifEmpty { "Select date" },
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 13.sp,
+                        fontWeight = if (timestamp != null) FontWeight.SemiBold else FontWeight.Normal
+                    ),
+                    color = if (timestamp != null) LXTextPrimary else LXTextSecondary.copy(alpha = 0.45f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (timestamp != null) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(LXBorder.copy(alpha = 0.6f))
+                        .clickable(
+                            role = androidx.compose.ui.semantics.Role.Button,
+                            onClickLabel = "Clear Date",
+                            onClick = { onDateSelected(null) }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Clear Date",
+                        tint = LXTextPrimary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
     }
 }

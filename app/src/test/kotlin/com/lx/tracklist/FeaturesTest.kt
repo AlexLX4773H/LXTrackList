@@ -631,28 +631,28 @@ class FeaturesTest {
             id = 4L,
             title = "Data URI Image",
             mediaType = MediaType.MANGA,
-            status = MediaStatus.READING,
+            status = MediaStatus.WATCHING,
             coverImageUri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA"
         )
         val entry5 = MediaEntry(
             id = 5L,
             title = "No Cover",
             mediaType = MediaType.MANGA,
-            status = MediaStatus.READING,
+            status = MediaStatus.WATCHING,
             coverImageUri = null
         )
         val entry6 = MediaEntry(
             id = 6L,
             title = "Blank Cover",
             mediaType = MediaType.MANGA,
-            status = MediaStatus.READING,
+            status = MediaStatus.WATCHING,
             coverImageUri = "   "
         )
         val entry7 = MediaEntry(
             id = 7L,
             title = "Invalid Protocol",
             mediaType = MediaType.MANGA,
-            status = MediaStatus.READING,
+            status = MediaStatus.WATCHING,
             coverImageUri = "ftp://example.com/manga.jpg"
         )
 
