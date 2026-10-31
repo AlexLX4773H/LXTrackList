@@ -1,5 +1,6 @@
 package com.lx.tracklist.ui.settings
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,10 +34,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -92,9 +95,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -122,6 +128,7 @@ enum class SettingsSubMenu(val title: String) {
     CATEGORIES("Custom Categories"),
     STORAGE("Backup & Storage"),
     CONFLICTS("Conflict Resolution"),
+    EXPORT_GUIDES("Export Guides & Help"),
     PREFERENCES("Gestures & Navigation"),
     ABOUT("About")
 }
@@ -1144,11 +1151,15 @@ fun SettingsScreen(
                             onSaveAs = { viewModel.prepareExport(ExportDestination.CUSTOM_FILE) },
                             onSetTachiyomiImportAsFavorites = { viewModel.setTachiyomiImportAsFavorites(it) },
                             onReindexCovers = { viewModel.reindexCoverImages(context) },
-                            onClearCoverCache = { viewModel.clearCoverCache(context) }
+                            onClearCoverCache = { viewModel.clearCoverCache(context) },
+                            onNavigateToExportGuides = { activeSubMenu = SettingsSubMenu.EXPORT_GUIDES }
                         )
                         SettingsSubMenu.CONFLICTS -> ConflictResolutionContent(
                             selectedStrategy = state.selectedConflictStrategy,
                             onSelectStrategy = { viewModel.setConflictStrategy(it) }
+                        )
+                        SettingsSubMenu.EXPORT_GUIDES -> ExportGuidesContent(
+                            onNavigateToStorage = { activeSubMenu = SettingsSubMenu.STORAGE }
                         )
                         SettingsSubMenu.PREFERENCES -> PreferencesContent(
                             isSwipeToSwitchTabsEnabled = state.isSwipeToSwitchTabsEnabled,
@@ -1198,6 +1209,7 @@ fun SettingsScreen(
                             onSetTachiyomiImportAsFavorites = { viewModel.setTachiyomiImportAsFavorites(it) },
                             onReindexCovers = { viewModel.reindexCoverImages(context) },
                             onClearCoverCache = { viewModel.clearCoverCache(context) },
+                            onNavigateToExportGuides = { activeSubMenu = SettingsSubMenu.EXPORT_GUIDES },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -1205,6 +1217,12 @@ fun SettingsScreen(
                         ConflictResolutionContent(
                             selectedStrategy = state.selectedConflictStrategy,
                             onSelectStrategy = { viewModel.setConflictStrategy(it) },
+                            modifier = Modifier.widthIn(max = 840.dp)
+                        )
+                    }
+                    SettingsSubMenu.EXPORT_GUIDES -> {
+                        ExportGuidesContent(
+                            onNavigateToStorage = { activeSubMenu = SettingsSubMenu.STORAGE },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -1294,6 +1312,17 @@ private fun SettingsMainMenu(
                 badgeColor = LXScoreGold,
                 isSelected = selectedSubMenu == SettingsSubMenu.CONFLICTS,
                 onClick = { onSelectSubMenu(SettingsSubMenu.CONFLICTS) }
+            )
+            SettingsMenuItem(
+                icon = Icons.AutoMirrored.Filled.MenuBook,
+                iconBackgroundColor = LXPrimaryGreen.copy(alpha = 0.15f),
+                iconTintColor = LXPrimaryGreen,
+                title = "Export Guides & Help",
+                subtitle = "How to export from MyAnimeList, AniList & Tachiyomi",
+                badgeText = "GUIDES",
+                badgeColor = LXPrimaryGreen,
+                isSelected = selectedSubMenu == SettingsSubMenu.EXPORT_GUIDES,
+                onClick = { onSelectSubMenu(SettingsSubMenu.EXPORT_GUIDES) }
             )
         }
 
@@ -1680,6 +1709,7 @@ private fun BackupStorageContent(
     onSetTachiyomiImportAsFavorites: (Boolean) -> Unit,
     onReindexCovers: () -> Unit,
     onClearCoverCache: () -> Unit,
+    onNavigateToExportGuides: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showReindexConfirmDialog by remember { mutableStateOf(false) }
@@ -1932,6 +1962,58 @@ private fun BackupStorageContent(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Help on Exporting from Sources Banner
+        if (onNavigateToExportGuides != null) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onNavigateToExportGuides() },
+                colors = CardDefaults.cardColors(containerColor = LXPrimaryGreen.copy(alpha = 0.08f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.35f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(LXPrimaryGreen.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                            contentDescription = null,
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "How to Export from Other Apps",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = LXPrimaryGreen
+                        )
+                        Text(
+                            text = "Guides for MyAnimeList, AniList, Tachiyomi & CSV.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LXTextSecondary
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                        contentDescription = "View Guides",
+                        tint = LXPrimaryGreen,
+                        modifier = Modifier.size(14.dp)
+                    )
                 }
             }
         }
@@ -2635,5 +2717,591 @@ private fun parseHexColor(hex: String): Color {
         }
     } catch (_: Exception) {
         LXPrimaryGreen
+    }
+}
+
+@Composable
+private fun ExportGuidesContent(
+    onNavigateToStorage: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val clipboardManager = LocalClipboardManager.current
+    var copiedUrl by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(copiedUrl) {
+        if (copiedUrl != null) {
+            kotlinx.coroutines.delay(2000)
+            copiedUrl = null
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Header Overview Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(LXPrimaryGreen.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                        contentDescription = null,
+                        tint = LXPrimaryGreen,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(14.dp))
+
+                Column {
+                    Text(
+                        text = "Importing & Exporting Help",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXPrimaryGreen
+                    )
+                    Text(
+                        text = "Follow these step-by-step instructions to export your lists from other tracking platforms and import them into LX Track List.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LXTextSecondary
+                    )
+                }
+            }
+        }
+
+        // Section 1: MyAnimeList (MAL) Guide (Featured)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF2E51A2).copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LiveTv,
+                                contentDescription = null,
+                                tint = Color(0xFF4DA8DA),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "MyAnimeList (MAL)",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                            .border(1.dp, LXPrimaryGreen.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "XML / GZ",
+                            color = LXPrimaryGreen,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "MyAnimeList provides a dedicated export panel where you can download your complete Anime and Manga watch lists in a compressed XML (.xml.gz) format.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LXTextSecondary
+                )
+
+                // Interactive URL Box with Open and Copy actions
+                val malExportUrl = "https://myanimelist.net/panel.php?go=export"
+                val isMalCopied = copiedUrl == malExportUrl
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .border(1.dp, LXBorder, RoundedCornerShape(8.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Official Export Panel URL:",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = LXTextSecondary
+                    )
+
+                    Text(
+                        text = malExportUrl,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = LXPrimaryGreen
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                try {
+                                    uriHandler.openUri(malExportUrl)
+                                } catch (_: Exception) {
+                                    Toast.makeText(context, "Could not open browser", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Open Link",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString(malExportUrl))
+                                copiedUrl = malExportUrl
+                                Toast.makeText(context, "MyAnimeList export URL copied to clipboard", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (isMalCopied) LXPrimaryGreen else LXTextPrimary
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isMalCopied) LXPrimaryGreen else LXBorder
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = if (isMalCopied) Icons.Default.Check else Icons.Default.ContentCopy,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isMalCopied) "Copied!" else "Copy URL",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Step-by-step instructions:",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextPrimary
+                )
+
+                GuideStepItem(
+                    number = "1",
+                    title = "Log in & Open Export Page",
+                    description = "Tap 'Open Link' above or copy the URL into your browser (log in to MyAnimeList if prompted)."
+                )
+                GuideStepItem(
+                    number = "2",
+                    title = "Export List",
+                    description = "Select 'Anime List' or 'Manga List', then tap the 'Export My List' button."
+                )
+                GuideStepItem(
+                    number = "3",
+                    title = "Download Archive",
+                    description = "Wait a few seconds for MAL to generate your file, then download the .xml.gz archive."
+                )
+                GuideStepItem(
+                    number = "4",
+                    title = "Import into LX Track List",
+                    description = "Go to Backup & Storage in this app, tap 'Pick & Import File' (or drop the file into /LXTrackList/input), and your entries will be imported automatically."
+                )
+            }
+        }
+
+        // Section 2: AniList Guide
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF02A9FF).copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tv,
+                                contentDescription = null,
+                                tint = Color(0xFF02A9FF),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "AniList",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF02A9FF).copy(alpha = 0.15f))
+                            .border(1.dp, Color(0xFF02A9FF).copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "JSON",
+                            color = Color(0xFF02A9FF),
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "AniList allows exporting your full anime and manga tracking history via their Data Exchange settings.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LXTextSecondary
+                )
+
+                val anilistUrl = "https://anilist.co/settings/data-exchange"
+                val isAnilistCopied = copiedUrl == anilistUrl
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .border(1.dp, LXBorder, RoundedCornerShape(8.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "AniList Data Exchange URL:",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = LXTextSecondary
+                    )
+
+                    Text(
+                        text = anilistUrl,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = Color(0xFF02A9FF)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                try {
+                                    uriHandler.openUri(anilistUrl)
+                                } catch (_: Exception) {
+                                    Toast.makeText(context, "Could not open browser", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF02A9FF),
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Open Link",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString(anilistUrl))
+                                copiedUrl = anilistUrl
+                                Toast.makeText(context, "AniList URL copied to clipboard", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = if (isAnilistCopied) Color(0xFF02A9FF) else LXTextPrimary
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isAnilistCopied) Color(0xFF02A9FF) else LXBorder
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = if (isAnilistCopied) Icons.Default.Check else Icons.Default.ContentCopy,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isAnilistCopied) "Copied!" else "Copy URL",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Step-by-step instructions:",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextPrimary
+                )
+
+                GuideStepItem(number = "1", title = "Log in to AniList", description = "Navigate to Settings > Data Exchange.")
+                GuideStepItem(number = "2", title = "Request Data Export", description = "Click the 'Export' button to generate your data archive.")
+                GuideStepItem(number = "3", title = "Download & Import", description = "Download the .json export file and select it in LX Track List under Backup & Storage.")
+            }
+        }
+
+        // Section 3: Tachiyomi / Mihon / Aniyomi Guide
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(LXScoreGold.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Book,
+                                contentDescription = null,
+                                tint = LXScoreGold,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Tachiyomi / Mihon / Aniyomi",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(LXScoreGold.copy(alpha = 0.15f))
+                            .border(1.dp, LXScoreGold.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "TACHIBK",
+                            color = LXScoreGold,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Export your entire manga and comic reading library directly from the Tachiyomi, Mihon, or Aniyomi app.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LXTextSecondary
+                )
+
+                Text(
+                    text = "Step-by-step instructions:",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextPrimary
+                )
+
+                GuideStepItem(number = "1", title = "Open App Settings", description = "In Tachiyomi or Mihon, go to More > Settings > Data and storage.")
+                GuideStepItem(number = "2", title = "Create Backup", description = "Tap 'Create backup' and save the .tachibk backup file to your device.")
+                GuideStepItem(number = "3", title = "Import into LX Track List", description = "In Backup & Storage, tap 'Pick & Import File' and choose your .tachibk file. Your manga titles, read chapters, and custom categories will be seamlessly imported.")
+            }
+        }
+
+        // Section 4: CSV / JSON Generic
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Custom CSV & JSON Spreadsheets",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextPrimary
+                )
+                Text(
+                    text = "You can also import custom CSV files or previously exported LX Track List JSON backups. Supported columns in CSV include: title, mediaType, status, score, currentEpisodes, totalEpisodes, notes, tags, and startDate.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LXTextSecondary
+                )
+            }
+        }
+
+        // Ready to Import Call-to-action
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { onNavigateToStorage() },
+            colors = CardDefaults.cardColors(containerColor = LXPrimaryGreen.copy(alpha = 0.12f)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FileUpload,
+                    contentDescription = null,
+                    tint = LXPrimaryGreen,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(modifier = Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Ready to import?",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXPrimaryGreen
+                    )
+                    Text(
+                        text = "Go to Backup & Storage to pick or auto-import your files.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LXTextSecondary
+                    )
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                    contentDescription = null,
+                    tint = LXPrimaryGreen,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun GuideStepItem(
+    number: String,
+    title: String,
+    description: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                .border(1.dp, LXPrimaryGreen.copy(alpha = 0.4f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = number,
+                color = LXPrimaryGreen,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+            )
+        }
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                color = LXTextPrimary
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = LXTextSecondary
+            )
+        }
     }
 }
