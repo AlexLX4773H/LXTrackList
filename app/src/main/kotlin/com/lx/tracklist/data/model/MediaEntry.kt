@@ -247,6 +247,14 @@ data class MediaEntry(
             ?: emptyList()
     }
 
+    fun getTagList(): List<String> {
+        return tags
+            ?.split(",")
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+    }
+
     fun formatAiredDateRange(): String {
         if (airedStartDate == null && airedEndDate == null) return ""
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())

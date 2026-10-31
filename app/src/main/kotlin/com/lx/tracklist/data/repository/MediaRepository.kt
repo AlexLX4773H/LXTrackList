@@ -130,6 +130,23 @@ class MediaRepository(
         }
     }
 
+    suspend fun updateProfileStartupDefaults(
+        profileId: Long,
+        defaultMediaType: MediaType?,
+        defaultCustomCategory: String?,
+        defaultSubCategory: String?,
+        defaultStatus: MediaStatus?
+    ) {
+        val profile = userProfileDao?.getProfileById(profileId) ?: return
+        val updated = profile.copy(
+            defaultMediaType = defaultMediaType,
+            defaultCustomCategory = defaultCustomCategory,
+            defaultSubCategory = defaultSubCategory,
+            defaultStatus = defaultStatus
+        )
+        updateUser(updated)
+    }
+
     // Custom Categories
     val customCategories: Flow<List<CustomCategory>>
         get() = customCategoryDao?.getAllCategories() ?: emptyFlow()

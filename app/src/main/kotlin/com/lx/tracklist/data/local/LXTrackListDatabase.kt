@@ -14,7 +14,7 @@ import com.lx.tracklist.data.model.UserProfile
 
 @Database(
     entities = [MediaEntry::class, UserProfile::class, CustomCategory::class, SubCategory::class],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -69,6 +69,15 @@ abstract class LXTrackListDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE user_profiles ADD COLUMN defaultMediaType TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE user_profiles ADD COLUMN defaultCustomCategory TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE user_profiles ADD COLUMN defaultSubCategory TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE user_profiles ADD COLUMN defaultStatus TEXT DEFAULT NULL")
+            }
+        }
+
         fun getDatabase(context: Context): LXTrackListDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -76,7 +85,7 @@ abstract class LXTrackListDatabase : RoomDatabase() {
                     LXTrackListDatabase::class.java,
                     "lx_track_list.db"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

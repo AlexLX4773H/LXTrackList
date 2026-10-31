@@ -714,4 +714,282 @@ class FeaturesTest {
         val newFinishDate = if (MediaStatus.COMPLETED == MediaStatus.COMPLETED && entryWithoutFinishDate.finishDate == null) todayStart else entryWithoutFinishDate.finishDate
         assertEquals(todayStart, newFinishDate)
     }
+
+    @Test
+    fun testUserProfileStartupDefaults() {
+        val userDefault = UserProfile(id = 1L, name = "Alex")
+        assertNull(userDefault.defaultMediaType)
+        assertNull(userDefault.defaultCustomCategory)
+        assertNull(userDefault.defaultSubCategory)
+        assertNull(userDefault.defaultStatus)
+
+        // Custom defaults for User 1
+        val userCustom = UserProfile(
+            id = 2L,
+            name = "Manga Reader",
+            defaultMediaType = MediaType.MANGA,
+            defaultCustomCategory = null,
+            defaultSubCategory = null,
+            defaultStatus = MediaStatus.WATCHING
+        )
+        assertEquals(MediaType.MANGA, userCustom.defaultMediaType)
+        assertNull(userCustom.defaultCustomCategory)
+        assertEquals(MediaStatus.WATCHING, userCustom.defaultStatus)
+        assertNull(userCustom.defaultSubCategory)
+
+        // Copy with updated startup default subcategory
+        val updatedUser = userCustom.copy(
+            defaultSubCategory = "Isekai",
+            defaultStatus = null
+        )
+        assertEquals("Isekai", updatedUser.defaultSubCategory)
+        assertNull(updatedUser.defaultStatus)
+    }
+
+    @Test
+    fun testPerProfileStartupDefaultsIndependence() {
+        val profile1 = UserProfile(
+            id = 1L,
+            name = "Anime Watcher",
+            defaultMediaType = MediaType.ANIME,
+            defaultStatus = MediaStatus.WATCHING
+        )
+        val profile2 = UserProfile(
+            id = 2L,
+            name = "Novel Lover",
+            defaultCustomCategory = "Web Novels",
+            defaultMediaType = MediaType.BOOK,
+            defaultSubCategory = "Wuxia"
+        )
+        val profile3 = UserProfile(
+            id = 3L,
+            name = "Movie Fan",
+            defaultMediaType = MediaType.MOVIE,
+            defaultStatus = MediaStatus.PLAN_TO_WATCH
+        )
+
+        // Verify profile 1
+        assertEquals(MediaType.ANIME, profile1.defaultMediaType)
+        assertNull(profile1.defaultCustomCategory)
+        assertEquals(MediaStatus.WATCHING, profile1.defaultStatus)
+        assertNull(profile1.defaultSubCategory)
+
+        // Verify profile 2
+        assertEquals("Web Novels", profile2.defaultCustomCategory)
+        assertEquals("Wuxia", profile2.defaultSubCategory)
+        assertNull(profile2.defaultStatus)
+
+        // Verify profile 3
+        assertEquals(MediaType.MOVIE, profile3.defaultMediaType)
+        assertEquals(MediaStatus.PLAN_TO_WATCH, profile3.defaultStatus)
+        assertNull(profile3.defaultSubCategory)
+    }
+
+    @Test
+    fun testStartupDefaultsApplicationLogic() {
+        fun resolveStartupView(profile: UserProfile): Triple<MediaType, String?, Pair<String?, MediaStatus?>> {
+            val targetCustomCat = profile.defaultCustomCategory?.trim()?.ifBlank { null }
+            val targetMediaType = if (!targetCustomCat.isNullOrBlank()) {
+                profile.defaultMediaType ?: MediaType.MANGA
+            } else {
+                profile.defaultMediaType ?: MediaType.ANIME
+            }
+            val targetSubCat = profile.defaultSubCategory?.trim()?.ifBlank { null }
+            val targetStatus = if (targetSubCat != null) null else profile.defaultStatus
+            return Triple(targetMediaType, targetCustomCat, Pair(targetSubCat, targetStatus))
+        }
+
+        // Profile with unconfigured defaults -> defaults to ANIME • ALL (null status, null subCategory)
+        val unconfigured = UserProfile(id = 1L, name = "Default")
+        val view1 = resolveStartupView(unconfigured)
+        assertEquals(MediaType.ANIME, view1.first)
+        assertNull(view1.second)
+        assertNull(view1.third.first)
+        assertNull(view1.third.second)
+
+        // Profile with MANGA • WATCHING (Reading)
+        val mangaProfile = UserProfile(id = 2L, name = "Reader", defaultMediaType = MediaType.MANGA, defaultStatus = MediaStatus.WATCHING)
+        val view2 = resolveStartupView(mangaProfile)
+        assertEquals(MediaType.MANGA, view2.first)
+        assertNull(view2.second)
+        assertNull(view2.third.first)
+        assertEquals(MediaStatus.WATCHING, view2.third.second)
+
+        // Profile with Custom category "Donghua" and SubCategory "Season 1"
+        val donghuaProfile = UserProfile(
+            id = 3L,
+            name = "Donghua Fan",
+            defaultCustomCategory = "Donghua",
+            defaultMediaType = MediaType.ANIME,
+            defaultSubCategory = "Season 1"
+        )
+        val view3 = resolveStartupView(donghuaProfile)
+        assertEquals(MediaType.ANIME, view3.first)
+        assertEquals("Donghua", view3.second)
+        assertEquals("Season 1", view3.third.first)
+        assertNull(view3.third.second)
+
+        // Subcategory and Status mutual exclusivity: selecting subcategory overrides status
+        val conflictingProfile = UserProfile(
+            id = 4L,
+            name = "Conflicted",
+            defaultMediaType = MediaType.MANGA,
+            defaultSubCategory = "Action",
+            defaultStatus = MediaStatus.COMPLETED
+        )
+        val view4 = resolveStartupView(conflictingProfile)
+        assertEquals("Action", view4.third.first)
+        assertNull(view4.third.second)
+    }
+
+    @Test
+    fun testSettingsUiStateStartupDefaults() {
+        val state = com.lx.tracklist.ui.settings.SettingsUiState()
+        assertNotNull(state.activeUser)
+        assertEquals(1L, state.activeUser.id)
+        assertNull(state.selectedProfileIdForDefaults)
+        assertTrue(state.allSubCategories.isEmpty())
+        assertTrue(state.allUsers.isEmpty())
+    }
+
+    @Test
+    fun testMediaEntryGetTagList() {
+        val entry1 = MediaEntry(title = "Bleach", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Action, Supernatural, Shounen")
+        assertEquals(listOf("Action", "Supernatural", "Shounen"), entry1.getTagList())
+
+        // Extra whitespace, empty slots, trailing commas
+        val entry2 = MediaEntry(title = "One Piece", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = " Action,  , Adventure , Pirates, ")
+        assertEquals(listOf("Action", "Adventure", "Pirates"), entry2.getTagList())
+
+        // Empty & null string
+        val entry3 = MediaEntry(title = "Blank", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "")
+        assertTrue(entry3.getTagList().isEmpty())
+
+        val entry4 = MediaEntry(title = "Null", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = null)
+        assertTrue(entry4.getTagList().isEmpty())
+    }
+
+    @Test
+    fun testTagMultiSelectInclusion() {
+        val entry1 = MediaEntry(id = 1L, title = "Jujutsu Kaisen", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Action, Supernatural, School")
+        val entry2 = MediaEntry(id = 2L, title = "Bleach", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Action, Supernatural, Swords")
+        val entry3 = MediaEntry(id = 3L, title = "Horimiya", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Romance, School, Comedy")
+        val entry4 = MediaEntry(id = 4L, title = "Naruto", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Action, Ninja")
+
+        val entries = listOf(entry1, entry2, entry3, entry4)
+
+        // Filter requiring BOTH "Action" AND "Supernatural"
+        val includedTags = setOf("Action", "Supernatural")
+        val filtered = entries.filter { entry ->
+            val entryTags = entry.getTagList()
+            includedTags.all { inc -> entryTags.any { it.equals(inc, ignoreCase = true) } }
+        }
+
+        assertEquals(2, filtered.size)
+        assertTrue(filtered.any { it.id == 1L })
+        assertTrue(filtered.any { it.id == 2L })
+        assertFalse(filtered.any { it.id == 3L })
+        assertFalse(filtered.any { it.id == 4L })
+
+        // Case-insensitivity check: "supernatural" matches "Supernatural"
+        val lowerFilter = setOf("supernatural")
+        val filteredLower = entries.filter { entry ->
+            val entryTags = entry.getTagList()
+            lowerFilter.all { inc -> entryTags.any { it.equals(inc, ignoreCase = true) } }
+        }
+        assertEquals(2, filteredLower.size)
+    }
+
+    @Test
+    fun testTagInverseExclusion() {
+        val entry1 = MediaEntry(id = 1L, title = "Dark Fantasy", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Action, Dark, Gore")
+        val entry2 = MediaEntry(id = 2L, title = "Light Fantasy", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Action, Comedy, Fantasy")
+        val entry3 = MediaEntry(id = 3L, title = "Horror Show", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Horror, Gore")
+        val entry4 = MediaEntry(id = 4L, title = "Slice of Life", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Comedy, Slice of Life")
+
+        val entries = listOf(entry1, entry2, entry3, entry4)
+
+        // Exclude tags: "Gore", "Horror"
+        val excludedTags = setOf("Gore", "Horror")
+        val filtered = entries.filter { entry ->
+            val entryTags = entry.getTagList()
+            excludedTags.none { exc -> entryTags.any { it.equals(exc, ignoreCase = true) } }
+        }
+
+        // Only entry2 and entry4 should remain
+        assertEquals(2, filtered.size)
+        assertEquals(listOf(2L, 4L), filtered.map { it.id })
+    }
+
+    @Test
+    fun testTagInclusionAndInverseExclusionCombined() {
+        val entry1 = MediaEntry(id = 1L, title = "Action Pure", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Action, Adventure")
+        val entry2 = MediaEntry(id = 2L, title = "Action Mech", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Action, Mecha, Sci-Fi")
+        val entry3 = MediaEntry(id = 3L, title = "Action Romance", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Action, Romance")
+        val entry4 = MediaEntry(id = 4L, title = "Romance Only", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Romance, Drama")
+
+        val entries = listOf(entry1, entry2, entry3, entry4)
+
+        // Include "Action", but exclude "Mecha" and "Romance"
+        val included = setOf("Action")
+        val excluded = setOf("Mecha", "Romance")
+
+        val filtered = entries.filter { entry ->
+            val tags = entry.getTagList()
+            val matchesIncluded = included.all { inc -> tags.any { it.equals(inc, ignoreCase = true) } }
+            val passesExcluded = excluded.none { exc -> tags.any { it.equals(exc, ignoreCase = true) } }
+            matchesIncluded && passesExcluded
+        }
+
+        assertEquals(1, filtered.size)
+        assertEquals(1L, filtered.first().id)
+        assertEquals("Action Pure", filtered.first().title)
+    }
+
+    @Test
+    fun testTagExtractionAndFrequencies() {
+        val entries = listOf(
+            MediaEntry(id = 1L, title = "A", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Action, Fantasy"),
+            MediaEntry(id = 2L, title = "B", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "Fantasy, Drama"),
+            MediaEntry(id = 3L, title = "C", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = "action, Sci-Fi"),
+            MediaEntry(id = 4L, title = "D", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, tags = null)
+        )
+
+        val allAvailableTags = entries
+            .flatMap { it.getTagList() }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
+
+        assertEquals(listOf("Action", "Drama", "Fantasy", "Sci-Fi"), allAvailableTags)
+
+        val tagCounts = allAvailableTags.associateWith { tag ->
+            entries.count { entry ->
+                entry.getTagList().any { it.equals(tag, ignoreCase = true) }
+            }
+        }
+
+        assertEquals(2, tagCounts["Action"])
+        assertEquals(1, tagCounts["Drama"])
+        assertEquals(2, tagCounts["Fantasy"])
+        assertEquals(1, tagCounts["Sci-Fi"])
+    }
+
+    @Test
+    fun testLibraryUiStateTagProperties() {
+        val state = com.lx.tracklist.ui.library.LibraryUiState(
+            includedTags = setOf("Action", "Fantasy"),
+            excludedTags = setOf("Horror"),
+            availableTags = listOf("Action", "Drama", "Fantasy", "Horror"),
+            tagCounts = mapOf("Action" to 5, "Fantasy" to 3, "Horror" to 1)
+        )
+
+        assertEquals(2, state.includedTags.size)
+        assertTrue(state.includedTags.contains("Action"))
+        assertEquals(1, state.excludedTags.size)
+        assertTrue(state.excludedTags.contains("Horror"))
+        assertEquals(4, state.availableTags.size)
+        assertEquals(5, state.tagCounts["Action"])
+    }
 }

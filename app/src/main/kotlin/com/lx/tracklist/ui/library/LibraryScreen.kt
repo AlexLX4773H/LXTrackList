@@ -32,6 +32,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -54,6 +56,10 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,6 +71,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Surface
@@ -94,7 +102,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
-import com.lx.tracklist.data.model.Priority
 import com.lx.tracklist.ui.components.MediaCard
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
@@ -829,7 +836,17 @@ fun LibraryScreen(
             }
 
             // Active Filter Removable Badges (if filters active)
-            if (state.selectedCategoryFilter != null || state.selectedCustomCategoryFilter != null || state.selectedSubCategoryFilter != null || state.selectedStatusFilter != null || state.minScore != null || state.onlyUnrated || state.selectedPriorityFilter != null || state.onlyAiring) {
+            val hasActiveFilters = state.selectedCategoryFilter != null ||
+                    state.selectedCustomCategoryFilter != null ||
+                    state.selectedSubCategoryFilter != null ||
+                    state.selectedStatusFilter != null ||
+                    state.minScore != null ||
+                    state.onlyUnrated ||
+                    state.includedTags.isNotEmpty() ||
+                    state.excludedTags.isNotEmpty() ||
+                    state.onlyAiring
+
+            if (hasActiveFilters) {
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -889,11 +906,20 @@ fun LibraryScreen(
                         }
                     }
 
-                    state.selectedPriorityFilter?.let { priority ->
-                        item {
+                    state.includedTags.forEach { tag ->
+                        item(key = "inc_$tag") {
                             RemovableFilterBadge(
-                                label = "Priority: ${priority.name}",
-                                onRemove = { viewModel.setPriorityFilter(null) }
+                                label = "+Tag: $tag",
+                                onRemove = { viewModel.toggleIncludedTag(tag) }
+                            )
+                        }
+                    }
+
+                    state.excludedTags.forEach { tag ->
+                        item(key = "exc_$tag") {
+                            RemovableFilterBadge(
+                                label = "-Tag: $tag",
+                                onRemove = { viewModel.toggleExcludedTag(tag) }
                             )
                         }
                     }
@@ -1031,6 +1057,13 @@ private fun AdvancedFilterSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showTagsSubMenu by remember { mutableStateOf(false) }
+    var tagSearchQuery by remember { mutableStateOf("") }
+    var tagFilterTab by remember { mutableStateOf(0) } // 0 = Include, 1 = Exclude
+
+    BackHandler(enabled = showTagsSubMenu) {
+        showTagsSubMenu = false
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1047,110 +1080,416 @@ private fun AdvancedFilterSheet(
             )
         }
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        if (showTagsSubMenu) {
+            // ================= TAGS SUB-MENU =================
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Tune, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(22.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Advanced Filters",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = LXTextPrimary
-                    )
-                }
-
-                if (state.activeFilterCount > 0) {
-                    TextButton(onClick = { viewModel.resetAllFilters() }) {
-                        Text("Reset All", color = LXErrorRed, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
-            HorizontalDivider(color = LXBorder, thickness = 1.dp)
-
-            // Status Filter Section
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "Status",
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = LXTextPrimary
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilterChip(
-                        selected = state.selectedStatusFilter == null,
-                        onClick = { viewModel.setStatusFilter(null) },
-                        label = { Text("All Statuses") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showTagsSubMenu = false }
+                            .padding(vertical = 4.dp, horizontal = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier.size(22.dp)
                         )
-                    )
-
-                    MediaStatus.entries.forEach { st ->
-                        val isSelected = state.selectedStatusFilter == st
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { viewModel.setStatusFilter(if (isSelected) null else st) },
-                            label = { Text(st.name.lowercase().replaceFirstChar { it.uppercase() }) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = LXPrimaryGreen,
-                                selectedLabelColor = LXBackgroundBlack,
-                                containerColor = LXSurfaceElevated,
-                                labelColor = LXTextSecondary
-                            )
-                        )
-                    }
-                }
-            }
-
-            // Sub Category Filter Section (Advanced Filter)
-            val catFilter = state.selectedCategoryFilter
-            val customCatFilter = state.selectedCustomCategoryFilter
-            val relevantSubCats = remember(state.subCategories, catFilter, customCatFilter) {
-                if (catFilter != null) {
-                    state.subCategories.filter { it.categoryKey.equals(catFilter.name, ignoreCase = true) }
-                } else if (customCatFilter != null) {
-                    state.subCategories.filter { it.categoryKey.equals(customCatFilter, ignoreCase = true) }
-                } else {
-                    state.subCategories.distinctBy { it.name.lowercase() }
-                }
-            }
-
-            if (relevantSubCats.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Style, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Sub Category",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            text = "Tags Filter",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             color = LXTextPrimary
                         )
                     }
+
+                    if (state.includedTags.isNotEmpty() || state.excludedTags.isNotEmpty()) {
+                        TextButton(onClick = { viewModel.clearTagFilters() }) {
+                            Text("Clear All", color = LXErrorRed, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = LXBorder, thickness = 1.dp)
+
+                // Sub-menu Instructions & active count
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(if (tagFilterTab == 0) LXPrimaryGreen else LXErrorRed)
+                        )
+                        Text(
+                            text = if (tagFilterTab == 0)
+                                "Check tags to INCLUDE (must match)"
+                            else
+                                "Check tags to EXCLUDE (inverse filter / hide items)",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = LXTextSecondary
+                        )
+                    }
+
+                    Text(
+                        text = "${state.includedTags.size} inc • ${state.excludedTags.size} exc",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = if (tagFilterTab == 0) LXPrimaryGreen else LXErrorRed
+                    )
+                }
+
+                // Search Bar for Tags
+                OutlinedTextField(
+                    value = tagSearchQuery,
+                    onValueChange = { tagSearchQuery = it },
+                    placeholder = { Text("Search tags...", color = LXTextSecondary, fontSize = 13.sp) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = LXTextSecondary, modifier = Modifier.size(18.dp))
+                    },
+                    trailingIcon = {
+                        if (tagSearchQuery.isNotBlank()) {
+                            IconButton(onClick = { tagSearchQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = LXTextSecondary, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = LXPrimaryGreen,
+                        unfocusedBorderColor = LXBorder,
+                        focusedTextColor = LXTextPrimary,
+                        unfocusedTextColor = LXTextPrimary,
+                        focusedContainerColor = LXSurfaceElevated,
+                        unfocusedContainerColor = LXSurfaceElevated
+                    )
+                )
+
+                // Mode Tabs: Include (Multi-select) vs Exclude (Inverse Select)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(LXSurfaceElevated)
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    // Include Tab
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (tagFilterTab == 0) LXPrimaryGreen.copy(alpha = 0.2f) else Color.Transparent)
+                            .border(
+                                width = if (tagFilterTab == 0) 1.dp else 0.dp,
+                                color = if (tagFilterTab == 0) LXPrimaryGreen else Color.Transparent,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .clickable { tagFilterTab = 0 }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = if (tagFilterTab == 0) LXPrimaryGreen else LXTextSecondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "Include Tags (${state.includedTags.size})",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = if (tagFilterTab == 0) FontWeight.Bold else FontWeight.Medium
+                                ),
+                                color = if (tagFilterTab == 0) LXPrimaryGreen else LXTextSecondary
+                            )
+                        }
+                    }
+
+                    // Exclude Tab (Inverse)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (tagFilterTab == 1) LXErrorRed.copy(alpha = 0.2f) else Color.Transparent)
+                            .border(
+                                width = if (tagFilterTab == 1) 1.dp else 0.dp,
+                                color = if (tagFilterTab == 1) LXErrorRed else Color.Transparent,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .clickable { tagFilterTab = 1 }
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = null,
+                                tint = if (tagFilterTab == 1) LXErrorRed else LXTextSecondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "Exclude Tags (${state.excludedTags.size})",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = if (tagFilterTab == 1) FontWeight.Bold else FontWeight.Medium
+                                ),
+                                color = if (tagFilterTab == 1) LXErrorRed else LXTextSecondary
+                            )
+                        }
+                    }
+                }
+
+                // Tag List with Checkboxes
+                val filteredTags = remember(state.availableTags, tagSearchQuery) {
+                    if (tagSearchQuery.isBlank()) {
+                        state.availableTags
+                    } else {
+                        state.availableTags.filter { it.contains(tagSearchQuery, ignoreCase = true) }
+                    }
+                }
+
+                if (state.availableTags.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No tags found in library. Add tags to your media in the Edit screen to filter by them.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = LXTextSecondary
+                        )
+                    }
+                } else if (filteredTags.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No tags matching \"$tagSearchQuery\"",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = LXTextSecondary
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        filteredTags.forEach { tag ->
+                            val isIncluded = state.includedTags.any { it.equals(tag, ignoreCase = true) }
+                            val isExcluded = state.excludedTags.any { it.equals(tag, ignoreCase = true) }
+                            val count = state.tagCounts[tag] ?: 0
+
+                            val isCurrentChecked = if (tagFilterTab == 0) isIncluded else isExcluded
+                            val activeColor = if (tagFilterTab == 0) LXPrimaryGreen else LXErrorRed
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (isCurrentChecked) activeColor.copy(alpha = 0.12f)
+                                        else LXSurfaceElevated
+                                    )
+                                    .border(
+                                        width = if (isCurrentChecked) 1.dp else 0.5.dp,
+                                        color = if (isCurrentChecked) activeColor.copy(alpha = 0.6f) else LXBorder,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable {
+                                        if (tagFilterTab == 0) {
+                                            viewModel.toggleIncludedTag(tag)
+                                        } else {
+                                            viewModel.toggleExcludedTag(tag)
+                                        }
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Checkbox(
+                                        checked = isCurrentChecked,
+                                        onCheckedChange = {
+                                            if (tagFilterTab == 0) {
+                                                viewModel.toggleIncludedTag(tag)
+                                            } else {
+                                                viewModel.toggleExcludedTag(tag)
+                                            }
+                                        },
+                                        colors = CheckboxDefaults.colors(
+                                            checkedColor = activeColor,
+                                            uncheckedColor = LXTextSecondary,
+                                            checkmarkColor = LXBackgroundBlack
+                                        )
+                                    )
+
+                                    Text(
+                                        text = tag,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = if (isCurrentChecked) FontWeight.Bold else FontWeight.Normal
+                                        ),
+                                        color = if (isCurrentChecked) activeColor else LXTextPrimary
+                                    )
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    if (tagFilterTab == 0 && isExcluded) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(LXErrorRed.copy(alpha = 0.2f))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "Excluded",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                                color = LXErrorRed
+                                            )
+                                        }
+                                    } else if (tagFilterTab == 1 && isIncluded) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(LXPrimaryGreen.copy(alpha = 0.2f))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "Included",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                                color = LXPrimaryGreen
+                                            )
+                                        }
+                                    }
+
+                                    Text(
+                                        text = "($count)",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = LXTextSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Done button in sub-menu
+                Button(
+                    onClick = { showTagsSubMenu = false },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(
+                        text = "Apply Tag Filters (${state.includedTags.size} Inc, ${state.excludedTags.size} Exc)",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        } else {
+            // ================= MAIN ADVANCED FILTERS =================
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Tune, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(22.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Advanced Filters",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                    }
+
+                    if (state.activeFilterCount > 0) {
+                        TextButton(onClick = { viewModel.resetAllFilters() }) {
+                            Text("Reset All", color = LXErrorRed, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = LXBorder, thickness = 1.dp)
+
+                // Status Filter Section
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Status",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextPrimary
+                    )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         FilterChip(
-                            selected = state.selectedSubCategoryFilter == null,
-                            onClick = { viewModel.setSubCategoryFilter(null) },
-                            label = { Text("All Sub Categories") },
+                            selected = state.selectedStatusFilter == null,
+                            onClick = { viewModel.setStatusFilter(null) },
+                            label = { Text("All Statuses") },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = LXPrimaryGreen,
                                 selectedLabelColor = LXBackgroundBlack,
@@ -1159,14 +1498,14 @@ private fun AdvancedFilterSheet(
                             )
                         )
 
-                        relevantSubCats.forEach { subCat ->
-                            val isSelected = state.selectedSubCategoryFilter.equals(subCat.name, ignoreCase = true)
+                        MediaStatus.entries.forEach { st ->
+                            val isSelected = state.selectedStatusFilter == st
                             FilterChip(
                                 selected = isSelected,
-                                onClick = { viewModel.setSubCategoryFilter(if (isSelected) null else subCat.name) },
-                                label = { Text(subCat.name) },
+                                onClick = { viewModel.setStatusFilter(if (isSelected) null else st) },
+                                label = { Text(st.name.lowercase().replaceFirstChar { it.uppercase() }) },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = LXScoreGold,
+                                    selectedContainerColor = LXPrimaryGreen,
                                     selectedLabelColor = LXBackgroundBlack,
                                     containerColor = LXSurfaceElevated,
                                     labelColor = LXTextSecondary
@@ -1175,97 +1514,115 @@ private fun AdvancedFilterSheet(
                         }
                     }
                 }
-            }
 
-            // Score / Rating Section
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Star, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Score / Rating",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = LXTextPrimary
-                    )
+                // Sub Category Filter Section (Advanced Filter)
+                val catFilter = state.selectedCategoryFilter
+                val customCatFilter = state.selectedCustomCategoryFilter
+                val relevantSubCats = remember(state.subCategories, catFilter, customCatFilter) {
+                    if (catFilter != null) {
+                        state.subCategories.filter { it.categoryKey.equals(catFilter.name, ignoreCase = true) }
+                    } else if (customCatFilter != null) {
+                        state.subCategories.filter { it.categoryKey.equals(customCatFilter, ignoreCase = true) }
+                    } else {
+                        state.subCategories.distinctBy { it.name.lowercase() }
+                    }
                 }
 
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = state.minScore == null && !state.onlyUnrated,
-                        onClick = {
-                            viewModel.setMinScore(null)
-                            viewModel.setOnlyUnrated(false)
-                        },
-                        label = { Text("Any Score") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
+                if (relevantSubCats.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Style, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Sub Category",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = LXTextPrimary
+                            )
+                        }
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = state.selectedSubCategoryFilter == null,
+                                onClick = { viewModel.setSubCategoryFilter(null) },
+                                label = { Text("All Sub Categories") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = LXPrimaryGreen,
+                                    selectedLabelColor = LXBackgroundBlack,
+                                    containerColor = LXSurfaceElevated,
+                                    labelColor = LXTextSecondary
+                                )
+                            )
 
-                    listOf(9, 8, 7, 6, 5).forEach { threshold ->
-                        val isSelected = state.minScore == threshold && !state.onlyUnrated
+                            relevantSubCats.forEach { subCat ->
+                                val isSelected = state.selectedSubCategoryFilter.equals(subCat.name, ignoreCase = true)
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { viewModel.setSubCategoryFilter(if (isSelected) null else subCat.name) },
+                                    label = { Text(subCat.name) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXScoreGold,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Score / Rating Section
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Star, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Score / Rating",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                    }
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         FilterChip(
-                            selected = isSelected,
-                            onClick = { viewModel.setMinScore(if (isSelected) null else threshold) },
-                            label = { Text("★ $threshold+") },
+                            selected = state.minScore == null && !state.onlyUnrated,
+                            onClick = {
+                                viewModel.setMinScore(null)
+                                viewModel.setOnlyUnrated(false)
+                            },
+                            label = { Text("Any Score") },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = LXScoreGold,
+                                selectedContainerColor = LXPrimaryGreen,
                                 selectedLabelColor = LXBackgroundBlack,
                                 containerColor = LXSurfaceElevated,
                                 labelColor = LXTextSecondary
                             )
                         )
-                    }
 
-                    FilterChip(
-                        selected = state.onlyUnrated,
-                        onClick = { viewModel.setOnlyUnrated(!state.onlyUnrated) },
-                        label = { Text("Unrated") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
-                }
-            }
+                        listOf(9, 8, 7, 6, 5).forEach { threshold ->
+                            val isSelected = state.minScore == threshold && !state.onlyUnrated
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.setMinScore(if (isSelected) null else threshold) },
+                                label = { Text("★ $threshold+") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = LXScoreGold,
+                                    selectedLabelColor = LXBackgroundBlack,
+                                    containerColor = LXSurfaceElevated,
+                                    labelColor = LXTextSecondary
+                                )
+                            )
+                        }
 
-            // Priority Section
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "Priority",
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = LXTextPrimary
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = state.selectedPriorityFilter == null,
-                        onClick = { viewModel.setPriorityFilter(null) },
-                        label = { Text("Any Priority") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
-
-                    Priority.entries.forEach { p ->
-                        val isSelected = state.selectedPriorityFilter == p
                         FilterChip(
-                            selected = isSelected,
-                            onClick = { viewModel.setPriorityFilter(if (isSelected) null else p) },
-                            label = { Text(p.name) },
+                            selected = state.onlyUnrated,
+                            onClick = { viewModel.setOnlyUnrated(!state.onlyUnrated) },
+                            label = { Text("Unrated") },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = LXPrimaryGreen,
                                 selectedLabelColor = LXBackgroundBlack,
@@ -1275,77 +1632,187 @@ private fun AdvancedFilterSheet(
                         )
                     }
                 }
-            }
 
-            // Quick Toggles Section
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = "Extra Options",
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = LXTextPrimary
-                )
+                // Tags Filter Section (Replaced Priority)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Style, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Tags Filter",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = LXTextPrimary
+                            )
+                        }
 
-                // Airing Only Toggle
-                Row(
+                        if (state.includedTags.isNotEmpty() || state.excludedTags.isNotEmpty()) {
+                            TextButton(onClick = { viewModel.clearTagFilters() }) {
+                                Text("Clear Tags", color = LXErrorRed, fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    // Clickable Card to open Tags Sub-Menu
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { showTagsSubMenu = true },
+                        colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                        border = BorderStroke(
+                            1.dp,
+                            if (state.includedTags.isNotEmpty() || state.excludedTags.isNotEmpty()) LXPrimaryGreen.copy(alpha = 0.6f) else LXBorder
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(LXPrimaryGreen.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Checklist,
+                                        contentDescription = null,
+                                        tint = LXPrimaryGreen,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = "Select & Exclude Tags",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = LXTextPrimary
+                                    )
+                                    Text(
+                                        text = if (state.includedTags.isEmpty() && state.excludedTags.isEmpty())
+                                            "Multi-select tags to include or exclude (inverse)"
+                                        else
+                                            "${state.includedTags.size} included (showing) • ${state.excludedTags.size} excluded (hiding)",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                        color = LXTextSecondary
+                                    )
+                                }
+                            }
+
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                contentDescription = "Open Tags Filter",
+                                tint = LXPrimaryGreen,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    // Active Tag Chips in Main Sheet
+                    if (state.includedTags.isNotEmpty() || state.excludedTags.isNotEmpty()) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            state.includedTags.forEach { tag ->
+                                RemovableFilterBadge(
+                                    label = "+$tag",
+                                    onRemove = { viewModel.toggleIncludedTag(tag) }
+                                )
+                            }
+                            state.excludedTags.forEach { tag ->
+                                RemovableFilterBadge(
+                                    label = "-$tag",
+                                    onRemove = { viewModel.toggleExcludedTag(tag) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Quick Toggles Section
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Extra Options",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextPrimary
+                    )
+
+                    // Airing Only Toggle
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Only Ongoing / Airing", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
+                        Switch(
+                            checked = state.onlyAiring,
+                            onCheckedChange = { viewModel.toggleAiringFilter() },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = LXBackgroundBlack,
+                                checkedTrackColor = LXPrimaryGreen
+                            )
+                        )
+                    }
+
+                    // Favorites Only Toggle
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Favorites Only", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
+                        Switch(
+                            checked = state.onlyFavorites,
+                            onCheckedChange = { viewModel.toggleFavoritesFilter() },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = LXBackgroundBlack,
+                                checkedTrackColor = LXPrimaryGreen
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Apply / Close Button
+                Button(
+                    onClick = onDismiss,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(LXSurfaceElevated)
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Only Ongoing / Airing", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
-                    Switch(
-                        checked = state.onlyAiring,
-                        onCheckedChange = { viewModel.toggleAiringFilter() },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = LXBackgroundBlack,
-                            checkedTrackColor = LXPrimaryGreen
-                        )
+                    Text(
+                        text = "Show ${state.totalCount} ${if (state.totalCount == 1) "Result" else "Results"}",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                 }
 
-                // Favorites Only Toggle
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(LXSurfaceElevated)
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Favorites Only", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
-                    Switch(
-                        checked = state.onlyFavorites,
-                        onCheckedChange = { viewModel.toggleFavoritesFilter() },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = LXBackgroundBlack,
-                            checkedTrackColor = LXPrimaryGreen
-                        )
-                    )
-                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Apply / Close Button
-            Button(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text(
-                    text = "Show ${state.totalCount} ${if (state.totalCount == 1) "Result" else "Results"}",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

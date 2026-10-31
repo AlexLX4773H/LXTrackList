@@ -15,8 +15,11 @@ import com.lx.tracklist.data.local.StorageFileInfo
 import com.lx.tracklist.data.local.StorageHelper
 import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
+import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.repository.ConflictStrategy
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.Dispatchers
@@ -230,6 +233,10 @@ data class SettingsUiState(
     val inputFiles: List<StorageFileInfo> = emptyList(),
     val homeFolderPath: String = "",
     val customCategories: List<CustomCategory> = emptyList(),
+    val allSubCategories: List<SubCategory> = emptyList(),
+    val activeUser: UserProfile = UserProfile(id = 1L, name = "Main Profile", isDefault = true),
+    val allUsers: List<UserProfile> = emptyList(),
+    val selectedProfileIdForDefaults: Long? = null,
     val isSwipeToSwitchTabsEnabled: Boolean = true,
     val isTachiyomiImportAsFavorites: Boolean = false,
     val coverCacheSizeFormatted: String = "0 B",
@@ -251,6 +258,31 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
             }
         }
         viewModelScope.launch {
+            repository.allSubCategories.collect { subCats ->
+                _uiState.update { it.copy(allSubCategories = subCats) }
+            }
+        }
+        viewModelScope.launch {
+            repository.activeUser.collect { user ->
+                _uiState.update { state ->
+                    state.copy(
+                        activeUser = user,
+                        selectedProfileIdForDefaults = state.selectedProfileIdForDefaults ?: user.id
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            repository.allUsers.collect { users ->
+                _uiState.update { state ->
+                    state.copy(
+                        allUsers = users,
+                        selectedProfileIdForDefaults = state.selectedProfileIdForDefaults ?: users.firstOrNull()?.id
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
             repository.isSwipeToSwitchTabsEnabled.collect { enabled ->
                 _uiState.update { it.copy(isSwipeToSwitchTabsEnabled = enabled) }
             }
@@ -260,6 +292,47 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 _uiState.update { it.copy(isTachiyomiImportAsFavorites = enabled) }
             }
         }
+    }
+
+    fun selectProfileForDefaults(profileId: Long) {
+        _uiState.update { it.copy(selectedProfileIdForDefaults = profileId) }
+    }
+
+    fun updateStartupDefaults(
+        profileId: Long,
+        defaultMediaType: MediaType?,
+        defaultCustomCategory: String?,
+        defaultSubCategory: String?,
+        defaultStatus: MediaStatus?
+    ) {
+        viewModelScope.launch {
+            repository.updateProfileStartupDefaults(
+                profileId = profileId,
+                defaultMediaType = defaultMediaType,
+                defaultCustomCategory = defaultCustomCategory,
+                defaultSubCategory = defaultSubCategory,
+                defaultStatus = defaultStatus
+            )
+            val profileName = _uiState.value.allUsers.firstOrNull { it.id == profileId }?.name ?: "Profile"
+            val categoryLabel = defaultCustomCategory ?: (defaultMediaType ?: MediaType.ANIME).displayName
+            val tabLabel = defaultSubCategory ?: (defaultStatus?.getDisplayLabel(defaultMediaType ?: MediaType.ANIME) ?: "All")
+            _uiState.update {
+                it.copy(
+                    statusMessage = "Startup defaults updated for \"$profileName\" ($categoryLabel • $tabLabel)",
+                    isErrorMessage = false
+                )
+            }
+        }
+    }
+
+    fun resetStartupDefaults(profileId: Long) {
+        updateStartupDefaults(
+            profileId = profileId,
+            defaultMediaType = MediaType.ANIME,
+            defaultCustomCategory = null,
+            defaultSubCategory = null,
+            defaultStatus = null
+        )
     }
 
     fun setSwipeToSwitchTabsEnabled(enabled: Boolean) {
@@ -310,6 +383,10 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
     fun deleteCustomCategory(category: CustomCategory) {
         viewModelScope.launch {
             repository.deleteCustomCategory(category)
+            val affected = _uiState.value.allUsers.filter { it.defaultCustomCategory.equals(category.name, ignoreCase = true) }
+            for (p in affected) {
+                repository.updateUser(p.copy(defaultCustomCategory = null, defaultMediaType = MediaType.ANIME, defaultSubCategory = null))
+            }
             _uiState.update {
                 it.copy(
                     statusMessage = "Deleted category \"${category.name}\"",

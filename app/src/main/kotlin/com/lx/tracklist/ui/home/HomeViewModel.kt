@@ -66,6 +66,46 @@ private data class UserAndSettingsContext(
 class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
 
     private val _filterState = MutableStateFlow(FilterState())
+    private var lastAppliedProfile: UserProfile? = null
+
+    init {
+        viewModelScope.launch {
+            repository.activeUser.collect { user ->
+                val isFirst = (lastAppliedProfile == null)
+                val isUserSwitch = (lastAppliedProfile != null && lastAppliedProfile?.id != user.id)
+                val isDefaultsUpdatedForActive = (lastAppliedProfile != null &&
+                        (lastAppliedProfile?.defaultMediaType != user.defaultMediaType ||
+                                lastAppliedProfile?.defaultCustomCategory != user.defaultCustomCategory ||
+                                lastAppliedProfile?.defaultSubCategory != user.defaultSubCategory ||
+                                lastAppliedProfile?.defaultStatus != user.defaultStatus))
+
+                if (isFirst || isUserSwitch || isDefaultsUpdatedForActive) {
+                    lastAppliedProfile = user
+                    applyProfileDefaults(user)
+                }
+            }
+        }
+    }
+
+    private fun applyProfileDefaults(profile: UserProfile) {
+        val targetCustomCat = profile.defaultCustomCategory?.trim()?.ifBlank { null }
+        val targetMediaType = if (!targetCustomCat.isNullOrBlank()) {
+            profile.defaultMediaType ?: MediaType.MANGA
+        } else {
+            profile.defaultMediaType ?: MediaType.ANIME
+        }
+        val targetSubCat = profile.defaultSubCategory?.trim()?.ifBlank { null }
+        val targetStatus = if (targetSubCat != null) null else profile.defaultStatus
+
+        _filterState.update { current ->
+            current.copy(
+                category = targetMediaType,
+                customCategory = targetCustomCat,
+                subCategory = targetSubCat,
+                status = targetStatus
+            )
+        }
+    }
 
     private val userAndSettingsContextFlow = combine(
         repository.activeUser,

@@ -7,7 +7,6 @@ import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
-import com.lx.tracklist.data.model.Priority
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,7 +37,10 @@ data class LibraryUiState(
     val selectedStatusFilter: MediaStatus? = null,
     val minScore: Int? = null,
     val onlyUnrated: Boolean = false,
-    val selectedPriorityFilter: Priority? = null,
+    val includedTags: Set<String> = emptySet(),
+    val excludedTags: Set<String> = emptySet(),
+    val availableTags: List<String> = emptyList(),
+    val tagCounts: Map<String, Int> = emptyMap(),
     val onlyFavorites: Boolean = false,
     val onlyAiring: Boolean = false,
     val selectedSort: LibrarySortOption = LibrarySortOption.RECENTLY_UPDATED,
@@ -61,7 +63,8 @@ private data class LibraryFilterState(
     val statusFilter: MediaStatus? = null,
     val minScore: Int? = null,
     val onlyUnrated: Boolean = false,
-    val priorityFilter: Priority? = null,
+    val includedTags: Set<String> = emptySet(),
+    val excludedTags: Set<String> = emptySet(),
     val onlyFavorites: Boolean = false,
     val onlyAiring: Boolean = false,
     val sortOption: LibrarySortOption = LibrarySortOption.RECENTLY_UPDATED,
@@ -77,7 +80,7 @@ private data class LibraryFilterState(
             if (subCategoryFilter != null) count++
             if (statusFilter != null) count++
             if (minScore != null || onlyUnrated) count++
-            if (priorityFilter != null) count++
+            if (includedTags.isNotEmpty() || excludedTags.isNotEmpty()) count++
             if (onlyFavorites) count++
             if (onlyAiring) count++
             return count
@@ -94,6 +97,20 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         repository.customCategories,
         repository.allSubCategories
     ) { filter, allEntries, customCats, subCats ->
+        // Distinct available tags and tag counts across all user entries
+        val allAvailableTags = allEntries
+            .flatMap { it.getTagList() }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
+
+        val tagCounts = allAvailableTags.associateWith { tag ->
+            allEntries.count { entry ->
+                entry.getTagList().any { it.equals(tag, ignoreCase = true) }
+            }
+        }
+
         var list = allEntries
 
         // 1. Category / Custom Category / Sub Category Filter
@@ -122,9 +139,22 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             list = list.filter { it.isAiring }
         }
 
-        // 5. Priority Filter
-        if (filter.priorityFilter != null) {
-            list = list.filter { it.priority == filter.priorityFilter }
+        // 5. Tags Filter (Multi-select Include & Inverse Exclude)
+        if (filter.includedTags.isNotEmpty()) {
+            list = list.filter { entry ->
+                val entryTags = entry.getTagList()
+                filter.includedTags.all { inc ->
+                    entryTags.any { it.equals(inc, ignoreCase = true) }
+                }
+            }
+        }
+        if (filter.excludedTags.isNotEmpty()) {
+            list = list.filter { entry ->
+                val entryTags = entry.getTagList()
+                filter.excludedTags.none { exc ->
+                    entryTags.any { it.equals(exc, ignoreCase = true) }
+                }
+            }
         }
 
         // 6. Score Filter
@@ -168,7 +198,10 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             selectedStatusFilter = filter.statusFilter,
             minScore = filter.minScore,
             onlyUnrated = filter.onlyUnrated,
-            selectedPriorityFilter = filter.priorityFilter,
+            includedTags = filter.includedTags,
+            excludedTags = filter.excludedTags,
+            availableTags = allAvailableTags,
+            tagCounts = tagCounts,
             onlyFavorites = filter.onlyFavorites,
             onlyAiring = filter.onlyAiring,
             selectedSort = filter.sortOption,
@@ -214,8 +247,44 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         _filterState.update { it.copy(onlyUnrated = unrated, minScore = if (unrated) null else it.minScore) }
     }
 
-    fun setPriorityFilter(priority: Priority?) {
-        _filterState.update { it.copy(priorityFilter = priority) }
+    fun toggleIncludedTag(tag: String) {
+        _filterState.update { state ->
+            val cleanTag = tag.trim()
+            val newIncluded = if (state.includedTags.any { it.equals(cleanTag, ignoreCase = true) }) {
+                state.includedTags.filter { !it.equals(cleanTag, ignoreCase = true) }.toSet()
+            } else {
+                state.includedTags + cleanTag
+            }
+            val newExcluded = state.excludedTags.filter { !it.equals(cleanTag, ignoreCase = true) }.toSet()
+            state.copy(includedTags = newIncluded, excludedTags = newExcluded)
+        }
+    }
+
+    fun toggleExcludedTag(tag: String) {
+        _filterState.update { state ->
+            val cleanTag = tag.trim()
+            val newExcluded = if (state.excludedTags.any { it.equals(cleanTag, ignoreCase = true) }) {
+                state.excludedTags.filter { !it.equals(cleanTag, ignoreCase = true) }.toSet()
+            } else {
+                state.excludedTags + cleanTag
+            }
+            val newIncluded = state.includedTags.filter { !it.equals(cleanTag, ignoreCase = true) }.toSet()
+            state.copy(includedTags = newIncluded, excludedTags = newExcluded)
+        }
+    }
+
+    fun removeTagFilter(tag: String) {
+        _filterState.update { state ->
+            val cleanTag = tag.trim()
+            state.copy(
+                includedTags = state.includedTags.filter { !it.equals(cleanTag, ignoreCase = true) }.toSet(),
+                excludedTags = state.excludedTags.filter { !it.equals(cleanTag, ignoreCase = true) }.toSet()
+            )
+        }
+    }
+
+    fun clearTagFilters() {
+        _filterState.update { it.copy(includedTags = emptySet(), excludedTags = emptySet()) }
     }
 
     fun toggleFavoritesFilter() {
@@ -247,7 +316,8 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                 statusFilter = null,
                 minScore = null,
                 onlyUnrated = false,
-                priorityFilter = null,
+                includedTags = emptySet(),
+                excludedTags = emptySet(),
                 onlyFavorites = false,
                 onlyAiring = false
             )

@@ -96,6 +96,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -107,12 +108,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import coil.compose.AsyncImage
 import com.lx.tracklist.R
 import com.lx.tracklist.data.local.StorageFileInfo
 import com.lx.tracklist.data.model.CustomCategory
+import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.repository.ConflictStrategy
+import com.lx.tracklist.ui.components.getCategoryIcon
 import com.lx.tracklist.ui.settings.ExportDestination
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
@@ -130,6 +138,7 @@ enum class SettingsSubMenu(val title: String) {
     STORAGE("Backup & Storage"),
     CONFLICTS("Conflict Resolution"),
     EXPORT_GUIDES("Export Guides & Help"),
+    STARTUP_VIEW("Default Startup View"),
     PREFERENCES("Gestures & Navigation"),
     ABOUT("About")
 }
@@ -1162,9 +1171,18 @@ fun SettingsScreen(
                         SettingsSubMenu.EXPORT_GUIDES -> ExportGuidesContent(
                             onNavigateToStorage = { activeSubMenu = SettingsSubMenu.STORAGE }
                         )
+                        SettingsSubMenu.STARTUP_VIEW -> StartupViewContent(
+                            state = state,
+                            onSelectProfile = { viewModel.selectProfileForDefaults(it) },
+                            onUpdateStartupDefaults = { profileId, mediaType, customCat, subCat, status ->
+                                viewModel.updateStartupDefaults(profileId, mediaType, customCat, subCat, status)
+                            },
+                            onResetStartupDefaults = { viewModel.resetStartupDefaults(it) }
+                        )
                         SettingsSubMenu.PREFERENCES -> PreferencesContent(
                             isSwipeToSwitchTabsEnabled = state.isSwipeToSwitchTabsEnabled,
-                            onSetSwipeToSwitchTabsEnabled = { viewModel.setSwipeToSwitchTabsEnabled(it) }
+                            onSetSwipeToSwitchTabsEnabled = { viewModel.setSwipeToSwitchTabsEnabled(it) },
+                            onNavigateToStartupView = { activeSubMenu = SettingsSubMenu.STARTUP_VIEW }
                         )
                         SettingsSubMenu.ABOUT -> AboutContent(
                             state = state
@@ -1227,10 +1245,22 @@ fun SettingsScreen(
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
+                    SettingsSubMenu.STARTUP_VIEW -> {
+                        StartupViewContent(
+                            state = state,
+                            onSelectProfile = { viewModel.selectProfileForDefaults(it) },
+                            onUpdateStartupDefaults = { profileId, mediaType, customCat, subCat, status ->
+                                viewModel.updateStartupDefaults(profileId, mediaType, customCat, subCat, status)
+                            },
+                            onResetStartupDefaults = { viewModel.resetStartupDefaults(it) },
+                            modifier = Modifier.widthIn(max = 840.dp)
+                        )
+                    }
                     SettingsSubMenu.PREFERENCES -> {
                         PreferencesContent(
                             isSwipeToSwitchTabsEnabled = state.isSwipeToSwitchTabsEnabled,
                             onSetSwipeToSwitchTabsEnabled = { viewModel.setSwipeToSwitchTabsEnabled(it) },
+                            onNavigateToStartupView = { activeSubMenu = SettingsSubMenu.STARTUP_VIEW },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -1330,6 +1360,24 @@ private fun SettingsMainMenu(
         // Section: Preferences
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SettingsSectionHeader("Preferences")
+
+            val currentProfileId = state.selectedProfileIdForDefaults ?: state.activeUser.id
+            val targetUser = state.allUsers.firstOrNull { it.id == currentProfileId } ?: state.activeUser
+            val defaultCatName = targetUser.defaultCustomCategory ?: (targetUser.defaultMediaType ?: MediaType.ANIME).displayName
+            val defaultTabName = targetUser.defaultSubCategory ?: (targetUser.defaultStatus?.getDisplayLabel(targetUser.defaultMediaType ?: MediaType.ANIME) ?: "All")
+
+            SettingsMenuItem(
+                icon = Icons.Default.Bookmark,
+                iconBackgroundColor = LXPrimaryGreen.copy(alpha = 0.15f),
+                iconTintColor = LXPrimaryGreen,
+                title = "Default Startup View",
+                subtitle = "${targetUser.name}: $defaultCatName • $defaultTabName",
+                badgeText = "PER PROFILE",
+                badgeColor = LXPrimaryGreen,
+                isSelected = selectedSubMenu == SettingsSubMenu.STARTUP_VIEW,
+                onClick = { onSelectSubMenu(SettingsSubMenu.STARTUP_VIEW) }
+            )
+
             SettingsMenuItem(
                 icon = Icons.Default.TouchApp,
                 iconBackgroundColor = Color(0xFFBB86FC).copy(alpha = 0.15f),
@@ -2500,6 +2548,7 @@ private fun ConflictResolutionContent(
 private fun PreferencesContent(
     isSwipeToSwitchTabsEnabled: Boolean,
     onSetSwipeToSwitchTabsEnabled: (Boolean) -> Unit,
+    onNavigateToStartupView: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -2508,6 +2557,63 @@ private fun PreferencesContent(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        if (onNavigateToStartupView != null) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigateToStartupView() },
+                colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Bookmark,
+                                contentDescription = null,
+                                tint = LXPrimaryGreen,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
+                            Text(
+                                text = "Default Startup View",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = LXTextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Configure default Category and Status or SubCategory when app boots up (per Profile)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LXTextSecondary
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                        contentDescription = "Open",
+                        tint = LXPrimaryGreen,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
@@ -2557,6 +2663,593 @@ private fun PreferencesContent(
                     color = LXTextSecondary.copy(alpha = 0.8f)
                 )
             }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun StartupViewContent(
+    state: SettingsUiState,
+    onSelectProfile: (Long) -> Unit,
+    onUpdateStartupDefaults: (Long, MediaType?, String?, String?, MediaStatus?) -> Unit,
+    onResetStartupDefaults: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val currentProfileId = state.selectedProfileIdForDefaults ?: state.activeUser.id
+    val targetProfile = state.allUsers.firstOrNull { it.id == currentProfileId } ?: state.activeUser
+
+    val currentMediaType = targetProfile.defaultMediaType ?: MediaType.ANIME
+    val currentCustomCat = targetProfile.defaultCustomCategory
+    val currentSubCat = targetProfile.defaultSubCategory
+    val currentStatus = targetProfile.defaultStatus
+
+    val categoryDisplayName = currentCustomCat ?: currentMediaType.displayName
+    val tabDisplayName = currentSubCat ?: (currentStatus?.getDisplayLabel(currentMediaType) ?: "All")
+
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Profile Selector Header
+        if (state.allUsers.size > 1) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Target Profile",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "Per-Profile Setting",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = LXPrimaryGreen
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Select which profile's startup default view you want to configure:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LXTextSecondary
+                    )
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(state.allUsers) { user ->
+                            val isSelected = user.id == targetProfile.id
+                            val isActive = user.id == state.activeUser.id
+                            val color = parseHexColor(user.avatarColorHex)
+
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSelected) LXPrimaryGreen.copy(alpha = 0.15f) else LXSurfaceElevated)
+                                    .border(
+                                        width = if (isSelected) 1.5.dp else 1.dp,
+                                        color = if (isSelected) LXPrimaryGreen else LXBorder,
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable { onSelectProfile(user.id) }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(CircleShape)
+                                        .background(color),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (!user.avatarImageUri.isNullOrBlank()) {
+                                        AsyncImage(
+                                            model = user.avatarImageUri,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .clip(CircleShape)
+                                        )
+                                    } else {
+                                        Text(
+                                            text = user.name.take(1).uppercase(),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = Color.Black
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = user.name,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    ),
+                                    color = if (isSelected) LXPrimaryGreen else LXTextPrimary
+                                )
+                                if (isActive) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(LXPrimaryGreen.copy(alpha = 0.2f))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "Active",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                            color = LXPrimaryGreen
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Active Boot Target Summary Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.6f)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Bookmark,
+                                contentDescription = null,
+                                tint = LXPrimaryGreen,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Current Boot Target",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = LXPrimaryGreen
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = targetProfile.name,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                    }
+                }
+
+                Text(
+                    text = "$categoryDisplayName • $tabDisplayName",
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextPrimary
+                )
+
+                Text(
+                    text = "When LX Track List launches into \"${targetProfile.name}\", it will open directly to $categoryDisplayName with the $tabDisplayName tab active.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+            }
+        }
+
+        // Section 1: Default Category
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "1. Default Category",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextPrimary
+                )
+                Text(
+                    text = "Select which category tab appears when opening the app:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                Text(
+                    text = "BUILT-IN CATEGORIES",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextSecondary
+                )
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    MediaType.entries.forEach { mediaType ->
+                        val isSelected = currentCustomCat == null && currentMediaType == mediaType
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isSelected) LXPrimaryGreen.copy(alpha = 0.15f) else LXSurfaceElevated)
+                                .border(
+                                    width = if (isSelected) 1.5.dp else 1.dp,
+                                    color = if (isSelected) LXPrimaryGreen else LXBorder,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .clickable {
+                                    val newSubCat = if (currentSubCat != null && state.allSubCategories.any {
+                                            it.categoryKey.equals(mediaType.name, ignoreCase = true) &&
+                                                    it.name.equals(currentSubCat, ignoreCase = true)
+                                        }) currentSubCat else null
+                                    onUpdateStartupDefaults(targetProfile.id, mediaType, null, newSubCat, currentStatus)
+                                }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = getCategoryIcon(mediaType),
+                                contentDescription = null,
+                                tint = if (isSelected) LXPrimaryGreen else LXTextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = mediaType.displayName,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                ),
+                                color = if (isSelected) LXPrimaryGreen else LXTextPrimary
+                            )
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (state.customCategories.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "CUSTOM CATEGORIES",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextSecondary
+                    )
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        state.customCategories.forEach { customCat ->
+                            val isSelected = currentCustomCat.equals(customCat.name, ignoreCase = true)
+                            val accentColor = parseHexColor(customCat.colorHex)
+
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSelected) accentColor.copy(alpha = 0.15f) else LXSurfaceElevated)
+                                    .border(
+                                        width = if (isSelected) 1.5.dp else 1.dp,
+                                        color = if (isSelected) accentColor else LXBorder,
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable {
+                                        val newSubCat = if (currentSubCat != null && state.allSubCategories.any {
+                                                it.categoryKey.equals(customCat.name, ignoreCase = true) &&
+                                                        it.name.equals(currentSubCat, ignoreCase = true)
+                                            }) currentSubCat else null
+                                        onUpdateStartupDefaults(
+                                            targetProfile.id,
+                                            customCat.mediaType ?: MediaType.MANGA,
+                                            customCat.name,
+                                            newSubCat,
+                                            currentStatus
+                                        )
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(accentColor)
+                                )
+                                Text(
+                                    text = customCat.name,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    ),
+                                    color = if (isSelected) accentColor else LXTextPrimary
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = accentColor,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Section 2: Default Tab (Status or SubCategory)
+        val activeKey = currentCustomCat ?: currentMediaType.name
+        val subCatsForActive = state.allSubCategories.filter { it.categoryKey.equals(activeKey, ignoreCase = true) }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "2. Default Tab (Status / SubCategory)",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextPrimary
+                )
+                Text(
+                    text = "Choose which tab is active for $categoryDisplayName on launch. SubCategory and Status are mutually exclusive.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                Text(
+                    text = "STATUS TABS",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextSecondary
+                )
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // ALL tab
+                    val isAllSelected = currentSubCat == null && currentStatus == null
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isAllSelected) LXPrimaryGreen.copy(alpha = 0.15f) else LXSurfaceElevated)
+                            .border(
+                                width = if (isAllSelected) 1.5.dp else 1.dp,
+                                color = if (isAllSelected) LXPrimaryGreen else LXBorder,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .clickable {
+                                onUpdateStartupDefaults(targetProfile.id, currentMediaType, currentCustomCat, null, null)
+                            }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "ALL (Default)",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Medium
+                            ),
+                            color = if (isAllSelected) LXPrimaryGreen else LXTextPrimary
+                        )
+                        if (isAllSelected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Selected",
+                                tint = LXPrimaryGreen,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    // Status entries
+                    val statuses = listOf(
+                        MediaStatus.WATCHING,
+                        MediaStatus.PLAN_TO_WATCH,
+                        MediaStatus.COMPLETED,
+                        MediaStatus.ON_HOLD,
+                        MediaStatus.DROPPED
+                    )
+
+                    statuses.forEach { st ->
+                        val isStatusSelected = currentSubCat == null && currentStatus == st
+                        val label = st.getDisplayLabel(currentMediaType)
+
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isStatusSelected) LXPrimaryGreen.copy(alpha = 0.15f) else LXSurfaceElevated)
+                                .border(
+                                    width = if (isStatusSelected) 1.5.dp else 1.dp,
+                                    color = if (isStatusSelected) LXPrimaryGreen else LXBorder,
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .clickable {
+                                    onUpdateStartupDefaults(targetProfile.id, currentMediaType, currentCustomCat, null, st)
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = if (isStatusSelected) FontWeight.Bold else FontWeight.Medium
+                                ),
+                                color = if (isStatusSelected) LXPrimaryGreen else LXTextPrimary
+                            )
+                            if (isStatusSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "SUBCATEGORIES FOR $categoryDisplayName",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextSecondary
+                )
+
+                if (subCatsForActive.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        subCatsForActive.forEach { subCat ->
+                            val isSubSelected = currentSubCat.equals(subCat.name, ignoreCase = true)
+                            val color = parseHexColor(subCat.colorHex)
+
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (isSubSelected) color.copy(alpha = 0.15f) else LXSurfaceElevated)
+                                    .border(
+                                        width = if (isSubSelected) 1.5.dp else 1.dp,
+                                        color = if (isSubSelected) color else LXBorder,
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable {
+                                        onUpdateStartupDefaults(
+                                            targetProfile.id,
+                                            currentMediaType,
+                                            currentCustomCat,
+                                            subCat.name,
+                                            null
+                                        )
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(color)
+                                )
+                                Text(
+                                    text = subCat.name,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = if (isSubSelected) FontWeight.Bold else FontWeight.Medium
+                                    ),
+                                    color = if (isSubSelected) color else LXTextPrimary
+                                )
+                                if (isSubSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = color,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated.copy(alpha = 0.5f))
+                            .border(1.dp, LXBorder.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = "No subcategories found for $categoryDisplayName. You can create subcategories directly from the Home screen tab bar (+) to use them as your startup view.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LXTextSecondary
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section 3: Reset
+        OutlinedButton(
+            onClick = { onResetStartupDefaults(targetProfile.id) },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Refresh,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = LXTextSecondary
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Reset ${targetProfile.name} to App Default (Anime • All)",
+                fontSize = 13.sp
+            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))

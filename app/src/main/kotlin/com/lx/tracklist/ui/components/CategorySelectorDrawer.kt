@@ -273,7 +273,7 @@ fun CategorySelectorSheet(
     }
 }
 
-private fun getCategoryIcon(type: MediaType): ImageVector {
+fun getCategoryIcon(type: MediaType): ImageVector {
     return when (type) {
         MediaType.ANIME -> Icons.Default.LiveTv
         MediaType.MANGA -> Icons.Default.MenuBook

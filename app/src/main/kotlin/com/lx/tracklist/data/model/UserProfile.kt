@@ -11,6 +11,10 @@ data class UserProfile(
     val avatarColorHex: String = "#A7EF60",
     val avatarImageUri: String? = null,
     val isDefault: Boolean = false,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val defaultMediaType: MediaType? = null,
+    val defaultCustomCategory: String? = null,
+    val defaultSubCategory: String? = null,
+    val defaultStatus: MediaStatus? = null
 )
 
