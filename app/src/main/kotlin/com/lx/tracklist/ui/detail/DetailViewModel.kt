@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.Calendar
 import kotlin.math.max
 
 class DetailViewModel(
@@ -69,6 +70,40 @@ class DetailViewModel(
         val cur = entry.value ?: return
         viewModelScope.launch {
             repository.toggleFavorite(cur)
+        }
+    }
+
+    fun updateStatus(newStatus: MediaStatus) {
+        val cur = entry.value ?: return
+        if (cur.status == newStatus) return
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val todayStart = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+
+            val newStartDate = if (newStatus == MediaStatus.WATCHING && cur.startDate == null) {
+                todayStart
+            } else {
+                cur.startDate
+            }
+
+            val newFinishDate = if (newStatus == MediaStatus.COMPLETED && cur.finishDate == null) {
+                todayStart
+            } else {
+                cur.finishDate
+            }
+
+            val updated = cur.copy(
+                status = newStatus,
+                startDate = newStartDate,
+                finishDate = newFinishDate,
+                updatedAt = now
+            )
+            repository.update(updated)
         }
     }
 

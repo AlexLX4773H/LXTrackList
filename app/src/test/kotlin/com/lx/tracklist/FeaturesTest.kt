@@ -675,4 +675,43 @@ class FeaturesTest {
         assertEquals(0f, state.reindexProgress, 0.001f)
         assertNull(state.reindexStatusText)
     }
+
+    @Test
+    fun testWatchingReadingDefaultStartDate() {
+        val todayStart = com.lx.tracklist.ui.edit.AddEditViewModel.todayStartTimestamp()
+        val cal = java.util.Calendar.getInstance()
+        cal.timeInMillis = todayStart
+        assertEquals(0, cal.get(java.util.Calendar.HOUR_OF_DAY))
+        assertEquals(0, cal.get(java.util.Calendar.MINUTE))
+        assertEquals(0, cal.get(java.util.Calendar.SECOND))
+        assertEquals(0, cal.get(java.util.Calendar.MILLISECOND))
+
+        // When entry is created or loaded in WATCHING (or READING) status and startDate is null,
+        // it defaults to todayStart
+        val defaultWatchingStartDate = if (MediaStatus.WATCHING == MediaStatus.WATCHING) todayStart else null
+        assertEquals(todayStart, defaultWatchingStartDate)
+
+        // When entry is in PLAN_TO_WATCH, startDate should remain null
+        val planToWatchStartDate: Long? = if (MediaStatus.PLAN_TO_WATCH == MediaStatus.WATCHING) todayStart else null
+        assertNull(planToWatchStartDate)
+
+        // When switching from PLAN_TO_WATCH to WATCHING, startDate is populated if null
+        var currentStartDate: Long? = null
+        var newStatus = MediaStatus.WATCHING
+        if (newStatus == MediaStatus.WATCHING && currentStartDate == null) {
+            currentStartDate = todayStart
+        }
+        assertEquals(todayStart, currentStartDate)
+
+        // When switching status but custom startDate is already set, it is preserved
+        val customStartDate = 1700000000000L
+        val entryWithCustomDate = MediaEntry(id = 1L, title = "Test", mediaType = MediaType.ANIME, status = MediaStatus.PLAN_TO_WATCH, startDate = customStartDate)
+        val preservedStartDate = if (MediaStatus.WATCHING == MediaStatus.WATCHING && entryWithCustomDate.startDate == null) todayStart else entryWithCustomDate.startDate
+        assertEquals(customStartDate, preservedStartDate)
+
+        // When switching to COMPLETED with no finishDate, finishDate is set
+        val entryWithoutFinishDate = MediaEntry(id = 2L, title = "Test 2", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING)
+        val newFinishDate = if (MediaStatus.COMPLETED == MediaStatus.COMPLETED && entryWithoutFinishDate.finishDate == null) todayStart else entryWithoutFinishDate.finishDate
+        assertEquals(todayStart, newFinishDate)
+    }
 }

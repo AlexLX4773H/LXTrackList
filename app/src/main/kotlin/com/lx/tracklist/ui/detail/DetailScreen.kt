@@ -3,6 +3,7 @@ package com.lx.tracklist.ui.detail
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
@@ -33,6 +36,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -248,9 +253,9 @@ fun DetailScreen(
                         }
 
                         // Badges
-                        Row(
+                        FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             MetaChip(label = currentEntry.mediaType.displayName, color = LXPrimaryGreen)
                             if (!currentEntry.customCategory.isNullOrBlank()) {
@@ -259,9 +264,10 @@ fun DetailScreen(
                             if (!currentEntry.subCategory.isNullOrBlank()) {
                                 MetaChip(label = currentEntry.subCategory, color = LXScoreGold)
                             }
-                            MetaChip(
-                                label = currentEntry.status.getDisplayLabel(currentEntry.mediaType),
-                                color = if (currentEntry.status == MediaStatus.COMPLETED) LXPrimaryGreen else LXTextSecondary
+                            StatusDropdownChip(
+                                status = currentEntry.status,
+                                mediaType = currentEntry.mediaType,
+                                onStatusSelected = { viewModel.updateStatus(it) }
                             )
                             if (currentEntry.score != null && currentEntry.score > 0) {
                                 Row(
@@ -383,9 +389,9 @@ fun DetailScreen(
                             }
                         }
 
-                        Row(
+                        FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             MetaChip(label = currentEntry.mediaType.displayName, color = LXPrimaryGreen)
                             if (!currentEntry.customCategory.isNullOrBlank()) {
@@ -394,9 +400,10 @@ fun DetailScreen(
                             if (!currentEntry.subCategory.isNullOrBlank()) {
                                 MetaChip(label = currentEntry.subCategory, color = LXScoreGold)
                             }
-                            MetaChip(
-                                label = currentEntry.status.getDisplayLabel(currentEntry.mediaType),
-                                color = if (currentEntry.status == MediaStatus.COMPLETED) LXPrimaryGreen else LXTextSecondary
+                            StatusDropdownChip(
+                                status = currentEntry.status,
+                                mediaType = currentEntry.mediaType,
+                                onStatusSelected = { viewModel.updateStatus(it) }
                             )
                             if (currentEntry.score != null && currentEntry.score > 0) {
                                 Row(
@@ -763,5 +770,86 @@ private fun MetaChip(label: String, color: Color) {
             color = color,
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
         )
+    }
+}
+
+@Composable
+private fun StatusDropdownChip(
+    status: MediaStatus,
+    mediaType: MediaType,
+    onStatusSelected: (MediaStatus) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val statusColor = when (status) {
+        MediaStatus.COMPLETED -> LXPrimaryGreen
+        MediaStatus.WATCHING -> LXPrimaryGreen
+        MediaStatus.ON_HOLD -> LXScoreGold
+        MediaStatus.DROPPED -> LXErrorRed.copy(alpha = 0.85f)
+        MediaStatus.PLAN_TO_WATCH -> LXTextSecondary
+    }
+
+    Box {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(statusColor.copy(alpha = 0.15f))
+                .border(1.dp, statusColor.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
+                .clickable { expanded = true }
+                .padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = status.getDisplayLabel(mediaType),
+                color = statusColor,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+            )
+            Spacer(modifier = Modifier.width(2.dp))
+            Icon(
+                imageVector = Icons.Default.ArrowDropDown,
+                contentDescription = "Change Status",
+                tint = statusColor,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(LXSurfaceElevated)
+        ) {
+            MediaStatus.entries.forEach { item ->
+                val isSelected = item == status
+                val itemLabel = item.getDisplayLabel(mediaType)
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.size(16.dp))
+                            }
+                            Text(
+                                text = itemLabel,
+                                color = if (isSelected) LXPrimaryGreen else LXTextPrimary,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onStatusSelected(item)
+                    }
+                )
+            }
+        }
     }
 }

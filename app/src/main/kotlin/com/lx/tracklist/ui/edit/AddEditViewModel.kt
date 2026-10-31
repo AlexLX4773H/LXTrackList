@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 data class AddEditUiState(
     val id: Long = 0L,
@@ -83,12 +84,16 @@ class AddEditViewModel(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
-        AddEditUiState(
-            mediaType = initialMediaType ?: MediaType.ANIME,
-            customCategory = initialCustomCategory,
-            subCategory = initialSubCategory,
-            status = initialStatus ?: MediaStatus.WATCHING
-        )
+        run {
+            val status = initialStatus ?: MediaStatus.WATCHING
+            AddEditUiState(
+                mediaType = initialMediaType ?: MediaType.ANIME,
+                customCategory = initialCustomCategory,
+                subCategory = initialSubCategory,
+                status = status,
+                startDate = if (status == MediaStatus.WATCHING) todayStartTimestamp() else null
+            )
+        }
     )
     val uiState: StateFlow<AddEditUiState> = _uiState.asStateFlow()
 
@@ -119,6 +124,11 @@ class AddEditViewModel(
                 val entry = repository.getEntryByIdSync(id)
                 if (entry != null) {
                     val altTitles = entry.getAlternateTitles()
+                    val effectiveStartDate = if (entry.status == MediaStatus.WATCHING && entry.startDate == null) {
+                        todayStartTimestamp()
+                    } else {
+                        entry.startDate
+                    }
                     _uiState.update {
                         it.copy(
                             id = entry.id,
@@ -136,7 +146,7 @@ class AddEditViewModel(
                             rewatchCount = entry.rewatchCount,
                             notes = entry.notes ?: "",
                             tags = entry.tags ?: "",
-                            startDate = entry.startDate,
+                            startDate = effectiveStartDate,
                             finishDate = entry.finishDate,
                             airedStartDate = entry.airedStartDate,
                             airedEndDate = entry.airedEndDate,
@@ -166,11 +176,13 @@ class AddEditViewModel(
                 }
             }
         } else {
+            val status = initialStatus ?: MediaStatus.WATCHING
             _uiState.value = AddEditUiState(
                 mediaType = initialMediaType ?: MediaType.ANIME,
                 customCategory = initialCustomCategory,
                 subCategory = initialSubCategory,
-                status = initialStatus ?: MediaStatus.WATCHING,
+                status = status,
+                startDate = if (status == MediaStatus.WATCHING) todayStartTimestamp() else null,
                 isSaved = false,
                 errorMessage = null
             )
@@ -211,10 +223,32 @@ class AddEditViewModel(
             }
         }
     }
-    fun updateMediaType(value: MediaType) = _uiState.update { it.copy(mediaType = value, customCategory = null, subCategory = null) }
+    fun updateMediaType(value: MediaType) = _uiState.update { current ->
+        val effectiveStartDate = if (current.status == MediaStatus.WATCHING && current.startDate == null) {
+            todayStartTimestamp()
+        } else {
+            current.startDate
+        }
+        current.copy(
+            mediaType = value,
+            customCategory = null,
+            subCategory = null,
+            startDate = effectiveStartDate
+        )
+    }
     fun updateCustomCategory(name: String?) = _uiState.update { it.copy(customCategory = name, subCategory = null) }
-    fun selectCategory(mediaType: MediaType, customCategory: String? = null) = _uiState.update {
-        it.copy(mediaType = mediaType, customCategory = customCategory, subCategory = null)
+    fun selectCategory(mediaType: MediaType, customCategory: String? = null) = _uiState.update { current ->
+        val effectiveStartDate = if (current.status == MediaStatus.WATCHING && current.startDate == null) {
+            todayStartTimestamp()
+        } else {
+            current.startDate
+        }
+        current.copy(
+            mediaType = mediaType,
+            customCategory = customCategory,
+            subCategory = null,
+            startDate = effectiveStartDate
+        )
     }
 
     fun updateSubCategory(name: String?) = _uiState.update { it.copy(subCategory = name?.trim()?.ifBlank { null }) }
@@ -228,7 +262,13 @@ class AddEditViewModel(
             updateSubCategory(trimmed)
         }
     }
-    fun updateStatus(value: MediaStatus) = _uiState.update { it.copy(status = value) }
+    fun updateStatus(value: MediaStatus) = _uiState.update { current ->
+        if (value == MediaStatus.WATCHING && current.startDate == null) {
+            current.copy(status = value, startDate = todayStartTimestamp())
+        } else {
+            current.copy(status = value)
+        }
+    }
     fun updateScore(value: Int?) = _uiState.update { it.copy(score = value) }
     fun updatePriority(value: Priority) = _uiState.update { it.copy(priority = value) }
     fun updateCoverUri(value: String) = _uiState.update { it.copy(coverImageUri = value) }
@@ -273,6 +313,11 @@ class AddEditViewModel(
                 else if (s.alternateTitle.isNotBlank()) listOf(s.alternateTitle)
                 else emptyList()
             )
+            val effectiveStartDate = if (s.status == MediaStatus.WATCHING && s.startDate == null) {
+                todayStartTimestamp()
+            } else {
+                s.startDate
+            }
             val entry = MediaEntry(
                 id = s.id,
                 title = s.title.trim(),
@@ -288,7 +333,7 @@ class AddEditViewModel(
                 rewatchCount = s.rewatchCount,
                 notes = s.notes.trim().ifBlank { null },
                 tags = s.tags.trim().ifBlank { null },
-                startDate = s.startDate,
+                startDate = effectiveStartDate,
                 finishDate = s.finishDate,
                 airedStartDate = s.airedStartDate,
                 airedEndDate = s.airedEndDate,
@@ -320,8 +365,19 @@ class AddEditViewModel(
                 repository.update(entry)
             }
 
-            _uiState.update { it.copy(isSaved = true) }
+            _uiState.update { it.copy(isSaved = true, startDate = effectiveStartDate) }
             _savedEvent.send(Unit)
+        }
+    }
+
+    companion object {
+        fun todayStartTimestamp(): Long {
+            return Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
         }
     }
 }
