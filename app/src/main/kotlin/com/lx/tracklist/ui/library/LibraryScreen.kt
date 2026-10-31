@@ -910,7 +910,7 @@ fun LibraryScreen(
                         item(key = "inc_$tag") {
                             RemovableFilterBadge(
                                 label = "+Tag: $tag",
-                                onRemove = { viewModel.toggleIncludedTag(tag) }
+                                onRemove = { viewModel.removeTagFilter(tag) }
                             )
                         }
                     }
@@ -919,7 +919,7 @@ fun LibraryScreen(
                         item(key = "exc_$tag") {
                             RemovableFilterBadge(
                                 label = "-Tag: $tag",
-                                onRemove = { viewModel.toggleExcludedTag(tag) }
+                                onRemove = { viewModel.removeTagFilter(tag) }
                             )
                         }
                     }
@@ -1009,23 +1009,77 @@ private fun RemovableFilterBadge(
     label: String,
     onRemove: () -> Unit
 ) {
+    val isExclude = label.startsWith("-")
+    val badgeColor = if (isExclude) LXErrorRed else LXPrimaryGreen
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(6.dp))
-            .background(LXPrimaryGreen.copy(alpha = 0.15f))
-            .border(1.dp, LXPrimaryGreen.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
+            .background(badgeColor.copy(alpha = 0.15f))
+            .border(1.dp, badgeColor.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
             .clickable(onClick = onRemove)
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, color = LXPrimaryGreen, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+        Text(text = label, color = badgeColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
         Spacer(modifier = Modifier.width(4.dp))
         Icon(
             imageVector = Icons.Default.Close,
             contentDescription = "Remove",
-            tint = LXPrimaryGreen,
+            tint = badgeColor,
             modifier = Modifier.size(12.dp)
         )
+    }
+}
+
+@Composable
+private fun TriStateTagCheckbox(
+    state: TagSelectionState,
+    modifier: Modifier = Modifier
+) {
+    val boxSize = 20.dp
+    val shape = RoundedCornerShape(4.dp)
+
+    when (state) {
+        TagSelectionState.UNSELECTED -> {
+            Box(
+                modifier = modifier
+                    .size(boxSize)
+                    .border(BorderStroke(1.5.dp, LXTextSecondary.copy(alpha = 0.6f)), shape)
+                    .clip(shape)
+            )
+        }
+        TagSelectionState.INCLUDED -> {
+            Box(
+                modifier = modifier
+                    .size(boxSize)
+                    .background(LXPrimaryGreen, shape)
+                    .clip(shape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Included (✓)",
+                    tint = LXBackgroundBlack,
+                    modifier = Modifier.size(15.dp)
+                )
+            }
+        }
+        TagSelectionState.EXCLUDED -> {
+            Box(
+                modifier = modifier
+                    .size(boxSize)
+                    .background(LXErrorRed, shape)
+                    .clip(shape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Excluded (✕)",
+                    tint = Color.White,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
     }
 }
 
@@ -1059,7 +1113,6 @@ private fun AdvancedFilterSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showTagsSubMenu by remember { mutableStateOf(false) }
     var tagSearchQuery by remember { mutableStateOf("") }
-    var tagFilterTab by remember { mutableStateOf(0) } // 0 = Include, 1 = Exclude
 
     BackHandler(enabled = showTagsSubMenu) {
         showTagsSubMenu = false
@@ -1136,30 +1189,35 @@ private fun AdvancedFilterSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
-                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(if (tagFilterTab == 0) LXPrimaryGreen else LXErrorRed)
-                        )
-                        Text(
-                            text = if (tagFilterTab == 0)
-                                "Check tags to INCLUDE (must match)"
-                            else
-                                "Check tags to EXCLUDE (inverse filter / hide items)",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = LXTextSecondary
-                        )
+                                .size(16.dp)
+                                .background(LXPrimaryGreen, RoundedCornerShape(3.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = LXBackgroundBlack, modifier = Modifier.size(12.dp))
+                        }
+                        Text("1 tap = Include", fontSize = 11.sp, color = LXPrimaryGreen, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp)
+                                .background(LXErrorRed, RoundedCornerShape(3.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+                        }
+                        Text("2 taps = Exclude", fontSize = 11.sp, color = LXErrorRed, fontWeight = FontWeight.Bold)
                     }
 
                     Text(
                         text = "${state.includedTags.size} inc • ${state.excludedTags.size} exc",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = if (tagFilterTab == 0) LXPrimaryGreen else LXErrorRed
+                        color = if (state.includedTags.isNotEmpty() || state.excludedTags.isNotEmpty()) LXPrimaryGreen else LXTextSecondary
                     )
                 }
 
@@ -1193,87 +1251,7 @@ private fun AdvancedFilterSheet(
                     )
                 )
 
-                // Mode Tabs: Include (Multi-select) vs Exclude (Inverse Select)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(LXSurfaceElevated)
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    // Include Tab
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (tagFilterTab == 0) LXPrimaryGreen.copy(alpha = 0.2f) else Color.Transparent)
-                            .border(
-                                width = if (tagFilterTab == 0) 1.dp else 0.dp,
-                                color = if (tagFilterTab == 0) LXPrimaryGreen else Color.Transparent,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .clickable { tagFilterTab = 0 }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                tint = if (tagFilterTab == 0) LXPrimaryGreen else LXTextSecondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = "Include Tags (${state.includedTags.size})",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = if (tagFilterTab == 0) FontWeight.Bold else FontWeight.Medium
-                                ),
-                                color = if (tagFilterTab == 0) LXPrimaryGreen else LXTextSecondary
-                            )
-                        }
-                    }
-
-                    // Exclude Tab (Inverse)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (tagFilterTab == 1) LXErrorRed.copy(alpha = 0.2f) else Color.Transparent)
-                            .border(
-                                width = if (tagFilterTab == 1) 1.dp else 0.dp,
-                                color = if (tagFilterTab == 1) LXErrorRed else Color.Transparent,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .clickable { tagFilterTab = 1 }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = null,
-                                tint = if (tagFilterTab == 1) LXErrorRed else LXTextSecondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = "Exclude Tags (${state.excludedTags.size})",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = if (tagFilterTab == 1) FontWeight.Bold else FontWeight.Medium
-                                ),
-                                color = if (tagFilterTab == 1) LXErrorRed else LXTextSecondary
-                            )
-                        }
-                    }
-                }
-
-                // Tag List with Checkboxes
+                // Tag List with Tri-State Checkboxes
                 val filteredTags = remember(state.availableTags, tagSearchQuery) {
                     if (tagSearchQuery.isBlank()) {
                         state.availableTags
@@ -1318,64 +1296,51 @@ private fun AdvancedFilterSheet(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         filteredTags.forEach { tag ->
-                            val isIncluded = state.includedTags.any { it.equals(tag, ignoreCase = true) }
-                            val isExcluded = state.excludedTags.any { it.equals(tag, ignoreCase = true) }
+                            val tagState = state.getTagState(tag)
                             val count = state.tagCounts[tag] ?: 0
-
-                            val isCurrentChecked = if (tagFilterTab == 0) isIncluded else isExcluded
-                            val activeColor = if (tagFilterTab == 0) LXPrimaryGreen else LXErrorRed
 
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(
-                                        if (isCurrentChecked) activeColor.copy(alpha = 0.12f)
-                                        else LXSurfaceElevated
+                                        when (tagState) {
+                                            TagSelectionState.INCLUDED -> LXPrimaryGreen.copy(alpha = 0.12f)
+                                            TagSelectionState.EXCLUDED -> LXErrorRed.copy(alpha = 0.12f)
+                                            TagSelectionState.UNSELECTED -> LXSurfaceElevated
+                                        }
                                     )
                                     .border(
-                                        width = if (isCurrentChecked) 1.dp else 0.5.dp,
-                                        color = if (isCurrentChecked) activeColor.copy(alpha = 0.6f) else LXBorder,
+                                        width = if (tagState != TagSelectionState.UNSELECTED) 1.dp else 0.5.dp,
+                                        color = when (tagState) {
+                                            TagSelectionState.INCLUDED -> LXPrimaryGreen.copy(alpha = 0.6f)
+                                            TagSelectionState.EXCLUDED -> LXErrorRed.copy(alpha = 0.6f)
+                                            TagSelectionState.UNSELECTED -> LXBorder
+                                        },
                                         shape = RoundedCornerShape(8.dp)
                                     )
-                                    .clickable {
-                                        if (tagFilterTab == 0) {
-                                            viewModel.toggleIncludedTag(tag)
-                                        } else {
-                                            viewModel.toggleExcludedTag(tag)
-                                        }
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    .clickable { viewModel.cycleTagState(tag) }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Checkbox(
-                                        checked = isCurrentChecked,
-                                        onCheckedChange = {
-                                            if (tagFilterTab == 0) {
-                                                viewModel.toggleIncludedTag(tag)
-                                            } else {
-                                                viewModel.toggleExcludedTag(tag)
-                                            }
-                                        },
-                                        colors = CheckboxDefaults.colors(
-                                            checkedColor = activeColor,
-                                            uncheckedColor = LXTextSecondary,
-                                            checkmarkColor = LXBackgroundBlack
-                                        )
-                                    )
+                                    TriStateTagCheckbox(state = tagState)
 
                                     Text(
                                         text = tag,
                                         style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontWeight = if (isCurrentChecked) FontWeight.Bold else FontWeight.Normal
+                                            fontWeight = if (tagState != TagSelectionState.UNSELECTED) FontWeight.Bold else FontWeight.Normal
                                         ),
-                                        color = if (isCurrentChecked) activeColor else LXTextPrimary
+                                        color = when (tagState) {
+                                            TagSelectionState.INCLUDED -> LXPrimaryGreen
+                                            TagSelectionState.EXCLUDED -> LXErrorRed
+                                            TagSelectionState.UNSELECTED -> LXTextPrimary
+                                        }
                                     )
                                 }
 
@@ -1383,32 +1348,36 @@ private fun AdvancedFilterSheet(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    if (tagFilterTab == 0 && isExcluded) {
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(4.dp))
-                                                .background(LXErrorRed.copy(alpha = 0.2f))
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                        ) {
-                                            Text(
-                                                text = "Excluded",
-                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                                color = LXErrorRed
-                                            )
+                                    when (tagState) {
+                                        TagSelectionState.INCLUDED -> {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(LXPrimaryGreen.copy(alpha = 0.2f))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Included",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                                    color = LXPrimaryGreen
+                                                )
+                                            }
                                         }
-                                    } else if (tagFilterTab == 1 && isIncluded) {
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(4.dp))
-                                                .background(LXPrimaryGreen.copy(alpha = 0.2f))
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                        ) {
-                                            Text(
-                                                text = "Included",
-                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                                color = LXPrimaryGreen
-                                            )
+                                        TagSelectionState.EXCLUDED -> {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(LXErrorRed.copy(alpha = 0.2f))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Excluded",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                                    color = LXErrorRed
+                                                )
+                                            }
                                         }
+                                        TagSelectionState.UNSELECTED -> {}
                                     }
 
                                     Text(
@@ -1702,9 +1671,9 @@ private fun AdvancedFilterSheet(
                                     )
                                     Text(
                                         text = if (state.includedTags.isEmpty() && state.excludedTags.isEmpty())
-                                            "Multi-select tags to include or exclude (inverse)"
+                                            "1 tap: [✓] Include • 2 taps: [✕] Exclude • 3 taps: Clear"
                                         else
-                                            "${state.includedTags.size} included (showing) • ${state.excludedTags.size} excluded (hiding)",
+                                            "${state.includedTags.size} included (✓) • ${state.excludedTags.size} excluded (✕)",
                                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                         color = LXTextSecondary
                                     )
@@ -1730,13 +1699,13 @@ private fun AdvancedFilterSheet(
                             state.includedTags.forEach { tag ->
                                 RemovableFilterBadge(
                                     label = "+$tag",
-                                    onRemove = { viewModel.toggleIncludedTag(tag) }
+                                    onRemove = { viewModel.removeTagFilter(tag) }
                                 )
                             }
                             state.excludedTags.forEach { tag ->
                                 RemovableFilterBadge(
                                     label = "-$tag",
-                                    onRemove = { viewModel.toggleExcludedTag(tag) }
+                                    onRemove = { viewModel.removeTagFilter(tag) }
                                 )
                             }
                         }

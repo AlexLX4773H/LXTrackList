@@ -992,4 +992,71 @@ class FeaturesTest {
         assertEquals(4, state.availableTags.size)
         assertEquals(5, state.tagCounts["Action"])
     }
+
+    @Test
+    fun testTriStateTagCycling() {
+        val tag = "Supernatural"
+
+        fun cycle(currentIncluded: Set<String>, currentExcluded: Set<String>, t: String): Pair<Set<String>, Set<String>> {
+            val cleanTag = t.trim()
+            val isIncluded = currentIncluded.any { it.equals(cleanTag, ignoreCase = true) }
+            val isExcluded = currentExcluded.any { it.equals(cleanTag, ignoreCase = true) }
+
+            return when {
+                !isIncluded && !isExcluded -> {
+                    // 1st press: UNSELECTED -> INCLUDED (tick)
+                    Pair(currentIncluded + cleanTag, currentExcluded.filter { !it.equals(cleanTag, ignoreCase = true) }.toSet())
+                }
+                isIncluded -> {
+                    // 2nd press: INCLUDED -> EXCLUDED (x)
+                    Pair(currentIncluded.filter { !it.equals(cleanTag, ignoreCase = true) }.toSet(), currentExcluded + cleanTag)
+                }
+                else -> {
+                    // 3rd press: EXCLUDED -> UNSELECTED (no select)
+                    Pair(currentIncluded.filter { !it.equals(cleanTag, ignoreCase = true) }.toSet(), currentExcluded.filter { !it.equals(cleanTag, ignoreCase = true) }.toSet())
+                }
+            }
+        }
+
+        // Initial: Unselected
+        var included = emptySet<String>()
+        var excluded = emptySet<String>()
+        var state = com.lx.tracklist.ui.library.LibraryUiState(includedTags = included, excludedTags = excluded)
+        assertEquals(com.lx.tracklist.ui.library.TagSelectionState.UNSELECTED, state.getTagState(tag))
+
+        // 1st press: select / include (tick ✓)
+        val afterPress1 = cycle(included, excluded, tag)
+        included = afterPress1.first
+        excluded = afterPress1.second
+        state = com.lx.tracklist.ui.library.LibraryUiState(includedTags = included, excludedTags = excluded)
+        assertEquals(com.lx.tracklist.ui.library.TagSelectionState.INCLUDED, state.getTagState(tag))
+        assertTrue(included.contains(tag))
+        assertFalse(excluded.contains(tag))
+
+        // 2nd press: exclude (x ✕)
+        val afterPress2 = cycle(included, excluded, tag)
+        included = afterPress2.first
+        excluded = afterPress2.second
+        state = com.lx.tracklist.ui.library.LibraryUiState(includedTags = included, excludedTags = excluded)
+        assertEquals(com.lx.tracklist.ui.library.TagSelectionState.EXCLUDED, state.getTagState(tag))
+        assertFalse(included.contains(tag))
+        assertTrue(excluded.contains(tag))
+
+        // 3rd press: no select / clear
+        val afterPress3 = cycle(included, excluded, tag)
+        included = afterPress3.first
+        excluded = afterPress3.second
+        state = com.lx.tracklist.ui.library.LibraryUiState(includedTags = included, excludedTags = excluded)
+        assertEquals(com.lx.tracklist.ui.library.TagSelectionState.UNSELECTED, state.getTagState(tag))
+        assertFalse(included.contains(tag))
+        assertFalse(excluded.contains(tag))
+
+        // 4th press: cycle restarts at include (tick ✓)
+        val afterPress4 = cycle(included, excluded, tag)
+        included = afterPress4.first
+        excluded = afterPress4.second
+        state = com.lx.tracklist.ui.library.LibraryUiState(includedTags = included, excludedTags = excluded)
+        assertEquals(com.lx.tracklist.ui.library.TagSelectionState.INCLUDED, state.getTagState(tag))
+        assertTrue(included.contains(tag))
+    }
 }

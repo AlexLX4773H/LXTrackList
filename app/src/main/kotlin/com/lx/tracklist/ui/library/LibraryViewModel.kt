@@ -28,6 +28,12 @@ enum class LibrarySortOption(val displayName: String) {
     REWATCH_DESC("Most Re-watched/Re-read")
 }
 
+enum class TagSelectionState {
+    UNSELECTED,
+    INCLUDED,
+    EXCLUDED
+}
+
 data class LibraryUiState(
     val entries: List<MediaEntry> = emptyList(),
     val searchQuery: String = "",
@@ -53,6 +59,15 @@ data class LibraryUiState(
     val activeFilterCount: Int = 0
 ) {
     val isSelectionMode: Boolean get() = selectedIds.isNotEmpty()
+
+    fun getTagState(tag: String): TagSelectionState {
+        val clean = tag.trim()
+        return when {
+            includedTags.any { it.equals(clean, ignoreCase = true) } -> TagSelectionState.INCLUDED
+            excludedTags.any { it.equals(clean, ignoreCase = true) } -> TagSelectionState.EXCLUDED
+            else -> TagSelectionState.UNSELECTED
+        }
+    }
 }
 
 private data class LibraryFilterState(
@@ -245,6 +260,38 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun setOnlyUnrated(unrated: Boolean) {
         _filterState.update { it.copy(onlyUnrated = unrated, minScore = if (unrated) null else it.minScore) }
+    }
+
+    fun cycleTagState(tag: String) {
+        _filterState.update { state ->
+            val cleanTag = tag.trim()
+            val isIncluded = state.includedTags.any { it.equals(cleanTag, ignoreCase = true) }
+            val isExcluded = state.excludedTags.any { it.equals(cleanTag, ignoreCase = true) }
+
+            when {
+                !isIncluded && !isExcluded -> {
+                    // 1st press: UNSELECTED -> INCLUDED (tick)
+                    state.copy(
+                        includedTags = state.includedTags + cleanTag,
+                        excludedTags = state.excludedTags.filter { !it.equals(cleanTag, ignoreCase = true) }.toSet()
+                    )
+                }
+                isIncluded -> {
+                    // 2nd press: INCLUDED -> EXCLUDED (x)
+                    state.copy(
+                        includedTags = state.includedTags.filter { !it.equals(cleanTag, ignoreCase = true) }.toSet(),
+                        excludedTags = state.excludedTags + cleanTag
+                    )
+                }
+                else -> {
+                    // 3rd press: EXCLUDED -> UNSELECTED (no select)
+                    state.copy(
+                        includedTags = state.includedTags.filter { !it.equals(cleanTag, ignoreCase = true) }.toSet(),
+                        excludedTags = state.excludedTags.filter { !it.equals(cleanTag, ignoreCase = true) }.toSet()
+                    )
+                }
+            }
+        }
     }
 
     fun toggleIncludedTag(tag: String) {
