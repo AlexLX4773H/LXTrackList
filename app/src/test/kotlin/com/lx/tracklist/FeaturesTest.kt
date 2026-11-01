@@ -1059,4 +1059,101 @@ class FeaturesTest {
         assertEquals(com.lx.tracklist.ui.library.TagSelectionState.INCLUDED, state.getTagState(tag))
         assertTrue(included.contains(tag))
     }
+
+    @Test
+    fun testFavoritesAndAiringInclusionAndExclusionFilter() {
+        // Test enum cycling
+        var opt = com.lx.tracklist.ui.library.InclusionFilterOption.ALL
+        assertEquals(com.lx.tracklist.ui.library.InclusionFilterOption.ALL, opt)
+        opt = opt.next()
+        assertEquals(com.lx.tracklist.ui.library.InclusionFilterOption.INCLUDE_ONLY, opt)
+        opt = opt.next()
+        assertEquals(com.lx.tracklist.ui.library.InclusionFilterOption.EXCLUDE, opt)
+        opt = opt.next()
+        assertEquals(com.lx.tracklist.ui.library.InclusionFilterOption.ALL, opt)
+
+        // Test filtering behavior on dataset
+        val e1 = MediaEntry(id = 1L, title = "Fav & Airing", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, isFavorite = true, isAiring = true)
+        val e2 = MediaEntry(id = 2L, title = "Fav & Finished", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, isFavorite = true, isAiring = false)
+        val e3 = MediaEntry(id = 3L, title = "Normal Airing", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, isFavorite = false, isAiring = true)
+        val e4 = MediaEntry(id = 4L, title = "Normal Finished", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, isFavorite = false, isAiring = false)
+
+        val entries = listOf(e1, e2, e3, e4)
+
+        // 1. Favorites: Include only
+        val favOnly = entries.filter { it.isFavorite }
+        assertEquals(listOf(1L, 2L), favOnly.map { it.id })
+
+        // 2. Favorites: Exclude favorites (hide favorites)
+        val favExcluded = entries.filter { !it.isFavorite }
+        assertEquals(listOf(3L, 4L), favExcluded.map { it.id })
+
+        // 3. Airing: Include only
+        val airingOnly = entries.filter { it.isAiring }
+        assertEquals(listOf(1L, 3L), airingOnly.map { it.id })
+
+        // 4. Airing: Exclude airing (finished only)
+        val airingExcluded = entries.filter { !it.isAiring }
+        assertEquals(listOf(2L, 4L), airingExcluded.map { it.id })
+
+        // 5. Combined: Exclude Favorites AND Exclude Airing (Only non-favorite completed items)
+        val nonFavFinished = entries.filter { !it.isFavorite && !it.isAiring }
+        assertEquals(listOf(4L), nonFavFinished.map { it.id })
+
+        // 6. Combined: Include Favorites AND Exclude Airing (Favorite finished items)
+        val favFinished = entries.filter { it.isFavorite && !it.isAiring }
+        assertEquals(listOf(2L), favFinished.map { it.id })
+    }
+
+    @Test
+    fun testScoreDistributionCalculation() {
+        val anime1 = MediaEntry(id = 1L, title = "A1", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, score = 10)
+        val anime2 = MediaEntry(id = 2L, title = "A2", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, score = 8)
+        val anime3 = MediaEntry(id = 3L, title = "A3", mediaType = MediaType.ANIME, status = MediaStatus.WATCHING, score = 8)
+        val anime4 = MediaEntry(id = 4L, title = "A4", mediaType = MediaType.ANIME, status = MediaStatus.PLAN_TO_WATCH, score = null)
+        val manga1 = MediaEntry(id = 5L, title = "M1", mediaType = MediaType.MANGA, status = MediaStatus.COMPLETED, score = null)
+        val donghua1 = MediaEntry(id = 6L, title = "D1", mediaType = MediaType.ANIME, customCategory = "Donghua", status = MediaStatus.COMPLETED, score = 9)
+
+        val entries = listOf(anime1, anime2, anime3, anime4, manga1, donghua1)
+
+        // 1. Anime distribution (all statuses)
+        val animeData = com.lx.tracklist.ui.stats.calculateScoreDistribution(entries, "ANIME", completedOnly = false)
+        assertEquals(4, animeData.totalCategoryEntries)
+        assertEquals(3, animeData.scoredCount)
+        assertEquals(2, animeData.distribution[8])
+        assertEquals(1, animeData.distribution[10])
+        assertEquals(0, animeData.distribution[9])
+        assertEquals(0, animeData.distribution[1])
+        assertEquals((10 + 8 + 8) / 3.0, animeData.meanScore, 0.001)
+        assertEquals(2, animeData.maxFrequency)
+
+        // 2. Anime completed only
+        val animeCompleted = com.lx.tracklist.ui.stats.calculateScoreDistribution(entries, "ANIME", completedOnly = true)
+        assertEquals(2, animeCompleted.scoredCount)
+        assertEquals(1, animeCompleted.distribution[10])
+        assertEquals(1, animeCompleted.distribution[8])
+        assertEquals(9.0, animeCompleted.meanScore, 0.001)
+
+        // 3. Manga with NO scores -> should have scoredCount = 0 (triggers Image 2 message)
+        val mangaData = com.lx.tracklist.ui.stats.calculateScoreDistribution(entries, "MANGA", completedOnly = false)
+        assertEquals(1, mangaData.totalCategoryEntries)
+        assertEquals(0, mangaData.scoredCount)
+        assertEquals(0.0, mangaData.meanScore, 0.001)
+        assertEquals(0, mangaData.maxFrequency)
+
+        // 4. Custom Category "Donghua"
+        val donghuaData = com.lx.tracklist.ui.stats.calculateScoreDistribution(entries, "Donghua", completedOnly = false)
+        assertEquals(1, donghuaData.totalCategoryEntries)
+        assertEquals(1, donghuaData.scoredCount)
+        assertEquals(1, donghuaData.distribution[9])
+        assertEquals(9.0, donghuaData.meanScore, 0.001)
+
+        // 5. Score rating labels
+        assertEquals("Masterpiece", com.lx.tracklist.ui.stats.getScoreLabel(10))
+        assertEquals("Great", com.lx.tracklist.ui.stats.getScoreLabel(9))
+        assertEquals("Very Good", com.lx.tracklist.ui.stats.getScoreLabel(8))
+        assertEquals("Good", com.lx.tracklist.ui.stats.getScoreLabel(7))
+        assertEquals("Average", com.lx.tracklist.ui.stats.getScoreLabel(5))
+        assertEquals("Appalling", com.lx.tracklist.ui.stats.getScoreLabel(1))
+    }
 }

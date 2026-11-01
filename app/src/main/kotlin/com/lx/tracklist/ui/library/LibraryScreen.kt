@@ -757,35 +757,13 @@ fun LibraryScreen(
                 }
             }
 
-            // Quick Category & Favorites Horizontal Chips
+            // Quick Category Horizontal Chips
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item {
-                    FilterChip(
-                        selected = state.onlyFavorites,
-                        onClick = { viewModel.toggleFavoritesFilter() },
-                        label = { Text("Favorites", fontSize = 12.sp) },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Favorite,
-                                contentDescription = null,
-                                tint = if (state.onlyFavorites) LXBackgroundBlack else LXPrimaryGreen,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
-                }
-
                 item {
                     FilterChip(
                         selected = state.selectedCategoryFilter == null && state.selectedCustomCategoryFilter == null,
@@ -844,7 +822,8 @@ fun LibraryScreen(
                     state.onlyUnrated ||
                     state.includedTags.isNotEmpty() ||
                     state.excludedTags.isNotEmpty() ||
-                    state.onlyAiring
+                    state.favoritesFilter != InclusionFilterOption.ALL ||
+                    state.airingFilter != InclusionFilterOption.ALL
 
             if (hasActiveFilters) {
                 LazyRow(
@@ -924,11 +903,34 @@ fun LibraryScreen(
                         }
                     }
 
-                    if (state.onlyAiring) {
+                    if (state.favoritesFilter == InclusionFilterOption.INCLUDE_ONLY) {
                         item {
                             RemovableFilterBadge(
-                                label = "Airing Only",
-                                onRemove = { viewModel.toggleAiringFilter() }
+                                label = "+Favorites",
+                                onRemove = { viewModel.setFavoritesFilter(InclusionFilterOption.ALL) }
+                            )
+                        }
+                    } else if (state.favoritesFilter == InclusionFilterOption.EXCLUDE) {
+                        item {
+                            RemovableFilterBadge(
+                                label = "-Favorites",
+                                onRemove = { viewModel.setFavoritesFilter(InclusionFilterOption.ALL) }
+                            )
+                        }
+                    }
+
+                    if (state.airingFilter == InclusionFilterOption.INCLUDE_ONLY) {
+                        item {
+                            RemovableFilterBadge(
+                                label = "+Airing",
+                                onRemove = { viewModel.setAiringFilter(InclusionFilterOption.ALL) }
+                            )
+                        }
+                    } else if (state.airingFilter == InclusionFilterOption.EXCLUDE) {
+                        item {
+                            RemovableFilterBadge(
+                                label = "-Airing",
+                                onRemove = { viewModel.setAiringFilter(InclusionFilterOption.ALL) }
                             )
                         }
                     }
@@ -1078,6 +1080,161 @@ private fun TriStateTagCheckbox(
                     tint = Color.White,
                     modifier = Modifier.size(14.dp)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TriStateFilterRow(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    state: InclusionFilterOption,
+    onClick: () -> Unit
+) {
+    val activeColor = when (state) {
+        InclusionFilterOption.INCLUDE_ONLY -> LXPrimaryGreen
+        InclusionFilterOption.EXCLUDE -> LXErrorRed
+        InclusionFilterOption.ALL -> LXTextSecondary
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                when (state) {
+                    InclusionFilterOption.INCLUDE_ONLY -> LXPrimaryGreen.copy(alpha = 0.12f)
+                    InclusionFilterOption.EXCLUDE -> LXErrorRed.copy(alpha = 0.12f)
+                    InclusionFilterOption.ALL -> LXSurfaceElevated
+                }
+            )
+            .border(
+                width = if (state != InclusionFilterOption.ALL) 1.dp else 0.5.dp,
+                color = when (state) {
+                    InclusionFilterOption.INCLUDE_ONLY -> LXPrimaryGreen.copy(alpha = 0.6f)
+                    InclusionFilterOption.EXCLUDE -> LXErrorRed.copy(alpha = 0.6f)
+                    InclusionFilterOption.ALL -> LXBorder
+                },
+                shape = RoundedCornerShape(10.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(
+                        when (state) {
+                            InclusionFilterOption.INCLUDE_ONLY -> LXPrimaryGreen.copy(alpha = 0.2f)
+                            InclusionFilterOption.EXCLUDE -> LXErrorRed.copy(alpha = 0.2f)
+                            InclusionFilterOption.ALL -> LXSurfaceBlack
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = activeColor,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = if (state != InclusionFilterOption.ALL) FontWeight.Bold else FontWeight.Medium
+                    ),
+                    color = if (state != InclusionFilterOption.ALL) activeColor else LXTextPrimary
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = if (state != InclusionFilterOption.ALL) activeColor.copy(alpha = 0.85f) else LXTextSecondary
+                )
+            }
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            when (state) {
+                InclusionFilterOption.ALL -> {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .border(BorderStroke(1.5.dp, LXTextSecondary.copy(alpha = 0.5f)), RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(4.dp))
+                    )
+                }
+                InclusionFilterOption.INCLUDE_ONLY -> {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(LXPrimaryGreen.copy(alpha = 0.2f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "Only",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                            color = LXPrimaryGreen
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .background(LXPrimaryGreen, RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(4.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Included",
+                            tint = LXBackgroundBlack,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+                InclusionFilterOption.EXCLUDE -> {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(LXErrorRed.copy(alpha = 0.2f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "Excluded",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                            color = LXErrorRed
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .background(LXErrorRed, RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(4.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Excluded",
+                            tint = Color.White,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
             }
         }
     }
@@ -1712,7 +1869,7 @@ private fun AdvancedFilterSheet(
                     }
                 }
 
-                // Quick Toggles Section
+                // Quick Toggles Section (Extra Options with Tri-State Exclusion)
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "Extra Options",
@@ -1720,47 +1877,31 @@ private fun AdvancedFilterSheet(
                         color = LXTextPrimary
                     )
 
-                    // Airing Only Toggle
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(LXSurfaceElevated)
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Only Ongoing / Airing", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
-                        Switch(
-                            checked = state.onlyAiring,
-                            onCheckedChange = { viewModel.toggleAiringFilter() },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = LXBackgroundBlack,
-                                checkedTrackColor = LXPrimaryGreen
-                            )
-                        )
-                    }
+                    // Ongoing / Airing Filter
+                    TriStateFilterRow(
+                        title = "Ongoing / Airing",
+                        subtitle = when (state.airingFilter) {
+                            InclusionFilterOption.ALL -> "Tap: Only Ongoing → Exclude Ongoing → Off"
+                            InclusionFilterOption.INCLUDE_ONLY -> "Showing Only Ongoing / Airing"
+                            InclusionFilterOption.EXCLUDE -> "Excluding / Hiding Ongoing (Finished only)"
+                        },
+                        icon = Icons.Default.Tv,
+                        state = state.airingFilter,
+                        onClick = { viewModel.cycleAiringFilter() }
+                    )
 
-                    // Favorites Only Toggle
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(LXSurfaceElevated)
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Favorites Only", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
-                        Switch(
-                            checked = state.onlyFavorites,
-                            onCheckedChange = { viewModel.toggleFavoritesFilter() },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = LXBackgroundBlack,
-                                checkedTrackColor = LXPrimaryGreen
-                            )
-                        )
-                    }
+                    // Favorites Filter
+                    TriStateFilterRow(
+                        title = "Favorites",
+                        subtitle = when (state.favoritesFilter) {
+                            InclusionFilterOption.ALL -> "Tap: Only Favorites → Exclude Favorites → Off"
+                            InclusionFilterOption.INCLUDE_ONLY -> "Showing Only Favorites"
+                            InclusionFilterOption.EXCLUDE -> "Excluding / Hiding Favorites"
+                        },
+                        icon = Icons.Default.Favorite,
+                        state = state.favoritesFilter,
+                        onClick = { viewModel.cycleFavoritesFilter() }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))

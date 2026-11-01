@@ -34,6 +34,18 @@ enum class TagSelectionState {
     EXCLUDED
 }
 
+enum class InclusionFilterOption {
+    ALL,
+    INCLUDE_ONLY,
+    EXCLUDE;
+
+    fun next(): InclusionFilterOption = when (this) {
+        ALL -> INCLUDE_ONLY
+        INCLUDE_ONLY -> EXCLUDE
+        EXCLUDE -> ALL
+    }
+}
+
 data class LibraryUiState(
     val entries: List<MediaEntry> = emptyList(),
     val searchQuery: String = "",
@@ -47,8 +59,8 @@ data class LibraryUiState(
     val excludedTags: Set<String> = emptySet(),
     val availableTags: List<String> = emptyList(),
     val tagCounts: Map<String, Int> = emptyMap(),
-    val onlyFavorites: Boolean = false,
-    val onlyAiring: Boolean = false,
+    val favoritesFilter: InclusionFilterOption = InclusionFilterOption.ALL,
+    val airingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val selectedSort: LibrarySortOption = LibrarySortOption.RECENTLY_UPDATED,
     val totalCount: Int = 0,
     val selectedIds: Set<Long> = emptySet(),
@@ -59,6 +71,8 @@ data class LibraryUiState(
     val activeFilterCount: Int = 0
 ) {
     val isSelectionMode: Boolean get() = selectedIds.isNotEmpty()
+    val onlyFavorites: Boolean get() = favoritesFilter == InclusionFilterOption.INCLUDE_ONLY
+    val onlyAiring: Boolean get() = airingFilter == InclusionFilterOption.INCLUDE_ONLY
 
     fun getTagState(tag: String): TagSelectionState {
         val clean = tag.trim()
@@ -80,8 +94,8 @@ private data class LibraryFilterState(
     val onlyUnrated: Boolean = false,
     val includedTags: Set<String> = emptySet(),
     val excludedTags: Set<String> = emptySet(),
-    val onlyFavorites: Boolean = false,
-    val onlyAiring: Boolean = false,
+    val favoritesFilter: InclusionFilterOption = InclusionFilterOption.ALL,
+    val airingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val sortOption: LibrarySortOption = LibrarySortOption.RECENTLY_UPDATED,
     val selectedIds: Set<Long> = emptySet(),
     val isFilterSheetOpen: Boolean = false,
@@ -96,8 +110,8 @@ private data class LibraryFilterState(
             if (statusFilter != null) count++
             if (minScore != null || onlyUnrated) count++
             if (includedTags.isNotEmpty() || excludedTags.isNotEmpty()) count++
-            if (onlyFavorites) count++
-            if (onlyAiring) count++
+            if (favoritesFilter != InclusionFilterOption.ALL) count++
+            if (airingFilter != InclusionFilterOption.ALL) count++
             return count
         }
 }
@@ -144,14 +158,26 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             list = list.filter { it.status == filter.statusFilter }
         }
 
-        // 3. Favorites Filter
-        if (filter.onlyFavorites) {
-            list = list.filter { it.isFavorite }
+        // 3. Favorites Filter (Tri-State: All / Include Only / Exclude)
+        when (filter.favoritesFilter) {
+            InclusionFilterOption.ALL -> { /* no-op */ }
+            InclusionFilterOption.INCLUDE_ONLY -> {
+                list = list.filter { it.isFavorite }
+            }
+            InclusionFilterOption.EXCLUDE -> {
+                list = list.filter { !it.isFavorite }
+            }
         }
 
-        // 4. Airing Filter
-        if (filter.onlyAiring) {
-            list = list.filter { it.isAiring }
+        // 4. Airing Filter (Tri-State: All / Include Only / Exclude)
+        when (filter.airingFilter) {
+            InclusionFilterOption.ALL -> { /* no-op */ }
+            InclusionFilterOption.INCLUDE_ONLY -> {
+                list = list.filter { it.isAiring }
+            }
+            InclusionFilterOption.EXCLUDE -> {
+                list = list.filter { !it.isAiring }
+            }
         }
 
         // 5. Tags Filter (Multi-select Include & Inverse Exclude)
@@ -217,8 +243,8 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             excludedTags = filter.excludedTags,
             availableTags = allAvailableTags,
             tagCounts = tagCounts,
-            onlyFavorites = filter.onlyFavorites,
-            onlyAiring = filter.onlyAiring,
+            favoritesFilter = filter.favoritesFilter,
+            airingFilter = filter.airingFilter,
             selectedSort = filter.sortOption,
             totalCount = sortedList.size,
             selectedIds = filter.selectedIds,
@@ -334,13 +360,25 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         _filterState.update { it.copy(includedTags = emptySet(), excludedTags = emptySet()) }
     }
 
-    fun toggleFavoritesFilter() {
-        _filterState.update { it.copy(onlyFavorites = !it.onlyFavorites) }
+    fun cycleFavoritesFilter() {
+        _filterState.update { it.copy(favoritesFilter = it.favoritesFilter.next()) }
     }
 
-    fun toggleAiringFilter() {
-        _filterState.update { it.copy(onlyAiring = !it.onlyAiring) }
+    fun cycleAiringFilter() {
+        _filterState.update { it.copy(airingFilter = it.airingFilter.next()) }
     }
+
+    fun setFavoritesFilter(option: InclusionFilterOption) {
+        _filterState.update { it.copy(favoritesFilter = option) }
+    }
+
+    fun setAiringFilter(option: InclusionFilterOption) {
+        _filterState.update { it.copy(airingFilter = option) }
+    }
+
+    fun toggleFavoritesFilter() = cycleFavoritesFilter()
+
+    fun toggleAiringFilter() = cycleAiringFilter()
 
     fun setSortOption(sort: LibrarySortOption) {
         _filterState.update { it.copy(sortOption = sort, isSortMenuOpen = false) }
@@ -365,8 +403,8 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                 onlyUnrated = false,
                 includedTags = emptySet(),
                 excludedTags = emptySet(),
-                onlyFavorites = false,
-                onlyAiring = false
+                favoritesFilter = InclusionFilterOption.ALL,
+                airingFilter = InclusionFilterOption.ALL
             )
         }
     }
