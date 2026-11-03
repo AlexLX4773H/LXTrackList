@@ -61,6 +61,7 @@ data class LibraryUiState(
     val tagCounts: Map<String, Int> = emptyMap(),
     val favoritesFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val airingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
+    val hasImageFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val selectedSort: LibrarySortOption = LibrarySortOption.RECENTLY_UPDATED,
     val totalCount: Int = 0,
     val selectedIds: Set<Long> = emptySet(),
@@ -96,6 +97,7 @@ private data class LibraryFilterState(
     val excludedTags: Set<String> = emptySet(),
     val favoritesFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val airingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
+    val hasImageFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val sortOption: LibrarySortOption = LibrarySortOption.RECENTLY_UPDATED,
     val selectedIds: Set<Long> = emptySet(),
     val isFilterSheetOpen: Boolean = false,
@@ -112,6 +114,7 @@ private data class LibraryFilterState(
             if (includedTags.isNotEmpty() || excludedTags.isNotEmpty()) count++
             if (favoritesFilter != InclusionFilterOption.ALL) count++
             if (airingFilter != InclusionFilterOption.ALL) count++
+            if (hasImageFilter != InclusionFilterOption.ALL) count++
             return count
         }
 }
@@ -180,7 +183,18 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             }
         }
 
-        // 5. Tags Filter (Multi-select Include & Inverse Exclude)
+        // 5. Has Cover Image Filter (Tri-State: All / Include Only / Exclude)
+        when (filter.hasImageFilter) {
+            InclusionFilterOption.ALL -> { /* no-op */ }
+            InclusionFilterOption.INCLUDE_ONLY -> {
+                list = list.filter { !it.coverImageUri.isNullOrBlank() }
+            }
+            InclusionFilterOption.EXCLUDE -> {
+                list = list.filter { it.coverImageUri.isNullOrBlank() }
+            }
+        }
+
+        // 6. Tags Filter (Multi-select Include & Inverse Exclude)
         if (filter.includedTags.isNotEmpty()) {
             list = list.filter { entry ->
                 val entryTags = entry.getTagList()
@@ -245,6 +259,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             tagCounts = tagCounts,
             favoritesFilter = filter.favoritesFilter,
             airingFilter = filter.airingFilter,
+            hasImageFilter = filter.hasImageFilter,
             selectedSort = filter.sortOption,
             totalCount = sortedList.size,
             selectedIds = filter.selectedIds,
@@ -376,9 +391,19 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         _filterState.update { it.copy(airingFilter = option) }
     }
 
+    fun cycleHasImageFilter() {
+        _filterState.update { it.copy(hasImageFilter = it.hasImageFilter.next()) }
+    }
+
+    fun setHasImageFilter(option: InclusionFilterOption) {
+        _filterState.update { it.copy(hasImageFilter = option) }
+    }
+
     fun toggleFavoritesFilter() = cycleFavoritesFilter()
 
     fun toggleAiringFilter() = cycleAiringFilter()
+
+    fun toggleHasImageFilter() = cycleHasImageFilter()
 
     fun setSortOption(sort: LibrarySortOption) {
         _filterState.update { it.copy(sortOption = sort, isSortMenuOpen = false) }
@@ -404,7 +429,8 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                 includedTags = emptySet(),
                 excludedTags = emptySet(),
                 favoritesFilter = InclusionFilterOption.ALL,
-                airingFilter = InclusionFilterOption.ALL
+                airingFilter = InclusionFilterOption.ALL,
+                hasImageFilter = InclusionFilterOption.ALL
             )
         }
     }

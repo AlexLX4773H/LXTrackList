@@ -1156,4 +1156,87 @@ class FeaturesTest {
         assertEquals("Average", com.lx.tracklist.ui.stats.getScoreLabel(5))
         assertEquals("Appalling", com.lx.tracklist.ui.stats.getScoreLabel(1))
     }
+
+    @Test
+    fun testMalCategoryStatsCalculation() {
+        val anime1 = MediaEntry(
+            id = 1L,
+            title = "Frieren",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.COMPLETED,
+            score = 10,
+            currentEpisodes = 28,
+            totalEpisodes = 28,
+            episodeLengthMinutes = 24,
+            rewatchCount = 1,
+            isFavorite = true
+        )
+        val anime2 = MediaEntry(
+            id = 2L,
+            title = "Dungeon Meshi",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.WATCHING,
+            score = 9,
+            currentEpisodes = 12,
+            totalEpisodes = 24,
+            episodeLengthMinutes = 24
+        )
+        val manga1 = MediaEntry(
+            id = 3L,
+            title = "Berserk",
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.WATCHING,
+            score = 10,
+            currentChapters = 370,
+            currentVolumes = 41
+        )
+
+        val entries = listOf(anime1, anime2, manga1)
+        val customCats = emptyList<CustomCategory>()
+
+        // Test Anime Category MAL Stats
+        val animeSummary = com.lx.tracklist.ui.stats.calculateCategoryStatSummary(entries, "ANIME", customCats)
+        assertEquals(2, animeSummary.totalEntries)
+        assertEquals(1, animeSummary.statusCounts[MediaStatus.COMPLETED])
+        assertEquals(1, animeSummary.statusCounts[MediaStatus.WATCHING])
+        assertEquals(0, animeSummary.statusCounts[MediaStatus.ON_HOLD])
+        assertEquals(9.5, animeSummary.meanScore, 0.001)
+        assertEquals(2, animeSummary.scoredCount)
+        assertEquals(1, animeSummary.favoritesCount)
+        assertEquals(1, animeSummary.rewatchedCount)
+        assertEquals(40, animeSummary.episodesCount) // 28 + 12
+        assertTrue(animeSummary.isVideo)
+        // Days calculation:
+        // anime1: 28 current + 1*28 rewatch = 56 eps * 24 min = 1344 min
+        // anime2: 12 current * 24 min = 288 min
+        // total minutes = 1632 min / 1440 = 1.133 days
+        assertEquals(1632.0 / 1440.0, animeSummary.daysSpent, 0.01)
+
+        // Test Manga Category MAL Stats
+        val mangaSummary = com.lx.tracklist.ui.stats.calculateCategoryStatSummary(entries, "MANGA", customCats)
+        assertEquals(1, mangaSummary.totalEntries)
+        assertEquals(1, mangaSummary.statusCounts[MediaStatus.WATCHING])
+        assertEquals(370, mangaSummary.chaptersCount)
+        assertEquals(41, mangaSummary.volumesCount)
+        assertFalse(mangaSummary.isVideo)
+        // 370 ch * 5 min = 1850 min / 1440 = 1.2847 days
+        assertEquals(1850.0 / 1440.0, mangaSummary.daysSpent, 0.01)
+    }
+
+    @Test
+    fun testHasCoverImageFilter() {
+        val entryWithCover = MediaEntry(id = 1L, title = "With Cover", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, coverImageUri = "https://example.com/cover.jpg")
+        val entryWithEmptyCover = MediaEntry(id = 2L, title = "Empty Cover", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, coverImageUri = "")
+        val entryWithNullCover = MediaEntry(id = 3L, title = "Null Cover", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, coverImageUri = null)
+
+        val list = listOf(entryWithCover, entryWithEmptyCover, entryWithNullCover)
+
+        // INCLUDE_ONLY (Has cover image)
+        val withCoverOnly = list.filter { !it.coverImageUri.isNullOrBlank() }
+        assertEquals(listOf(1L), withCoverOnly.map { it.id })
+
+        // EXCLUDE (No cover image)
+        val noCoverOnly = list.filter { it.coverImageUri.isNullOrBlank() }
+        assertEquals(listOf(2L, 3L), noCoverOnly.map { it.id })
+    }
 }

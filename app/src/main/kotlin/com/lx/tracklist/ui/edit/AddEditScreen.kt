@@ -29,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -639,40 +640,105 @@ fun AddEditScreen(
                 }
             }
 
+            var isCoverImageError by remember(state.coverImageUri) { mutableStateOf(false) }
+
             if (state.coverImageUri.isNotBlank()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .background(LXSurfaceElevated)
+                        .border(
+                            width = 1.dp,
+                            color = if (isCoverImageError) LXErrorRed else LXBorder,
+                            shape = RoundedCornerShape(8.dp)
+                        )
                         .padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    AsyncImage(
-                        model = state.coverImageUri,
-                        contentDescription = "Cover Preview",
+                    Box(
                         modifier = Modifier
                             .size(60.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .border(1.dp, LXBorder, RoundedCornerShape(6.dp)),
-                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                    )
+                            .border(
+                                width = 1.dp,
+                                color = if (isCoverImageError) LXErrorRed else LXBorder,
+                                shape = RoundedCornerShape(6.dp)
+                            )
+                            .background(Color(0xFF1E1E1E)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AsyncImage(
+                            model = state.coverImageUri,
+                            contentDescription = "Cover Preview",
+                            onError = { isCoverImageError = true },
+                            onSuccess = { isCoverImageError = false },
+                            onLoading = { isCoverImageError = false },
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                        )
+                        if (isCoverImageError) {
+                            Icon(
+                                imageVector = Icons.Default.BrokenImage,
+                                contentDescription = "Image Failed to Load",
+                                tint = LXErrorRed,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Cover preview", color = LXPrimaryGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        Text(state.coverImageUri, color = LXTextSecondary, fontSize = 11.sp, maxLines = 1)
+                        Text(
+                            text = if (isCoverImageError) "Cover preview (Failed to load)" else "Cover preview",
+                            color = if (isCoverImageError) LXErrorRed else LXPrimaryGreen,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = state.coverImageUri,
+                            color = if (isCoverImageError) LXErrorRed.copy(alpha = 0.85f) else LXTextSecondary,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (isCoverImageError) {
+                            Text(
+                                text = "Image URL is not accessible or failed to load",
+                                color = LXErrorRed,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                     IconButton(onClick = { viewModel.updateCoverUri("") }) {
-                        Icon(Icons.Default.Close, contentDescription = "Remove", tint = LXTextSecondary, modifier = Modifier.size(16.dp))
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Remove",
+                            tint = if (isCoverImageError) LXErrorRed else LXTextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
             }
 
             OutlinedTextField(
                 value = state.coverImageUri,
-                onValueChange = { viewModel.updateCoverUri(it) },
+                onValueChange = {
+                    isCoverImageError = false
+                    viewModel.updateCoverUri(it)
+                },
                 label = { Text("Cover Image URL (or search above)") },
                 singleLine = true,
+                isError = isCoverImageError,
+                supportingText = if (isCoverImageError) {
+                    {
+                        Text(
+                            text = "Image could not be loaded from this URL. Server may block hotlinking or URL is broken.",
+                            color = LXErrorRed,
+                            fontSize = 11.sp
+                        )
+                    }
+                } else null,
                 modifier = Modifier.fillMaxWidth(),
                 colors = outlinedColors()
             )
@@ -1055,7 +1121,11 @@ private fun outlinedColors() = OutlinedTextFieldDefaults.colors(
     unfocusedTextColor = LXTextPrimary,
     cursorColor = LXPrimaryGreen,
     focusedTrailingIconColor = LXPrimaryGreen,
-    unfocusedTrailingIconColor = LXTextSecondary
+    unfocusedTrailingIconColor = LXTextSecondary,
+    errorBorderColor = LXErrorRed,
+    errorLabelColor = LXErrorRed,
+    errorTextColor = LXTextPrimary,
+    errorCursorColor = LXErrorRed
 )
 
 private data class MainCategoryItem(

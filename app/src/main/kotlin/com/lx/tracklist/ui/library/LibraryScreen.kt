@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
@@ -549,15 +550,15 @@ fun LibraryScreen(
                                     }
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.FilterList,
-                                        contentDescription = "Filters",
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = "All Filters",
                                         tint = LXPrimaryGreen
                                     )
                                 }
                             } else {
                                 Icon(
-                                    imageVector = Icons.Default.FilterList,
-                                    contentDescription = "Filters",
+                                    imageVector = Icons.Default.Tune,
+                                    contentDescription = "All Filters",
                                     tint = LXTextSecondary
                                 )
                             }
@@ -672,91 +673,6 @@ fun LibraryScreen(
                     .clip(RoundedCornerShape(10.dp))
             )
 
-            // Filter & Sort Control Strip
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Filter Sheet Trigger Button
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (state.activeFilterCount > 0) LXPrimaryGreen.copy(alpha = 0.18f) else LXSurfaceElevated)
-                            .border(
-                                width = 1.dp,
-                                color = if (state.activeFilterCount > 0) LXPrimaryGreen else LXBorder,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .clickable { viewModel.setFilterSheetOpen(true) }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Default.Tune,
-                                contentDescription = null,
-                                tint = if (state.activeFilterCount > 0) LXPrimaryGreen else LXTextSecondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (state.activeFilterCount > 0) "Filters (${state.activeFilterCount})" else "All Filters",
-                                fontSize = 12.sp,
-                                fontWeight = if (state.activeFilterCount > 0) FontWeight.Bold else FontWeight.Normal,
-                                color = if (state.activeFilterCount > 0) LXPrimaryGreen else LXTextPrimary
-                            )
-                        }
-                    }
-
-                    // Sort Selector Pill
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(LXSurfaceElevated)
-                            .border(1.dp, LXBorder, RoundedCornerShape(8.dp))
-                            .clickable { viewModel.setSortMenuOpen(true) }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.Sort,
-                                contentDescription = null,
-                                tint = LXTextSecondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = state.selectedSort.displayName,
-                                fontSize = 12.sp,
-                                color = LXTextPrimary
-                            )
-                            Icon(
-                                Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                tint = LXTextSecondary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-
-                // Reset Filters Button
-                if (state.activeFilterCount > 0) {
-                    TextButton(
-                        onClick = { viewModel.resetAllFilters() },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text("Reset", color = LXErrorRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-
             // Quick Category Horizontal Chips
             LazyRow(
                 modifier = Modifier
@@ -823,7 +739,8 @@ fun LibraryScreen(
                     state.includedTags.isNotEmpty() ||
                     state.excludedTags.isNotEmpty() ||
                     state.favoritesFilter != InclusionFilterOption.ALL ||
-                    state.airingFilter != InclusionFilterOption.ALL
+                    state.airingFilter != InclusionFilterOption.ALL ||
+                    state.hasImageFilter != InclusionFilterOption.ALL
 
             if (hasActiveFilters) {
                 LazyRow(
@@ -832,6 +749,13 @@ fun LibraryScreen(
                         .padding(horizontal = 16.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    item {
+                        RemovableFilterBadge(
+                            label = "Reset All",
+                            onRemove = { viewModel.resetAllFilters() }
+                        )
+                    }
+
                     state.selectedCategoryFilter?.let { cat ->
                         item {
                             RemovableFilterBadge(
@@ -931,6 +855,22 @@ fun LibraryScreen(
                             RemovableFilterBadge(
                                 label = "-Airing",
                                 onRemove = { viewModel.setAiringFilter(InclusionFilterOption.ALL) }
+                            )
+                        }
+                    }
+
+                    if (state.hasImageFilter == InclusionFilterOption.INCLUDE_ONLY) {
+                        item {
+                            RemovableFilterBadge(
+                                label = "+Has Cover",
+                                onRemove = { viewModel.setHasImageFilter(InclusionFilterOption.ALL) }
+                            )
+                        }
+                    } else if (state.hasImageFilter == InclusionFilterOption.EXCLUDE) {
+                        item {
+                            RemovableFilterBadge(
+                                label = "-No Cover",
+                                onRemove = { viewModel.setHasImageFilter(InclusionFilterOption.ALL) }
                             )
                         }
                     }
@@ -1901,6 +1841,19 @@ private fun AdvancedFilterSheet(
                         icon = Icons.Default.Favorite,
                         state = state.favoritesFilter,
                         onClick = { viewModel.cycleFavoritesFilter() }
+                    )
+
+                    // Cover Image Filter
+                    TriStateFilterRow(
+                        title = "Cover Image",
+                        subtitle = when (state.hasImageFilter) {
+                            InclusionFilterOption.ALL -> "Tap: Only With Cover → Exclude Cover → Off"
+                            InclusionFilterOption.INCLUDE_ONLY -> "Showing Only Entries With Cover Image"
+                            InclusionFilterOption.EXCLUDE -> "Excluding / Hiding Entries With Cover Image"
+                        },
+                        icon = Icons.Default.Image,
+                        state = state.hasImageFilter,
+                        onClick = { viewModel.cycleHasImageFilter() }
                     )
                 }
 

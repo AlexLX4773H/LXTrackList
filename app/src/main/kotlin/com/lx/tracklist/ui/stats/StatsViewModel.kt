@@ -22,6 +22,122 @@ data class ScoreDistributionData(
     val totalCategoryEntries: Int
 )
 
+data class CategoryStatSummary(
+    val categoryKey: String,
+    val displayName: String,
+    val isVideo: Boolean,
+    val daysSpent: Double,
+    val meanScore: Double,
+    val scoredCount: Int,
+    val totalEntries: Int,
+    val rewatchedCount: Int,
+    val statusCounts: Map<MediaStatus, Int>,
+    val episodesCount: Int,
+    val chaptersCount: Int,
+    val volumesCount: Int,
+    val favoritesCount: Int
+)
+
+fun calculateCategoryStatSummary(
+    entries: List<MediaEntry>,
+    categoryKey: String,
+    customCategories: List<CustomCategory>
+): CategoryStatSummary {
+    val isStandardMediaType = MediaType.entries.any { it.name.equals(categoryKey, ignoreCase = true) }
+    val filteredEntries = if (categoryKey.equals("ALL", ignoreCase = true)) {
+        entries
+    } else if (isStandardMediaType) {
+        val type = MediaType.valueOf(categoryKey.uppercase())
+        entries.filter { it.mediaType == type && it.customCategory == null }
+    } else {
+        entries.filter { it.customCategory != null && it.customCategory.equals(categoryKey, ignoreCase = true) }
+    }
+
+    val total = filteredEntries.size
+    val statusMap = MediaStatus.entries.associateWith { st ->
+        filteredEntries.count { it.status == st }
+    }
+
+    val scored = filteredEntries.filter { it.score != null && it.score > 0 }
+    val mean = if (scored.isNotEmpty()) scored.map { it.score!! }.average() else 0.0
+
+    val rewatch = filteredEntries.sumOf { it.rewatchCount }
+    val episodes = filteredEntries.sumOf { it.currentEpisodes }
+    val chapters = filteredEntries.sumOf { it.currentChapters }
+    val volumes = filteredEntries.sumOf { it.currentVolumes }
+    val favs = filteredEntries.count { it.isFavorite }
+
+    val isVideo = if (categoryKey.equals("ALL", ignoreCase = true)) {
+        episodes >= chapters
+    } else if (isStandardMediaType) {
+        val type = MediaType.valueOf(categoryKey.uppercase())
+        type == MediaType.ANIME || type == MediaType.SHOW || type == MediaType.MOVIE
+    } else {
+        val custom = customCategories.firstOrNull { it.name.equals(categoryKey, ignoreCase = true) }
+        custom?.isWatchType ?: true
+    }
+
+    var totalMinutes = 0.0
+    filteredEntries.forEach { entry ->
+        when (entry.mediaType) {
+            MediaType.ANIME, MediaType.SHOW -> {
+                val epLen = (entry.episodeLengthMinutes ?: 24).toDouble()
+                val totalEpConsumed = entry.currentEpisodes + (entry.rewatchCount * (if (entry.totalEpisodes > 0) entry.totalEpisodes else entry.currentEpisodes))
+                totalMinutes += totalEpConsumed * epLen
+            }
+            MediaType.MOVIE -> {
+                val dur = (entry.durationMinutes ?: 100).toDouble()
+                val totalViews = (if (entry.status == MediaStatus.COMPLETED) 1 else 0) + entry.rewatchCount
+                totalMinutes += totalViews * dur
+            }
+            MediaType.MANGA, MediaType.MANHWA -> {
+                val chRead = entry.currentChapters + (entry.rewatchCount * (if (entry.totalChapters > 0) entry.totalChapters else entry.currentChapters))
+                val volRead = entry.currentVolumes + (entry.rewatchCount * (if (entry.totalVolumes > 0) entry.totalVolumes else entry.currentVolumes))
+                if (chRead > 0) {
+                    totalMinutes += chRead * 5.0
+                } else if (volRead > 0) {
+                    totalMinutes += volRead * 60.0
+                }
+            }
+            MediaType.BOOK -> {
+                val chRead = entry.currentChapters + (entry.rewatchCount * (if (entry.totalChapters > 0) entry.totalChapters else entry.currentChapters))
+                val volRead = entry.currentVolumes + (entry.rewatchCount * (if (entry.totalVolumes > 0) entry.totalVolumes else entry.currentVolumes))
+                val pagesRead = entry.currentPages + (entry.rewatchCount * (if (entry.totalPages > 0) entry.totalPages else entry.currentPages))
+                if (pagesRead > 0) {
+                    totalMinutes += pagesRead * 1.5
+                } else if (chRead > 0) {
+                    totalMinutes += chRead * 10.0
+                } else if (volRead > 0) {
+                    totalMinutes += volRead * 180.0
+                }
+            }
+        }
+    }
+    val days = totalMinutes / 1440.0
+
+    val displayName = when {
+        categoryKey.equals("ALL", ignoreCase = true) -> "All Categories"
+        isStandardMediaType -> MediaType.valueOf(categoryKey.uppercase()).displayName
+        else -> customCategories.firstOrNull { it.name.equals(categoryKey, ignoreCase = true) }?.name ?: categoryKey
+    }
+
+    return CategoryStatSummary(
+        categoryKey = categoryKey,
+        displayName = displayName,
+        isVideo = isVideo,
+        daysSpent = days,
+        meanScore = mean,
+        scoredCount = scored.size,
+        totalEntries = total,
+        rewatchedCount = rewatch,
+        statusCounts = statusMap,
+        episodesCount = episodes,
+        chaptersCount = chapters,
+        volumesCount = volumes,
+        favoritesCount = favs
+    )
+}
+
 fun calculateScoreDistribution(
     entries: List<MediaEntry>,
     categoryKey: String? = null,
