@@ -1206,8 +1206,7 @@ private fun TriStateFilterRow(
 @Composable
 private fun CoverImageFilterRow(
     state: CoverImageFilterOption,
-    onClick: () -> Unit,
-    onSelectOption: ((CoverImageFilterOption) -> Unit)? = null
+    onClick: () -> Unit
 ) {
     val activeColor = when (state) {
         CoverImageFilterOption.HAS_COVER -> LXPrimaryGreen
@@ -1223,21 +1222,21 @@ private fun CoverImageFilterRow(
     }
 
     val subtitle = when (state) {
-        CoverImageFilterOption.ALL -> "Tap to cycle or select an option below"
-        CoverImageFilterOption.HAS_COVER -> "Showing only entries with a cover image"
-        CoverImageFilterOption.BROKEN_COVER -> "Showing entries with a cover URL that does not work"
-        CoverImageFilterOption.NO_COVER -> "Excluding entries with a cover (No Cover only)"
+        CoverImageFilterOption.ALL -> "Tap: Has Cover → Broken URL → No Cover → Off"
+        CoverImageFilterOption.HAS_COVER -> "Showing Only Entries With Cover Image"
+        CoverImageFilterOption.BROKEN_COVER -> "Showing Entries With Broken Cover URL"
+        CoverImageFilterOption.NO_COVER -> "Excluding Entries With Cover (No Cover Only)"
     }
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .background(
                 when (state) {
-                    CoverImageFilterOption.HAS_COVER -> LXPrimaryGreen.copy(alpha = 0.09f)
-                    CoverImageFilterOption.BROKEN_COVER -> LXErrorRed.copy(alpha = 0.09f)
-                    CoverImageFilterOption.NO_COVER -> Color(0xFFE67E22).copy(alpha = 0.09f)
+                    CoverImageFilterOption.HAS_COVER -> LXPrimaryGreen.copy(alpha = 0.12f)
+                    CoverImageFilterOption.BROKEN_COVER -> LXErrorRed.copy(alpha = 0.12f)
+                    CoverImageFilterOption.NO_COVER -> Color(0xFFE67E22).copy(alpha = 0.12f)
                     CoverImageFilterOption.ALL -> LXSurfaceElevated
                 }
             )
@@ -1245,126 +1244,154 @@ private fun CoverImageFilterRow(
                 width = if (state != CoverImageFilterOption.ALL) 1.dp else 0.5.dp,
                 color = when (state) {
                     CoverImageFilterOption.HAS_COVER -> LXPrimaryGreen.copy(alpha = 0.6f)
-                    CoverImageFilterOption.BROKEN_COVER -> LXErrorRed.copy(alpha = 0.7f)
+                    CoverImageFilterOption.BROKEN_COVER -> LXErrorRed.copy(alpha = 0.6f)
                     CoverImageFilterOption.NO_COVER -> Color(0xFFE67E22).copy(alpha = 0.6f)
                     CoverImageFilterOption.ALL -> LXBorder
                 },
                 shape = RoundedCornerShape(10.dp)
             )
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.weight(1f)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.weight(1f)
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(
+                        when (state) {
+                            CoverImageFilterOption.HAS_COVER -> LXPrimaryGreen.copy(alpha = 0.2f)
+                            CoverImageFilterOption.BROKEN_COVER -> LXErrorRed.copy(alpha = 0.2f)
+                            CoverImageFilterOption.NO_COVER -> Color(0xFFE67E22).copy(alpha = 0.2f)
+                            CoverImageFilterOption.ALL -> LXSurfaceBlack
+                        }
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(
-                            when (state) {
-                                CoverImageFilterOption.HAS_COVER -> LXPrimaryGreen.copy(alpha = 0.2f)
-                                CoverImageFilterOption.BROKEN_COVER -> LXErrorRed.copy(alpha = 0.2f)
-                                CoverImageFilterOption.NO_COVER -> Color(0xFFE67E22).copy(alpha = 0.2f)
-                                CoverImageFilterOption.ALL -> LXSurfaceBlack
-                            }
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = activeColor,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = activeColor,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
 
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = "Cover Image",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = if (state != CoverImageFilterOption.ALL) FontWeight.Bold else FontWeight.Medium
-                        ),
-                        color = if (state != CoverImageFilterOption.ALL) activeColor else LXTextPrimary
-                    )
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = if (state != CoverImageFilterOption.ALL) activeColor.copy(alpha = 0.85f) else LXTextSecondary
-                    )
-                }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "Cover Image",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = if (state != CoverImageFilterOption.ALL) FontWeight.Bold else FontWeight.Medium
+                    ),
+                    color = if (state != CoverImageFilterOption.ALL) activeColor else LXTextPrimary
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = if (state != CoverImageFilterOption.ALL) activeColor.copy(alpha = 0.85f) else LXTextSecondary
+                )
             }
         }
 
-        // Direct Selector Buttons
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            val options = listOf(
-                CoverImageFilterOption.ALL to "All",
-                CoverImageFilterOption.HAS_COVER to "Has Cover",
-                CoverImageFilterOption.BROKEN_COVER to "Broken URL",
-                CoverImageFilterOption.NO_COVER to "No Cover"
-            )
-
-            options.forEach { (opt, label) ->
-                val isSelected = state == opt
-                val chipColor = when (opt) {
-                    CoverImageFilterOption.HAS_COVER -> LXPrimaryGreen
-                    CoverImageFilterOption.BROKEN_COVER -> LXErrorRed
-                    CoverImageFilterOption.NO_COVER -> Color(0xFFE67E22)
-                    CoverImageFilterOption.ALL -> LXPrimaryGreen
+            when (state) {
+                CoverImageFilterOption.ALL -> {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .border(BorderStroke(1.5.dp, LXTextSecondary.copy(alpha = 0.5f)), RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(4.dp))
+                    )
                 }
-
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = if (isSelected) chipColor.copy(alpha = 0.22f) else LXSurfaceBlack,
-                    border = BorderStroke(
-                        width = if (isSelected) 1.dp else 0.5.dp,
-                        color = if (isSelected) chipColor else LXBorder
-                    ),
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable {
-                            if (onSelectOption != null) {
-                                onSelectOption(opt)
-                            } else {
-                                onClick()
-                            }
-                        }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(vertical = 7.dp, horizontal = 2.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                CoverImageFilterOption.HAS_COVER -> {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(LXPrimaryGreen.copy(alpha = 0.2f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
-                        if (opt == CoverImageFilterOption.BROKEN_COVER && isSelected) {
-                            Icon(
-                                imageVector = Icons.Default.BrokenImage,
-                                contentDescription = null,
-                                tint = LXErrorRed,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                        }
                         Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 11.sp
-                            ),
-                            color = if (isSelected) chipColor else LXTextSecondary,
-                            maxLines = 1
+                            text = "Has Cover",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                            color = LXPrimaryGreen
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .background(LXPrimaryGreen, RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(4.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Has Cover",
+                            tint = LXBackgroundBlack,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+                CoverImageFilterOption.BROKEN_COVER -> {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(LXErrorRed.copy(alpha = 0.2f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "Broken URL",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                            color = LXErrorRed
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .background(LXErrorRed, RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(4.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BrokenImage,
+                            contentDescription = "Broken URL",
+                            tint = Color.White,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+                CoverImageFilterOption.NO_COVER -> {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFFE67E22).copy(alpha = 0.2f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "No Cover",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                            color = Color(0xFFE67E22)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .background(Color(0xFFE67E22), RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(4.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "No Cover",
+                            tint = Color.White,
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }
@@ -2039,8 +2066,7 @@ private fun AdvancedFilterSheet(
                     // Cover Image Filter (All / Has Cover / Broken URL / No Cover)
                     CoverImageFilterRow(
                         state = state.coverImageFilter,
-                        onClick = { viewModel.cycleCoverImageFilter() },
-                        onSelectOption = { viewModel.setCoverImageFilter(it) }
+                        onClick = { viewModel.cycleCoverImageFilter() }
                     )
                 }
 
