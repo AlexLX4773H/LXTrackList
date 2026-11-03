@@ -38,6 +38,7 @@ import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
@@ -87,6 +88,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -98,6 +100,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -126,6 +129,7 @@ fun LibraryScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val configuration = LocalConfiguration.current
+    val context = LocalContext.current
     val isTablet = configuration.screenWidthDp >= 600
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showCategoryBatchDialog by remember { mutableStateOf(false) }
@@ -134,6 +138,13 @@ fun LibraryScreen(
     var showFavoriteBatchDialog by remember { mutableStateOf(false) }
 
     val visibleIds = remember(state.entries) { state.entries.map { it.id } }
+
+    // Proactively validate image URLs across all entries when Broken Cover filter is engaged or filter sheet is opened
+    LaunchedEffect(state.coverImageFilter, state.isFilterSheetOpen) {
+        if (state.coverImageFilter == CoverImageFilterOption.BROKEN_COVER || state.isFilterSheetOpen) {
+            viewModel.validateCovers(context)
+        }
+    }
 
     // Intercept back button when in selection mode or filter sheet is open
     BackHandler(enabled = state.isSelectionMode || state.isFilterSheetOpen) {
@@ -740,7 +751,7 @@ fun LibraryScreen(
                     state.excludedTags.isNotEmpty() ||
                     state.favoritesFilter != InclusionFilterOption.ALL ||
                     state.airingFilter != InclusionFilterOption.ALL ||
-                    state.hasImageFilter != InclusionFilterOption.ALL
+                    state.coverImageFilter != CoverImageFilterOption.ALL
 
             if (hasActiveFilters) {
                 LazyRow(
@@ -859,19 +870,31 @@ fun LibraryScreen(
                         }
                     }
 
-                    if (state.hasImageFilter == InclusionFilterOption.INCLUDE_ONLY) {
-                        item {
-                            RemovableFilterBadge(
-                                label = "+Has Cover",
-                                onRemove = { viewModel.setHasImageFilter(InclusionFilterOption.ALL) }
-                            )
+                    when (state.coverImageFilter) {
+                        CoverImageFilterOption.ALL -> {}
+                        CoverImageFilterOption.HAS_COVER -> {
+                            item {
+                                RemovableFilterBadge(
+                                    label = "+Has Cover",
+                                    onRemove = { viewModel.setCoverImageFilter(CoverImageFilterOption.ALL) }
+                                )
+                            }
                         }
-                    } else if (state.hasImageFilter == InclusionFilterOption.EXCLUDE) {
-                        item {
-                            RemovableFilterBadge(
-                                label = "-No Cover",
-                                onRemove = { viewModel.setHasImageFilter(InclusionFilterOption.ALL) }
-                            )
+                        CoverImageFilterOption.BROKEN_COVER -> {
+                            item {
+                                RemovableFilterBadge(
+                                    label = "⚠️ Broken Cover URL",
+                                    onRemove = { viewModel.setCoverImageFilter(CoverImageFilterOption.ALL) }
+                                )
+                            }
+                        }
+                        CoverImageFilterOption.NO_COVER -> {
+                            item {
+                                RemovableFilterBadge(
+                                    label = "-No Cover",
+                                    onRemove = { viewModel.setCoverImageFilter(CoverImageFilterOption.ALL) }
+                                )
+                            }
                         }
                     }
                 }
@@ -1172,6 +1195,176 @@ private fun TriStateFilterRow(
                             contentDescription = "Excluded",
                             tint = Color.White,
                             modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CoverImageFilterRow(
+    state: CoverImageFilterOption,
+    onClick: () -> Unit,
+    onSelectOption: ((CoverImageFilterOption) -> Unit)? = null
+) {
+    val activeColor = when (state) {
+        CoverImageFilterOption.HAS_COVER -> LXPrimaryGreen
+        CoverImageFilterOption.BROKEN_COVER -> LXErrorRed
+        CoverImageFilterOption.NO_COVER -> Color(0xFFE67E22)
+        CoverImageFilterOption.ALL -> LXTextSecondary
+    }
+
+    val icon = when (state) {
+        CoverImageFilterOption.BROKEN_COVER -> Icons.Default.BrokenImage
+        CoverImageFilterOption.NO_COVER -> Icons.Default.Close
+        else -> Icons.Default.Image
+    }
+
+    val subtitle = when (state) {
+        CoverImageFilterOption.ALL -> "Tap to cycle or select an option below"
+        CoverImageFilterOption.HAS_COVER -> "Showing only entries with a cover image"
+        CoverImageFilterOption.BROKEN_COVER -> "Showing entries with a cover URL that does not work"
+        CoverImageFilterOption.NO_COVER -> "Excluding entries with a cover (No Cover only)"
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                when (state) {
+                    CoverImageFilterOption.HAS_COVER -> LXPrimaryGreen.copy(alpha = 0.09f)
+                    CoverImageFilterOption.BROKEN_COVER -> LXErrorRed.copy(alpha = 0.09f)
+                    CoverImageFilterOption.NO_COVER -> Color(0xFFE67E22).copy(alpha = 0.09f)
+                    CoverImageFilterOption.ALL -> LXSurfaceElevated
+                }
+            )
+            .border(
+                width = if (state != CoverImageFilterOption.ALL) 1.dp else 0.5.dp,
+                color = when (state) {
+                    CoverImageFilterOption.HAS_COVER -> LXPrimaryGreen.copy(alpha = 0.6f)
+                    CoverImageFilterOption.BROKEN_COVER -> LXErrorRed.copy(alpha = 0.7f)
+                    CoverImageFilterOption.NO_COVER -> Color(0xFFE67E22).copy(alpha = 0.6f)
+                    CoverImageFilterOption.ALL -> LXBorder
+                },
+                shape = RoundedCornerShape(10.dp)
+            )
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(
+                            when (state) {
+                                CoverImageFilterOption.HAS_COVER -> LXPrimaryGreen.copy(alpha = 0.2f)
+                                CoverImageFilterOption.BROKEN_COVER -> LXErrorRed.copy(alpha = 0.2f)
+                                CoverImageFilterOption.NO_COVER -> Color(0xFFE67E22).copy(alpha = 0.2f)
+                                CoverImageFilterOption.ALL -> LXSurfaceBlack
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = activeColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "Cover Image",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = if (state != CoverImageFilterOption.ALL) FontWeight.Bold else FontWeight.Medium
+                        ),
+                        color = if (state != CoverImageFilterOption.ALL) activeColor else LXTextPrimary
+                    )
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = if (state != CoverImageFilterOption.ALL) activeColor.copy(alpha = 0.85f) else LXTextSecondary
+                    )
+                }
+            }
+        }
+
+        // Direct Selector Buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            val options = listOf(
+                CoverImageFilterOption.ALL to "All",
+                CoverImageFilterOption.HAS_COVER to "Has Cover",
+                CoverImageFilterOption.BROKEN_COVER to "Broken URL",
+                CoverImageFilterOption.NO_COVER to "No Cover"
+            )
+
+            options.forEach { (opt, label) ->
+                val isSelected = state == opt
+                val chipColor = when (opt) {
+                    CoverImageFilterOption.HAS_COVER -> LXPrimaryGreen
+                    CoverImageFilterOption.BROKEN_COVER -> LXErrorRed
+                    CoverImageFilterOption.NO_COVER -> Color(0xFFE67E22)
+                    CoverImageFilterOption.ALL -> LXPrimaryGreen
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = if (isSelected) chipColor.copy(alpha = 0.22f) else LXSurfaceBlack,
+                    border = BorderStroke(
+                        width = if (isSelected) 1.dp else 0.5.dp,
+                        color = if (isSelected) chipColor else LXBorder
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable {
+                            if (onSelectOption != null) {
+                                onSelectOption(opt)
+                            } else {
+                                onClick()
+                            }
+                        }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(vertical = 7.dp, horizontal = 2.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (opt == CoverImageFilterOption.BROKEN_COVER && isSelected) {
+                            Icon(
+                                imageVector = Icons.Default.BrokenImage,
+                                contentDescription = null,
+                                tint = LXErrorRed,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                        }
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 11.sp
+                            ),
+                            color = if (isSelected) chipColor else LXTextSecondary,
+                            maxLines = 1
                         )
                     }
                 }
@@ -1843,17 +2036,11 @@ private fun AdvancedFilterSheet(
                         onClick = { viewModel.cycleFavoritesFilter() }
                     )
 
-                    // Cover Image Filter
-                    TriStateFilterRow(
-                        title = "Cover Image",
-                        subtitle = when (state.hasImageFilter) {
-                            InclusionFilterOption.ALL -> "Tap: Only With Cover → Exclude Cover → Off"
-                            InclusionFilterOption.INCLUDE_ONLY -> "Showing Only Entries With Cover Image"
-                            InclusionFilterOption.EXCLUDE -> "Excluding / Hiding Entries With Cover Image"
-                        },
-                        icon = Icons.Default.Image,
-                        state = state.hasImageFilter,
-                        onClick = { viewModel.cycleHasImageFilter() }
+                    // Cover Image Filter (All / Has Cover / Broken URL / No Cover)
+                    CoverImageFilterRow(
+                        state = state.coverImageFilter,
+                        onClick = { viewModel.cycleCoverImageFilter() },
+                        onSelectOption = { viewModel.setCoverImageFilter(it) }
                     )
                 }
 

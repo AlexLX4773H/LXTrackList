@@ -1224,19 +1224,39 @@ class FeaturesTest {
     }
 
     @Test
-    fun testHasCoverImageFilter() {
-        val entryWithCover = MediaEntry(id = 1L, title = "With Cover", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, coverImageUri = "https://example.com/cover.jpg")
-        val entryWithEmptyCover = MediaEntry(id = 2L, title = "Empty Cover", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, coverImageUri = "")
-        val entryWithNullCover = MediaEntry(id = 3L, title = "Null Cover", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, coverImageUri = null)
+    fun testCoverImageFilterOptions() {
+        val entryWithGoodCover = MediaEntry(id = 1L, title = "Good Cover", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, coverImageUri = "https://example.com/cover.jpg")
+        val entryWithBrokenCover = MediaEntry(id = 2L, title = "Broken URL Cover", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, coverImageUri = "https://broken-cdn.com/bad.webp")
+        val entryWithMalformedCover = MediaEntry(id = 3L, title = "Malformed Cover", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, coverImageUri = "not_a_valid_url")
+        val entryWithEmptyCover = MediaEntry(id = 4L, title = "Empty Cover", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, coverImageUri = "")
+        val entryWithNullCover = MediaEntry(id = 5L, title = "Null Cover", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, coverImageUri = null)
 
-        val list = listOf(entryWithCover, entryWithEmptyCover, entryWithNullCover)
+        val list = listOf(entryWithGoodCover, entryWithBrokenCover, entryWithMalformedCover, entryWithEmptyCover, entryWithNullCover)
 
-        // INCLUDE_ONLY (Has cover image)
-        val withCoverOnly = list.filter { !it.coverImageUri.isNullOrBlank() }
-        assertEquals(listOf(1L), withCoverOnly.map { it.id })
+        // Mark entry 2 as known broken
+        com.lx.tracklist.data.local.FailedCoverTracker.markFailed(2L, "https://broken-cdn.com/bad.webp")
 
-        // EXCLUDE (No cover image)
-        val noCoverOnly = list.filter { it.coverImageUri.isNullOrBlank() }
-        assertEquals(listOf(2L, 3L), noCoverOnly.map { it.id })
+        // 1. Cycle test
+        assertEquals(com.lx.tracklist.ui.library.CoverImageFilterOption.HAS_COVER, com.lx.tracklist.ui.library.CoverImageFilterOption.ALL.next())
+        assertEquals(com.lx.tracklist.ui.library.CoverImageFilterOption.BROKEN_COVER, com.lx.tracklist.ui.library.CoverImageFilterOption.HAS_COVER.next())
+        assertEquals(com.lx.tracklist.ui.library.CoverImageFilterOption.NO_COVER, com.lx.tracklist.ui.library.CoverImageFilterOption.BROKEN_COVER.next())
+        assertEquals(com.lx.tracklist.ui.library.CoverImageFilterOption.ALL, com.lx.tracklist.ui.library.CoverImageFilterOption.NO_COVER.next())
+
+        // 2. HAS_COVER (Any entry with a cover URL)
+        val hasCover = list.filter { !it.coverImageUri.isNullOrBlank() }
+        assertEquals(listOf(1L, 2L, 3L), hasCover.map { it.id })
+
+        // 3. BROKEN_COVER (Has a cover URL, but it does NOT work: known broken or malformed)
+        val brokenCover = list.filter { entry ->
+            val url = entry.coverImageUri?.trim()
+            !url.isNullOrBlank() && (
+                com.lx.tracklist.data.local.FailedCoverTracker.isUrlBroken(url)
+            )
+        }
+        assertEquals(listOf(2L, 3L), brokenCover.map { it.id })
+
+        // 4. NO_COVER (Missing/empty cover image)
+        val noCover = list.filter { it.coverImageUri.isNullOrBlank() }
+        assertEquals(listOf(4L, 5L), noCover.map { it.id })
     }
 }

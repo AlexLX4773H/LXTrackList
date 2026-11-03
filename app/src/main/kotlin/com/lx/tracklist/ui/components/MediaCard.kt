@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -159,17 +160,19 @@ fun MediaCard(
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
                         success = {
+                            com.lx.tracklist.data.local.FailedCoverTracker.markSuccess(entry.id, entry.coverImageUri)
                             SubcomposeAsyncImageContent()
                         },
                         loading = {
-                            SmallLogoPlaceholder(size = 48.dp)
+                            SmallLogoPlaceholder(size = 48.dp, isError = false)
                         },
                         error = {
-                            SmallLogoPlaceholder(size = 48.dp)
+                            com.lx.tracklist.data.local.FailedCoverTracker.markFailed(entry.id, entry.coverImageUri)
+                            SmallLogoPlaceholder(size = 48.dp, isError = true)
                         }
                     )
                 } else {
-                    SmallLogoPlaceholder(size = 48.dp)
+                    SmallLogoPlaceholder(size = 48.dp, isError = false)
                 }
             }
 
@@ -388,7 +391,7 @@ private fun formatDateRange(start: Long?, finish: Long?): String {
 }
 
 @Composable
-private fun SmallLogoPlaceholder(size: Dp) {
+private fun SmallLogoPlaceholder(size: Dp, isError: Boolean = false) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -401,5 +404,20 @@ private fun SmallLogoPlaceholder(size: Dp) {
                 .clip(CircleShape),
             contentScale = ContentScale.Fit
         )
+        if (isError) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.BrokenImage,
+                    contentDescription = "Image Failed to Load",
+                    tint = LXErrorRed,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
     }
 }

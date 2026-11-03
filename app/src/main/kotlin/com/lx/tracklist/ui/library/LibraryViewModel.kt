@@ -1,8 +1,10 @@
 package com.lx.tracklist.ui.library
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.lx.tracklist.data.local.FailedCoverTracker
 import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
@@ -13,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -46,6 +49,20 @@ enum class InclusionFilterOption {
     }
 }
 
+enum class CoverImageFilterOption {
+    ALL,
+    HAS_COVER,
+    BROKEN_COVER,
+    NO_COVER;
+
+    fun next(): CoverImageFilterOption = when (this) {
+        ALL -> HAS_COVER
+        HAS_COVER -> BROKEN_COVER
+        BROKEN_COVER -> NO_COVER
+        NO_COVER -> ALL
+    }
+}
+
 data class LibraryUiState(
     val entries: List<MediaEntry> = emptyList(),
     val searchQuery: String = "",
@@ -61,7 +78,7 @@ data class LibraryUiState(
     val tagCounts: Map<String, Int> = emptyMap(),
     val favoritesFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val airingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
-    val hasImageFilter: InclusionFilterOption = InclusionFilterOption.ALL,
+    val coverImageFilter: CoverImageFilterOption = CoverImageFilterOption.ALL,
     val selectedSort: LibrarySortOption = LibrarySortOption.RECENTLY_UPDATED,
     val totalCount: Int = 0,
     val selectedIds: Set<Long> = emptySet(),
@@ -97,7 +114,7 @@ private data class LibraryFilterState(
     val excludedTags: Set<String> = emptySet(),
     val favoritesFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val airingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
-    val hasImageFilter: InclusionFilterOption = InclusionFilterOption.ALL,
+    val coverImageFilter: CoverImageFilterOption = CoverImageFilterOption.ALL,
     val sortOption: LibrarySortOption = LibrarySortOption.RECENTLY_UPDATED,
     val selectedIds: Set<Long> = emptySet(),
     val isFilterSheetOpen: Boolean = false,
@@ -114,7 +131,7 @@ private data class LibraryFilterState(
             if (includedTags.isNotEmpty() || excludedTags.isNotEmpty()) count++
             if (favoritesFilter != InclusionFilterOption.ALL) count++
             if (airingFilter != InclusionFilterOption.ALL) count++
-            if (hasImageFilter != InclusionFilterOption.ALL) count++
+            if (coverImageFilter != CoverImageFilterOption.ALL) count++
             return count
         }
 }
@@ -127,8 +144,9 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         _filterState,
         repository.getAllEntries(),
         repository.customCategories,
-        repository.allSubCategories
-    ) { filter, allEntries, customCats, subCats ->
+        repository.allSubCategories,
+        FailedCoverTracker.failedEntryIds
+    ) { filter, allEntries, customCats, subCats, failedCoverIds ->
         // Distinct available tags and tag counts across all user entries
         val allAvailableTags = allEntries
             .flatMap { it.getTagList() }
@@ -183,13 +201,22 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             }
         }
 
-        // 5. Has Cover Image Filter (Tri-State: All / Include Only / Exclude)
-        when (filter.hasImageFilter) {
-            InclusionFilterOption.ALL -> { /* no-op */ }
-            InclusionFilterOption.INCLUDE_ONLY -> {
+        // 5. Cover Image Filter (All / Has Cover / Broken Cover / No Cover)
+        when (filter.coverImageFilter) {
+            CoverImageFilterOption.ALL -> { /* no-op */ }
+            CoverImageFilterOption.HAS_COVER -> {
                 list = list.filter { !it.coverImageUri.isNullOrBlank() }
             }
-            InclusionFilterOption.EXCLUDE -> {
+            CoverImageFilterOption.BROKEN_COVER -> {
+                list = list.filter { entry ->
+                    val url = entry.coverImageUri?.trim()
+                    !url.isNullOrBlank() && (
+                        failedCoverIds.contains(entry.id) ||
+                        FailedCoverTracker.isUrlBroken(url)
+                    )
+                }
+            }
+            CoverImageFilterOption.NO_COVER -> {
                 list = list.filter { it.coverImageUri.isNullOrBlank() }
             }
         }
@@ -259,7 +286,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             tagCounts = tagCounts,
             favoritesFilter = filter.favoritesFilter,
             airingFilter = filter.airingFilter,
-            hasImageFilter = filter.hasImageFilter,
+            coverImageFilter = filter.coverImageFilter,
             selectedSort = filter.sortOption,
             totalCount = sortedList.size,
             selectedIds = filter.selectedIds,
@@ -391,19 +418,30 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         _filterState.update { it.copy(airingFilter = option) }
     }
 
-    fun cycleHasImageFilter() {
-        _filterState.update { it.copy(hasImageFilter = it.hasImageFilter.next()) }
+    fun cycleCoverImageFilter() {
+        _filterState.update { it.copy(coverImageFilter = it.coverImageFilter.next()) }
     }
 
-    fun setHasImageFilter(option: InclusionFilterOption) {
-        _filterState.update { it.copy(hasImageFilter = option) }
+    fun setCoverImageFilter(option: CoverImageFilterOption) {
+        _filterState.update { it.copy(coverImageFilter = option) }
     }
 
     fun toggleFavoritesFilter() = cycleFavoritesFilter()
 
     fun toggleAiringFilter() = cycleAiringFilter()
 
-    fun toggleHasImageFilter() = cycleHasImageFilter()
+    fun toggleCoverImageFilter() = cycleCoverImageFilter()
+
+    fun validateCovers(context: Context, entries: List<MediaEntry>? = null) {
+        if (entries != null && entries.isNotEmpty()) {
+            FailedCoverTracker.validateEntries(context, entries)
+        } else {
+            viewModelScope.launch {
+                val all = repository.getAllEntries().first()
+                FailedCoverTracker.validateEntries(context, all)
+            }
+        }
+    }
 
     fun setSortOption(sort: LibrarySortOption) {
         _filterState.update { it.copy(sortOption = sort, isSortMenuOpen = false) }
@@ -430,7 +468,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                 excludedTags = emptySet(),
                 favoritesFilter = InclusionFilterOption.ALL,
                 airingFilter = InclusionFilterOption.ALL,
-                hasImageFilter = InclusionFilterOption.ALL
+                coverImageFilter = CoverImageFilterOption.ALL
             )
         }
     }

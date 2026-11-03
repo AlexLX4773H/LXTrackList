@@ -131,11 +131,14 @@ object CoverCacheManager {
                         val result = imageLoader.execute(request)
                         if (result is SuccessResult) {
                             successCounter.incrementAndGet()
+                            FailedCoverTracker.markSuccess(0L, url)
                         } else {
                             failedCounter.incrementAndGet()
+                            FailedCoverTracker.markFailed(0L, url)
                         }
                     } catch (_: Exception) {
                         failedCounter.incrementAndGet()
+                        FailedCoverTracker.markFailed(0L, url)
                     } finally {
                         val current = processedCounter.incrementAndGet()
                         onProgress(
