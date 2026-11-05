@@ -1,9 +1,13 @@
 package com.lx.tracklist.ui.settings
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -169,6 +173,18 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         viewModel.checkStorageStatus(context)
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
+    val ensureNotificationPermission = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
     }
 
     val importLauncher = rememberLauncherForActivityResult(
@@ -689,7 +705,10 @@ fun SettingsScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = { viewModel.confirmImport() },
+                    onClick = {
+                        ensureNotificationPermission()
+                        viewModel.confirmImport()
+                    },
                     enabled = preview.selectedCount > 0 && !preview.isImporting,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = LXPrimaryGreen,
@@ -1155,14 +1174,26 @@ fun SettingsScreen(
                         SettingsSubMenu.STORAGE -> BackupStorageContent(
                             state = state,
                             jikanSyncState = jikanSyncState,
-                            onStartJikanSync = { force -> viewModel.startJikanSync(context, force) },
-                            onCancelJikanSync = { viewModel.cancelJikanSync() },
+                            onStartJikanSync = { force ->
+                                ensureNotificationPermission()
+                                viewModel.startJikanSync(context, force)
+                            },
+                            onCancelJikanSync = { viewModel.cancelJikanSync(context) },
                             onCheckStorageStatus = { viewModel.checkStorageStatus(context) },
                             onRequestStoragePermission = { viewModel.requestStoragePermission(context) },
                             onExportToHomeOutput = { viewModel.prepareExport(ExportDestination.HOME_OUTPUT_FOLDER) },
-                            onImportAllLocalFiles = { viewModel.importAllLocalFiles(context) },
-                            onImportLocalFile = { viewModel.importLocalFile(context, it) },
-                            onPickFile = { importLauncher.launch("*/*") },
+                            onImportAllLocalFiles = {
+                                ensureNotificationPermission()
+                                viewModel.importAllLocalFiles(context)
+                            },
+                            onImportLocalFile = {
+                                ensureNotificationPermission()
+                                viewModel.importLocalFile(context, it)
+                            },
+                            onPickFile = {
+                                ensureNotificationPermission()
+                                importLauncher.launch("*/*")
+                            },
                             onSaveAs = { viewModel.prepareExport(ExportDestination.CUSTOM_FILE) },
                             onSetTachiyomiImportAsFavorites = { viewModel.setTachiyomiImportAsFavorites(it) },
                             onReindexCovers = { viewModel.reindexCoverImages(context) },
@@ -1224,14 +1255,26 @@ fun SettingsScreen(
                         BackupStorageContent(
                             state = state,
                             jikanSyncState = jikanSyncState,
-                            onStartJikanSync = { force -> viewModel.startJikanSync(context, force) },
-                            onCancelJikanSync = { viewModel.cancelJikanSync() },
+                            onStartJikanSync = { force ->
+                                ensureNotificationPermission()
+                                viewModel.startJikanSync(context, force)
+                            },
+                            onCancelJikanSync = { viewModel.cancelJikanSync(context) },
                             onCheckStorageStatus = { viewModel.checkStorageStatus(context) },
                             onRequestStoragePermission = { viewModel.requestStoragePermission(context) },
                             onExportToHomeOutput = { viewModel.prepareExport(ExportDestination.HOME_OUTPUT_FOLDER) },
-                            onImportAllLocalFiles = { viewModel.importAllLocalFiles(context) },
-                            onImportLocalFile = { viewModel.importLocalFile(context, it) },
-                            onPickFile = { importLauncher.launch("*/*") },
+                            onImportAllLocalFiles = {
+                                ensureNotificationPermission()
+                                viewModel.importAllLocalFiles(context)
+                            },
+                            onImportLocalFile = {
+                                ensureNotificationPermission()
+                                viewModel.importLocalFile(context, it)
+                            },
+                            onPickFile = {
+                                ensureNotificationPermission()
+                                importLauncher.launch("*/*")
+                            },
                             onSaveAs = { viewModel.prepareExport(ExportDestination.CUSTOM_FILE) },
                             onSetTachiyomiImportAsFavorites = { viewModel.setTachiyomiImportAsFavorites(it) },
                             onReindexCovers = { viewModel.reindexCoverImages(context) },
@@ -1780,10 +1823,6 @@ private fun BackupStorageContent(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        if (state.statusMessage != null) {
-            StatusMessageBanner(message = state.statusMessage, isError = state.isErrorMessage)
-        }
-
         // Dedicated Home Folder Storage Card
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -2507,22 +2546,6 @@ private fun BackupStorageContent(
                         }
                     }
                 } else {
-                    if (jikanSyncState.statusMessage != null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.1f))
-                                .padding(10.dp)
-                        ) {
-                            Text(
-                                text = jikanSyncState.statusMessage,
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)

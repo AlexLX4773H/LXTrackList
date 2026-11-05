@@ -1,22 +1,15 @@
 package com.lx.tracklist.data.remote
 
-import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.Context
-import android.content.pm.PackageManager
-import android.os.Build
 import android.util.Log
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import coil.Coil
 import coil.request.CachePolicy
 import coil.request.ImageRequest
-import com.lx.tracklist.R
+import com.lx.tracklist.LXApplication
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.repository.MediaRepository
+import com.lx.tracklist.util.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -47,8 +40,6 @@ data class JikanSyncProgress(
 object JikanSyncManager {
 
     private const val TAG = "JikanSync"
-    private const val NOTIFICATION_CHANNEL_ID = "jikan_sync_channel"
-    private const val NOTIFICATION_ID = 47007
     private const val RATE_LIMIT_DELAY_MS = 600L
 
     private val _syncState = MutableStateFlow(JikanSyncProgress())
@@ -98,7 +89,7 @@ object JikanSyncManager {
         if (_syncState.value.isRunning) return
 
         syncJob = scope.launch {
-            createNotificationChannel(context)
+            NotificationHelper.initNotificationChannels(context)
 
             // Find eligible entries across all media types (anime, movies, manga, manhwa, etc.)
             val allEntries = repository.getAllEntriesSync()
@@ -121,10 +112,19 @@ object JikanSyncManager {
                         updatedCount = 0,
                         failedCount = 0,
                         currentTitle = "",
-                        statusMessage = msg,
+                        statusMessage = null,
                         isCompleted = true
                     )
                 }
+                NotificationHelper.showJikanSyncComplete(
+                    context = context,
+                    completed = 0,
+                    total = 0,
+                    updated = 0,
+                    failed = 0,
+                    lastError = msg,
+                    isCancelled = false
+                )
                 return@launch
             }
 
@@ -161,7 +161,7 @@ object JikanSyncManager {
                     )
                 }
 
-                updateNotification(context, completed, total, entry.title, isComplete = false)
+                NotificationHelper.showJikanSyncProgress(context, completed, total, entry.title)
 
                 // Rate limiting delay
                 delay(RATE_LIMIT_DELAY_MS)
@@ -271,87 +271,54 @@ object JikanSyncManager {
                 }
             }
 
-            val finalMsg = if (syncJob?.isCancelled == true) {
-                "Sync cancelled. $completed / $total completed ($updated updated)."
-            } else if (failed == 0) {
-                "Sync completed successfully! Updated $updated MAL entries with posters & details."
-            } else {
-                "Sync completed: $updated updated, $failed failed${if (lastError != null) " ($lastError)" else ""}."
-            }
-
             _syncState.update {
                 it.copy(
                     isRunning = false,
                     currentTitle = "",
-                    statusMessage = finalMsg,
+                    statusMessage = null,
                     isCompleted = true
                 )
             }
 
-            updateNotification(context, completed, total, finalMsg, isComplete = true)
+            NotificationHelper.showJikanSyncComplete(
+                context = context,
+                completed = completed,
+                total = total,
+                updated = updated,
+                failed = failed,
+                lastError = lastError,
+                isCancelled = (syncJob?.isCancelled == true)
+            )
         }
     }
 
-    fun cancelSync() {
+    fun cancelSync(context: Context? = null) {
+        val wasRunning = _syncState.value.isRunning
+        val completed = _syncState.value.completedCount
+        val total = _syncState.value.totalCount
+        val updated = _syncState.value.updatedCount
+        val failed = _syncState.value.failedCount
         syncJob?.cancel()
         syncJob = null
         _syncState.update {
             it.copy(
                 isRunning = false,
                 currentTitle = "",
-                statusMessage = "Sync cancelled by user."
+                statusMessage = null,
+                isCompleted = false
             )
         }
-    }
-
-    private fun createNotificationChannel(context: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
-                "Jikan Sync Progress",
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = "Shows real-time progress when syncing posters and metadata from Jikan"
-            }
-            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
+        if (wasRunning) {
+            val ctx = context ?: LXApplication.instance
+            NotificationHelper.showJikanSyncComplete(
+                context = ctx,
+                completed = completed,
+                total = total,
+                updated = updated,
+                failed = failed,
+                lastError = null,
+                isCancelled = true
+            )
         }
-    }
-
-    private fun updateNotification(
-        context: Context,
-        completed: Int,
-        total: Int,
-        titleOrMessage: String,
-        isComplete: Boolean
-    ) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val hasPermission = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-            if (!hasPermission) return
-        }
-
-        try {
-            val manager = NotificationManagerCompat.from(context)
-            val builder = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
-                .setSmallIcon(R.drawable.lx_logo)
-                .setOnlyAlertOnce(true)
-
-            if (isComplete) {
-                builder.setContentTitle("MAL Sync Completed")
-                    .setContentText(titleOrMessage)
-                    .setProgress(0, 0, false)
-                    .setAutoCancel(true)
-            } else {
-                builder.setContentTitle("Syncing MAL Metadata ($completed/$total)")
-                    .setContentText(titleOrMessage)
-                    .setProgress(total, completed, false)
-                    .setOngoing(true)
-            }
-
-            manager.notify(NOTIFICATION_ID, builder.build())
-        } catch (_: Exception) {}
     }
 }

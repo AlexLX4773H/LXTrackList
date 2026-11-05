@@ -8,6 +8,7 @@ import coil.memory.MemoryCache
 import com.lx.tracklist.data.local.CoverCacheManager
 import com.lx.tracklist.data.local.LXTrackListDatabase
 import com.lx.tracklist.data.repository.MediaRepository
+import com.lx.tracklist.util.NotificationHelper
 
 class LXApplication : Application(), ImageLoaderFactory {
 
@@ -30,6 +31,7 @@ class LXApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        NotificationHelper.initNotificationChannels(this)
     }
 
     override fun newImageLoader(): ImageLoader {

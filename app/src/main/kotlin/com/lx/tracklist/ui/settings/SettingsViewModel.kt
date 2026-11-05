@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.lx.tracklist.LXApplication
+import com.lx.tracklist.util.NotificationHelper
 import com.lx.tracklist.data.exporter.JsonExporter
 import com.lx.tracklist.data.importer.CsvImporter
 import com.lx.tracklist.data.importer.JsonImporter
@@ -305,8 +307,8 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         JikanSyncManager.startSync(context, repository, forceRefresh)
     }
 
-    fun cancelJikanSync() {
-        JikanSyncManager.cancelSync()
+    fun cancelJikanSync(context: Context? = null) {
+        JikanSyncManager.cancelSync(context)
     }
 
     fun updateStartupDefaults(
@@ -695,25 +697,42 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 )
             }
 
+            val appContext = LXApplication.instance.applicationContext
+            NotificationHelper.showImportProgress(appContext, preview.sourceName)
+
             try {
                 val (inserted, updated) = withContext(Dispatchers.IO) {
                     repository.importEntries(filteredEntries, _uiState.value.selectedConflictStrategy)
                 }
 
+                NotificationHelper.showImportComplete(
+                    context = appContext,
+                    sourceName = preview.sourceName,
+                    totalCount = filteredEntries.size,
+                    addedCount = inserted,
+                    updatedCount = updated
+                )
+
                 _uiState.update {
                     it.copy(
                         isImporting = false,
                         importPreview = null,
-                        statusMessage = "Imported ${filteredEntries.size} entries from ${preview.sourceName} ($inserted added, $updated updated)",
+                        statusMessage = null,
                         isErrorMessage = false
                     )
                 }
             } catch (e: Exception) {
+                NotificationHelper.showImportFailed(
+                    context = appContext,
+                    sourceName = preview.sourceName,
+                    errorMessage = e.localizedMessage ?: "Unknown error"
+                )
+
                 _uiState.update {
                     it.copy(
                         isImporting = false,
                         importPreview = null,
-                        statusMessage = "Import failed: ${e.localizedMessage ?: "Unknown error"}",
+                        statusMessage = null,
                         isErrorMessage = true
                     )
                 }
@@ -1080,27 +1099,53 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
     }
 
     private suspend fun saveImportedEntries(entries: List<MediaEntry>, sourceName: String) {
+        val appContext = LXApplication.instance.applicationContext
         if (entries.isEmpty()) {
+            NotificationHelper.showImportFailed(appContext, sourceName, "No valid media entries found")
             _uiState.update {
                 it.copy(
                     isImporting = false,
-                    statusMessage = "No valid media entries found in $sourceName",
+                    statusMessage = null,
                     isErrorMessage = true
                 )
             }
             return
         }
 
-        val (inserted, updated) = withContext(Dispatchers.IO) {
-            repository.importEntries(entries, _uiState.value.selectedConflictStrategy)
-        }
+        NotificationHelper.showImportProgress(appContext, sourceName)
+        try {
+            val (inserted, updated) = withContext(Dispatchers.IO) {
+                repository.importEntries(entries, _uiState.value.selectedConflictStrategy)
+            }
 
-        _uiState.update {
-            it.copy(
-                isImporting = false,
-                statusMessage = "Imported ${entries.size} entries from $sourceName ($inserted added, $updated updated)",
-                isErrorMessage = false
+            NotificationHelper.showImportComplete(
+                context = appContext,
+                sourceName = sourceName,
+                totalCount = entries.size,
+                addedCount = inserted,
+                updatedCount = updated
             )
+
+            _uiState.update {
+                it.copy(
+                    isImporting = false,
+                    statusMessage = null,
+                    isErrorMessage = false
+                )
+            }
+        } catch (e: Exception) {
+            NotificationHelper.showImportFailed(
+                context = appContext,
+                sourceName = sourceName,
+                errorMessage = e.localizedMessage ?: "Unknown error"
+            )
+            _uiState.update {
+                it.copy(
+                    isImporting = false,
+                    statusMessage = null,
+                    isErrorMessage = true
+                )
+            }
         }
     }
 }
