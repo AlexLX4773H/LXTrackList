@@ -68,4 +68,56 @@ class MediaEntryTest {
         val updated = entry.incrementProgress()
         assertEquals(4, updated.currentVolumes)
     }
+
+    @Test
+    fun testRewatchProgressCompletion() {
+        val entry = MediaEntry(
+            title = "Steins;Gate",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.COMPLETED,
+            currentEpisodes = 23,
+            totalEpisodes = 24,
+            isRewatching = true,
+            rewatchCount = 1
+        )
+
+        val updated = entry.incrementProgress()
+        assertEquals(24, updated.currentEpisodes)
+        assertEquals(MediaStatus.COMPLETED, updated.status)
+        assertEquals(false, updated.isRewatching)
+        assertEquals(2, updated.rewatchCount)
+    }
+
+    @Test
+    fun testRewatchInProgressIncrement() {
+        val entry = MediaEntry(
+            title = "Steins;Gate",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.WATCHING,
+            currentEpisodes = 5,
+            totalEpisodes = 24,
+            isRewatching = true,
+            rewatchCount = 1
+        )
+
+        val updated = entry.incrementProgress()
+        assertEquals(6, updated.currentEpisodes)
+        assertEquals(MediaStatus.WATCHING, updated.status)
+        assertEquals(true, updated.isRewatching)
+        assertEquals(1, updated.rewatchCount)
+    }
+
+    @Test
+    fun testForeignDatabaseIdAndSourceAliases() {
+        val entry = MediaEntry(
+            title = "Fullmetal Alchemist: Brotherhood",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.COMPLETED,
+            externalId = "5114",
+            externalSource = "MAL"
+        )
+
+        assertEquals("5114", entry.foreignDatabaseId)
+        assertEquals("MAL", entry.foreignDatabaseSource)
+    }
 }

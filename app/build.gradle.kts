@@ -75,6 +75,9 @@ dependencies {
   // Gson (JSON Import/Export)
   implementation(libs.gson)
 
+  // OkHttp (Networking & Remote Metadata Sync)
+  implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
   // Tooling
   debugImplementation(libs.androidx.compose.ui.tooling)
   // Instrumented tests

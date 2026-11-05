@@ -75,3 +75,8 @@ scratch/
 /dat/
 /plan/
 
+# Environment files
+.env
+*.env.local
+
+

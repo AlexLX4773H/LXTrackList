@@ -3,11 +3,14 @@ package com.lx.tracklist
 import com.lx.tracklist.data.exporter.JsonExporter
 import com.lx.tracklist.data.importer.CsvImporter
 import com.lx.tracklist.data.importer.JsonImporter
+import com.lx.tracklist.data.importer.MalXmlImporter
 import com.lx.tracklist.data.importer.TachiyomiImporter
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.data.remote.JikanApiClient
+import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.ui.settings.ExportDestination
 import com.lx.tracklist.ui.settings.ExportPreviewState
 import com.lx.tracklist.ui.settings.ImportPreviewState
@@ -644,6 +647,186 @@ class ImporterExporterTest {
         }
         assertEquals(2, filtered.size)
         assertTrue(filtered.all { it.subCategory == "Reading" })
+    }
+
+    @Test
+    fun testMalXmlImporterDatesAndRewatch() {
+        val xmlData = """
+            <?xml version="1.0" encoding="UTF-8" ?>
+            <myanimelist>
+                <myinfo>
+                    <user_id>12345</user_id>
+                    <user_name>Alex</user_name>
+                    <user_export_type>1</user_export_type>
+                </myinfo>
+                <anime>
+                    <series_animedb_id>5114</series_animedb_id>
+                    <series_title><![CDATA[Fullmetal Alchemist: Brotherhood]]></series_title>
+                    <series_type>TV</series_type>
+                    <series_episodes>64</series_episodes>
+                    <my_watched_episodes>64</my_watched_episodes>
+                    <my_start_date>2023-01-15</my_start_date>
+                    <my_finish_date>2023-04-20</my_finish_date>
+                    <my_score>10</my_score>
+                    <my_status>2</my_status>
+                    <my_rewatching>1</my_rewatching>
+                    <my_times_watched>2</my_times_watched>
+                    <my_tags><![CDATA[shounen, military]]></my_tags>
+                </anime>
+                <anime>
+                    <series_animedb_id>16498</series_animedb_id>
+                    <series_title>Attack on Titan</series_title>
+                    <series_type>TV</series_type>
+                    <series_episodes>25</series_episodes>
+                    <my_watched_episodes>10</my_watched_episodes>
+                    <my_start_date>0000-00-00</my_start_date>
+                    <my_finish_date />
+                    <my_score>9</my_score>
+                    <my_status>1</my_status>
+                    <my_rewatching>0</my_rewatching>
+                    <my_times_watched>0</my_times_watched>
+                </anime>
+                <manga>
+                    <manga_mangadb_id>11</manga_mangadb_id>
+                    <manga_title>Naruto</manga_title>
+                    <manga_volumes>72</manga_volumes>
+                    <manga_chapters>700</manga_chapters>
+                    <my_read_volumes>72</my_read_volumes>
+                    <my_read_chapters>700</my_read_chapters>
+                    <my_start_date>2021-05-10</my_start_date>
+                    <my_finish_date>2022-02-14</my_finish_date>
+                    <my_score>8</my_score>
+                    <my_status>2</my_status>
+                    <my_rereadingg>0</my_rereadingg>
+                    <my_times_read>3</my_times_read>
+                </manga>
+            </myanimelist>
+        """.trimIndent()
+
+        val stream = ByteArrayInputStream(xmlData.toByteArray(Charsets.UTF_8))
+        val entries = MalXmlImporter.parse(stream)
+
+        assertEquals(3, entries.size)
+
+        // 1. FMAB
+        val fmab = entries[0]
+        assertEquals("Fullmetal Alchemist: Brotherhood", fmab.title)
+        assertEquals("5114", fmab.externalId)
+        assertEquals("5114", fmab.foreignDatabaseId)
+        assertEquals("MAL", fmab.externalSource)
+        assertEquals("MAL", fmab.foreignDatabaseSource)
+        assertEquals(MediaType.ANIME, fmab.mediaType)
+        assertEquals(MediaStatus.COMPLETED, fmab.status)
+        assertEquals(10, fmab.score)
+        assertEquals(64, fmab.currentEpisodes)
+        assertEquals(64, fmab.totalEpisodes)
+        assertEquals(true, fmab.isRewatching)
+        assertEquals(2, fmab.rewatchCount)
+        assertNotNull(fmab.startDate)
+        assertNotNull(fmab.finishDate)
+        assertTrue(fmab.finishDate!! > fmab.startDate!!)
+
+        // 2. AOT (Zero/Empty dates)
+        val aot = entries[1]
+        assertEquals("Attack on Titan", aot.title)
+        assertEquals("16498", aot.externalId)
+        assertEquals("MAL", aot.externalSource)
+        assertEquals(MediaType.ANIME, aot.mediaType)
+        assertEquals(MediaStatus.WATCHING, aot.status)
+        assertEquals(9, aot.score)
+        assertEquals(10, aot.currentEpisodes)
+        assertEquals(25, aot.totalEpisodes)
+        assertEquals(false, aot.isRewatching)
+        assertEquals(0, aot.rewatchCount)
+        assertNull(aot.startDate)
+        assertNull(aot.finishDate)
+
+        // 3. Naruto (Manga)
+        val naruto = entries[2]
+        assertEquals("Naruto", naruto.title)
+        assertEquals("11", naruto.externalId)
+        assertEquals("MAL", naruto.externalSource)
+        assertEquals(MediaType.MANGA, naruto.mediaType)
+        assertEquals(MediaStatus.COMPLETED, naruto.status)
+        assertEquals(8, naruto.score)
+        assertEquals(700, naruto.currentChapters)
+        assertEquals(700, naruto.totalChapters)
+        assertEquals(false, naruto.isRewatching)
+        assertEquals(3, naruto.rewatchCount)
+        assertNotNull(naruto.startDate)
+        assertNotNull(naruto.finishDate)
+    }
+
+    @Test
+    fun testCsvImporterWithForeignDbAndRewatch() {
+        val csvData = """
+            title,mediaType,status,score,foreign_database_id,foreign_database_source,rewatch_count,is_rewatching,runtime
+            "Death Note",ANIME,COMPLETED,9,"1535","MAL",2,true,23
+            "Spirited Away",MOVIE,COMPLETED,10,"199","MAL",4,false,125
+        """.trimIndent()
+
+        val stream = ByteArrayInputStream(csvData.toByteArray(Charsets.UTF_8))
+        val entries = CsvImporter.parse(stream)
+
+        assertEquals(2, entries.size)
+
+        val deathNote = entries[0]
+        assertEquals("Death Note", deathNote.title)
+        assertEquals(MediaType.ANIME, deathNote.mediaType)
+        assertEquals(MediaStatus.COMPLETED, deathNote.status)
+        assertEquals("1535", deathNote.foreignDatabaseId)
+        assertEquals("MAL", deathNote.foreignDatabaseSource)
+        assertEquals(2, deathNote.rewatchCount)
+        assertEquals(true, deathNote.isRewatching)
+        assertEquals(23, deathNote.episodeLengthMinutes)
+        assertNull(deathNote.durationMinutes)
+
+        val spirited = entries[1]
+        assertEquals("Spirited Away", spirited.title)
+        assertEquals(MediaType.MOVIE, spirited.mediaType)
+        assertEquals("199", spirited.foreignDatabaseId)
+        assertEquals("MAL", spirited.foreignDatabaseSource)
+        assertEquals(4, spirited.rewatchCount)
+        assertEquals(false, spirited.isRewatching)
+        assertEquals(125, spirited.durationMinutes)
+        assertNull(spirited.episodeLengthMinutes)
+    }
+
+    @Test
+    fun testJikanDurationMinutesParsing() {
+        assertEquals(24, JikanApiClient.parseDurationMinutes("24 min per ep"))
+        assertEquals(110, JikanApiClient.parseDurationMinutes("1 hr 50 min"))
+        assertEquals(60, JikanApiClient.parseDurationMinutes("1 hr"))
+        assertEquals(120, JikanApiClient.parseDurationMinutes("2 hours"))
+        assertEquals(45, JikanApiClient.parseDurationMinutes("45 min"))
+        assertEquals(83, JikanApiClient.parseDurationMinutes("1 hour 23 mins"))
+        assertNull(JikanApiClient.parseDurationMinutes("Unknown"))
+        assertNull(JikanApiClient.parseDurationMinutes(""))
+        assertNull(JikanApiClient.parseDurationMinutes(null))
+    }
+
+    @Test
+    fun testJikanSyncManagerEligibility() {
+        val animeMal = MediaEntry(title = "Anime", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, externalId = "5114", externalSource = "MAL")
+        val mangaMal = MediaEntry(title = "Manga", mediaType = MediaType.MANGA, status = MediaStatus.WATCHING, externalId = "11", externalSource = "MAL")
+        val manhwaMal = MediaEntry(title = "Manhwa", mediaType = MediaType.MANHWA, status = MediaStatus.WATCHING, externalId = "121496", externalSource = "MyAnimeList")
+        val movieMal = MediaEntry(title = "Movie", mediaType = MediaType.MOVIE, status = MediaStatus.COMPLETED, externalId = "199", externalSource = "mal")
+        val bookMal = MediaEntry(title = "Novel", mediaType = MediaType.BOOK, status = MediaStatus.WATCHING, externalId = "3000", externalSource = null)
+        val anilistEntry = MediaEntry(title = "Anilist", mediaType = MediaType.MANGA, status = MediaStatus.WATCHING, externalId = "30002", externalSource = "ANILIST")
+
+        assertTrue(JikanSyncManager.isMalSource(animeMal))
+        assertTrue(JikanSyncManager.isMalSource(mangaMal))
+        assertTrue(JikanSyncManager.isMalSource(manhwaMal))
+        assertTrue(JikanSyncManager.isMalSource(movieMal))
+        assertTrue(JikanSyncManager.isMalSource(bookMal))
+        assertFalse(JikanSyncManager.isMalSource(anilistEntry))
+
+        assertTrue(JikanSyncManager.isMangaType(MediaType.MANGA))
+        assertTrue(JikanSyncManager.isMangaType(MediaType.MANHWA))
+        assertTrue(JikanSyncManager.isMangaType(MediaType.BOOK))
+        assertFalse(JikanSyncManager.isMangaType(MediaType.ANIME))
+        assertFalse(JikanSyncManager.isMangaType(MediaType.MOVIE))
+        assertFalse(JikanSyncManager.isMangaType(MediaType.SHOW))
     }
 
     private fun writeVarint(out: ByteArrayOutputStream, value: Long) {

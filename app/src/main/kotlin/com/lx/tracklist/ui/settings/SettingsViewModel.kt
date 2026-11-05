@@ -13,6 +13,7 @@ import com.lx.tracklist.data.importer.TachiyomiImporter
 import com.lx.tracklist.data.local.CoverCacheManager
 import com.lx.tracklist.data.local.StorageFileInfo
 import com.lx.tracklist.data.local.StorageHelper
+import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
@@ -248,6 +249,8 @@ data class SettingsUiState(
 
 class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
+    val jikanSyncState = JikanSyncManager.syncState
+
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
@@ -296,6 +299,14 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun selectProfileForDefaults(profileId: Long) {
         _uiState.update { it.copy(selectedProfileIdForDefaults = profileId) }
+    }
+
+    fun startJikanSync(context: Context, forceRefresh: Boolean = false) {
+        JikanSyncManager.startSync(context, repository, forceRefresh)
+    }
+
+    fun cancelJikanSync() {
+        JikanSyncManager.cancelSync()
     }
 
     fun updateStartupDefaults(

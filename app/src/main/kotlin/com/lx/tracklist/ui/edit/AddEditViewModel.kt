@@ -38,6 +38,9 @@ data class AddEditUiState(
     val coverImageUri: String = "",
     val isFavorite: Boolean = false,
     val rewatchCount: Int = 0,
+    val isRewatching: Boolean = false,
+    val externalId: String = "",
+    val externalSource: String = "",
     val notes: String = "",
     val tags: String = "",
     val startDate: Long? = null,
@@ -144,6 +147,9 @@ class AddEditViewModel(
                             coverImageUri = entry.coverImageUri ?: "",
                             isFavorite = entry.isFavorite,
                             rewatchCount = entry.rewatchCount,
+                            isRewatching = entry.isRewatching,
+                            externalId = entry.externalId ?: "",
+                            externalSource = entry.externalSource ?: "",
                             notes = entry.notes ?: "",
                             tags = entry.tags ?: "",
                             startDate = effectiveStartDate,
@@ -273,6 +279,10 @@ class AddEditViewModel(
     fun updatePriority(value: Priority) = _uiState.update { it.copy(priority = value) }
     fun updateCoverUri(value: String) = _uiState.update { it.copy(coverImageUri = value) }
     fun updateIsFavorite(value: Boolean) = _uiState.update { it.copy(isFavorite = value) }
+    fun updateRewatchCount(value: Int) = _uiState.update { it.copy(rewatchCount = value.coerceAtLeast(0)) }
+    fun updateIsRewatching(value: Boolean) = _uiState.update { it.copy(isRewatching = value) }
+    fun updateExternalId(value: String) = _uiState.update { it.copy(externalId = value) }
+    fun updateExternalSource(value: String) = _uiState.update { it.copy(externalSource = value) }
     fun updateNotes(value: String) = _uiState.update { it.copy(notes = value) }
     fun updateTags(value: String) = _uiState.update { it.copy(tags = value) }
     fun updateStartDate(value: Long?) = _uiState.update { it.copy(startDate = value) }
@@ -285,6 +295,7 @@ class AddEditViewModel(
     fun updateAiredEpisodes(value: Int) = _uiState.update { it.copy(airedEpisodes = value) }
     fun updateCurrentSeasons(value: Int) = _uiState.update { it.copy(currentSeasons = value) }
     fun updateTotalSeasons(value: Int) = _uiState.update { it.copy(totalSeasons = value) }
+    fun updateEpisodeLengthMinutes(value: Int?) = _uiState.update { it.copy(episodeLengthMinutes = value) }
     fun updateIsAiring(value: Boolean) = _uiState.update { it.copy(isAiring = value) }
 
     fun updateTrackingUnit(value: TrackingUnit) = _uiState.update { it.copy(trackingUnit = value) }
@@ -331,6 +342,9 @@ class AddEditViewModel(
                 coverImageUri = s.coverImageUri.trim().ifBlank { null },
                 isFavorite = s.isFavorite,
                 rewatchCount = s.rewatchCount,
+                isRewatching = s.isRewatching,
+                externalId = s.externalId.trim().ifBlank { null },
+                externalSource = s.externalSource.trim().ifBlank { null },
                 notes = s.notes.trim().ifBlank { null },
                 tags = s.tags.trim().ifBlank { null },
                 startDate = effectiveStartDate,

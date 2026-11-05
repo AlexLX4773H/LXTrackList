@@ -36,8 +36,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -116,6 +118,8 @@ fun AddEditScreen(
     var subCategoryExpanded by remember { mutableStateOf(false) }
     var pendingMainCategory by remember { mutableStateOf<MainCategoryItem?>(null) }
     var pendingSubCategoryChange by remember { mutableStateOf<PendingSubCategoryChange?>(null) }
+    var isForeignDbUnlocked by remember { mutableStateOf(false) }
+    var showForeignDbWarningDialog by remember { mutableStateOf(false) }
 
     BackHandler(onBack = onNavigateBack)
 
@@ -395,6 +399,16 @@ fun AddEditScreen(
                                 }
                             }
 
+                            OutlinedTextField(
+                                value = if (state.episodeLengthMinutes != null && state.episodeLengthMinutes!! > 0) state.episodeLengthMinutes.toString() else "",
+                                onValueChange = { viewModel.updateEpisodeLengthMinutes(it.toIntOrNull()?.takeIf { len -> len > 0 }) },
+                                label = { Text("Episode Runtime (mins)") },
+                                placeholder = { Text("e.g. 24") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = outlinedColors()
+                            )
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -550,6 +564,16 @@ fun AddEditScreen(
                                     colors = outlinedColors()
                                 )
                             }
+
+                            OutlinedTextField(
+                                value = if (state.durationMinutes != null && state.durationMinutes!! > 0) state.durationMinutes.toString() else "",
+                                onValueChange = { viewModel.updateDurationMinutes(it.toIntOrNull()?.takeIf { len -> len > 0 }) },
+                                label = { Text("Movie Runtime (mins)") },
+                                placeholder = { Text("e.g. 110") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = outlinedColors()
+                            )
                         }
                     }
                 }
@@ -616,6 +640,125 @@ fun AddEditScreen(
                         endTimestamp = state.airedEndDate,
                         onEndDateSelected = { viewModel.updateAiredEndDate(it) }
                     )
+                }
+            }
+
+            // Rewatch Details Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                border = BorderStroke(1.dp, LXBorder),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Rewatch Details",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = LXPrimaryGreen
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Currently Rewatching?", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
+                            Text("Flag that you are re-experiencing this title", color = LXTextSecondary, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(
+                            checked = state.isRewatching,
+                            onCheckedChange = { viewModel.updateIsRewatching(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = LXBackgroundBlack,
+                                checkedTrackColor = LXPrimaryGreen
+                            )
+                        )
+                    }
+                    OutlinedTextField(
+                        value = if (state.rewatchCount > 0) state.rewatchCount.toString() else "",
+                        onValueChange = { viewModel.updateRewatchCount(it.toIntOrNull() ?: 0) },
+                        label = { Text("Times Rewatched / Re-read") },
+                        placeholder = { Text("0") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = outlinedColors()
+                    )
+                }
+            }
+
+            // Foreign Database Information Section
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                border = BorderStroke(1.dp, LXBorder),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Foreign Database Information",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = LXPrimaryGreen
+                            )
+                            Text(
+                                text = "Source database and external ID (e.g. MAL ID for Jikan sync)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LXTextSecondary
+                            )
+                        }
+                        if (!isForeignDbUnlocked) {
+                            TextButton(
+                                onClick = { showForeignDbWarningDialog = true }
+                            ) {
+                                Icon(Icons.Default.Lock, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Edit", color = LXScoreGold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = state.externalSource,
+                            onValueChange = {
+                                if (isForeignDbUnlocked) viewModel.updateExternalSource(it)
+                                else showForeignDbWarningDialog = true
+                            },
+                            readOnly = !isForeignDbUnlocked,
+                            label = { Text("Database Source") },
+                            placeholder = { Text("e.g. MAL") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            colors = outlinedColors()
+                        )
+                        OutlinedTextField(
+                            value = state.externalId,
+                            onValueChange = {
+                                if (isForeignDbUnlocked) viewModel.updateExternalId(it)
+                                else showForeignDbWarningDialog = true
+                            },
+                            readOnly = !isForeignDbUnlocked,
+                            label = { Text("Foreign Database ID") },
+                            placeholder = { Text("e.g. 38101") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1.5f),
+                            colors = outlinedColors()
+                        )
+                    }
                 }
             }
 
@@ -884,6 +1027,52 @@ fun AddEditScreen(
                     },
                     dismissButton = {
                         TextButton(onClick = { pendingSubCategoryChange = null }) {
+                            Text("Cancel", color = LXTextSecondary)
+                        }
+                    },
+                    containerColor = LXSurfaceElevated
+                )
+            }
+
+            // Warning Dialog for Foreign Database ID / Source editing
+            if (showForeignDbWarningDialog) {
+                AlertDialog(
+                    onDismissRequest = { showForeignDbWarningDialog = false },
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = LXScoreGold)
+                            Text(
+                                text = "Edit Foreign Database ID?",
+                                color = LXTextPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    },
+                    text = {
+                        Text(
+                            text = "Modifying the foreign database ID or source may affect automated poster fetching and synchronization with external databases (such as MyAnimeList / Jikan). Are you sure you want to edit this?",
+                            color = LXTextSecondary
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                isForeignDbUnlocked = true
+                                showForeignDbWarningDialog = false
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack
+                            )
+                        ) {
+                            Text("Enable Editing", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showForeignDbWarningDialog = false }) {
                             Text("Cancel", color = LXTextSecondary)
                         }
                     },

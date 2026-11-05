@@ -107,6 +107,62 @@ class DetailViewModel(
         }
     }
 
+    fun updateScore(newScore: Int?) {
+        val cur = entry.value ?: return
+        viewModelScope.launch {
+            val updated = cur.copy(score = newScore, updatedAt = System.currentTimeMillis())
+            repository.update(updated)
+        }
+    }
+
+    fun startRewatch() {
+        val cur = entry.value ?: return
+        val now = System.currentTimeMillis()
+        viewModelScope.launch {
+            val updated = cur.copy(
+                isRewatching = true,
+                status = MediaStatus.WATCHING,
+                currentEpisodes = 0,
+                currentChapters = 0,
+                currentVolumes = 0,
+                currentPages = 0,
+                startDate = now,
+                finishDate = null,
+                updatedAt = now
+            )
+            repository.update(updated)
+        }
+    }
+
+    fun finishRewatch() {
+        val cur = entry.value ?: return
+        val now = System.currentTimeMillis()
+        viewModelScope.launch {
+            val updated = cur.copy(
+                isRewatching = false,
+                rewatchCount = cur.rewatchCount + 1,
+                status = MediaStatus.COMPLETED,
+                currentEpisodes = if (cur.totalEpisodes > 0) cur.totalEpisodes else cur.currentEpisodes,
+                currentChapters = if (cur.totalChapters > 0) cur.totalChapters else cur.currentChapters,
+                currentVolumes = if (cur.totalVolumes > 0) cur.totalVolumes else cur.currentVolumes,
+                finishDate = now,
+                updatedAt = now
+            )
+            repository.update(updated)
+        }
+    }
+
+    fun cancelRewatch() {
+        val cur = entry.value ?: return
+        viewModelScope.launch {
+            val updated = cur.copy(
+                isRewatching = false,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.update(updated)
+        }
+    }
+
     fun deleteEntry() {
         val cur = entry.value ?: return
         viewModelScope.launch {

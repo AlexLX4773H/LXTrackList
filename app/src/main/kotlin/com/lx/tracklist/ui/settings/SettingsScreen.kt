@@ -119,6 +119,7 @@ import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.remote.JikanSyncProgress
 import com.lx.tracklist.data.repository.ConflictStrategy
 import com.lx.tracklist.ui.components.getCategoryIcon
 import com.lx.tracklist.ui.settings.ExportDestination
@@ -150,6 +151,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
+    val jikanSyncState by viewModel.jikanSyncState.collectAsState()
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 600
@@ -1152,6 +1154,9 @@ fun SettingsScreen(
                         )
                         SettingsSubMenu.STORAGE -> BackupStorageContent(
                             state = state,
+                            jikanSyncState = jikanSyncState,
+                            onStartJikanSync = { force -> viewModel.startJikanSync(context, force) },
+                            onCancelJikanSync = { viewModel.cancelJikanSync() },
                             onCheckStorageStatus = { viewModel.checkStorageStatus(context) },
                             onRequestStoragePermission = { viewModel.requestStoragePermission(context) },
                             onExportToHomeOutput = { viewModel.prepareExport(ExportDestination.HOME_OUTPUT_FOLDER) },
@@ -1218,6 +1223,9 @@ fun SettingsScreen(
                     SettingsSubMenu.STORAGE -> {
                         BackupStorageContent(
                             state = state,
+                            jikanSyncState = jikanSyncState,
+                            onStartJikanSync = { force -> viewModel.startJikanSync(context, force) },
+                            onCancelJikanSync = { viewModel.cancelJikanSync() },
                             onCheckStorageStatus = { viewModel.checkStorageStatus(context) },
                             onRequestStoragePermission = { viewModel.requestStoragePermission(context) },
                             onExportToHomeOutput = { viewModel.prepareExport(ExportDestination.HOME_OUTPUT_FOLDER) },
@@ -1748,6 +1756,9 @@ private fun CustomCategoriesContent(
 @Composable
 private fun BackupStorageContent(
     state: SettingsUiState,
+    jikanSyncState: JikanSyncProgress,
+    onStartJikanSync: (Boolean) -> Unit,
+    onCancelJikanSync: () -> Unit,
     onCheckStorageStatus: () -> Unit,
     onRequestStoragePermission: () -> Unit,
     onExportToHomeOutput: () -> Unit,
@@ -2361,6 +2372,197 @@ private fun BackupStorageContent(
                             Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp), tint = LXErrorRed)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("Clear", color = LXErrorRed, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Jikan MAL Metadata Sync Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = null,
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "MyAnimeList (Jikan) Sync",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                    }
+
+                    if (jikanSyncState.isRunning) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "SYNCING",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Automatically fetches official high-res posters, runtimes (anime/movies), and total chapters/volumes (manga/manhwa) from MyAnimeList via Jikan for all entries with database source MAL.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                if (jikanSyncState.isRunning) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Progress (${jikanSyncState.completedCount}/${jikanSyncState.totalCount}) • ${jikanSyncState.updatedCount} updated",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = LXTextPrimary
+                            )
+                            Text(
+                                text = "${(jikanSyncState.progressFraction * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = LXPrimaryGreen
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(LXBorder)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(jikanSyncState.progressFraction)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(LXPrimaryGreen)
+                            )
+                        }
+
+                        if (jikanSyncState.currentTitle.isNotBlank()) {
+                            Text(
+                                text = "Current: ${jikanSyncState.currentTitle}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Text(
+                            text = "Pending: ${jikanSyncState.pendingCount} remaining (throttled for rate limits)${if (jikanSyncState.failedCount > 0) " • ${jikanSyncState.failedCount} failed" else ""}",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = LXTextSecondary
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            OutlinedButton(
+                                onClick = onCancelJikanSync,
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXErrorRed),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, LXErrorRed.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Cancel Sync", fontSize = 12.sp, color = LXErrorRed)
+                            }
+                        }
+                    }
+                } else {
+                    if (jikanSyncState.statusMessage != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.1f))
+                                .padding(10.dp)
+                        ) {
+                            Text(
+                                text = jikanSyncState.statusMessage,
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { onStartJikanSync(false) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Fetch Missing Posters",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { onStartJikanSync(true) },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Re-fetch All MAL",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }

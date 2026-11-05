@@ -32,6 +32,18 @@ object CsvImporter {
         val totalChIdx = header.indexOfFirst { it.contains("totalchapter") }
         val notesIdx = header.indexOfFirst { it.contains("note") || it.contains("comment") }
         val tagsIdx = header.indexOfFirst { it.contains("tag") }
+        val foreignDbIdIdx = header.indexOfFirst {
+            it.contains("foreign_database_id") || it.contains("foreigndatabaseid") ||
+            it.contains("external_id") || it.contains("externalid") ||
+            it.contains("mal_id") || it.contains("series_animedb_id") || it.contains("manga_mangadb_id")
+        }
+        val foreignDbSourceIdx = header.indexOfFirst {
+            it.contains("foreign_database_source") || it.contains("foreigndatabasesource") ||
+            it.contains("external_source") || it.contains("externalsource")
+        }
+        val rewatchCountIdx = header.indexOfFirst { it.contains("rewatch") || it.contains("times_watched") || it.contains("times_read") }
+        val isRewatchingIdx = header.indexOfFirst { it.contains("is_rewatching") || it.contains("isrewatching") || it.contains("rewatching") }
+        val episodeLengthIdx = header.indexOfFirst { it.contains("episode_length") || it.contains("episodelength") || it.contains("runtime") || it.contains("duration") }
 
         val entries = mutableListOf<MediaEntry>()
 
@@ -58,6 +70,14 @@ object CsvImporter {
 
             val notes = if (notesIdx in cols.indices) cols[notesIdx].takeIf { it.isNotBlank() } else null
             val tags = if (tagsIdx in cols.indices) cols[tagsIdx].takeIf { it.isNotBlank() } else null
+            val foreignId = if (foreignDbIdIdx in cols.indices) cols[foreignDbIdIdx].trim().takeIf { it.isNotBlank() } else null
+            val foreignSource = if (foreignDbSourceIdx in cols.indices) cols[foreignDbSourceIdx].trim().takeIf { it.isNotBlank() } else if (foreignId != null) "CSV" else null
+            val rewatchCount = if (rewatchCountIdx in cols.indices) cols[rewatchCountIdx].toIntOrNull() ?: 0 else 0
+            val isRewatching = if (isRewatchingIdx in cols.indices) {
+                val v = cols[isRewatchingIdx].trim().lowercase()
+                v == "1" || v == "true" || v == "yes"
+            } else false
+            val parsedLength = if (episodeLengthIdx in cols.indices) cols[episodeLengthIdx].toIntOrNull() else null
 
             entries.add(
                 MediaEntry(
@@ -77,7 +97,12 @@ object CsvImporter {
                     notes = notes,
                     tags = tags,
                     priority = Priority.MEDIUM,
-                    externalSource = "CSV"
+                    externalId = foreignId,
+                    externalSource = foreignSource ?: "CSV",
+                    rewatchCount = rewatchCount,
+                    isRewatching = isRewatching,
+                    episodeLengthMinutes = if (mediaType != MediaType.MOVIE) parsedLength else null,
+                    durationMinutes = if (mediaType == MediaType.MOVIE) parsedLength else null
                 )
             )
         }

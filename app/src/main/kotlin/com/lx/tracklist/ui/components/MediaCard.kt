@@ -309,6 +309,17 @@ fun MediaCard(
                             )
                         }
 
+                        if (entry.isRewatching) {
+                            Text(
+                                text = "REWATCHING",
+                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                color = LXPrimaryGreen,
+                                modifier = Modifier
+                                    .background(LXPrimaryGreen.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
+
                         if (entry.score != null && entry.score > 0) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,

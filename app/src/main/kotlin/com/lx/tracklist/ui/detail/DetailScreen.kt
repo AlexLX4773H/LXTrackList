@@ -31,9 +31,12 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -43,6 +46,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -269,23 +273,23 @@ fun DetailScreen(
                                 mediaType = currentEntry.mediaType,
                                 onStatusSelected = { viewModel.updateStatus(it) }
                             )
-                            if (currentEntry.score != null && currentEntry.score > 0) {
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(LXScoreGold.copy(alpha = 0.15f))
-                                        .border(1.dp, LXScoreGold.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Default.Star, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(13.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text(
-                                        text = "${currentEntry.score}/10",
-                                        color = LXScoreGold,
-                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                                    )
-                                }
+                            ScoreDropdownChip(
+                                score = currentEntry.score,
+                                onScoreSelected = { viewModel.updateScore(it) }
+                            )
+                            if (currentEntry.mediaType == MediaType.MOVIE && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
+                                val h = currentEntry.durationMinutes / 60
+                                val m = currentEntry.durationMinutes % 60
+                                val durStr = if (h > 0) "${h}h ${m}m" else "${m}m"
+                                MetaChip(label = "⏱️ $durStr", color = LXPrimaryGreen)
+                            } else if (currentEntry.episodeLengthMinutes != null && currentEntry.episodeLengthMinutes > 0) {
+                                MetaChip(label = "⏱️ ${currentEntry.episodeLengthMinutes} min/ep", color = LXPrimaryGreen)
+                            }
+                            if (currentEntry.isRewatching) {
+                                MetaChip(label = "REWATCHING", color = LXPrimaryGreen)
+                            }
+                            if (currentEntry.rewatchCount > 0) {
+                                MetaChip(label = "Rewatched ${currentEntry.rewatchCount}x", color = LXScoreGold)
                             }
                         }
                     }
@@ -297,7 +301,14 @@ fun DetailScreen(
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        DetailProgressCard(currentEntry, onIncrement = { viewModel.increment() }, onDecrement = { viewModel.decrement() })
+                        DetailProgressCard(
+                            entry = currentEntry,
+                            onIncrement = { viewModel.increment() },
+                            onDecrement = { viewModel.decrement() },
+                            onStartRewatch = { viewModel.startRewatch() },
+                            onFinishRewatch = { viewModel.finishRewatch() },
+                            onCancelRewatch = { viewModel.cancelRewatch() }
+                        )
                         DetailDatesCard(currentEntry)
                         DetailNotesCard(currentEntry)
                         DetailTagsCard(currentEntry)
@@ -405,30 +416,37 @@ fun DetailScreen(
                                 mediaType = currentEntry.mediaType,
                                 onStatusSelected = { viewModel.updateStatus(it) }
                             )
-                            if (currentEntry.score != null && currentEntry.score > 0) {
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(LXScoreGold.copy(alpha = 0.15f))
-                                        .border(1.dp, LXScoreGold.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Default.Star, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(13.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text(
-                                        text = "${currentEntry.score}/10",
-                                        color = LXScoreGold,
-                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                                    )
-                                }
+                            ScoreDropdownChip(
+                                score = currentEntry.score,
+                                onScoreSelected = { viewModel.updateScore(it) }
+                            )
+                            if (currentEntry.mediaType == MediaType.MOVIE && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
+                                val h = currentEntry.durationMinutes / 60
+                                val m = currentEntry.durationMinutes % 60
+                                val durStr = if (h > 0) "${h}h ${m}m" else "${m}m"
+                                MetaChip(label = "⏱️ $durStr", color = LXPrimaryGreen)
+                            } else if (currentEntry.episodeLengthMinutes != null && currentEntry.episodeLengthMinutes > 0) {
+                                MetaChip(label = "⏱️ ${currentEntry.episodeLengthMinutes} min/ep", color = LXPrimaryGreen)
+                            }
+                            if (currentEntry.isRewatching) {
+                                MetaChip(label = "REWATCHING", color = LXPrimaryGreen)
+                            }
+                            if (currentEntry.rewatchCount > 0) {
+                                MetaChip(label = "Rewatched ${currentEntry.rewatchCount}x", color = LXScoreGold)
                             }
                             if (currentEntry.isAiring) {
                                 MetaChip(label = "AIRING", color = LXAiringBlue)
                             }
                         }
 
-                        DetailProgressCard(currentEntry, onIncrement = { viewModel.increment() }, onDecrement = { viewModel.decrement() })
+                        DetailProgressCard(
+                            entry = currentEntry,
+                            onIncrement = { viewModel.increment() },
+                            onDecrement = { viewModel.decrement() },
+                            onStartRewatch = { viewModel.startRewatch() },
+                            onFinishRewatch = { viewModel.finishRewatch() },
+                            onCancelRewatch = { viewModel.cancelRewatch() }
+                        )
                         DetailDatesCard(currentEntry)
                         DetailNotesCard(currentEntry)
                         DetailTagsCard(currentEntry)
@@ -468,7 +486,10 @@ fun DetailScreen(
 private fun DetailProgressCard(
     entry: MediaEntry,
     onIncrement: () -> Unit,
-    onDecrement: () -> Unit
+    onDecrement: () -> Unit,
+    onStartRewatch: () -> Unit,
+    onFinishRewatch: () -> Unit,
+    onCancelRewatch: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -495,6 +516,53 @@ private fun DetailProgressCard(
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = LXPrimaryGreen
                 )
+            }
+
+            // Rewatching banner & controls
+            if (entry.isRewatching) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXPrimaryGreen.copy(alpha = 0.12f))
+                        .border(1.dp, LXPrimaryGreen.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(16.dp))
+                        Text(
+                            text = "Rewatching${if (entry.rewatchCount > 0) " (#${entry.rewatchCount + 1})" else ""}",
+                            color = LXPrimaryGreen,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(
+                            onClick = onCancelRewatch,
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("Cancel", color = LXTextSecondary, fontSize = 11.sp)
+                        }
+                        Button(
+                            onClick = onFinishRewatch,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack
+                            ),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text("Finish Rewatch", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
 
             // If it is an airing show/anime, display user's episodes watched, aired episodes and total episodes
@@ -592,29 +660,48 @@ private fun DetailProgressCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = onDecrement,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(LXSurfaceElevated)
-                ) {
-                    Icon(Icons.Default.Remove, contentDescription = "Decrement", tint = LXTextPrimary)
+                if (entry.status == MediaStatus.COMPLETED && !entry.isRewatching) {
+                    OutlinedButton(
+                        onClick = onStartRewatch,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text("Start Rewatch", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Spacer(modifier = Modifier.width(1.dp))
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onDecrement,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(LXSurfaceElevated)
+                    ) {
+                        Icon(Icons.Default.Remove, contentDescription = "Decrement", tint = LXTextPrimary)
+                    }
 
-                IconButton(
-                    onClick = onIncrement,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(LXPrimaryGreen)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Increment", tint = LXBackgroundBlack)
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    IconButton(
+                        onClick = onIncrement,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(LXPrimaryGreen)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Increment", tint = LXBackgroundBlack)
+                    }
                 }
             }
         }
@@ -847,6 +934,98 @@ private fun StatusDropdownChip(
                     onClick = {
                         expanded = false
                         onStatusSelected(item)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScoreDropdownChip(
+    score: Int?,
+    onScoreSelected: (Int?) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val hasScore = score != null && score > 0
+
+    Box {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(if (hasScore) LXScoreGold.copy(alpha = 0.15f) else LXSurfaceElevated)
+                .border(
+                    width = 1.dp,
+                    color = if (hasScore) LXScoreGold.copy(alpha = 0.45f) else LXBorder,
+                    shape = RoundedCornerShape(6.dp)
+                )
+                .clickable { expanded = true }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Star,
+                contentDescription = null,
+                tint = if (hasScore) LXScoreGold else LXTextSecondary,
+                modifier = Modifier.size(13.dp)
+            )
+            Spacer(modifier = Modifier.width(3.dp))
+            Text(
+                text = if (hasScore) "$score/10" else "Rate",
+                color = if (hasScore) LXScoreGold else LXTextSecondary,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+            )
+            Spacer(modifier = Modifier.width(2.dp))
+            Icon(
+                imageVector = Icons.Default.ArrowDropDown,
+                contentDescription = "Select Score",
+                tint = if (hasScore) LXScoreGold else LXTextSecondary,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(LXSurfaceElevated)
+        ) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = "— Clear / Unrated",
+                        color = if (score == null) LXPrimaryGreen else LXTextSecondary,
+                        fontWeight = if (score == null) FontWeight.Bold else FontWeight.Normal
+                    )
+                },
+                onClick = {
+                    expanded = false
+                    onScoreSelected(null)
+                }
+            )
+            (10 downTo 1).forEach { s ->
+                val isSelected = score == s
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null,
+                                tint = if (isSelected) LXScoreGold else LXTextSecondary,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "$s / 10",
+                                color = if (isSelected) LXScoreGold else LXTextPrimary,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onScoreSelected(s)
                     }
                 )
             }

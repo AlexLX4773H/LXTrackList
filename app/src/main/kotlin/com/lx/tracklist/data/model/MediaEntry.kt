@@ -52,6 +52,7 @@ data class MediaEntry(
     val coverImageUri: String? = null,
     val priority: Priority = Priority.MEDIUM,
     val rewatchCount: Int = 0,
+    val isRewatching: Boolean = false,
     val isFavorite: Boolean = false,
     val externalId: String? = null,
     val externalSource: String? = null,
@@ -83,6 +84,12 @@ data class MediaEntry(
     val movieSeriesName: String? = null,
     val durationMinutes: Int? = null
 ) {
+    val foreignDatabaseId: String?
+        get() = externalId
+
+    val foreignDatabaseSource: String?
+        get() = externalSource
+
     val displayProgress: String
         get() = when (mediaType) {
             MediaType.ANIME, MediaType.SHOW -> {
@@ -187,10 +194,15 @@ data class MediaEntry(
         return when (mediaType) {
             MediaType.ANIME, MediaType.SHOW -> {
                 val nextEp = currentEpisodes + 1
-                val newStatus = if (totalEpisodes > 0 && nextEp >= totalEpisodes) MediaStatus.COMPLETED else status
+                val isDone = totalEpisodes > 0 && nextEp >= totalEpisodes
+                val newStatus = if (isDone) MediaStatus.COMPLETED else status
+                val newRewatchCount = if (isDone && isRewatching) rewatchCount + 1 else rewatchCount
+                val newIsRewatching = if (isDone) false else isRewatching
                 copy(
                     currentEpisodes = nextEp,
                     status = newStatus,
+                    rewatchCount = newRewatchCount,
+                    isRewatching = newIsRewatching,
                     updatedAt = now,
                     finishDate = if (newStatus == MediaStatus.COMPLETED && finishDate == null) now else finishDate
                 )
@@ -199,30 +211,45 @@ data class MediaEntry(
                 when (trackingUnit) {
                     TrackingUnit.VOLUMES -> {
                         val nextVol = currentVolumes + 1
-                        val newStatus = if (totalVolumes > 0 && nextVol >= totalVolumes) MediaStatus.COMPLETED else status
+                        val isDone = totalVolumes > 0 && nextVol >= totalVolumes
+                        val newStatus = if (isDone) MediaStatus.COMPLETED else status
+                        val newRewatchCount = if (isDone && isRewatching) rewatchCount + 1 else rewatchCount
+                        val newIsRewatching = if (isDone) false else isRewatching
                         copy(
                             currentVolumes = nextVol,
                             status = newStatus,
+                            rewatchCount = newRewatchCount,
+                            isRewatching = newIsRewatching,
                             updatedAt = now,
                             finishDate = if (newStatus == MediaStatus.COMPLETED && finishDate == null) now else finishDate
                         )
                     }
                     TrackingUnit.PAGES -> {
                         val nextPages = currentPages + 10
-                        val newStatus = if (totalPages > 0 && nextPages >= totalPages) MediaStatus.COMPLETED else status
+                        val isDone = totalPages > 0 && nextPages >= totalPages
+                        val newStatus = if (isDone) MediaStatus.COMPLETED else status
+                        val newRewatchCount = if (isDone && isRewatching) rewatchCount + 1 else rewatchCount
+                        val newIsRewatching = if (isDone) false else isRewatching
                         copy(
                             currentPages = nextPages,
                             status = newStatus,
+                            rewatchCount = newRewatchCount,
+                            isRewatching = newIsRewatching,
                             updatedAt = now,
                             finishDate = if (newStatus == MediaStatus.COMPLETED && finishDate == null) now else finishDate
                         )
                     }
                     TrackingUnit.CHAPTERS, TrackingUnit.COMBINED -> {
                         val nextCh = currentChapters + 1
-                        val newStatus = if (totalChapters > 0 && nextCh >= totalChapters) MediaStatus.COMPLETED else status
+                        val isDone = totalChapters > 0 && nextCh >= totalChapters
+                        val newStatus = if (isDone) MediaStatus.COMPLETED else status
+                        val newRewatchCount = if (isDone && isRewatching) rewatchCount + 1 else rewatchCount
+                        val newIsRewatching = if (isDone) false else isRewatching
                         copy(
                             currentChapters = nextCh,
                             status = newStatus,
+                            rewatchCount = newRewatchCount,
+                            isRewatching = newIsRewatching,
                             updatedAt = now,
                             finishDate = if (newStatus == MediaStatus.COMPLETED && finishDate == null) now else finishDate
                         )
@@ -230,8 +257,14 @@ data class MediaEntry(
                 }
             }
             MediaType.MOVIE -> {
+                val newStatus = if (status == MediaStatus.COMPLETED) MediaStatus.WATCHING else MediaStatus.COMPLETED
+                val isDone = newStatus == MediaStatus.COMPLETED
+                val newRewatchCount = if (isDone && isRewatching) rewatchCount + 1 else rewatchCount
+                val newIsRewatching = if (isDone) false else isRewatching
                 copy(
-                    status = if (status == MediaStatus.COMPLETED) MediaStatus.WATCHING else MediaStatus.COMPLETED,
+                    status = newStatus,
+                    rewatchCount = newRewatchCount,
+                    isRewatching = newIsRewatching,
                     updatedAt = now,
                     finishDate = if (status != MediaStatus.COMPLETED && finishDate == null) now else finishDate
                 )
