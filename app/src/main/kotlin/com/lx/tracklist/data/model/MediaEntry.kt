@@ -3,6 +3,8 @@ package com.lx.tracklist.data.model
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -84,8 +86,37 @@ data class MediaEntry(
     // Movie fields
     val movieSeriesNumber: Int? = null,
     val movieSeriesName: String? = null,
-    val durationMinutes: Int? = null
+    val durationMinutes: Int? = null,
+    val relatedEntriesJson: String? = null
 ) {
+    fun getRelatedMediaItems(): List<RelatedMediaItem> {
+        if (relatedEntriesJson.isNullOrBlank()) return emptyList()
+        return try {
+            val type = object : TypeToken<List<RelatedMediaItem>>() {}.type
+            Gson().fromJson<List<RelatedMediaItem>>(relatedEntriesJson, type) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun getCorrelatedRelatedItems(allEntries: List<MediaEntry>): List<RelatedMediaItem> {
+        val items = getRelatedMediaItems()
+        if (items.isEmpty()) return emptyList()
+        return items.map { item ->
+            val match = allEntries.firstOrNull { entry ->
+                val sameExt = !entry.externalId.isNullOrBlank() &&
+                        entry.externalId.equals(item.externalId, ignoreCase = true) &&
+                        (entry.externalSource.isNullOrBlank() || item.externalSource.isBlank() || entry.externalSource.equals(item.externalSource, ignoreCase = true))
+                val sameTitle = entry.title.equals(item.title, ignoreCase = true) && entry.mediaType == item.mediaType
+                sameExt || sameTitle
+            }
+            item.copy(
+                inLibraryEntryId = match?.id,
+                inLibraryStatus = match?.status
+            )
+        }
+    }
+
     val foreignDatabaseId: String?
         get() = externalId
 

@@ -1,6 +1,7 @@
 package com.lx.tracklist.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +59,7 @@ import coil.compose.SubcomposeAsyncImageContent
 import com.lx.tracklist.R
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
+import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.ui.theme.LXAiringBlue
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
@@ -65,6 +68,7 @@ import com.lx.tracklist.ui.theme.LXPrimaryGreen
 import com.lx.tracklist.ui.theme.LXProgressTrack
 import com.lx.tracklist.ui.theme.LXScoreGold
 import com.lx.tracklist.ui.theme.LXSurfaceBlack
+import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
 import java.text.SimpleDateFormat
@@ -84,7 +88,10 @@ fun MediaCard(
     isSelectionMode: Boolean = false,
     isSelected: Boolean = false,
     onToggleSelect: (() -> Unit)? = null,
-    onLongClick: (() -> Unit)? = null
+    onLongClick: (() -> Unit)? = null,
+    allLibraryEntries: List<MediaEntry> = emptyList(),
+    onRelatedEntryClick: ((Long) -> Unit)? = null,
+    onAddRelatedItem: ((RelatedMediaItem) -> Unit)? = null
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val progressAnimated by animateFloatAsState(targetValue = entry.progressFraction, label = "progress")
@@ -116,12 +123,13 @@ fun MediaCard(
             ),
         color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.08f) else LXSurfaceBlack
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
             // Selection Checkbox (Visible in Selection Mode)
             if (isSelectionMode) {
                 Box(
@@ -411,6 +419,212 @@ fun MediaCard(
                             tint = LXPrimaryGreen,
                             modifier = Modifier.size(15.dp)
                         )
+                    }
+                }
+            }
+        }
+
+        // Related Franchise Section (Extracted during Sync)
+            val correlatedRelated = remember(entry.relatedEntriesJson, allLibraryEntries) {
+                entry.getCorrelatedRelatedItems(allLibraryEntries)
+            }
+
+            if (correlatedRelated.isNotEmpty()) {
+                var isRelatedExpanded by remember { mutableStateOf(false) }
+                val trackingCount = remember(correlatedRelated) { correlatedRelated.count { it.inLibraryEntryId != null } }
+                val untrackedCount = correlatedRelated.size - trackingCount
+
+                HorizontalDivider(
+                    color = LXBorder.copy(alpha = 0.5f),
+                    thickness = 0.5.dp
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                        .clickable { isRelatedExpanded = !isRelatedExpanded }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🔗 ${correlatedRelated.size} Related:",
+                            color = LXTextSecondary,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                            fontSize = 10.5.sp
+                        )
+
+                        // Tracking pill
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                        ) {
+                            Text(
+                                text = "$trackingCount Tracking",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                fontSize = 9.5.sp
+                            )
+                        }
+
+                        // Untracked pill
+                        if (untrackedCount > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFFF59E0B).copy(alpha = 0.15f))
+                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                            ) {
+                                Text(
+                                    text = "$untrackedCount Untracked",
+                                    color = Color(0xFFF59E0B),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    fontSize = 9.5.sp
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = if (isRelatedExpanded) "Hide ▲" else "View ▼",
+                        color = LXPrimaryGreen,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        fontSize = 10.sp
+                    )
+                }
+
+                if (isRelatedExpanded) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF141414))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        correlatedRelated.forEach { relItem ->
+                            val isItemTracking = relItem.inLibraryEntryId != null
+                            val relColor = when {
+                                relItem.relationship.contains("Sequel", ignoreCase = true) -> LXPrimaryGreen
+                                relItem.relationship.contains("Prequel", ignoreCase = true) -> Color(0xFF38BDF8)
+                                relItem.relationship.contains("Collection", ignoreCase = true) || relItem.relationship.contains("Part", ignoreCase = true) -> LXScoreGold
+                                relItem.relationship.contains("Spin", ignoreCase = true) || relItem.relationship.contains("Side", ignoreCase = true) -> Color(0xFFA78BFA)
+                                else -> LXTextSecondary
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(LXSurfaceBlack)
+                                    .border(BorderStroke(0.5.dp, LXBorder.copy(alpha = 0.5f)), RoundedCornerShape(6.dp))
+                                    .clickable {
+                                        if (isItemTracking && relItem.inLibraryEntryId != null) {
+                                            onRelatedEntryClick?.invoke(relItem.inLibraryEntryId)
+                                        } else if (!isItemTracking) {
+                                            onAddRelatedItem?.invoke(relItem)
+                                        }
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(3.dp))
+                                                .background(relColor.copy(alpha = 0.15f))
+                                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                                        ) {
+                                            Text(
+                                                text = relItem.relationship.uppercase(),
+                                                color = relColor,
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                fontSize = 8.sp
+                                            )
+                                        }
+                                        if (!relItem.releaseYear.isNullOrBlank()) {
+                                            Text(
+                                                text = relItem.releaseYear,
+                                                color = LXTextSecondary,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontSize = 8.5.sp
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = relItem.title,
+                                        color = LXTextPrimary,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(6.dp))
+
+                                if (isItemTracking) {
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                            .padding(horizontal = 6.dp, vertical = 2.5.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = LXPrimaryGreen,
+                                            modifier = Modifier.size(10.dp)
+                                        )
+                                        Text(
+                                            text = relItem.inLibraryStatus?.getDisplayLabel(relItem.mediaType) ?: "Tracking",
+                                            color = LXPrimaryGreen,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            fontSize = 9.sp
+                                        )
+                                    }
+                                } else {
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .background(LXSurfaceElevated)
+                                            .border(0.5.dp, LXBorder, RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.5.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = null,
+                                            tint = LXTextPrimary,
+                                            modifier = Modifier.size(10.dp)
+                                        )
+                                        Text(
+                                            text = "Track",
+                                            color = LXTextPrimary,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            fontSize = 9.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

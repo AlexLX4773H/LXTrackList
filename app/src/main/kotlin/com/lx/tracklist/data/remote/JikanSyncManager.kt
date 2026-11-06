@@ -5,6 +5,7 @@ import android.util.Log
 import coil.Coil
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import com.google.gson.Gson
 import com.lx.tracklist.LXApplication
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
@@ -41,6 +42,7 @@ object JikanSyncManager {
 
     private const val TAG = "JikanSync"
     private const val RATE_LIMIT_DELAY_MS = 600L
+    private val gson = Gson()
 
     private val _syncState = MutableStateFlow(JikanSyncProgress())
     val syncState: StateFlow<JikanSyncProgress> = _syncState.asStateFlow()
@@ -95,6 +97,7 @@ object JikanSyncManager {
         val missingTags = entry.tags.isNullOrBlank()
         val missingNotes = entry.notes.isNullOrBlank()
         val missingExternalScore = entry.externalScore == null
+        val missingRelated = entry.relatedEntriesJson.isNullOrBlank()
 
         return missingCover ||
                missingRuntime ||
@@ -105,7 +108,8 @@ object JikanSyncManager {
                missingAltTitles ||
                missingTags ||
                missingNotes ||
-               missingExternalScore
+               missingExternalScore ||
+               missingRelated
     }
 
     fun startSync(
@@ -426,6 +430,30 @@ object JikanSyncManager {
                             entry.externalScoreSource
                         }
 
+                        // Extract related entries (prequels, sequels, side stories, etc.)
+                        val newRelatedJson = if ((entry.relatedEntriesJson.isNullOrBlank() || forceRefresh) && finalExternalId != null) {
+                            val targetMalId = finalExternalId.toLongOrNull()
+                            if (targetMalId != null) {
+                                val relRes = JikanApiClient.fetchRelatedEntries(targetMalId, isMangaType(entry.mediaType), title = entry.title)
+                                val relList = relRes.getOrNull()
+                                if (!relList.isNullOrEmpty()) {
+                                    val json = gson.toJson(relList)
+                                    if (json != entry.relatedEntriesJson) {
+                                        hasChanges = true
+                                        json
+                                    } else {
+                                        entry.relatedEntriesJson
+                                    }
+                                } else {
+                                    entry.relatedEntriesJson
+                                }
+                            } else {
+                                entry.relatedEntriesJson
+                            }
+                        } else {
+                            entry.relatedEntriesJson
+                        }
+
                         if (hasChanges) {
                             val updatedEntry = entry.copy(
                                 coverImageUri = finalCoverUri ?: entry.coverImageUri,
@@ -444,6 +472,7 @@ object JikanSyncManager {
                                 externalScoreSource = newExternalScoreSource,
                                 externalId = finalExternalId,
                                 externalSource = finalExternalSource ?: entry.externalSource,
+                                relatedEntriesJson = newRelatedJson,
                                 updatedAt = System.currentTimeMillis()
                             )
                             repository.update(updatedEntry)

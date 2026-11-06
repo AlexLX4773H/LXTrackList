@@ -1259,4 +1259,96 @@ class FeaturesTest {
         val noCover = list.filter { it.coverImageUri.isNullOrBlank() }
         assertEquals(listOf(4L, 5L), noCover.map { it.id })
     }
+
+    @Test
+    fun testAniListRelationFormatting() {
+        assertEquals("Sequel", com.lx.tracklist.data.remote.JikanApiClient.formatAniListRelationType("SEQUEL"))
+        assertEquals("Prequel", com.lx.tracklist.data.remote.JikanApiClient.formatAniListRelationType("PREQUEL"))
+        assertEquals("Side Story", com.lx.tracklist.data.remote.JikanApiClient.formatAniListRelationType("SIDE_STORY"))
+        assertEquals("Spin-off", com.lx.tracklist.data.remote.JikanApiClient.formatAniListRelationType("SPIN_OFF"))
+        assertEquals("Alternative Version", com.lx.tracklist.data.remote.JikanApiClient.formatAniListRelationType("ALTERNATIVE"))
+        assertEquals("Parent Story", com.lx.tracklist.data.remote.JikanApiClient.formatAniListRelationType("PARENT"))
+        assertEquals("Summary", com.lx.tracklist.data.remote.JikanApiClient.formatAniListRelationType("SUMMARY"))
+        assertEquals("Adaptation", com.lx.tracklist.data.remote.JikanApiClient.formatAniListRelationType("ADAPTATION"))
+        assertEquals("Character", com.lx.tracklist.data.remote.JikanApiClient.formatAniListRelationType("CHARACTER"))
+        assertEquals("Other", com.lx.tracklist.data.remote.JikanApiClient.formatAniListRelationType("OTHER"))
+        assertEquals("Related", com.lx.tracklist.data.remote.JikanApiClient.formatAniListRelationType(null))
+    }
+
+    @Test
+    fun testAniListRelationsParsing() {
+        val sampleJson = """
+            {
+              "relations": {
+                "edges": [
+                  {
+                    "relationType": "SEQUEL",
+                    "node": {
+                      "id": 164980,
+                      "idMal": 53580,
+                      "title": {
+                        "english": "That Time I Got Reincarnated as a Slime Season 3",
+                        "romaji": "Tensei shitara Slime Datta Ken 3rd Season",
+                        "userPreferred": "That Time I Got Reincarnated as a Slime Season 3"
+                      },
+                      "type": "ANIME",
+                      "format": "TV",
+                      "coverImage": {
+                        "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx164980.jpg",
+                        "medium": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/small/bx164980.jpg"
+                      },
+                      "averageScore": 81,
+                      "startDate": {
+                        "year": 2024
+                      }
+                    }
+                  },
+                  {
+                    "relationType": "PREQUEL",
+                    "node": {
+                      "id": 108511,
+                      "idMal": 39551,
+                      "title": {
+                        "english": "That Time I Got Reincarnated as a Slime Season 2",
+                        "romaji": "Tensei shitara Slime Datta Ken 2nd Season",
+                        "userPreferred": "That Time I Got Reincarnated as a Slime Season 2"
+                      },
+                      "type": "ANIME",
+                      "format": "TV",
+                      "coverImage": {
+                        "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx108511.jpg"
+                      },
+                      "averageScore": 82,
+                      "startDate": {
+                        "year": 2021
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val mediaObj = com.google.gson.Gson().fromJson(sampleJson, com.google.gson.JsonObject::class.java)
+        val items = com.lx.tracklist.data.remote.JikanApiClient.parseAniListRelations(mediaObj)
+
+        assertEquals(2, items.size)
+
+        // Item 0: Sequel (Season 3)
+        assertEquals("That Time I Got Reincarnated as a Slime Season 3", items[0].title)
+        assertEquals("Sequel", items[0].relationship)
+        assertEquals("53580", items[0].externalId)
+        assertEquals("MAL", items[0].externalSource)
+        assertEquals(com.lx.tracklist.data.model.MediaType.ANIME, items[0].mediaType)
+        assertEquals("https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx164980.jpg", items[0].posterUrl)
+        assertEquals("2024", items[0].releaseYear)
+        assertEquals(8.1f, items[0].score!!, 0.01f)
+
+        // Item 1: Prequel (Season 2 Part 1)
+        assertEquals("That Time I Got Reincarnated as a Slime Season 2", items[1].title)
+        assertEquals("Prequel", items[1].relationship)
+        assertEquals("39551", items[1].externalId)
+        assertEquals("2021", items[1].releaseYear)
+        assertEquals(8.2f, items[1].score!!, 0.01f)
+    }
 }

@@ -42,6 +42,9 @@ class DetailViewModel(
     private val _isLoadingRelated = MutableStateFlow(false)
     val isLoadingRelated: StateFlow<Boolean> = _isLoadingRelated.asStateFlow()
 
+    private val _relatedErrorMessage = MutableStateFlow<String?>(null)
+    val relatedErrorMessage: StateFlow<String?> = _relatedErrorMessage.asStateFlow()
+
     val relatedEntries: StateFlow<List<RelatedMediaItem>> = combine(
         _rawRelatedEntries,
         repository.getAllEntries()
@@ -71,6 +74,10 @@ class DetailViewModel(
         viewModelScope.launch {
             entry.collect { currentEntry ->
                 if (currentEntry != null) {
+                    val localRelated = currentEntry.getRelatedMediaItems()
+                    if (localRelated.isNotEmpty() && _rawRelatedEntries.value.isEmpty()) {
+                        _rawRelatedEntries.value = localRelated
+                    }
                     loadRelatedEntries(currentEntry)
                 }
             }
@@ -80,7 +87,17 @@ class DetailViewModel(
     fun loadRelatedEntries(cur: MediaEntry, context: Context? = null) {
         if (loadedForEntryId == cur.id && _rawRelatedEntries.value.isNotEmpty()) return
         loadedForEntryId = cur.id
+
+        val localRelated = cur.getRelatedMediaItems()
+        if (localRelated.isNotEmpty()) {
+            _rawRelatedEntries.value = localRelated
+            _isLoadingRelated.value = false
+            _relatedErrorMessage.value = null
+            return
+        }
+
         _isLoadingRelated.value = true
+        _relatedErrorMessage.value = null
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -104,102 +121,52 @@ class DetailViewModel(
                     }
                 }
 
-                val results = if ((src.equals("TMDB", ignoreCase = true) || cur.mediaType == MediaType.MOVIE || cur.mediaType == MediaType.SHOW) && extId != null) {
-                    TmdbApiClient.fetchRelatedEntries(extId, isTv = cur.mediaType == MediaType.SHOW, context).getOrDefault(emptyList())
-                } else if (extId != null) {
+                val fetchResult: Result<List<RelatedMediaItem>> = if ((src.equals("TMDB", ignoreCase = true) || cur.mediaType == MediaType.MOVIE || cur.mediaType == MediaType.SHOW) && extId != null) {
+                    TmdbApiClient.fetchRelatedEntries(extId, isTv = cur.mediaType == MediaType.SHOW, context)
+                } else {
                     val isManga = cur.mediaType == MediaType.MANGA ||
                             cur.mediaType == MediaType.MANHWA ||
                             cur.mediaType == MediaType.BOOK
-                    JikanApiClient.fetchRelatedEntries(extId, isManga).getOrDefault(emptyList())
-                } else {
-                    emptyList()
+                    JikanApiClient.fetchRelatedEntries(malId = extId, isManga = isManga, title = cur.title)
                 }
 
-                _rawRelatedEntries.value = results.filter { item ->
-                    val isSameExt = !cur.externalId.isNullOrBlank() && item.externalId.equals(cur.externalId, ignoreCase = true)
-                    val isSameTitle = item.title.equals(cur.title, ignoreCase = true) && item.mediaType == cur.mediaType
-                    !isSameExt && !isSameTitle
+                if (fetchResult.isSuccess) {
+                    val results = fetchResult.getOrDefault(emptyList())
+                    val filtered = results.filter { item ->
+                        val isSameExt = !cur.externalId.isNullOrBlank() && item.externalId.equals(cur.externalId, ignoreCase = true)
+                        val isSameTitle = item.title.equals(cur.title, ignoreCase = true) && item.mediaType == cur.mediaType
+                        !isSameExt && !isSameTitle
+                    }
+                    _rawRelatedEntries.value = filtered
+                    _relatedErrorMessage.value = null
+
+                    if (filtered.isNotEmpty()) {
+                        val json = com.google.gson.Gson().toJson(filtered)
+                        if (json != cur.relatedEntriesJson) {
+                            repository.update(cur.copy(relatedEntriesJson = json, updatedAt = System.currentTimeMillis()))
+                        }
+                    }
+                } else {
+                    val err = fetchResult.exceptionOrNull()?.localizedMessage ?: "Failed to load related entries"
+                    _relatedErrorMessage.value = "Unable to load related entries. Tap to retry."
                 }
-            } catch (_: Exception) {
-                _rawRelatedEntries.value = emptyList()
+            } catch (e: Exception) {
+                _relatedErrorMessage.value = "Failed to load related entries (${e.localizedMessage ?: "network error"}). Tap to retry."
             } finally {
                 _isLoadingRelated.value = false
             }
         }
     }
 
+    fun retryLoadRelatedEntries(context: Context? = null) {
+        val cur = entry.value ?: return
+        loadedForEntryId = null
+        _relatedErrorMessage.value = null
+        loadRelatedEntries(cur, context)
+    }
+
     suspend fun addRelatedToLibrary(item: RelatedMediaItem, status: MediaStatus, context: Context? = null): Long {
-        return withContext(Dispatchers.IO) {
-            val entry = if (item.externalSource == "TMDB") {
-                val tmdbId = item.externalId.toLongOrNull() ?: 0L
-                if (item.mediaType == MediaType.MOVIE) {
-                    val fullDetails = TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()
-                    MediaEntry(
-                        title = fullDetails?.title ?: item.title,
-                        alternateTitle = fullDetails?.alternateTitle,
-                        mediaType = MediaType.MOVIE,
-                        status = status,
-                        externalId = item.externalId,
-                        externalSource = "TMDB",
-                        externalScore = fullDetails?.externalScore ?: item.score,
-                        externalScoreSource = "TMDB",
-                        coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
-                        durationMinutes = fullDetails?.durationMinutes,
-                        tags = fullDetails?.tags,
-                        notes = fullDetails?.synopsis,
-                        airedStartDate = fullDetails?.airedStartDate
-                    )
-                } else {
-                    val fullDetails = TmdbApiClient.fetchTvDetails(tmdbId, context).getOrNull()
-                    MediaEntry(
-                        title = fullDetails?.title ?: item.title,
-                        alternateTitle = fullDetails?.alternateTitle,
-                        mediaType = MediaType.SHOW,
-                        status = status,
-                        externalId = item.externalId,
-                        externalSource = "TMDB",
-                        externalScore = fullDetails?.externalScore ?: item.score,
-                        externalScoreSource = "TMDB",
-                        coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
-                        totalEpisodes = fullDetails?.totalEpisodes ?: 0,
-                        totalSeasons = fullDetails?.totalSeasons ?: 1,
-                        episodeLengthMinutes = fullDetails?.durationMinutes,
-                        tags = fullDetails?.tags,
-                        notes = fullDetails?.synopsis,
-                        airedStartDate = fullDetails?.airedStartDate,
-                        isAiring = fullDetails?.isAiring ?: false
-                    )
-                }
-            } else {
-                val malId = item.externalId.toLongOrNull() ?: 0L
-                val isManga = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA || item.mediaType == MediaType.BOOK
-                val details = JikanApiClient.fetchMediaDetails(malId, isManga).getOrNull()
-                val isVideo = item.mediaType == MediaType.ANIME
-                MediaEntry(
-                    title = details?.title ?: item.title,
-                    alternateTitle = details?.alternateTitle,
-                    mediaType = item.mediaType,
-                    status = status,
-                    externalId = item.externalId,
-                    externalSource = "MAL",
-                    externalScore = details?.externalScore ?: item.score,
-                    externalScoreSource = "MAL",
-                    coverImageUri = details?.posterUrl ?: item.posterUrl,
-                    totalEpisodes = if (isVideo) (details?.totalEpisodes ?: 0) else 0,
-                    totalChapters = if (!isVideo) (details?.totalChapters ?: 0) else 0,
-                    totalVolumes = if (!isVideo) (details?.totalVolumes ?: 0) else 0,
-                    trackingUnit = TrackingUnit.CHAPTERS,
-                    durationMinutes = details?.durationMinutes,
-                    episodeLengthMinutes = details?.durationMinutes,
-                    tags = details?.tags,
-                    notes = details?.synopsis,
-                    airedStartDate = details?.airedStartDate,
-                    airedEndDate = details?.airedEndDate,
-                    isAiring = details?.isAiring ?: false
-                )
-            }
-            repository.insert(entry)
-        }
+        return repository.addRelatedItem(item, status, context)
     }
 
     private val _isDeleted = MutableStateFlow(false)

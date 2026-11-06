@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.max
 
 enum class ConflictStrategy {
@@ -478,5 +479,85 @@ class MediaRepository(
             subCategory = imported.subCategory ?: existing.subCategory,
             updatedAt = System.currentTimeMillis()
         )
+    }
+
+    suspend fun addRelatedItem(
+        item: com.lx.tracklist.data.model.RelatedMediaItem,
+        status: MediaStatus,
+        context: Context? = null
+    ): Long {
+        return withContext(Dispatchers.IO) {
+            val entry = if (item.externalSource.equals("TMDB", ignoreCase = true)) {
+                val tmdbId = item.externalId.toLongOrNull() ?: 0L
+                if (item.mediaType == MediaType.MOVIE) {
+                    val fullDetails = com.lx.tracklist.data.remote.TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()
+                    MediaEntry(
+                        userId = activeUser.value.id,
+                        title = fullDetails?.title ?: item.title,
+                        alternateTitle = fullDetails?.alternateTitle,
+                        mediaType = MediaType.MOVIE,
+                        status = status,
+                        externalId = item.externalId,
+                        externalSource = "TMDB",
+                        externalScore = fullDetails?.externalScore ?: item.score,
+                        externalScoreSource = "TMDB",
+                        coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
+                        durationMinutes = fullDetails?.durationMinutes,
+                        tags = fullDetails?.tags,
+                        notes = fullDetails?.synopsis,
+                        airedStartDate = fullDetails?.airedStartDate
+                    )
+                } else {
+                    val fullDetails = com.lx.tracklist.data.remote.TmdbApiClient.fetchTvDetails(tmdbId, context).getOrNull()
+                    MediaEntry(
+                        userId = activeUser.value.id,
+                        title = fullDetails?.title ?: item.title,
+                        alternateTitle = fullDetails?.alternateTitle,
+                        mediaType = MediaType.SHOW,
+                        status = status,
+                        externalId = item.externalId,
+                        externalSource = "TMDB",
+                        externalScore = fullDetails?.externalScore ?: item.score,
+                        externalScoreSource = "TMDB",
+                        coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
+                        totalEpisodes = fullDetails?.totalEpisodes ?: 0,
+                        totalSeasons = fullDetails?.totalSeasons ?: 1,
+                        episodeLengthMinutes = fullDetails?.durationMinutes,
+                        tags = fullDetails?.tags,
+                        notes = fullDetails?.synopsis,
+                        airedStartDate = fullDetails?.airedStartDate,
+                        isAiring = fullDetails?.isAiring ?: false
+                    )
+                }
+            } else {
+                val malId = item.externalId.toLongOrNull() ?: 0L
+                val isManga = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA || item.mediaType == MediaType.BOOK
+                val details = com.lx.tracklist.data.remote.JikanApiClient.fetchMediaDetails(malId, isManga).getOrNull()
+                val isVideo = item.mediaType == MediaType.ANIME
+                MediaEntry(
+                    userId = activeUser.value.id,
+                    title = details?.title ?: item.title,
+                    alternateTitle = details?.alternateTitle,
+                    mediaType = item.mediaType,
+                    status = status,
+                    externalId = item.externalId,
+                    externalSource = "MAL",
+                    externalScore = details?.externalScore ?: item.score,
+                    externalScoreSource = "MAL",
+                    coverImageUri = details?.posterUrl ?: item.posterUrl,
+                    totalEpisodes = if (isVideo) (details?.totalEpisodes ?: 0) else 0,
+                    totalChapters = if (!isVideo) (details?.totalChapters ?: 0) else 0,
+                    totalVolumes = if (!isVideo) (details?.totalVolumes ?: 0) else 0,
+                    episodeLengthMinutes = details?.durationMinutes,
+                    durationMinutes = if (item.mediaType == MediaType.MOVIE) details?.durationMinutes else null,
+                    tags = details?.tags,
+                    notes = details?.synopsis,
+                    airedStartDate = details?.airedStartDate,
+                    airedEndDate = details?.airedEndDate,
+                    isAiring = details?.isAiring ?: false
+                )
+            }
+            insert(entry)
+        }
     }
 }

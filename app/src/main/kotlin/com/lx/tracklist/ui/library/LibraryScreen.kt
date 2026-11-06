@@ -103,6 +103,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -117,6 +118,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.RelatedMediaItem
+import com.lx.tracklist.ui.components.AddRelatedToLibraryDialog
 import com.lx.tracklist.ui.components.MediaCard
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
@@ -128,6 +131,7 @@ import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXSurfaceVariant
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -149,6 +153,9 @@ fun LibraryScreen(
     var showFavoriteBatchDialog by remember { mutableStateOf(false) }
     var showExternalDbBatchDialog by remember { mutableStateOf(false) }
     var showSelectionOverflowMenu by remember { mutableStateOf(false) }
+    var relatedItemToAdd by remember { mutableStateOf<RelatedMediaItem?>(null) }
+    var isAddingRelated by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -539,6 +546,35 @@ fun LibraryScreen(
             },
             containerColor = LXSurfaceElevated
         )
+    }
+
+    // Add Related Media Dialog
+    if (relatedItemToAdd != null) {
+        relatedItemToAdd?.let { item ->
+            AddRelatedToLibraryDialog(
+                item = item,
+                isAdding = isAddingRelated,
+                confirmButtonText = "Add to Library",
+                onConfirm = { status ->
+                    if (!isAddingRelated) {
+                        isAddingRelated = true
+                        coroutineScope.launch {
+                            try {
+                                viewModel.addRelatedToLibrary(item, status, context)
+                                relatedItemToAdd = null
+                            } finally {
+                                isAddingRelated = false
+                            }
+                        }
+                    }
+                },
+                onDismiss = {
+                    if (!isAddingRelated) {
+                        relatedItemToAdd = null
+                    }
+                }
+            )
+        }
     }
 
     // Advanced Filter Modal Bottom Sheet
@@ -1099,7 +1135,10 @@ fun LibraryScreen(
                             isSelectionMode = state.isSelectionMode,
                             isSelected = state.selectedIds.contains(entry.id),
                             onToggleSelect = { viewModel.toggleSelect(entry.id) },
-                            onLongClick = { viewModel.toggleSelect(entry.id) }
+                            onLongClick = { viewModel.toggleSelect(entry.id) },
+                            allLibraryEntries = state.entries,
+                            onRelatedEntryClick = { onEntryClick(it) },
+                            onAddRelatedItem = { item -> relatedItemToAdd = item }
                         )
                     }
                 }

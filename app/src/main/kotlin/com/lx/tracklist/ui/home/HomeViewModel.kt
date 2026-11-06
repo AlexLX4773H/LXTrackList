@@ -330,6 +330,12 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
             repository.delete(entry)
         }
     }
+
+    fun addRelatedToLibrary(item: com.lx.tracklist.data.model.RelatedMediaItem, status: MediaStatus, context: android.content.Context? = null) {
+        viewModelScope.launch {
+            repository.addRelatedItem(item, status, context)
+        }
+    }
 }
 
 class HomeViewModelFactory(private val repository: MediaRepository) : ViewModelProvider.Factory {

@@ -648,6 +648,12 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             repository.delete(entry)
         }
     }
+
+    fun addRelatedToLibrary(item: com.lx.tracklist.data.model.RelatedMediaItem, status: MediaStatus, context: Context? = null) {
+        viewModelScope.launch {
+            repository.addRelatedItem(item, status, context)
+        }
+    }
 }
 
 class LibraryViewModelFactory(private val repository: MediaRepository) : ViewModelProvider.Factory {

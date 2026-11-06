@@ -5,6 +5,7 @@ import android.util.Log
 import coil.Coil
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import com.google.gson.Gson
 import com.lx.tracklist.LXApplication
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
@@ -40,6 +41,7 @@ object TmdbSyncManager {
 
     private const val TAG = "TmdbSync"
     private const val RATE_LIMIT_DELAY_MS = 250L
+    private val gson = Gson()
 
     private val _syncState = MutableStateFlow(TmdbSyncProgress())
     val syncState: StateFlow<TmdbSyncProgress> = _syncState.asStateFlow()
@@ -83,6 +85,7 @@ object TmdbSyncManager {
         val missingTags = entry.tags.isNullOrBlank()
         val missingNotes = entry.notes.isNullOrBlank()
         val missingExternalScore = entry.externalScore == null
+        val missingRelated = entry.relatedEntriesJson.isNullOrBlank()
 
         return missingCover ||
                 missingRuntime ||
@@ -92,7 +95,8 @@ object TmdbSyncManager {
                 missingAltTitles ||
                 missingTags ||
                 missingNotes ||
-                missingExternalScore
+                missingExternalScore ||
+                missingRelated
     }
 
     fun startSync(
@@ -415,6 +419,30 @@ object TmdbSyncManager {
                             entry.externalScoreSource
                         }
 
+                        // Extract related entries (collection parts, sequels, prequels, recommendations)
+                        val newRelatedJson = if ((entry.relatedEntriesJson.isNullOrBlank() || forceRefresh) && finalExternalId != null) {
+                            val targetTmdbId = finalExternalId.toLongOrNull()
+                            if (targetTmdbId != null) {
+                                val relRes = TmdbApiClient.fetchRelatedEntries(targetTmdbId, isTv = isTv, context = context)
+                                val relList = relRes.getOrNull()
+                                if (!relList.isNullOrEmpty()) {
+                                    val json = gson.toJson(relList)
+                                    if (json != entry.relatedEntriesJson) {
+                                        hasChanges = true
+                                        json
+                                    } else {
+                                        entry.relatedEntriesJson
+                                    }
+                                } else {
+                                    entry.relatedEntriesJson
+                                }
+                            } else {
+                                entry.relatedEntriesJson
+                            }
+                        } else {
+                            entry.relatedEntriesJson
+                        }
+
                         if (hasChanges) {
                             val updatedEntry = entry.copy(
                                 coverImageUri = finalCoverUri ?: entry.coverImageUri,
@@ -432,6 +460,7 @@ object TmdbSyncManager {
                                 externalScoreSource = newExternalScoreSource,
                                 externalId = finalExternalId,
                                 externalSource = finalExternalSource ?: entry.externalSource,
+                                relatedEntriesJson = newRelatedJson,
                                 updatedAt = System.currentTimeMillis()
                             )
                             repository.update(updatedEntry)

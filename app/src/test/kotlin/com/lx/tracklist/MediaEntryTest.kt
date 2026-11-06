@@ -120,4 +120,76 @@ class MediaEntryTest {
         assertEquals("5114", entry.foreignDatabaseId)
         assertEquals("MAL", entry.foreignDatabaseSource)
     }
+
+    @Test
+    fun testRelatedMediaItemsSerializationAndCorrelation() {
+        val relatedList = listOf(
+            com.lx.tracklist.data.model.RelatedMediaItem(
+                title = "Attack on Titan Season 2",
+                relationship = "Sequel",
+                externalId = "25777",
+                externalSource = "MAL",
+                mediaType = MediaType.ANIME
+            ),
+            com.lx.tracklist.data.model.RelatedMediaItem(
+                title = "Attack on Titan: No Regrets",
+                relationship = "Side story",
+                externalId = "25781",
+                externalSource = "MAL",
+                mediaType = MediaType.ANIME
+            ),
+            com.lx.tracklist.data.model.RelatedMediaItem(
+                title = "Attack on Titan: Junior High",
+                relationship = "Spin-off",
+                externalId = "31374",
+                externalSource = "MAL",
+                mediaType = MediaType.ANIME
+            )
+        )
+        val json = com.google.gson.Gson().toJson(relatedList)
+
+        val mainEntry = MediaEntry(
+            id = 1L,
+            title = "Attack on Titan",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.COMPLETED,
+            externalId = "16498",
+            externalSource = "MAL",
+            relatedEntriesJson = json
+        )
+
+        // 1. Verify deserialization
+        val items = mainEntry.getRelatedMediaItems()
+        assertEquals(3, items.size)
+        assertEquals("Attack on Titan Season 2", items[0].title)
+        assertEquals("Sequel", items[0].relationship)
+
+        // 2. Correlate with library (User only has Season 2 in library, not No Regrets or Junior High)
+        val library = listOf(
+            mainEntry,
+            MediaEntry(
+                id = 10L,
+                title = "Attack on Titan Season 2",
+                mediaType = MediaType.ANIME,
+                status = MediaStatus.WATCHING,
+                externalId = "25777",
+                externalSource = "MAL"
+            )
+        )
+
+        val correlated = mainEntry.getCorrelatedRelatedItems(library)
+        assertEquals(3, correlated.size)
+
+        // Season 2 is being tracked
+        assertEquals(10L, correlated[0].inLibraryEntryId)
+        assertEquals(MediaStatus.WATCHING, correlated[0].inLibraryStatus)
+
+        // No Regrets is untracked
+        org.junit.Assert.assertNull(correlated[1].inLibraryEntryId)
+        org.junit.Assert.assertNull(correlated[1].inLibraryStatus)
+
+        // Junior High is untracked
+        org.junit.Assert.assertNull(correlated[2].inLibraryEntryId)
+        org.junit.Assert.assertNull(correlated[2].inLibraryStatus)
+    }
 }

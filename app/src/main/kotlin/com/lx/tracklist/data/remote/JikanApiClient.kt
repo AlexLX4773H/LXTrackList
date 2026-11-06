@@ -56,8 +56,8 @@ object JikanApiClient {
     private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 16; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36 LXTrackList/1.0"
 
     private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
@@ -785,10 +785,10 @@ object JikanApiClient {
         return if (total > 0) total else null
     }
 
-    fun fetchRelatedEntries(
-        malId: Long,
+    fun queryJikanRelations(
+        baseUrl: String = DEFAULT_BASE_URL,
         isManga: Boolean,
-        baseUrl: String = DEFAULT_BASE_URL
+        malId: Long
     ): Result<List<RelatedMediaItem>> {
         val type = if (isManga) "manga" else "anime"
         val endpoint = "${baseUrl.trimEnd('/')}/$type/$malId/relations"
@@ -839,6 +839,317 @@ object JikanApiClient {
             Log.w(TAG, "Exception fetching Jikan relations for $malId: ${e.message}")
             Result.failure(e)
         }
+    }
+
+    fun formatAniListRelationType(relType: String?): String {
+        return when (relType?.uppercase()) {
+            "SEQUEL" -> "Sequel"
+            "PREQUEL" -> "Prequel"
+            "SIDE_STORY" -> "Side Story"
+            "SPIN_OFF" -> "Spin-off"
+            "ALTERNATIVE" -> "Alternative Version"
+            "PARENT" -> "Parent Story"
+            "SUMMARY" -> "Summary"
+            "ADAPTATION" -> "Adaptation"
+            "CHARACTER" -> "Character"
+            "OTHER" -> "Other"
+            null -> "Related"
+            else -> relType.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }
+        }
+    }
+
+    fun parseAniListRelations(mediaObj: JsonObject?): List<RelatedMediaItem> {
+        if (mediaObj == null) return emptyList()
+        val relationsObj = mediaObj.getAsJsonObject("relations") ?: return emptyList()
+        val edgesArray = relationsObj.getAsJsonArray("edges") ?: return emptyList()
+
+        val list = mutableListOf<RelatedMediaItem>()
+        for (i in 0 until edgesArray.size()) {
+            val edgeElem = edgesArray.get(i)
+            if (!edgeElem.isJsonObject) continue
+            val edgeObj = edgeElem.asJsonObject
+            val relTypeRaw = edgeObj.get("relationType")?.takeIf { !it.isJsonNull }?.asString
+            val nodeObj = edgeObj.getAsJsonObject("node") ?: continue
+
+            val id = nodeObj.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
+            val idMal = nodeObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong
+            val finalExternalId = (idMal ?: id).toString()
+
+            val titleObj = nodeObj.getAsJsonObject("title")
+            val english = titleObj?.get("english")?.takeIf { !it.isJsonNull }?.asString?.trim()
+            val userPreferred = titleObj?.get("userPreferred")?.takeIf { !it.isJsonNull }?.asString?.trim()
+            val romaji = titleObj?.get("romaji")?.takeIf { !it.isJsonNull }?.asString?.trim()
+            val title = english?.takeIf { it.isNotBlank() }
+                ?: userPreferred?.takeIf { it.isNotBlank() }
+                ?: romaji?.takeIf { it.isNotBlank() }
+                ?: continue
+
+            val typeStr = nodeObj.get("type")?.takeIf { !it.isJsonNull }?.asString ?: "ANIME"
+            val mediaType = if (typeStr.equals("MANGA", ignoreCase = true)) MediaType.MANGA else MediaType.ANIME
+
+            val coverImageObj = nodeObj.getAsJsonObject("coverImage")
+            val posterUrl = coverImageObj?.get("large")?.takeIf { !it.isJsonNull }?.asString
+                ?: coverImageObj?.get("medium")?.takeIf { !it.isJsonNull }?.asString
+
+            val startDateObj = nodeObj.getAsJsonObject("startDate")
+            val year = startDateObj?.get("year")?.takeIf { !it.isJsonNull }?.asInt
+            val releaseYear = year?.takeIf { it > 0 }?.toString()
+
+            val avgScore = nodeObj.get("averageScore")?.takeIf { !it.isJsonNull }?.asFloat
+            val score = if (avgScore != null && avgScore > 0f) avgScore / 10f else null
+
+            val formattedRel = formatAniListRelationType(relTypeRaw)
+
+            list.add(
+                RelatedMediaItem(
+                    title = title,
+                    relationship = formattedRel,
+                    externalId = finalExternalId,
+                    externalSource = "MAL",
+                    mediaType = mediaType,
+                    posterUrl = posterUrl,
+                    releaseYear = releaseYear,
+                    score = score
+                )
+            )
+        }
+        return list
+    }
+
+    fun queryAniListRelations(
+        malId: Long? = null,
+        aniListId: Long? = null,
+        isManga: Boolean
+    ): Result<List<RelatedMediaItem>> {
+        val type = if (isManga) "MANGA" else "ANIME"
+        val query = """
+            query (${'$'}idMal: Int, ${'$'}id: Int, ${'$'}type: MediaType) {
+              Media(idMal: ${'$'}idMal, id: ${'$'}id, type: ${'$'}type) {
+                id
+                idMal
+                relations {
+                  edges {
+                    relationType
+                    node {
+                      id
+                      idMal
+                      title {
+                        english
+                        romaji
+                        userPreferred
+                      }
+                      type
+                      format
+                      coverImage {
+                        large
+                        medium
+                      }
+                      averageScore
+                      startDate {
+                        year
+                      }
+                    }
+                  }
+                }
+              }
+            }
+        """.trimIndent()
+
+        val jsonBody = JsonObject().apply {
+            addProperty("query", query)
+            val vars = JsonObject().apply {
+                if (malId != null && malId > 0) addProperty("idMal", malId)
+                if (aniListId != null && aniListId > 0) addProperty("id", aniListId)
+                addProperty("type", type)
+            }
+            add("variables", vars)
+        }
+
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val requestBody = jsonBody.toString().toRequestBody(mediaType)
+
+        val request = Request.Builder()
+            .url("https://graphql.anilist.co")
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "application/json")
+            .post(requestBody)
+            .build()
+
+        return try {
+            val response = okHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string() ?: ""
+
+            Log.d(TAG, "AniList relations HTTP $code for MAL ID $malId / AniList ID $aniListId ($type)")
+
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("AniList HTTP $code: ${bodyString.take(200)}"))
+            }
+
+            val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
+            val dataObj = rootObj?.getAsJsonObject("data")
+            val mediaObj = dataObj?.getAsJsonObject("Media")
+                ?: return Result.failure(NotFoundException("Media ID $malId relations not found on AniList"))
+
+            Result.success(parseAniListRelations(mediaObj))
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying AniList relations for MAL ID $malId", e)
+            Result.failure(e)
+        }
+    }
+
+    fun queryAniListRelationsByTitle(searchTitle: String, isManga: Boolean): Result<List<RelatedMediaItem>> {
+        val type = if (isManga) "MANGA" else "ANIME"
+        val query = """
+            query (${'$'}search: String, ${'$'}type: MediaType) {
+              Media(search: ${'$'}search, type: ${'$'}type) {
+                id
+                idMal
+                relations {
+                  edges {
+                    relationType
+                    node {
+                      id
+                      idMal
+                      title {
+                        english
+                        romaji
+                        userPreferred
+                      }
+                      type
+                      format
+                      coverImage {
+                        large
+                        medium
+                      }
+                      averageScore
+                      startDate {
+                        year
+                      }
+                    }
+                  }
+                }
+              }
+            }
+        """.trimIndent()
+
+        val jsonBody = JsonObject().apply {
+            addProperty("query", query)
+            val vars = JsonObject().apply {
+                addProperty("search", searchTitle)
+                addProperty("type", type)
+            }
+            add("variables", vars)
+        }
+
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val requestBody = jsonBody.toString().toRequestBody(mediaType)
+
+        val request = Request.Builder()
+            .url("https://graphql.anilist.co")
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "application/json")
+            .post(requestBody)
+            .build()
+
+        return try {
+            val response = okHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string() ?: ""
+
+            Log.d(TAG, "AniList relations by title HTTP $code for '$searchTitle' ($type)")
+
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("AniList HTTP $code: ${bodyString.take(200)}"))
+            }
+
+            val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
+            val dataObj = rootObj?.getAsJsonObject("data")
+            val mediaObj = dataObj?.getAsJsonObject("Media")
+                ?: return Result.failure(NotFoundException("Title '$searchTitle' relations not found on AniList"))
+
+            Result.success(parseAniListRelations(mediaObj))
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying AniList relations for title '$searchTitle'", e)
+            Result.failure(e)
+        }
+    }
+
+    fun fetchRelatedEntries(
+        malId: Long? = null,
+        isManga: Boolean,
+        title: String? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<RelatedMediaItem>> {
+        var lastException: Throwable? = null
+
+        // 1. If malId is provided, try Jikan relations endpoint
+        if (malId != null && malId > 0) {
+            val jikanRes = queryJikanRelations(baseUrl, isManga, malId)
+            if (jikanRes.isSuccess) {
+                val items = jikanRes.getOrDefault(emptyList())
+                if (items.isNotEmpty()) {
+                    return jikanRes
+                }
+            } else {
+                lastException = jikanRes.exceptionOrNull()
+                Log.w(TAG, "Jikan relations query failed for MAL ID $malId (${lastException?.message}). Falling back to AniList...")
+            }
+
+            // 2. Fallback to AniList by MAL ID
+            val anilistRes = queryAniListRelations(malId = malId, isManga = isManga)
+            if (anilistRes.isSuccess) {
+                val items = anilistRes.getOrDefault(emptyList())
+                if (items.isNotEmpty()) {
+                    return anilistRes
+                }
+            } else {
+                lastException = anilistRes.exceptionOrNull()
+                Log.w(TAG, "AniList relations query failed for MAL ID $malId (${lastException?.message}).")
+            }
+
+            // 2b. Also try as AniList ID directly
+            val anilistDirectRes = queryAniListRelations(aniListId = malId, isManga = isManga)
+            if (anilistDirectRes.isSuccess) {
+                val items = anilistDirectRes.getOrDefault(emptyList())
+                if (items.isNotEmpty()) {
+                    return anilistDirectRes
+                }
+            }
+        }
+
+        // 3. Fallback to AniList by exact title if provided
+        if (!title.isNullOrBlank()) {
+            val rawRes = queryAniListRelationsByTitle(title.trim(), isManga)
+            if (rawRes.isSuccess) {
+                val items = rawRes.getOrDefault(emptyList())
+                if (items.isNotEmpty()) {
+                    return rawRes
+                }
+            } else {
+                lastException = rawRes.exceptionOrNull()
+            }
+
+            val cleaned = cleanSearchTitle(title)
+            if (cleaned != title.trim()) {
+                val anilistTitleRes = queryAniListRelationsByTitle(cleaned, isManga)
+                if (anilistTitleRes.isSuccess) {
+                    val items = anilistTitleRes.getOrDefault(emptyList())
+                    if (items.isNotEmpty()) {
+                        return anilistTitleRes
+                    }
+                } else {
+                    lastException = anilistTitleRes.exceptionOrNull()
+                }
+            }
+        }
+
+        // If we experienced an error during all attempts and malId or title was provided:
+        if (lastException != null && (malId != null || !title.isNullOrBlank())) {
+            return Result.failure(lastException)
+        }
+
+        return Result.success(emptyList())
     }
 }
 

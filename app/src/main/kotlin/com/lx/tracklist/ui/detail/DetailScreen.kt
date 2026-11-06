@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -88,6 +89,7 @@ import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
+import com.lx.tracklist.ui.components.AddRelatedToLibraryDialog
 import com.lx.tracklist.ui.theme.LXAiringBlue
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
@@ -117,6 +119,7 @@ fun DetailScreen(
     val isDeleted by viewModel.isDeleted.collectAsState()
     val relatedEntries by viewModel.relatedEntries.collectAsState()
     val isLoadingRelated by viewModel.isLoadingRelated.collectAsState()
+    val relatedErrorMessage by viewModel.relatedErrorMessage.collectAsState()
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -344,6 +347,8 @@ fun DetailScreen(
                         DetailRelatedCard(
                             relatedEntries = relatedEntries,
                             isLoading = isLoadingRelated,
+                            errorMessage = relatedErrorMessage,
+                            onRetry = { viewModel.retryLoadRelatedEntries(context) },
                             onRelatedClick = { item ->
                                 if (item.inLibraryEntryId != null) {
                                     onNavigateToDetail?.invoke(item.inLibraryEntryId)
@@ -499,6 +504,8 @@ fun DetailScreen(
                         DetailRelatedCard(
                             relatedEntries = relatedEntries,
                             isLoading = isLoadingRelated,
+                            errorMessage = relatedErrorMessage,
+                            onRetry = { viewModel.retryLoadRelatedEntries(context) },
                             onRelatedClick = { item ->
                                 if (item.inLibraryEntryId != null) {
                                     onNavigateToDetail?.invoke(item.inLibraryEntryId)
@@ -1266,9 +1273,15 @@ private fun ScoreDropdownChip(
 private fun DetailRelatedCard(
     relatedEntries: List<RelatedMediaItem>,
     isLoading: Boolean,
+    errorMessage: String? = null,
+    onRetry: (() -> Unit)? = null,
     onRelatedClick: (RelatedMediaItem) -> Unit
 ) {
-    if (relatedEntries.isEmpty() && !isLoading) return
+    if (relatedEntries.isEmpty() && !isLoading && errorMessage == null) return
+
+    val trackingCount = remember(relatedEntries) { relatedEntries.count { it.inLibraryEntryId != null } }
+    val untrackedCount = remember(relatedEntries) { relatedEntries.size - trackingCount }
+    var filterTab by remember { mutableStateOf("ALL") } // "ALL", "TRACKING", "UNTRACKED"
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1322,38 +1335,131 @@ private fun DetailRelatedCard(
                 }
             }
 
-            if (relatedEntries.isEmpty() && isLoading) {
-                Text(
-                    text = "Checking for sequels & related entries...",
-                    color = LXTextSecondary,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
+            if (relatedEntries.isEmpty()) {
+                if (isLoading) {
+                    Text(
+                        text = "Checking for sequels & related entries...",
+                        color = LXTextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                } else if (errorMessage != null) {
+                    Text(
+                        text = errorMessage,
+                        color = LXTextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+                    if (onRetry != null) {
+                        OutlinedButton(
+                            onClick = onRetry,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                            border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = LXPrimaryGreen, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Retry", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             } else {
-                var expanded by remember { mutableStateOf(false) }
-                val displayList = if (expanded || relatedEntries.size <= 4) relatedEntries else relatedEntries.take(4)
-
-                Column(
+                // Tracking vs Untracked Stats Pills & Filter Tabs
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    displayList.forEach { item ->
-                        RelatedItemRow(
-                            item = item,
-                            onClick = { onRelatedClick(item) }
+                    // All Pill Tab
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (filterTab == "ALL") LXPrimaryGreen.copy(alpha = 0.2f) else LXSurfaceElevated)
+                            .border(1.dp, if (filterTab == "ALL") LXPrimaryGreen else LXBorder, RoundedCornerShape(6.dp))
+                            .clickable { filterTab = "ALL" }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "All (${relatedEntries.size})",
+                            color = if (filterTab == "ALL") LXPrimaryGreen else LXTextSecondary,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
                         )
                     }
 
-                    if (relatedEntries.size > 4) {
-                        TextButton(
-                            onClick = { expanded = !expanded },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = if (expanded) "Show Less" else "Show All (${relatedEntries.size})",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelMedium
+                    // Tracking Pill Tab
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (filterTab == "TRACKING") LXPrimaryGreen.copy(alpha = 0.25f) else LXSurfaceElevated)
+                            .border(1.dp, if (filterTab == "TRACKING") LXPrimaryGreen else LXBorder, RoundedCornerShape(6.dp))
+                            .clickable { filterTab = "TRACKING" }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "Tracking ($trackingCount)",
+                            color = if (filterTab == "TRACKING") LXPrimaryGreen else LXPrimaryGreen.copy(alpha = 0.7f),
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+
+                    // Not Tracking Pill Tab
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (filterTab == "UNTRACKED") Color(0xFFF59E0B).copy(alpha = 0.25f) else LXSurfaceElevated)
+                            .border(1.dp, if (filterTab == "UNTRACKED") Color(0xFFF59E0B) else LXBorder, RoundedCornerShape(6.dp))
+                            .clickable { filterTab = "UNTRACKED" }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "Not Tracking ($untrackedCount)",
+                            color = if (filterTab == "UNTRACKED") Color(0xFFF59E0B) else LXTextSecondary,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
+
+                val currentFiltered = when (filterTab) {
+                    "TRACKING" -> relatedEntries.filter { it.inLibraryEntryId != null }
+                    "UNTRACKED" -> relatedEntries.filter { it.inLibraryEntryId == null }
+                    else -> relatedEntries
+                }
+
+                if (currentFiltered.isEmpty()) {
+                    Text(
+                        text = if (filterTab == "TRACKING") "No related entries currently in your library" else "All related entries are already in your library!",
+                        color = LXTextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(vertical = 6.dp)
+                    )
+                } else {
+                    var expanded by remember { mutableStateOf(false) }
+                    val displayList = if (expanded || currentFiltered.size <= 4) currentFiltered else currentFiltered.take(4)
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        displayList.forEach { item ->
+                            RelatedItemRow(
+                                item = item,
+                                onClick = { onRelatedClick(item) }
                             )
+                        }
+
+                        if (currentFiltered.size > 4) {
+                            TextButton(
+                                onClick = { expanded = !expanded },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = if (expanded) "Show Less" else "Show All (${currentFiltered.size})",
+                                    color = LXPrimaryGreen,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
                         }
                     }
                 }
@@ -1524,145 +1630,4 @@ private fun RelatedItemRow(
             }
         }
     }
-}
-
-@Composable
-private fun AddRelatedToLibraryDialog(
-    item: RelatedMediaItem,
-    isAdding: Boolean,
-    onConfirm: (MediaStatus) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var selectedStatus by remember {
-        mutableStateOf(MediaStatus.PLAN_TO_WATCH)
-    }
-
-    val availableStatuses = listOf(
-        MediaStatus.PLAN_TO_WATCH,
-        MediaStatus.WATCHING,
-        MediaStatus.COMPLETED,
-        MediaStatus.ON_HOLD,
-        MediaStatus.DROPPED
-    )
-
-    AlertDialog(
-        onDismissRequest = { if (!isAdding) onDismiss() },
-        title = {
-            Text("Add to Library & Open", color = LXTextPrimary, fontWeight = FontWeight.Bold)
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (!item.posterUrl.isNullOrBlank()) {
-                        AsyncImage(
-                            model = item.posterUrl,
-                            contentDescription = item.title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(46.dp, 64.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = item.title,
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextPrimary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "${item.relationship} • ${item.mediaType.displayName}" + if (!item.releaseYear.isNullOrBlank()) " (${item.releaseYear})" else "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = LXTextSecondary
-                        )
-                    }
-                }
-
-                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
-
-                Text(
-                    text = "Initial Status",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = LXTextSecondary
-                )
-
-                var statusExpanded by remember { mutableStateOf(false) }
-                Box {
-                    OutlinedButton(
-                        onClick = { if (!isAdding) statusExpanded = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = LXSurfaceElevated,
-                            contentColor = LXTextPrimary
-                        ),
-                        border = BorderStroke(1.dp, LXBorder)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(selectedStatus.getDisplayLabel(item.mediaType), color = LXTextPrimary)
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = LXTextSecondary)
-                        }
-                    }
-
-                    DropdownMenu(
-                        expanded = statusExpanded,
-                        onDismissRequest = { statusExpanded = false },
-                        modifier = Modifier.background(LXSurfaceBlack)
-                    ) {
-                        availableStatuses.forEach { status ->
-                            DropdownMenuItem(
-                                text = { Text(status.getDisplayLabel(item.mediaType), color = LXTextPrimary) },
-                                onClick = {
-                                    selectedStatus = status
-                                    statusExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        containerColor = LXSurfaceBlack,
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !isAdding
-            ) {
-                Text("Cancel", color = LXTextSecondary)
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(selectedStatus) },
-                enabled = !isAdding,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = LXPrimaryGreen,
-                    contentColor = LXBackgroundBlack
-                ),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                if (isAdding) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                        color = LXBackgroundBlack
-                    )
-                } else {
-                    Text("Add & Open", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    )
 }

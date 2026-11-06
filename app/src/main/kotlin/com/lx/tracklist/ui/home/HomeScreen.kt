@@ -55,13 +55,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.data.model.SubCategory
+import com.lx.tracklist.ui.components.AddRelatedToLibraryDialog
 import com.lx.tracklist.ui.components.CategorySelectorSheet
 import com.lx.tracklist.ui.components.MediaCard
 import com.lx.tracklist.ui.components.StatusFilterTabs
@@ -93,6 +96,8 @@ fun HomeScreen(
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 600
     var subCategoryToDelete by remember { mutableStateOf<SubCategory?>(null) }
+    var relatedItemToAdd by remember { mutableStateOf<RelatedMediaItem?>(null) }
+    var isAddingRelated by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
     val statuses = remember {
@@ -301,10 +306,42 @@ fun HomeScreen(
                                 onIncrement = { viewModel.incrementProgress(entry) },
                                 onToggleFavorite = { viewModel.toggleFavorite(entry) },
                                 onDelete = { viewModel.deleteEntry(entry) },
-                                onEdit = { onEditEntry(entry.id) }
+                                onEdit = { onEditEntry(entry.id) },
+                                allLibraryEntries = state.entries,
+                                onRelatedEntryClick = { onEntryClick(it) },
+                                onAddRelatedItem = { item -> relatedItemToAdd = item }
                             )
                         }
                     }
+                }
+            }
+
+            if (relatedItemToAdd != null) {
+                val context = LocalContext.current
+                relatedItemToAdd?.let { item ->
+                    AddRelatedToLibraryDialog(
+                        item = item,
+                        isAdding = isAddingRelated,
+                        confirmButtonText = "Add to Library",
+                        onConfirm = { status ->
+                            if (!isAddingRelated) {
+                                isAddingRelated = true
+                                coroutineScope.launch {
+                                    try {
+                                        viewModel.addRelatedToLibrary(item, status, context)
+                                        relatedItemToAdd = null
+                                    } finally {
+                                        isAddingRelated = false
+                                    }
+                                }
+                            }
+                        },
+                        onDismiss = {
+                            if (!isAddingRelated) {
+                                relatedItemToAdd = null
+                            }
+                        }
+                    )
                 }
             }
 
