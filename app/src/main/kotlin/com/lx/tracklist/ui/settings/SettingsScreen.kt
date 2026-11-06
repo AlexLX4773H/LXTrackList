@@ -142,7 +142,7 @@ import com.lx.tracklist.ui.theme.LXTextSecondary
 
 enum class SettingsSubMenu(val title: String) {
     CATEGORIES("Custom Categories"),
-    SYNC_JOBS("Sync Jobs"),
+    SYNC_JOBS("External Sync Jobs"),
     STORAGE("Backup & Storage"),
     CONFLICTS("Conflict Resolution"),
     EXPORT_GUIDES("Export Guides & Help"),
@@ -1385,7 +1385,7 @@ private fun SettingsMainMenu(
                 icon = Icons.Default.Sync,
                 iconBackgroundColor = LXPrimaryGreen.copy(alpha = 0.15f),
                 iconTintColor = LXPrimaryGreen,
-                title = "Sync Jobs",
+                title = "External Sync Jobs",
                 subtitle = "Automated metadata, poster & episode sync with MyAnimeList & TMDB",
                 badgeText = if (isSyncing) "SYNCING" else "MAL & TMDB",
                 badgeColor = LXPrimaryGreen,

@@ -194,7 +194,7 @@ class TmdbIntegrationTest {
         assertEquals("search", com.lx.tracklist.ui.navigation.Screen.Search.route)
         assertEquals("Search", com.lx.tracklist.ui.navigation.Screen.Search.title)
 
-        assertEquals("Sync Jobs", com.lx.tracklist.ui.settings.SettingsSubMenu.SYNC_JOBS.title)
+        assertEquals("External Sync Jobs", com.lx.tracklist.ui.settings.SettingsSubMenu.SYNC_JOBS.title)
 
         val categories = com.lx.tracklist.ui.search.SearchCategory.entries
         assertEquals(5, categories.size)

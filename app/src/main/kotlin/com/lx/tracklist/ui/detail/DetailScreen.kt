@@ -1,5 +1,6 @@
 package com.lx.tracklist.ui.detail
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -8,16 +9,20 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -54,12 +59,15 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -71,14 +79,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -89,6 +102,8 @@ import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
+import com.lx.tracklist.data.remote.JikanApiClient
+import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.ui.components.AddRelatedToLibraryDialog
 import com.lx.tracklist.ui.theme.LXAiringBlue
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
@@ -101,10 +116,14 @@ import com.lx.tracklist.ui.theme.LXSurfaceBlack
 import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -126,6 +145,7 @@ fun DetailScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showStartRewatchDialog by remember { mutableStateOf(false) }
     var relatedItemToAdd by remember { mutableStateOf<RelatedMediaItem?>(null) }
+    var previewRelatedItem by remember { mutableStateOf<RelatedMediaItem?>(null) }
     var isAddingRelated by remember { mutableStateOf(false) }
 
     val configuration = LocalConfiguration.current
@@ -349,13 +369,9 @@ fun DetailScreen(
                             isLoading = isLoadingRelated,
                             errorMessage = relatedErrorMessage,
                             onRetry = { viewModel.retryLoadRelatedEntries(context) },
-                            onRelatedClick = { item ->
-                                if (item.inLibraryEntryId != null) {
-                                    onNavigateToDetail?.invoke(item.inLibraryEntryId)
-                                } else {
-                                    relatedItemToAdd = item
-                                }
-                            }
+                            onItemClick = { item -> previewRelatedItem = item },
+                            onAddClick = { item -> relatedItemToAdd = item },
+                            onViewInLibraryClick = { entryId -> onNavigateToDetail?.invoke(entryId) }
                         )
                         DetailNotesCard(currentEntry)
                         DetailTagsCard(currentEntry)
@@ -506,13 +522,9 @@ fun DetailScreen(
                             isLoading = isLoadingRelated,
                             errorMessage = relatedErrorMessage,
                             onRetry = { viewModel.retryLoadRelatedEntries(context) },
-                            onRelatedClick = { item ->
-                                if (item.inLibraryEntryId != null) {
-                                    onNavigateToDetail?.invoke(item.inLibraryEntryId)
-                                } else {
-                                    relatedItemToAdd = item
-                                }
-                            }
+                            onItemClick = { item -> previewRelatedItem = item },
+                            onAddClick = { item -> relatedItemToAdd = item },
+                            onViewInLibraryClick = { entryId -> onNavigateToDetail?.invoke(entryId) }
                         )
                         DetailNotesCard(currentEntry)
                         DetailTagsCard(currentEntry)
@@ -596,6 +608,23 @@ fun DetailScreen(
                 ) {
                     Text("Cancel", color = LXTextSecondary)
                 }
+            }
+        )
+    }
+
+    if (previewRelatedItem != null) {
+        RelatedItemDetailSheet(
+            item = previewRelatedItem!!,
+            context = context,
+            onDismiss = { previewRelatedItem = null },
+            onAddClick = {
+                val toAdd = previewRelatedItem
+                previewRelatedItem = null
+                relatedItemToAdd = toAdd
+            },
+            onViewInLibrary = { entryId ->
+                previewRelatedItem = null
+                onNavigateToDetail?.invoke(entryId)
             }
         )
     }
@@ -1275,7 +1304,9 @@ private fun DetailRelatedCard(
     isLoading: Boolean,
     errorMessage: String? = null,
     onRetry: (() -> Unit)? = null,
-    onRelatedClick: (RelatedMediaItem) -> Unit
+    onItemClick: (RelatedMediaItem) -> Unit,
+    onAddClick: (RelatedMediaItem) -> Unit,
+    onViewInLibraryClick: (Long) -> Unit
 ) {
     if (relatedEntries.isEmpty() && !isLoading && errorMessage == null) return
 
@@ -1306,7 +1337,7 @@ private fun DetailRelatedCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Related & Sequels",
+                        text = "Related",
                         color = LXPrimaryGreen,
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                     )
@@ -1338,7 +1369,7 @@ private fun DetailRelatedCard(
             if (relatedEntries.isEmpty()) {
                 if (isLoading) {
                     Text(
-                        text = "Checking for sequels & related entries...",
+                        text = "Checking for related entries...",
                         color = LXTextSecondary,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(vertical = 4.dp)
@@ -1445,7 +1476,9 @@ private fun DetailRelatedCard(
                         displayList.forEach { item ->
                             RelatedItemRow(
                                 item = item,
-                                onClick = { onRelatedClick(item) }
+                                onClick = { onItemClick(item) },
+                                onAddClick = { onAddClick(item) },
+                                onViewInLibraryClick = { onViewInLibraryClick(it) }
                             )
                         }
 
@@ -1471,7 +1504,9 @@ private fun DetailRelatedCard(
 @Composable
 private fun RelatedItemRow(
     item: RelatedMediaItem,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onAddClick: () -> Unit,
+    onViewInLibraryClick: (Long) -> Unit
 ) {
     val isInLibrary = item.inLibraryEntryId != null
     val relColor = when {
@@ -1584,6 +1619,7 @@ private fun RelatedItemRow(
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                    .clickable { onViewInLibraryClick(item.inLibraryEntryId) }
                     .padding(horizontal = 8.dp, vertical = 5.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -1610,10 +1646,11 @@ private fun RelatedItemRow(
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
-                    .background(LXSurfaceElevated)
-                    .border(BorderStroke(0.5.dp, LXBorder), RoundedCornerShape(6.dp))
+                    .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                    .border(BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.4f)), RoundedCornerShape(6.dp))
+                    .clickable { onAddClick() }
                     .padding(horizontal = 8.dp, vertical = 5.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
@@ -1625,8 +1662,465 @@ private fun RelatedItemRow(
                 Text(
                     text = "Add",
                     color = LXPrimaryGreen,
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
                 )
+            }
+        }
+    }
+}
+
+private data class RelatedDetailedInfo(
+    val title: String? = null,
+    val alternateTitle: String? = null,
+    val synopsis: String? = null,
+    val tags: String? = null,
+    val posterUrl: String? = null,
+    val score: Float? = null,
+    val scoreSource: String? = null,
+    val releaseYear: String? = null,
+    val durationMinutes: Int? = null,
+    val totalUnits: Int? = null,
+    val totalVolumes: Int? = null,
+    val statusText: String? = null,
+    val isAiring: Boolean? = null
+)
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun RelatedItemDetailSheet(
+    item: RelatedMediaItem,
+    context: Context,
+    onDismiss: () -> Unit,
+    onAddClick: () -> Unit,
+    onViewInLibrary: (Long) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset = Offset.Zero
+            override suspend fun onPreFling(available: Velocity): Velocity = Velocity.Zero
+        }
+    }
+
+    var detailedInfo by remember(item.externalId, item.externalSource) { mutableStateOf<RelatedDetailedInfo?>(null) }
+    var isLoadingDetails by remember(item.externalId, item.externalSource) { mutableStateOf(true) }
+
+    LaunchedEffect(item.externalId, item.externalSource) {
+        isLoadingDetails = true
+        withContext(Dispatchers.IO) {
+            try {
+                if (item.externalSource.equals("TMDB", ignoreCase = true)) {
+                    val tmdbId = item.externalId.toLongOrNull() ?: 0L
+                    if (item.mediaType == MediaType.MOVIE) {
+                        val full = TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()
+                        val yr = full?.airedStartDate?.let {
+                            val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = it }
+                            cal.get(Calendar.YEAR).toString()
+                        }
+                        detailedInfo = RelatedDetailedInfo(
+                            title = full?.title,
+                            alternateTitle = full?.alternateTitle,
+                            synopsis = full?.synopsis,
+                            tags = full?.tags,
+                            posterUrl = full?.posterUrl,
+                            score = full?.externalScore,
+                            scoreSource = "TMDB",
+                            releaseYear = yr,
+                            durationMinutes = full?.durationMinutes,
+                            statusText = "Movie"
+                        )
+                    } else {
+                        val full = TmdbApiClient.fetchTvDetails(tmdbId, context).getOrNull()
+                        val yr = full?.airedStartDate?.let {
+                            val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = it }
+                            cal.get(Calendar.YEAR).toString()
+                        }
+                        detailedInfo = RelatedDetailedInfo(
+                            title = full?.title,
+                            alternateTitle = full?.alternateTitle,
+                            synopsis = full?.synopsis,
+                            tags = full?.tags,
+                            posterUrl = full?.posterUrl,
+                            score = full?.externalScore,
+                            scoreSource = "TMDB",
+                            releaseYear = yr,
+                            durationMinutes = full?.durationMinutes,
+                            totalUnits = full?.totalEpisodes,
+                            isAiring = full?.isAiring,
+                            statusText = if (full?.isAiring == true) "Airing" else "Finished"
+                        )
+                    }
+                } else {
+                    val malId = item.externalId.toLongOrNull() ?: 0L
+                    val isManga = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA || item.mediaType == MediaType.BOOK
+                    var full = if (malId > 0) JikanApiClient.fetchMediaDetails(malId, isManga).getOrNull() else null
+                    if (full == null && item.title.isNotBlank()) {
+                        full = JikanApiClient.queryAniListByTitle(item.title, isManga).getOrNull()
+                    }
+                    val yr = full?.airedStartDate?.let {
+                        val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = it }
+                        cal.get(Calendar.YEAR).toString()
+                    }
+                    detailedInfo = RelatedDetailedInfo(
+                        title = full?.title,
+                        alternateTitle = full?.alternateTitle,
+                        synopsis = full?.synopsis,
+                        tags = full?.tags,
+                        posterUrl = full?.posterUrl,
+                        score = full?.externalScore,
+                        scoreSource = full?.externalScoreSource ?: "MAL",
+                        releaseYear = yr,
+                        durationMinutes = full?.durationMinutes,
+                        totalUnits = if (isManga) full?.totalChapters else full?.totalEpisodes,
+                        totalVolumes = full?.totalVolumes,
+                        isAiring = full?.isAiring,
+                        statusText = full?.type ?: item.mediaType.displayName
+                    )
+                }
+            } catch (_: Exception) {}
+            isLoadingDetails = false
+        }
+    }
+
+    val displayTitle = detailedInfo?.title ?: item.title
+    val displayPoster = detailedInfo?.posterUrl ?: item.posterUrl
+    val displayScore = detailedInfo?.score ?: item.score
+    val displayScoreSource = detailedInfo?.scoreSource ?: item.externalSource
+    val displayYear = detailedInfo?.releaseYear ?: item.releaseYear
+    val displayAlternate = detailedInfo?.alternateTitle
+    val displaySynopsis = detailedInfo?.synopsis
+    val displayTags = detailedInfo?.tags
+
+    val relColor = when {
+        item.relationship.contains("Sequel", ignoreCase = true) -> LXPrimaryGreen
+        item.relationship.contains("Prequel", ignoreCase = true) -> Color(0xFF38BDF8)
+        item.relationship.contains("Collection", ignoreCase = true) || item.relationship.contains("Part", ignoreCase = true) -> LXScoreGold
+        item.relationship.contains("Spin", ignoreCase = true) || item.relationship.contains("Side", ignoreCase = true) -> Color(0xFFA78BFA)
+        else -> LXTextSecondary
+    }
+
+    val unitsInfo = when (item.mediaType) {
+        MediaType.ANIME, MediaType.SHOW -> {
+            val eps = detailedInfo?.totalUnits?.takeIf { it > 0 }?.let { "$it Episodes" }
+            val dur = detailedInfo?.durationMinutes?.takeIf { it > 0 }?.let { "${it}m/ep" }
+            listOfNotNull(eps, dur).joinToString(" • ").takeIf { it.isNotBlank() }
+        }
+        MediaType.MOVIE -> {
+            detailedInfo?.durationMinutes?.takeIf { it > 0 }?.let { "${it}m runtime" }
+        }
+        MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> {
+            val chs = detailedInfo?.totalUnits?.takeIf { it > 0 }?.let { "$it Chapters" }
+            val vols = detailedInfo?.totalVolumes?.takeIf { it > 0 }?.let { "$it Volumes" }
+            listOfNotNull(chs, vols).joinToString(" • ").takeIf { it.isNotBlank() }
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = LXSurfaceBlack,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 10.dp)
+                    .width(36.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(LXBorder)
+            )
+        }
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .nestedScroll(nestedScrollConnection)
+        ) {
+            val maxSheetHeight = maxHeight * 0.90f
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxSheetHeight)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Header: Poster + Title + Metadata
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Poster
+                    Box(
+                        modifier = Modifier
+                            .width(100.dp)
+                            .height(148.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (!displayPoster.isNullOrBlank()) {
+                            AsyncImage(
+                                model = displayPoster,
+                                contentDescription = displayTitle,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Icon(
+                                imageVector = if (item.mediaType == MediaType.MOVIE) Icons.Default.Movie else Icons.Default.Tv,
+                                contentDescription = null,
+                                tint = LXTextSecondary.copy(alpha = 0.5f),
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+                    }
+
+                    // Info Column
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = displayTitle,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+
+                        if (!displayAlternate.isNullOrBlank() && !displayAlternate.equals(displayTitle, ignoreCase = true)) {
+                            Text(
+                                text = displayAlternate.replace("\n", " • "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LXTextSecondary.copy(alpha = 0.8f)
+                            )
+                        }
+
+                        // Chips row (Relationship, Format, Year, Score)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = relColor.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = item.relationship.uppercase(),
+                                    color = relColor,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = LXPrimaryGreen.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = detailedInfo?.statusText ?: item.mediaType.displayName,
+                                    color = LXPrimaryGreen,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+
+                            if (!displayYear.isNullOrBlank()) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = LXSurfaceElevated
+                                ) {
+                                    Text(
+                                        text = displayYear,
+                                        color = LXTextSecondary,
+                                        fontSize = 11.sp,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            if (displayScore != null && displayScore > 0f) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = LXScoreGold.copy(alpha = 0.15f)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Star,
+                                            contentDescription = null,
+                                            tint = LXScoreGold,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Text(
+                                            text = "${String.format(Locale.US, "%.1f", displayScore)} ($displayScoreSource)",
+                                            color = LXScoreGold,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!unitsInfo.isNullOrBlank()) {
+                            Text(
+                                text = unitsInfo,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LXTextSecondary
+                            )
+                        }
+                    }
+                }
+
+                // Tags / Genres
+                if (!displayTags.isNullOrBlank()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        displayTags.split(",").map { it.trim() }.filter { it.isNotBlank() }.forEach { tag ->
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = LXSurfaceElevated,
+                                border = BorderStroke(0.5.dp, LXBorder)
+                            ) {
+                                Text(
+                                    text = "#$tag",
+                                    color = LXTextSecondary,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Synopsis Card
+                if (isLoadingDetails) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = LXPrimaryGreen,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Loading overview & details...",
+                            color = LXTextSecondary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                } else if (!displaySynopsis.isNullOrBlank()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, LXBorder)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Synopsis / Overview",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = LXPrimaryGreen
+                            )
+                            Text(
+                                text = displaySynopsis,
+                                style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
+                                color = LXTextPrimary
+                            )
+                        }
+                    }
+                }
+
+                // TMDB Attribution Notice
+                if (item.externalSource == "TMDB") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_tmdb_logo),
+                            contentDescription = "TMDB",
+                            modifier = Modifier.height(14.dp).width(20.dp)
+                        )
+                        Text(
+                            text = "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                            color = LXTextSecondary.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+
+                // Bottom Actions
+                if (item.inLibraryEntryId != null) {
+                    Button(
+                        onClick = {
+                            onDismiss()
+                            onViewInLibrary(item.inLibraryEntryId)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LXPrimaryGreen,
+                            contentColor = LXBackgroundBlack
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "View in Library (${item.inLibraryStatus?.getDisplayLabel(item.mediaType) ?: "In Library"})",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            onDismiss()
+                            onAddClick()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LXPrimaryGreen,
+                            contentColor = LXBackgroundBlack
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Add to Library",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
