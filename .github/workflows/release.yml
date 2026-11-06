@@ -1,0 +1,110 @@
+name: Build & Release APK
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/build.gradle.kts'
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force release even if tag/release already exists'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check version change
+        id: version_check
+        run: |
+          VERSION=$(grep -m1 'versionName' app/build.gradle.kts | tr -d "'\" " | cut -d'=' -f2)
+          TAG="v${VERSION}"
+          echo "Detected version: $VERSION"
+          echo "Target tag: $TAG"
+
+          FORCE="${{ inputs.force_release }}"
+
+          if [ "$FORCE" = "true" ]; then
+            echo "Force release requested."
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          elif git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists. Version has not been changed since last release. Skipping."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New version $TAG detected! Proceeding with release build."
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up JDK 17
+        if: steps.version_check.outputs.should_release == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        if: steps.version_check.outputs.should_release == 'true'
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        if: steps.version_check.outputs.should_release == 'true'
+        run: chmod +x gradlew
+
+      - name: Prepare environment file
+        if: steps.version_check.outputs.should_release == 'true'
+        run: |
+          cat << 'EOF' > .env
+          TMDB_READ_ACCESS_TOKEN=${{ secrets.TMDB_READ_ACCESS_TOKEN }}
+          TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
+          EOF
+
+      - name: Build Release APK
+        if: steps.version_check.outputs.should_release == 'true'
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Prepare APK Asset
+        if: steps.version_check.outputs.should_release == 'true'
+        id: prepare_apk
+        run: |
+          VERSION="${{ steps.version_check.outputs.version }}"
+          ORIG_APK=$(find app/build/outputs/apk/release/ -name "*.apk" -type f | head -n 1)
+          if [ -z "$ORIG_APK" ]; then
+            echo "Error: No release APK found."
+            exit 1
+          fi
+          RELEASE_APK="LXTrackList-v${VERSION}.apk"
+          cp "$ORIG_APK" "$RELEASE_APK"
+          echo "Ready to release: $RELEASE_APK"
+          echo "apk_path=$RELEASE_APK" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release and Upload APK
+        if: steps.version_check.outputs.should_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version_check.outputs.tag }}
+          name: "LX Track List ${{ steps.version_check.outputs.tag }}"
+          files: ${{ steps.prepare_apk.outputs.apk_path }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

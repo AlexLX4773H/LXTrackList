@@ -38,10 +38,28 @@ android {
     buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
   }
 
+  signingConfigs {
+    create("release") {
+      val keystorePath = System.getenv("KEYSTORE_PATH") ?: project.findProperty("KEYSTORE_PATH") as? String
+      if (keystorePath != null && file(keystorePath).exists()) {
+        storeFile = file(keystorePath)
+        storePassword = System.getenv("KEYSTORE_PASSWORD") ?: project.findProperty("KEYSTORE_PASSWORD") as? String
+        keyAlias = System.getenv("KEY_ALIAS") ?: project.findProperty("KEY_ALIAS") as? String
+        keyPassword = System.getenv("KEY_PASSWORD") ?: project.findProperty("KEY_PASSWORD") as? String
+      }
+    }
+  }
+
   buildTypes {
     release {
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+      val releaseKeystore = signingConfigs.getByName("release")
+      signingConfig = if (releaseKeystore.storeFile != null && releaseKeystore.storeFile!!.exists()) {
+        releaseKeystore
+      } else {
+        signingConfigs.getByName("debug")
+      }
     }
   }
   compileOptions {

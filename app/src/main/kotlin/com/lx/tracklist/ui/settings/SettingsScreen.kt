@@ -1504,8 +1504,8 @@ private fun SettingsMainMenu(
                 iconBackgroundColor = Color(0xFF00E5FF).copy(alpha = 0.15f),
                 iconTintColor = Color(0xFF00E5FF),
                 title = "About LX Track List",
-                subtitle = "Version 0.1.0 • Device & storage details",
-                badgeText = "v0.1.0",
+                subtitle = "Version ${com.lx.tracklist.BuildConfig.VERSION_NAME} • Device & storage details",
+                badgeText = "v${com.lx.tracklist.BuildConfig.VERSION_NAME}",
                 badgeColor = Color(0xFF00E5FF),
                 isSelected = selectedSubMenu == SettingsSubMenu.ABOUT,
                 onClick = { onSelectSubMenu(SettingsSubMenu.ABOUT) }
@@ -3843,7 +3843,7 @@ private fun AboutContent(
                         color = LXPrimaryGreen
                     )
                     Text(
-                        text = "Version 0.1.0 (Optimized for Phone & Tablet)",
+                        text = "Version ${com.lx.tracklist.BuildConfig.VERSION_NAME} (Optimized for Phone & Tablet)",
                         style = MaterialTheme.typography.bodySmall,
                         color = LXTextSecondary
                     )
