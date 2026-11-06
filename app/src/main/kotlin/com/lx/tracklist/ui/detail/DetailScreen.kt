@@ -103,6 +103,7 @@ fun DetailScreen(
     val entry by viewModel.entry.collectAsState()
     val isDeleted by viewModel.isDeleted.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showStartRewatchDialog by remember { mutableStateOf(false) }
 
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 720
@@ -311,7 +312,7 @@ fun DetailScreen(
                             entry = currentEntry,
                             onIncrement = { viewModel.increment() },
                             onDecrement = { viewModel.decrement() },
-                            onStartRewatch = { viewModel.startRewatch() },
+                            onStartRewatch = { showStartRewatchDialog = true },
                             onFinishRewatch = { viewModel.finishRewatch() },
                             onCancelRewatch = { viewModel.cancelRewatch() }
                         )
@@ -455,7 +456,7 @@ fun DetailScreen(
                             entry = currentEntry,
                             onIncrement = { viewModel.increment() },
                             onDecrement = { viewModel.decrement() },
-                            onStartRewatch = { viewModel.startRewatch() },
+                            onStartRewatch = { showStartRewatchDialog = true },
                             onFinishRewatch = { viewModel.finishRewatch() },
                             onCancelRewatch = { viewModel.cancelRewatch() }
                         )
@@ -488,6 +489,59 @@ fun DetailScreen(
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
                     Text("Cancel", color = LXTextPrimary)
+                }
+            }
+        )
+    }
+
+    val currentEntry = entry
+    if (showStartRewatchDialog && currentEntry != null) {
+        val isReading = currentEntry.mediaType == MediaType.MANGA ||
+                        currentEntry.mediaType == MediaType.MANHWA ||
+                        currentEntry.mediaType == MediaType.BOOK
+        val actionName = if (isReading) "Re-read" else "Rewatch"
+        val actionVerb = if (isReading) "re-reading" else "rewatching"
+
+        AlertDialog(
+            onDismissRequest = { showStartRewatchDialog = false },
+            title = {
+                Text(
+                    text = "Start $actionName?",
+                    color = LXTextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to start $actionVerb \"${currentEntry.title}\"? Your progress will be reset so you can track your new session.",
+                    color = LXTextSecondary
+                )
+            },
+            containerColor = LXSurfaceBlack,
+            shape = RoundedCornerShape(14.dp),
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showStartRewatchDialog = false
+                        viewModel.startRewatch()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXPrimaryGreen,
+                        contentColor = LXBackgroundBlack
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "Start $actionName",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showStartRewatchDialog = false }
+                ) {
+                    Text("Cancel", color = LXTextSecondary)
                 }
             }
         )
