@@ -13,6 +13,7 @@ import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.TmdbSyncManager
 import com.lx.tracklist.data.repository.MediaRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class LibrarySortOption(val displayName: String) {
     RECENTLY_UPDATED("Recently Updated"),
@@ -557,6 +559,51 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         viewModelScope.launch {
             repository.batchUpdateFavorite(selected, isFavorite)
             clearSelection()
+        }
+    }
+
+    fun syncSelectedWithExternalDb(context: Context, forceRefresh: Boolean = false) {
+        val selected = _filterState.value.selectedIds.toSet()
+        if (selected.isEmpty()) return
+        clearSelection()
+        viewModelScope.launch(Dispatchers.IO) {
+            val allEntries = repository.getAllEntriesSync()
+            val selectedEntries = allEntries.filter { selected.contains(it.id) }
+
+            val jikanIds = mutableSetOf<Long>()
+            val tmdbIds = mutableSetOf<Long>()
+
+            for (entry in selectedEntries) {
+                val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim() ?: ""
+                if (src.equals("TMDB", ignoreCase = true)) {
+                    tmdbIds.add(entry.id)
+                } else if (src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)) {
+                    jikanIds.add(entry.id)
+                } else if (entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.SHOW) {
+                    tmdbIds.add(entry.id)
+                } else {
+                    jikanIds.add(entry.id)
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                if (jikanIds.isNotEmpty()) {
+                    JikanSyncManager.startSync(
+                        context = context,
+                        repository = repository,
+                        forceRefresh = forceRefresh,
+                        targetEntryIds = jikanIds
+                    )
+                }
+                if (tmdbIds.isNotEmpty()) {
+                    TmdbSyncManager.startSync(
+                        context = context,
+                        repository = repository,
+                        forceRefresh = forceRefresh,
+                        targetEntryIds = tmdbIds
+                    )
+                }
+            }
         }
     }
 

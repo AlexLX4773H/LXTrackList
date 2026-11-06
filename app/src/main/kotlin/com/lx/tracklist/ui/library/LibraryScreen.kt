@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
@@ -111,6 +112,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lx.tracklist.data.model.MediaStatus
@@ -145,8 +147,8 @@ fun LibraryScreen(
     var showSubCategoryBatchDialog by remember { mutableStateOf(false) }
     var showStatusBatchDialog by remember { mutableStateOf(false) }
     var showFavoriteBatchDialog by remember { mutableStateOf(false) }
-    var showJikanBatchDialog by remember { mutableStateOf(false) }
-    var showTmdbBatchDialog by remember { mutableStateOf(false) }
+    var showExternalDbBatchDialog by remember { mutableStateOf(false) }
+    var showSelectionOverflowMenu by remember { mutableStateOf(false) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -467,10 +469,10 @@ fun LibraryScreen(
         )
     }
 
-    // Jikan Sync Selected Entries Dialog
-    if (showJikanBatchDialog) {
+    // External DB Sync Selected Entries Dialog
+    if (showExternalDbBatchDialog) {
         AlertDialog(
-            onDismissRequest = { showJikanBatchDialog = false },
+            onDismissRequest = { showExternalDbBatchDialog = false },
             title = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -478,7 +480,7 @@ fun LibraryScreen(
                 ) {
                     Icon(Icons.Default.Sync, contentDescription = null, tint = LXPrimaryGreen)
                     Text(
-                        text = "Jikan Sync (${state.selectedIds.size} selected)",
+                        text = "External DB Sync (${state.selectedIds.size} selected)",
                         color = LXTextPrimary,
                         fontWeight = FontWeight.Bold
                     )
@@ -487,84 +489,17 @@ fun LibraryScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Search and update posters, runtimes, and MAL IDs for the selected ${state.selectedIds.size} entries using MyAnimeList (Jikan).",
+                        text = "Search and update posters, runtimes, broadcast dates, season/episode counts, and metadata for the selected ${state.selectedIds.size} entries using MyAnimeList (Jikan) and The Movie Database (TMDB).",
                         color = LXTextSecondary
                     )
                     Text(
-                        text = "If an entry already has a MAL ID, it will be used directly. Otherwise, it will search by title.",
-                        color = LXTextSecondary,
-                        fontSize = 12.sp
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        ensureNotificationPermission()
-                        viewModel.syncSelectedWithJikan(context, forceRefresh = false)
-                        showJikanBatchDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = LXPrimaryGreen,
-                        contentColor = LXBackgroundBlack
-                    )
-                ) {
-                    Text("Fetch Missing", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            ensureNotificationPermission()
-                            viewModel.syncSelectedWithJikan(context, forceRefresh = true)
-                            showJikanBatchDialog = false
-                        },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                        border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f))
-                    ) {
-                        Text("Re-fetch All")
-                    }
-                    TextButton(onClick = { showJikanBatchDialog = false }) {
-                        Text("Cancel", color = LXTextSecondary)
-                    }
-                }
-            },
-            containerColor = LXSurfaceElevated
-        )
-    }
-
-    // TMDB Sync Selected Entries Dialog
-    if (showTmdbBatchDialog) {
-        AlertDialog(
-            onDismissRequest = { showTmdbBatchDialog = false },
-            title = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(Icons.Default.Sync, contentDescription = null, tint = LXPrimaryGreen)
-                    Text(
-                        text = "TMDB Sync (${state.selectedIds.size} selected)",
-                        color = LXTextPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Search and update posters, runtimes, seasons, episodes, and TMDB IDs for the selected ${state.selectedIds.size} entries using The Movie Database (TMDB).",
-                        color = LXTextSecondary
-                    )
-                    Text(
-                        text = "Only Movie and TV Show entries are synced. If an entry already has a TMDB ID, it will be used directly. Otherwise, it will search by title.",
+                        text = "Anime, Manga, and Manhwa entries are synced with Jikan (MAL). Movies and TV Shows are synced with TMDB (or MAL if previously linked to MAL).",
                         color = LXTextSecondary,
                         fontSize = 12.sp
                     )
                     Text(
-                        text = "This product uses the TMDB API but is not endorsed or certified by TMDB.",
-                        color = LXTextSecondary.copy(alpha = 0.7f),
+                        text = "Existing external IDs will be used directly. Otherwise, it searches by title.",
+                        color = LXTextSecondary.copy(alpha = 0.8f),
                         fontSize = 11.sp
                     )
                 }
@@ -573,8 +508,8 @@ fun LibraryScreen(
                 Button(
                     onClick = {
                         ensureNotificationPermission()
-                        viewModel.syncSelectedWithTmdb(context, forceRefresh = false)
-                        showTmdbBatchDialog = false
+                        viewModel.syncSelectedWithExternalDb(context, forceRefresh = false)
+                        showExternalDbBatchDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = LXPrimaryGreen,
@@ -589,15 +524,15 @@ fun LibraryScreen(
                     OutlinedButton(
                         onClick = {
                             ensureNotificationPermission()
-                            viewModel.syncSelectedWithTmdb(context, forceRefresh = true)
-                            showTmdbBatchDialog = false
+                            viewModel.syncSelectedWithExternalDb(context, forceRefresh = true)
+                            showExternalDbBatchDialog = false
                         },
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
                         border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f))
                     ) {
                         Text("Re-fetch All")
                     }
-                    TextButton(onClick = { showTmdbBatchDialog = false }) {
+                    TextButton(onClick = { showExternalDbBatchDialog = false }) {
                         Text("Cancel", color = LXTextSecondary)
                     }
                 }
@@ -626,8 +561,11 @@ fun LibraryScreen(
                     title = {
                         Text(
                             text = "${state.selectedIds.size} Selected",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            color = LXPrimaryGreen
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXPrimaryGreen,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                     },
                     navigationIcon = {
@@ -641,29 +579,53 @@ fun LibraryScreen(
                             Icon(Icons.Default.SelectAll, contentDescription = "Select All", tint = LXTextPrimary)
                         }
 
-                        // Jikan Sync Action
-                        IconButton(onClick = { showJikanBatchDialog = true }) {
-                            Icon(Icons.Default.Sync, contentDescription = "Sync Selected with Jikan", tint = LXPrimaryGreen)
-                        }
-
-                        // TMDB Sync Action
-                        IconButton(onClick = { showTmdbBatchDialog = true }) {
-                            Icon(Icons.Default.Movie, contentDescription = "Sync Selected with TMDB", tint = LXPrimaryGreen)
-                        }
-
-                        // Range Select
-                        TextButton(onClick = { viewModel.selectRange(visibleIds) }) {
-                            Text("Range", color = LXPrimaryGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        }
-
-                        // Invert Selection
-                        TextButton(onClick = { viewModel.invertSelection(visibleIds) }) {
-                            Text("Invert", color = LXTextPrimary, fontSize = 13.sp)
+                        // External DB Sync Action (Single unified sync for MAL & TMDB)
+                        IconButton(onClick = { showExternalDbBatchDialog = true }) {
+                            Icon(Icons.Default.Sync, contentDescription = "Sync Selected with External DB", tint = LXPrimaryGreen)
                         }
 
                         // Bulk Delete Action
                         IconButton(onClick = { showDeleteConfirmDialog = true }) {
                             Icon(Icons.Default.Delete, contentDescription = "Delete Selected", tint = LXErrorRed)
+                        }
+
+                        if (isTablet) {
+                            // Range Select
+                            TextButton(onClick = { viewModel.selectRange(visibleIds) }) {
+                                Text("Range", color = LXPrimaryGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+
+                            // Invert Selection
+                            TextButton(onClick = { viewModel.invertSelection(visibleIds) }) {
+                                Text("Invert", color = LXTextPrimary, fontSize = 13.sp)
+                            }
+                        } else {
+                            // Overflow menu on phone so the top bar remains clean and title is never crushed
+                            Box {
+                                IconButton(onClick = { showSelectionOverflowMenu = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "More selection actions", tint = LXTextPrimary)
+                                }
+                                DropdownMenu(
+                                    expanded = showSelectionOverflowMenu,
+                                    onDismissRequest = { showSelectionOverflowMenu = false },
+                                    modifier = Modifier.background(LXSurfaceElevated)
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Select Range", color = LXTextPrimary) },
+                                        onClick = {
+                                            viewModel.selectRange(visibleIds)
+                                            showSelectionOverflowMenu = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Invert Selection", color = LXTextPrimary) },
+                                        onClick = {
+                                            viewModel.invertSelection(visibleIds)
+                                            showSelectionOverflowMenu = false
+                                        }
+                                    )
+                                }
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = LXSurfaceElevated)
@@ -797,13 +759,8 @@ fun LibraryScreen(
                         )
                         BatchActionButton(
                             icon = Icons.Default.Sync,
-                            label = "Jikan Sync",
-                            onClick = { showJikanBatchDialog = true }
-                        )
-                        BatchActionButton(
-                            icon = Icons.Default.Movie,
-                            label = "TMDB Sync",
-                            onClick = { showTmdbBatchDialog = true }
+                            label = "External DB Sync",
+                            onClick = { showExternalDbBatchDialog = true }
                         )
                     }
                 }
@@ -1592,13 +1549,20 @@ private fun BatchActionButton(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Icon(icon, contentDescription = label, tint = LXPrimaryGreen, modifier = Modifier.size(22.dp))
         Spacer(modifier = Modifier.height(2.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = LXTextPrimary, fontSize = 11.sp)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = LXTextPrimary,
+            fontSize = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

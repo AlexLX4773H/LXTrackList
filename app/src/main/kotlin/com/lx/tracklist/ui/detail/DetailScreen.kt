@@ -1,6 +1,7 @@
 package com.lx.tracklist.ui.detail
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -901,10 +902,11 @@ private fun DetailTagsCard(entry: MediaEntry) {
 @Composable
 private fun DetailSourceText(entry: MediaEntry) {
     val srcParts = mutableListOf<String>()
+    val isTmdb = entry.externalSource?.equals("TMDB", ignoreCase = true) == true || entry.externalScoreSource?.equals("TMDB", ignoreCase = true) == true
     if (!entry.externalSource.isNullOrBlank()) {
         srcParts.add("Imported from ${entry.externalSource}" + if (entry.externalId != null) " (ID: ${entry.externalId})" else "")
     }
-    if (entry.externalSource?.equals("TMDB", ignoreCase = true) == true || entry.externalScoreSource?.equals("TMDB", ignoreCase = true) == true) {
+    if (isTmdb) {
         srcParts.add("Data from TMDB")
     }
     if (entry.externalScore != null && entry.externalScore > 0f) {
@@ -917,11 +919,32 @@ private fun DetailSourceText(entry: MediaEntry) {
         srcParts.add("$src Rating: ★ $scoreStr")
     }
     if (srcParts.isNotEmpty()) {
-        Text(
-            text = srcParts.joinToString(" • "),
-            style = MaterialTheme.typography.bodySmall,
-            color = LXTextSecondary.copy(alpha = 0.6f)
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (isTmdb) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_tmdb_logo),
+                        contentDescription = "TMDB",
+                        modifier = Modifier.height(14.dp).width(20.dp)
+                    )
+                }
+                Text(
+                    text = srcParts.joinToString(" • "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary.copy(alpha = 0.7f)
+                )
+            }
+            if (isTmdb) {
+                Text(
+                    text = "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                    color = LXTextSecondary.copy(alpha = 0.5f)
+                )
+            }
+        }
     }
 }
 

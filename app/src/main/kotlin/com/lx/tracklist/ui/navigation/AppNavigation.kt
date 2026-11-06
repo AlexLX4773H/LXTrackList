@@ -59,6 +59,9 @@ import com.lx.tracklist.ui.home.HomeViewModelFactory
 import com.lx.tracklist.ui.library.LibraryScreen
 import com.lx.tracklist.ui.library.LibraryViewModel
 import com.lx.tracklist.ui.library.LibraryViewModelFactory
+import com.lx.tracklist.ui.search.SearchScreen
+import com.lx.tracklist.ui.search.SearchViewModel
+import com.lx.tracklist.ui.search.SearchViewModelFactory
 import com.lx.tracklist.ui.settings.SettingsScreen
 import com.lx.tracklist.ui.settings.SettingsViewModel
 import com.lx.tracklist.ui.settings.SettingsViewModelFactory
@@ -72,6 +75,7 @@ import com.lx.tracklist.ui.theme.LXTextSecondary
 sealed class NavDestination {
     data object Home : NavDestination()
     data object Library : NavDestination()
+    data object Search : NavDestination()
     data object Stats : NavDestination()
     data object Settings : NavDestination()
     data class Detail(val entryId: Long, val sessionId: Long = System.nanoTime()) : NavDestination()
@@ -95,6 +99,7 @@ fun AppNavigation() {
     val homeState by homeViewModel.uiState.collectAsState()
 
     val libraryViewModel: LibraryViewModel = viewModel(factory = LibraryViewModelFactory(repository))
+    val searchViewModel: SearchViewModel = viewModel(factory = SearchViewModelFactory(repository))
     val statsViewModel: com.lx.tracklist.ui.stats.StatsViewModel = viewModel(
         factory = com.lx.tracklist.ui.stats.StatsViewModelFactory(repository)
     )
@@ -108,6 +113,7 @@ fun AppNavigation() {
         val isTopLevel = destination in listOf(
             NavDestination.Home,
             NavDestination.Library,
+            NavDestination.Search,
             NavDestination.Stats,
             NavDestination.Settings
         )
@@ -141,6 +147,7 @@ fun AppNavigation() {
     val isTopLevelScreen = currentDestination in listOf(
         NavDestination.Home,
         NavDestination.Library,
+        NavDestination.Search,
         NavDestination.Stats,
         NavDestination.Settings
     )
@@ -151,6 +158,7 @@ fun AppNavigation() {
     val navItems = listOf(
         Screen.Home to NavDestination.Home,
         Screen.Library to NavDestination.Library,
+        Screen.Search to NavDestination.Search,
         Screen.Stats to NavDestination.Stats,
         Screen.Settings to NavDestination.Settings
     )
@@ -193,6 +201,13 @@ fun AppNavigation() {
                             )
                         )
                     }
+                )
+            }
+
+            is NavDestination.Search -> {
+                SearchScreen(
+                    viewModel = searchViewModel,
+                    onNavigateToDetail = { entryId -> navigateTo(NavDestination.Detail(entryId)) }
                 )
             }
 

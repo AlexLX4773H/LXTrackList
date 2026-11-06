@@ -142,6 +142,7 @@ import com.lx.tracklist.ui.theme.LXTextSecondary
 
 enum class SettingsSubMenu(val title: String) {
     CATEGORIES("Custom Categories"),
+    SYNC_JOBS("Sync Jobs"),
     STORAGE("Backup & Storage"),
     CONFLICTS("Conflict Resolution"),
     EXPORT_GUIDES("Export Guides & Help"),
@@ -1157,6 +1158,8 @@ fun SettingsScreen(
                 ) {
                     SettingsMainMenu(
                         state = state,
+                        jikanSyncState = jikanSyncState,
+                        tmdbSyncState = tmdbSyncState,
                         selectedSubMenu = currentSelection,
                         onSelectSubMenu = { activeSubMenu = it }
                     )
@@ -1174,8 +1177,7 @@ fun SettingsScreen(
                             onAddCategoryClick = { showAddCategoryDialog = true },
                             onDeleteCategoryClick = { categoryToDelete = it }
                         )
-                        SettingsSubMenu.STORAGE -> BackupStorageContent(
-                            state = state,
+                        SettingsSubMenu.SYNC_JOBS -> SyncJobsContent(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
                             onStartJikanSync = { force ->
@@ -1187,7 +1189,10 @@ fun SettingsScreen(
                                 ensureNotificationPermission()
                                 viewModel.startTmdbSync(context, force)
                             },
-                            onCancelTmdbSync = { viewModel.cancelTmdbSync(context) },
+                            onCancelTmdbSync = { viewModel.cancelTmdbSync(context) }
+                        )
+                        SettingsSubMenu.STORAGE -> BackupStorageContent(
+                            state = state,
                             onCheckStorageStatus = { viewModel.checkStorageStatus(context) },
                             onRequestStoragePermission = { viewModel.requestStoragePermission(context) },
                             onExportToHomeOutput = { viewModel.prepareExport(ExportDestination.HOME_OUTPUT_FOLDER) },
@@ -1247,6 +1252,8 @@ fun SettingsScreen(
                     null -> {
                         SettingsMainMenu(
                             state = state,
+                            jikanSyncState = jikanSyncState,
+                            tmdbSyncState = tmdbSyncState,
                             selectedSubMenu = null,
                             onSelectSubMenu = { activeSubMenu = it },
                             modifier = Modifier.widthIn(max = 840.dp)
@@ -1260,9 +1267,8 @@ fun SettingsScreen(
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
-                    SettingsSubMenu.STORAGE -> {
-                        BackupStorageContent(
-                            state = state,
+                    SettingsSubMenu.SYNC_JOBS -> {
+                        SyncJobsContent(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
                             onStartJikanSync = { force ->
@@ -1275,6 +1281,12 @@ fun SettingsScreen(
                                 viewModel.startTmdbSync(context, force)
                             },
                             onCancelTmdbSync = { viewModel.cancelTmdbSync(context) },
+                            modifier = Modifier.widthIn(max = 840.dp)
+                        )
+                    }
+                    SettingsSubMenu.STORAGE -> {
+                        BackupStorageContent(
+                            state = state,
                             onCheckStorageStatus = { viewModel.checkStorageStatus(context) },
                             onRequestStoragePermission = { viewModel.requestStoragePermission(context) },
                             onExportToHomeOutput = { viewModel.prepareExport(ExportDestination.HOME_OUTPUT_FOLDER) },
@@ -1345,6 +1357,8 @@ fun SettingsScreen(
 @Composable
 private fun SettingsMainMenu(
     state: SettingsUiState,
+    jikanSyncState: JikanSyncProgress,
+    tmdbSyncState: TmdbSyncProgress,
     selectedSubMenu: SettingsSubMenu?,
     onSelectSubMenu: (SettingsSubMenu) -> Unit,
     modifier: Modifier = Modifier
@@ -1360,6 +1374,23 @@ private fun SettingsMainMenu(
             StatusMessageBanner(
                 message = state.statusMessage,
                 isError = state.isErrorMessage
+            )
+        }
+
+        // Section: Sync & External Services
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SettingsSectionHeader("Sync & External Services")
+            val isSyncing = jikanSyncState.isRunning || tmdbSyncState.isRunning
+            SettingsMenuItem(
+                icon = Icons.Default.Sync,
+                iconBackgroundColor = LXPrimaryGreen.copy(alpha = 0.15f),
+                iconTintColor = LXPrimaryGreen,
+                title = "Sync Jobs",
+                subtitle = "Automated metadata, poster & episode sync with MyAnimeList & TMDB",
+                badgeText = if (isSyncing) "SYNCING" else "MAL & TMDB",
+                badgeColor = LXPrimaryGreen,
+                isSelected = selectedSubMenu == SettingsSubMenu.SYNC_JOBS,
+                onClick = { onSelectSubMenu(SettingsSubMenu.SYNC_JOBS) }
             )
         }
 
@@ -1814,12 +1845,6 @@ private fun CustomCategoriesContent(
 @Composable
 private fun BackupStorageContent(
     state: SettingsUiState,
-    jikanSyncState: JikanSyncProgress,
-    tmdbSyncState: TmdbSyncProgress,
-    onStartJikanSync: (Boolean) -> Unit,
-    onCancelJikanSync: () -> Unit,
-    onStartTmdbSync: (Boolean) -> Unit,
-    onCancelTmdbSync: () -> Unit,
     onCheckStorageStatus: () -> Unit,
     onRequestStoragePermission: () -> Unit,
     onExportToHomeOutput: () -> Unit,
@@ -2435,373 +2460,6 @@ private fun BackupStorageContent(
             }
         }
 
-        // Jikan MAL Metadata Sync Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f).padding(end = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Sync,
-                            contentDescription = null,
-                            tint = LXPrimaryGreen,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "MyAnimeList (Jikan) Sync",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextPrimary
-                        )
-                    }
-
-                    if (jikanSyncState.isRunning) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "SYNCING",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
-                    }
-                }
-
-                Text(
-                    text = "Automatically fetches official high-res posters, runtimes, broadcast dates, total episodes, alternate titles, tags, and synopses from MyAnimeList via Jikan. Uses MAL ID if present, or searches by title to link the ID and details.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = LXTextSecondary
-                )
-
-                if (jikanSyncState.isRunning) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(LXSurfaceElevated)
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Progress (${jikanSyncState.completedCount}/${jikanSyncState.totalCount}) • ${jikanSyncState.updatedCount} updated",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = LXTextPrimary
-                            )
-                            Text(
-                                text = "${(jikanSyncState.progressFraction * 100).toInt()}%",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                color = LXPrimaryGreen
-                            )
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(LXBorder)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(jikanSyncState.progressFraction)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(LXPrimaryGreen)
-                            )
-                        }
-
-                        if (jikanSyncState.currentTitle.isNotBlank()) {
-                            Text(
-                                text = "Current: ${jikanSyncState.currentTitle}",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = LXTextSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        Text(
-                            text = "Pending: ${jikanSyncState.pendingCount} remaining (throttled for rate limits)${if (jikanSyncState.failedCount > 0) " • ${jikanSyncState.failedCount} failed" else ""}",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = LXTextSecondary
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            OutlinedButton(
-                                onClick = onCancelJikanSync,
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXErrorRed),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, LXErrorRed.copy(alpha = 0.5f)),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text("Cancel Sync", fontSize = 12.sp, color = LXErrorRed)
-                            }
-                        }
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = { onStartJikanSync(false) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = LXPrimaryGreen,
-                                contentColor = LXBackgroundBlack
-                            ),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Fetch Missing Posters",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        OutlinedButton(
-                            onClick = { onStartJikanSync(true) },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Re-fetch All MAL",
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // The Movie Database (TMDB) Sync Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Movie,
-                            contentDescription = null,
-                            tint = LXPrimaryGreen,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "The Movie Database (TMDB) Sync",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextPrimary
-                        )
-                    }
-
-                    val isConfigured = TmdbConfig.isConfigured(LocalContext.current)
-                    if (tmdbSyncState.isRunning) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "SYNCING",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
-                    } else if (isConfigured) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "CONNECTED",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
-                    }
-                }
-
-                Text(
-                    text = "Automatically fetches official high-res posters, runtimes, broadcast dates, season & episode counts, alternate titles, tags, and synopses for Movies and TV Shows from The Movie Database.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = LXTextSecondary
-                )
-
-                Text(
-                    text = "This product uses the TMDB API but is not endorsed or certified by TMDB.",
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                    color = LXTextSecondary.copy(alpha = 0.7f)
-                )
-
-                if (tmdbSyncState.isRunning) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(LXSurfaceElevated)
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Progress (${tmdbSyncState.completedCount}/${tmdbSyncState.totalCount}) • ${tmdbSyncState.updatedCount} updated",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = LXTextPrimary
-                            )
-                            Text(
-                                text = "${(tmdbSyncState.progressFraction * 100).toInt()}%",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                color = LXPrimaryGreen
-                            )
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(LXBorder)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(tmdbSyncState.progressFraction)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(LXPrimaryGreen)
-                            )
-                        }
-
-                        if (tmdbSyncState.currentTitle.isNotBlank()) {
-                            Text(
-                                text = "Current: ${tmdbSyncState.currentTitle}",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = LXTextSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        Text(
-                            text = "Pending: ${tmdbSyncState.pendingCount} remaining (throttled for rate limits)${if (tmdbSyncState.failedCount > 0) " • ${tmdbSyncState.failedCount} failed" else ""}",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = LXTextSecondary
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            OutlinedButton(
-                                onClick = onCancelTmdbSync,
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXErrorRed),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, LXErrorRed.copy(alpha = 0.5f)),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text("Cancel Sync", fontSize = 12.sp, color = LXErrorRed)
-                            }
-                        }
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = { onStartTmdbSync(false) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = LXPrimaryGreen,
-                                contentColor = LXBackgroundBlack
-                            ),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Fetch Missing Posters",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        OutlinedButton(
-                            onClick = { onStartTmdbSync(true) },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Re-fetch All TMDB",
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
         if (showReindexConfirmDialog) {
             AlertDialog(
                 onDismissRequest = { showReindexConfirmDialog = false },
@@ -2864,6 +2522,454 @@ private fun BackupStorageContent(
                 containerColor = LXSurfaceBlack,
                 shape = RoundedCornerShape(12.dp)
             )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun SyncJobsContent(
+    jikanSyncState: JikanSyncProgress,
+    tmdbSyncState: TmdbSyncProgress,
+    onStartJikanSync: (Boolean) -> Unit,
+    onCancelJikanSync: () -> Unit,
+    onStartTmdbSync: (Boolean) -> Unit,
+    onCancelTmdbSync: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Overview Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Sync,
+                        contentDescription = null,
+                        tint = LXPrimaryGreen,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "External Sync Services",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextPrimary
+                    )
+                }
+                Text(
+                    text = "Automate fetching official high-resolution posters, runtimes, broadcast dates, season & episode counts, tags, and ratings from MyAnimeList (Jikan) and The Movie Database (TMDB).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+            }
+        }
+
+        // MyAnimeList (Jikan) Sync Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = null,
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "MyAnimeList (Jikan) Sync",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    if (jikanSyncState.isRunning) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "SYNCING",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Fetches official posters, runtimes, broadcast dates, total episodes, alternate titles, tags, and synopses from MyAnimeList via Jikan API.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                if (jikanSyncState.isRunning) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Progress (${jikanSyncState.completedCount}/${jikanSyncState.totalCount}) • ${jikanSyncState.updatedCount} updated",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = LXTextPrimary
+                            )
+                            Text(
+                                text = "${(jikanSyncState.progressFraction * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = LXPrimaryGreen
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(LXBorder)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(jikanSyncState.progressFraction)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(LXPrimaryGreen)
+                            )
+                        }
+
+                        if (jikanSyncState.currentTitle.isNotBlank()) {
+                            Text(
+                                text = "Current: ${jikanSyncState.currentTitle}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Text(
+                            text = "Pending: ${jikanSyncState.pendingCount} remaining${if (jikanSyncState.failedCount > 0) " • ${jikanSyncState.failedCount} failed" else ""}",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = LXTextSecondary
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            OutlinedButton(
+                                onClick = onCancelJikanSync,
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXErrorRed),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, LXErrorRed.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Cancel Sync", fontSize = 12.sp, color = LXErrorRed)
+                            }
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { onStartJikanSync(false) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Fetch Missing",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { onStartJikanSync(true) },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Re-fetch All",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // The Movie Database (TMDB) Sync Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_tmdb_logo),
+                            contentDescription = "TMDB",
+                            modifier = Modifier.height(20.dp).width(28.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "TMDB Sync",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    val isConfigured = TmdbConfig.isConfigured(LocalContext.current)
+                    if (tmdbSyncState.isRunning) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "SYNCING",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    } else if (isConfigured) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "CONNECTED",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Fetches official posters, runtimes, broadcast dates, season & episode counts, tags, and ratings for Movies and TV Shows from The Movie Database.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                // TMDB Logo & Official Attribution Notice
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_tmdb_logo),
+                        contentDescription = "TMDB",
+                        modifier = Modifier.height(18.dp).width(26.dp)
+                    )
+                    Text(
+                        text = TmdbConfig.ATTRIBUTION_TEXT,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = LXTextSecondary.copy(alpha = 0.8f)
+                    )
+                }
+
+                if (tmdbSyncState.isRunning) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Progress (${tmdbSyncState.completedCount}/${tmdbSyncState.totalCount}) • ${tmdbSyncState.updatedCount} updated",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = LXTextPrimary
+                            )
+                            Text(
+                                text = "${(tmdbSyncState.progressFraction * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = LXPrimaryGreen
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(LXBorder)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(tmdbSyncState.progressFraction)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(LXPrimaryGreen)
+                            )
+                        }
+
+                        if (tmdbSyncState.currentTitle.isNotBlank()) {
+                            Text(
+                                text = "Current: ${tmdbSyncState.currentTitle}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Text(
+                            text = "Pending: ${tmdbSyncState.pendingCount} remaining${if (tmdbSyncState.failedCount > 0) " • ${tmdbSyncState.failedCount} failed" else ""}",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = LXTextSecondary
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            OutlinedButton(
+                                onClick = onCancelTmdbSync,
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXErrorRed),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, LXErrorRed.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Cancel Sync", fontSize = 12.sp, color = LXErrorRed)
+                            }
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { onStartTmdbSync(false) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Fetch Missing",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { onStartTmdbSync(true) },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Re-fetch All",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))

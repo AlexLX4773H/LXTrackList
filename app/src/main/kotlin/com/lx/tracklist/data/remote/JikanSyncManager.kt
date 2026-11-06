@@ -57,11 +57,9 @@ object JikanSyncManager {
 
     fun isMalSource(entry: MediaEntry): Boolean {
         val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim()
-        if (src.equals("TMDB", ignoreCase = true)) return false
-        val hasMalSource = src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)
+        val hasMalSource = src.isNullOrBlank() || src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)
         val hasMalId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull() != null
-        if (hasMalSource || hasMalId) return true
-        return src.isNullOrBlank() && isEligibleMediaForMal(entry.mediaType)
+        return hasMalSource && (hasMalId || isEligibleMediaForMal(entry.mediaType))
     }
 
     fun isMangaType(mediaType: MediaType): Boolean {

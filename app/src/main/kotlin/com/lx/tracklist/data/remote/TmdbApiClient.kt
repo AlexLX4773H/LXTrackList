@@ -36,6 +36,19 @@ data class TmdbMediaDetails(
     val sourceProvider: String = "TMDB"
 )
 
+data class TmdbSearchResult(
+    val tmdbId: Long,
+    val title: String,
+    val originalTitle: String? = null,
+    val posterUrl: String? = null,
+    val backdropUrl: String? = null,
+    val overview: String? = null,
+    val releaseDate: Long? = null,
+    val releaseYear: String? = null,
+    val voteAverage: Float? = null,
+    val isMovie: Boolean
+)
+
 object TmdbApiClient {
 
     private const val TAG = "TmdbApiClient"
@@ -254,6 +267,136 @@ object TmdbApiClient {
 
             // Fetch full TV details to get seasons, episodes, runtime, full genres, alt titles
             fetchTvDetails(tmdbId, context, baseUrl)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception searching TMDB TV for '$title'", e)
+            Result.failure(e)
+        }
+    }
+
+    fun searchMoviesMultiple(
+        title: String,
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<TmdbSearchResult>> {
+        val token = TmdbConfig.getAccessToken(context)
+        if (token.isBlank()) {
+            return Result.failure(TmdbAuthException("TMDB Read Access Token is not configured."))
+        }
+
+        val encodedQuery = URLEncoder.encode(title.trim(), "UTF-8")
+        val endpoint = "${baseUrl.trimEnd('/')}/search/movie?query=$encodedQuery&page=1&include_adult=false"
+
+        return try {
+            val request = buildRequest(endpoint, token)
+            val response = okHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("TMDB search HTTP $code: ${bodyString.take(200)}"))
+            }
+
+            val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
+            val results = rootObj?.getAsJsonArray("results") ?: return Result.success(emptyList())
+
+            val list = mutableListOf<TmdbSearchResult>()
+            for (i in 0 until results.size()) {
+                val item = results.get(i).asJsonObject
+                val id = item.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
+                val itemTitle = item.get("title")?.takeIf { !it.isJsonNull }?.asString
+                    ?: item.get("original_title")?.takeIf { !it.isJsonNull }?.asString ?: "Untitled"
+                val origTitle = item.get("original_title")?.takeIf { !it.isJsonNull }?.asString
+                val posterPath = item.get("poster_path")?.takeIf { !it.isJsonNull }?.asString
+                val backdropPath = item.get("backdrop_path")?.takeIf { !it.isJsonNull }?.asString
+                val posterUrl = buildImageUrl(posterPath) ?: buildImageUrl(backdropPath)
+                val backdropUrl = buildImageUrl(backdropPath, BACKDROP_SIZE)
+                val releaseDateStr = item.get("release_date")?.takeIf { !it.isJsonNull }?.asString
+                val releaseDate = parseDateString(releaseDateStr)
+                val releaseYear = releaseDateStr?.take(4)?.takeIf { it.length == 4 && it.all { c -> c.isDigit() } }
+                val voteAvg = item.get("vote_average")?.takeIf { !it.isJsonNull }?.asFloat?.takeIf { it > 0f }
+                val overview = item.get("overview")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+
+                list.add(
+                    TmdbSearchResult(
+                        tmdbId = id,
+                        title = itemTitle,
+                        originalTitle = origTitle,
+                        posterUrl = posterUrl,
+                        backdropUrl = backdropUrl,
+                        overview = overview,
+                        releaseDate = releaseDate,
+                        releaseYear = releaseYear,
+                        voteAverage = voteAvg,
+                        isMovie = true
+                    )
+                )
+            }
+            Result.success(list)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception searching TMDB movies for '$title'", e)
+            Result.failure(e)
+        }
+    }
+
+    fun searchTvMultiple(
+        title: String,
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<TmdbSearchResult>> {
+        val token = TmdbConfig.getAccessToken(context)
+        if (token.isBlank()) {
+            return Result.failure(TmdbAuthException("TMDB Read Access Token is not configured."))
+        }
+
+        val encodedQuery = URLEncoder.encode(title.trim(), "UTF-8")
+        val endpoint = "${baseUrl.trimEnd('/')}/search/tv?query=$encodedQuery&page=1&include_adult=false"
+
+        return try {
+            val request = buildRequest(endpoint, token)
+            val response = okHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("TMDB search HTTP $code: ${bodyString.take(200)}"))
+            }
+
+            val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
+            val results = rootObj?.getAsJsonArray("results") ?: return Result.success(emptyList())
+
+            val list = mutableListOf<TmdbSearchResult>()
+            for (i in 0 until results.size()) {
+                val item = results.get(i).asJsonObject
+                val id = item.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
+                val itemTitle = item.get("name")?.takeIf { !it.isJsonNull }?.asString
+                    ?: item.get("original_name")?.takeIf { !it.isJsonNull }?.asString ?: "Untitled"
+                val origTitle = item.get("original_name")?.takeIf { !it.isJsonNull }?.asString
+                val posterPath = item.get("poster_path")?.takeIf { !it.isJsonNull }?.asString
+                val backdropPath = item.get("backdrop_path")?.takeIf { !it.isJsonNull }?.asString
+                val posterUrl = buildImageUrl(posterPath) ?: buildImageUrl(backdropPath)
+                val backdropUrl = buildImageUrl(backdropPath, BACKDROP_SIZE)
+                val airDateStr = item.get("first_air_date")?.takeIf { !it.isJsonNull }?.asString
+                val releaseDate = parseDateString(airDateStr)
+                val releaseYear = airDateStr?.take(4)?.takeIf { it.length == 4 && it.all { c -> c.isDigit() } }
+                val voteAvg = item.get("vote_average")?.takeIf { !it.isJsonNull }?.asFloat?.takeIf { it > 0f }
+                val overview = item.get("overview")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+
+                list.add(
+                    TmdbSearchResult(
+                        tmdbId = id,
+                        title = itemTitle,
+                        originalTitle = origTitle,
+                        posterUrl = posterUrl,
+                        backdropUrl = backdropUrl,
+                        overview = overview,
+                        releaseDate = releaseDate,
+                        releaseYear = releaseYear,
+                        voteAverage = voteAvg,
+                        isMovie = false
+                    )
+                )
+            }
+            Result.success(list)
         } catch (e: Exception) {
             Log.e(TAG, "Exception searching TMDB TV for '$title'", e)
             Result.failure(e)

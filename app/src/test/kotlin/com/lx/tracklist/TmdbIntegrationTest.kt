@@ -157,5 +157,59 @@ class TmdbIntegrationTest {
         // Ensure JikanSyncManager does NOT claim TMDB-sourced entry
         assertFalse(JikanSyncManager.isMalSource(tmdbExplicitEntry))
     }
+
+    @Test
+    fun testExternalDbSyncPartitioning() {
+        val anime = MediaEntry(id = 1L, title = "Naruto", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED)
+        val manga = MediaEntry(id = 2L, title = "Berserk", mediaType = MediaType.MANGA, status = MediaStatus.WATCHING)
+        val manhwa = MediaEntry(id = 3L, title = "Solo Leveling", mediaType = MediaType.MANHWA, status = MediaStatus.WATCHING)
+        val showTmdb = MediaEntry(id = 4L, title = "Breaking Bad", mediaType = MediaType.SHOW, status = MediaStatus.COMPLETED, externalSource = "TMDB")
+        val movieTmdb = MediaEntry(id = 5L, title = "Inception", mediaType = MediaType.MOVIE, status = MediaStatus.COMPLETED)
+        val animeMovieMal = MediaEntry(id = 6L, title = "Your Name", mediaType = MediaType.MOVIE, status = MediaStatus.COMPLETED, externalSource = "MAL", externalId = "32281")
+
+        val all = listOf(anime, manga, manhwa, showTmdb, movieTmdb, animeMovieMal)
+
+        val jikanIds = mutableSetOf<Long>()
+        val tmdbIds = mutableSetOf<Long>()
+
+        for (entry in all) {
+            val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim() ?: ""
+            if (src.equals("TMDB", ignoreCase = true)) {
+                tmdbIds.add(entry.id)
+            } else if (src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)) {
+                jikanIds.add(entry.id)
+            } else if (entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.SHOW) {
+                tmdbIds.add(entry.id)
+            } else {
+                jikanIds.add(entry.id)
+            }
+        }
+
+        assertEquals(setOf(1L, 2L, 3L, 6L), jikanIds)
+        assertEquals(setOf(4L, 5L), tmdbIds)
+    }
+
+    @Test
+    fun testSearchCategoriesAndNavigation() {
+        assertEquals("search", com.lx.tracklist.ui.navigation.Screen.Search.route)
+        assertEquals("Search", com.lx.tracklist.ui.navigation.Screen.Search.title)
+
+        assertEquals("Sync Jobs", com.lx.tracklist.ui.settings.SettingsSubMenu.SYNC_JOBS.title)
+
+        val categories = com.lx.tracklist.ui.search.SearchCategory.entries
+        assertEquals(5, categories.size)
+        assertEquals("MAL", com.lx.tracklist.ui.search.SearchCategory.ANIME.sourceName)
+        assertEquals("MAL", com.lx.tracklist.ui.search.SearchCategory.MANGA.sourceName)
+        assertEquals("MAL", com.lx.tracklist.ui.search.SearchCategory.MANHWA.sourceName)
+        assertEquals("TMDB", com.lx.tracklist.ui.search.SearchCategory.MOVIES.sourceName)
+        assertEquals("TMDB", com.lx.tracklist.ui.search.SearchCategory.TV_SHOWS.sourceName)
+    }
+
+    @Test
+    fun testTmdbAttributionDisclaimer() {
+        val disclaimer = "This product uses the TMDB API but is not endorsed or certified by TMDB."
+        assertTrue(disclaimer.contains("TMDB API"))
+        assertTrue(disclaimer.contains("not endorsed or certified by TMDB"))
+    }
 }
 

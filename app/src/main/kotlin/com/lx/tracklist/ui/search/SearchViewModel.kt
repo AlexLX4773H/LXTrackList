@@ -1,0 +1,392 @@
+package com.lx.tracklist.ui.search
+
+import android.content.Context
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.lx.tracklist.data.model.CustomCategory
+import com.lx.tracklist.data.model.MediaEntry
+import com.lx.tracklist.data.model.MediaStatus
+import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.SubCategory
+import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.data.remote.JikanApiClient
+import com.lx.tracklist.data.remote.JikanMediaDetails
+import com.lx.tracklist.data.remote.TmdbApiClient
+import com.lx.tracklist.data.remote.TmdbSearchResult
+import com.lx.tracklist.data.repository.MediaRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+enum class SearchCategory(val displayName: String, val sourceName: String) {
+    ANIME("Anime", "MAL"),
+    MANGA("Manga", "MAL"),
+    MANHWA("Manhwa", "MAL"),
+    MOVIES("Movies", "TMDB"),
+    TV_SHOWS("TV Shows", "TMDB")
+}
+
+data class SearchResultItem(
+    val externalId: String,
+    val externalSource: String, // "MAL" or "TMDB"
+    val mediaType: MediaType,
+    val title: String,
+    val alternateTitle: String? = null,
+    val posterUrl: String? = null,
+    val releaseYear: String? = null,
+    val totalUnits: Int? = null,
+    val totalVolumes: Int? = null,
+    val totalSeasons: Int? = null,
+    val durationMinutes: Int? = null,
+    val score: Float? = null,
+    val statusText: String? = null,
+    val synopsis: String? = null,
+    val isAlreadyInLibrary: Boolean = false,
+    val existingEntryId: Long? = null,
+    val existingStatus: MediaStatus? = null,
+    val rawJikanDetails: JikanMediaDetails? = null,
+    val rawTmdbResult: TmdbSearchResult? = null
+)
+
+data class SearchUiState(
+    val query: String = "",
+    val selectedCategory: SearchCategory = SearchCategory.ANIME,
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+    val results: List<SearchResultItem> = emptyList(),
+    val customCategories: List<CustomCategory> = emptyList(),
+    val subCategories: List<SubCategory> = emptyList(),
+    val userAddedMessage: String? = null
+)
+
+class SearchViewModel(
+    private val repository: MediaRepository
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(SearchUiState())
+    private var searchJob: Job? = null
+
+    val uiState: StateFlow<SearchUiState> = combine(
+        _uiState,
+        repository.getAllEntries(),
+        repository.customCategories,
+        repository.allSubCategories
+    ) { state: SearchUiState, allEntries: List<MediaEntry>, customCats: List<CustomCategory>, subCats: List<SubCategory> ->
+        val updatedResults = state.results.map { item ->
+            val match = allEntries.firstOrNull { entry ->
+                val hasSameExt = !entry.externalId.isNullOrBlank() &&
+                        entry.externalId.equals(item.externalId, ignoreCase = true) &&
+                        entry.externalSource?.equals(item.externalSource, ignoreCase = true) == true
+                val hasSameTitle = entry.title.equals(item.title, ignoreCase = true) && entry.mediaType == item.mediaType
+                hasSameExt || hasSameTitle
+            }
+            if (match != null) {
+                item.copy(
+                    isAlreadyInLibrary = true,
+                    existingEntryId = match.id,
+                    existingStatus = match.status
+                )
+            } else {
+                item.copy(
+                    isAlreadyInLibrary = false,
+                    existingEntryId = null,
+                    existingStatus = null
+                )
+            }
+        }
+        state.copy(
+            results = updatedResults,
+            customCategories = customCats,
+            subCategories = subCats
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = SearchUiState()
+    )
+
+    fun onQueryChanged(newQuery: String, context: Context? = null) {
+        _uiState.update { it.copy(query = newQuery) }
+        searchJob?.cancel()
+        if (newQuery.trim().length >= 2) {
+            searchJob = viewModelScope.launch {
+                delay(500)
+                executeSearch(newQuery.trim(), _uiState.value.selectedCategory, context)
+            }
+        } else if (newQuery.isBlank()) {
+            _uiState.update { it.copy(results = emptyList(), isLoading = false, errorMessage = null) }
+        }
+    }
+
+    fun onCategorySelected(category: SearchCategory, context: Context? = null) {
+        _uiState.update { it.copy(selectedCategory = category) }
+        val currentQuery = _uiState.value.query.trim()
+        if (currentQuery.length >= 2) {
+            searchJob?.cancel()
+            searchJob = viewModelScope.launch {
+                executeSearch(currentQuery, category, context)
+            }
+        }
+    }
+
+    fun submitSearch(context: Context? = null) {
+        val currentQuery = _uiState.value.query.trim()
+        if (currentQuery.isNotBlank()) {
+            searchJob?.cancel()
+            searchJob = viewModelScope.launch {
+                executeSearch(currentQuery, _uiState.value.selectedCategory, context)
+            }
+        }
+    }
+
+    private suspend fun executeSearch(
+        query: String,
+        category: SearchCategory,
+        context: Context?
+    ) {
+        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+
+        try {
+            val results = withContext(Dispatchers.IO) {
+                when (category) {
+                    SearchCategory.ANIME -> {
+                        val res = JikanApiClient.searchJikanMultiple(query, isManga = false, limit = 20)
+                        if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch anime")
+                        res.getOrDefault(emptyList()).map { details ->
+                            SearchResultItem(
+                                externalId = (details.malId ?: 0L).toString(),
+                                externalSource = "MAL",
+                                mediaType = MediaType.ANIME,
+                                title = details.title ?: "Unknown",
+                                alternateTitle = details.alternateTitle,
+                                posterUrl = details.posterUrl,
+                                releaseYear = details.airedStartDate?.let { extractYear(it) },
+                                totalUnits = details.totalEpisodes,
+                                durationMinutes = details.durationMinutes,
+                                score = details.externalScore,
+                                statusText = if (details.isAiring == true) "Airing" else "Finished",
+                                synopsis = details.synopsis,
+                                rawJikanDetails = details
+                            )
+                        }
+                    }
+                    SearchCategory.MANGA -> {
+                        val res = JikanApiClient.searchJikanMultiple(query, isManga = true, limit = 20)
+                        if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch manga")
+                        res.getOrDefault(emptyList()).map { details ->
+                            SearchResultItem(
+                                externalId = (details.malId ?: 0L).toString(),
+                                externalSource = "MAL",
+                                mediaType = MediaType.MANGA,
+                                title = details.title ?: "Unknown",
+                                alternateTitle = details.alternateTitle,
+                                posterUrl = details.posterUrl,
+                                releaseYear = details.airedStartDate?.let { extractYear(it) },
+                                totalUnits = details.totalChapters,
+                                totalVolumes = details.totalVolumes,
+                                score = details.externalScore,
+                                statusText = if (details.isAiring == true) "Publishing" else "Finished",
+                                synopsis = details.synopsis,
+                                rawJikanDetails = details
+                            )
+                        }
+                    }
+                    SearchCategory.MANHWA -> {
+                        val res = JikanApiClient.searchJikanMultiple(query, isManga = true, subType = "manhwa", limit = 20)
+                        if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch manhwa")
+                        res.getOrDefault(emptyList()).map { details ->
+                            SearchResultItem(
+                                externalId = (details.malId ?: 0L).toString(),
+                                externalSource = "MAL",
+                                mediaType = MediaType.MANHWA,
+                                title = details.title ?: "Unknown",
+                                alternateTitle = details.alternateTitle,
+                                posterUrl = details.posterUrl,
+                                releaseYear = details.airedStartDate?.let { extractYear(it) },
+                                totalUnits = details.totalChapters,
+                                totalVolumes = details.totalVolumes,
+                                score = details.externalScore,
+                                statusText = if (details.isAiring == true) "Publishing" else "Finished",
+                                synopsis = details.synopsis,
+                                rawJikanDetails = details
+                            )
+                        }
+                    }
+                    SearchCategory.MOVIES -> {
+                        val res = TmdbApiClient.searchMoviesMultiple(query, context)
+                        if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to search TMDB movies")
+                        res.getOrDefault(emptyList()).map { tmdb ->
+                            SearchResultItem(
+                                externalId = tmdb.tmdbId.toString(),
+                                externalSource = "TMDB",
+                                mediaType = MediaType.MOVIE,
+                                title = tmdb.title,
+                                alternateTitle = tmdb.originalTitle,
+                                posterUrl = tmdb.posterUrl,
+                                releaseYear = tmdb.releaseYear,
+                                score = tmdb.voteAverage,
+                                statusText = "Movie",
+                                synopsis = tmdb.overview,
+                                rawTmdbResult = tmdb
+                            )
+                        }
+                    }
+                    SearchCategory.TV_SHOWS -> {
+                        val res = TmdbApiClient.searchTvMultiple(query, context)
+                        if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to search TMDB TV")
+                        res.getOrDefault(emptyList()).map { tmdb ->
+                            SearchResultItem(
+                                externalId = tmdb.tmdbId.toString(),
+                                externalSource = "TMDB",
+                                mediaType = MediaType.SHOW,
+                                title = tmdb.title,
+                                alternateTitle = tmdb.originalTitle,
+                                posterUrl = tmdb.posterUrl,
+                                releaseYear = tmdb.releaseYear,
+                                score = tmdb.voteAverage,
+                                statusText = "TV Show",
+                                synopsis = tmdb.overview,
+                                rawTmdbResult = tmdb
+                            )
+                        }
+                    }
+                }
+            }
+
+            _uiState.update {
+                it.copy(
+                    results = results,
+                    isLoading = false,
+                    errorMessage = if (results.isEmpty()) "No results found for '$query'" else null
+                )
+            }
+        } catch (e: Exception) {
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    errorMessage = e.message ?: "An error occurred while searching."
+                )
+            }
+        }
+    }
+
+    fun addToLibrary(
+        item: SearchResultItem,
+        status: MediaStatus,
+        customCategory: String? = null,
+        subCategory: String? = null,
+        context: Context? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val entry: MediaEntry = if (item.externalSource == "TMDB") {
+                val tmdbId = item.externalId.toLongOrNull() ?: 0L
+                if (item.mediaType == MediaType.MOVIE) {
+                    val fullDetails = TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()
+                    MediaEntry(
+                        title = fullDetails?.title ?: item.title,
+                        alternateTitle = fullDetails?.alternateTitle ?: item.alternateTitle,
+                        mediaType = MediaType.MOVIE,
+                        status = status,
+                        customCategory = customCategory,
+                        subCategory = subCategory,
+                        externalId = item.externalId,
+                        externalSource = "TMDB",
+                        externalScore = fullDetails?.externalScore ?: item.score,
+                        externalScoreSource = "TMDB",
+                        coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
+                        durationMinutes = fullDetails?.durationMinutes ?: item.durationMinutes,
+                        tags = fullDetails?.tags,
+                        notes = fullDetails?.synopsis ?: item.synopsis,
+                        airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate
+                    )
+                } else {
+                    val fullDetails = TmdbApiClient.fetchTvDetails(tmdbId, context).getOrNull()
+                    MediaEntry(
+                        title = fullDetails?.title ?: item.title,
+                        alternateTitle = fullDetails?.alternateTitle ?: item.alternateTitle,
+                        mediaType = MediaType.SHOW,
+                        status = status,
+                        customCategory = customCategory,
+                        subCategory = subCategory,
+                        externalId = item.externalId,
+                        externalSource = "TMDB",
+                        externalScore = fullDetails?.externalScore ?: item.score,
+                        externalScoreSource = "TMDB",
+                        coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
+                        totalEpisodes = fullDetails?.totalEpisodes ?: 0,
+                        totalSeasons = fullDetails?.totalSeasons ?: 1,
+                        episodeLengthMinutes = fullDetails?.durationMinutes,
+                        tags = fullDetails?.tags,
+                        notes = fullDetails?.synopsis ?: item.synopsis,
+                        airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate,
+                        isAiring = fullDetails?.isAiring ?: false
+                    )
+                }
+            } else {
+                // MAL / Jikan item
+                val details = item.rawJikanDetails
+                val isVideo = item.mediaType == MediaType.ANIME
+                MediaEntry(
+                    title = details?.title ?: item.title,
+                    alternateTitle = details?.alternateTitle ?: item.alternateTitle,
+                    mediaType = item.mediaType,
+                    status = status,
+                    customCategory = customCategory,
+                    subCategory = subCategory,
+                    externalId = item.externalId,
+                    externalSource = "MAL",
+                    externalScore = details?.externalScore ?: item.score,
+                    externalScoreSource = "MAL",
+                    coverImageUri = details?.posterUrl ?: item.posterUrl,
+                    totalEpisodes = if (isVideo) (details?.totalEpisodes ?: item.totalUnits ?: 0) else 0,
+                    totalChapters = if (!isVideo) (details?.totalChapters ?: item.totalUnits ?: 0) else 0,
+                    totalVolumes = if (!isVideo) (details?.totalVolumes ?: item.totalVolumes ?: 0) else 0,
+                    trackingUnit = TrackingUnit.CHAPTERS,
+                    durationMinutes = details?.durationMinutes,
+                    episodeLengthMinutes = details?.durationMinutes,
+                    tags = details?.tags,
+                    notes = details?.synopsis ?: item.synopsis,
+                    airedStartDate = details?.airedStartDate,
+                    airedEndDate = details?.airedEndDate,
+                    isAiring = details?.isAiring ?: false
+                )
+            }
+
+            repository.insert(entry)
+            withContext(Dispatchers.Main) {
+                _uiState.update { it.copy(userAddedMessage = "Added '${entry.title}' to library!") }
+            }
+        }
+    }
+
+    fun clearAddedMessage() {
+        _uiState.update { it.copy(userAddedMessage = null) }
+    }
+
+    private fun extractYear(timestamp: Long): String {
+        val cal = java.util.Calendar.getInstance()
+        cal.timeInMillis = timestamp
+        return cal.get(java.util.Calendar.YEAR).toString()
+    }
+}
+
+class SearchViewModelFactory(
+    private val repository: MediaRepository
+) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(SearchViewModel::class.java)) {
+            return SearchViewModel(repository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
+    }
+}
