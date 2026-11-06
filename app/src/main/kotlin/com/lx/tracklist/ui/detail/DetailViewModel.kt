@@ -84,6 +84,22 @@ class DetailViewModel(
         }
     }
 
+    private fun isAnimeOrManga(cur: MediaEntry): Boolean {
+        val src = cur.externalSource ?: ""
+        val scoreSrc = cur.externalScoreSource ?: ""
+        val cat = cur.customCategory ?: ""
+        val subCat = cur.subCategory ?: ""
+
+        if (src.equals("MAL", ignoreCase = true) || src.equals("AniList", ignoreCase = true)) return true
+        if (scoreSrc.equals("MAL", ignoreCase = true) || scoreSrc.equals("AniList", ignoreCase = true)) return true
+        if (cur.mediaType == MediaType.ANIME || cur.mediaType == MediaType.MANGA ||
+            cur.mediaType == MediaType.MANHWA || cur.mediaType == MediaType.BOOK) return true
+        if (cat.contains("Anime", ignoreCase = true) || cat.contains("Manga", ignoreCase = true) || cat.contains("Donghua", ignoreCase = true)) return true
+        if (subCat.contains("Anime", ignoreCase = true) || subCat.contains("Manga", ignoreCase = true) || subCat.contains("Donghua", ignoreCase = true)) return true
+
+        return false
+    }
+
     fun loadRelatedEntries(cur: MediaEntry, context: Context? = null) {
         if (loadedForEntryId == cur.id && _rawRelatedEntries.value.isNotEmpty()) return
         loadedForEntryId = cur.id
@@ -101,11 +117,15 @@ class DetailViewModel(
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                val isAnime = isAnimeOrManga(cur)
+                val isManga = cur.mediaType == MediaType.MANGA ||
+                        cur.mediaType == MediaType.MANHWA ||
+                        cur.mediaType == MediaType.BOOK
                 val src = cur.externalSource ?: ""
                 var extId = cur.externalId?.toLongOrNull()
 
                 if (extId == null && cur.title.isNotBlank()) {
-                    if (src.equals("TMDB", ignoreCase = true) || cur.mediaType == MediaType.MOVIE || cur.mediaType == MediaType.SHOW) {
+                    if (!isAnime && (src.equals("TMDB", ignoreCase = true) || cur.mediaType == MediaType.MOVIE || cur.mediaType == MediaType.SHOW)) {
                         val tmdbRes = if (cur.mediaType == MediaType.MOVIE) {
                             TmdbApiClient.searchMovieByTitle(cur.title, context).getOrNull()
                         } else {
@@ -113,20 +133,21 @@ class DetailViewModel(
                         }
                         extId = tmdbRes?.tmdbId
                     } else {
-                        val isManga = cur.mediaType == MediaType.MANGA ||
-                                cur.mediaType == MediaType.MANHWA ||
-                                cur.mediaType == MediaType.BOOK
                         val jikanRes = JikanApiClient.searchJikanMultiple(cur.title, isManga, limit = 1).getOrNull()
                         extId = jikanRes?.firstOrNull()?.malId
                     }
                 }
 
-                val fetchResult: Result<List<RelatedMediaItem>> = if ((src.equals("TMDB", ignoreCase = true) || cur.mediaType == MediaType.MOVIE || cur.mediaType == MediaType.SHOW) && extId != null) {
-                    TmdbApiClient.fetchRelatedEntries(extId, isTv = cur.mediaType == MediaType.SHOW, context)
+                val fetchResult: Result<List<RelatedMediaItem>> = if (isAnime || src.equals("MAL", ignoreCase = true) || src.equals("AniList", ignoreCase = true)) {
+                    JikanApiClient.fetchRelatedEntries(malId = extId, isManga = isManga, title = cur.title)
+                } else if ((src.equals("TMDB", ignoreCase = true) || cur.mediaType == MediaType.MOVIE || cur.mediaType == MediaType.SHOW) && extId != null) {
+                    val tmdbRes = TmdbApiClient.fetchRelatedEntries(extId, isTv = cur.mediaType == MediaType.SHOW, context)
+                    if (tmdbRes.isFailure) {
+                        JikanApiClient.fetchRelatedEntries(malId = null, isManga = false, title = cur.title)
+                    } else {
+                        tmdbRes
+                    }
                 } else {
-                    val isManga = cur.mediaType == MediaType.MANGA ||
-                            cur.mediaType == MediaType.MANHWA ||
-                            cur.mediaType == MediaType.BOOK
                     JikanApiClient.fetchRelatedEntries(malId = extId, isManga = isManga, title = cur.title)
                 }
 

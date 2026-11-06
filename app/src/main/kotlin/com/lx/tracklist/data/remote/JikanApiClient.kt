@@ -1082,11 +1082,13 @@ object JikanApiClient {
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<RelatedMediaItem>> {
         var lastException: Throwable? = null
+        var anyProviderSucceeded = false
 
         // 1. If malId is provided, try Jikan relations endpoint
         if (malId != null && malId > 0) {
             val jikanRes = queryJikanRelations(baseUrl, isManga, malId)
             if (jikanRes.isSuccess) {
+                anyProviderSucceeded = true
                 val items = jikanRes.getOrDefault(emptyList())
                 if (items.isNotEmpty()) {
                     return jikanRes
@@ -1099,6 +1101,7 @@ object JikanApiClient {
             // 2. Fallback to AniList by MAL ID
             val anilistRes = queryAniListRelations(malId = malId, isManga = isManga)
             if (anilistRes.isSuccess) {
+                anyProviderSucceeded = true
                 val items = anilistRes.getOrDefault(emptyList())
                 if (items.isNotEmpty()) {
                     return anilistRes
@@ -1111,6 +1114,7 @@ object JikanApiClient {
             // 2b. Also try as AniList ID directly
             val anilistDirectRes = queryAniListRelations(aniListId = malId, isManga = isManga)
             if (anilistDirectRes.isSuccess) {
+                anyProviderSucceeded = true
                 val items = anilistDirectRes.getOrDefault(emptyList())
                 if (items.isNotEmpty()) {
                     return anilistDirectRes
@@ -1122,6 +1126,7 @@ object JikanApiClient {
         if (!title.isNullOrBlank()) {
             val rawRes = queryAniListRelationsByTitle(title.trim(), isManga)
             if (rawRes.isSuccess) {
+                anyProviderSucceeded = true
                 val items = rawRes.getOrDefault(emptyList())
                 if (items.isNotEmpty()) {
                     return rawRes
@@ -1134,6 +1139,7 @@ object JikanApiClient {
             if (cleaned != title.trim()) {
                 val anilistTitleRes = queryAniListRelationsByTitle(cleaned, isManga)
                 if (anilistTitleRes.isSuccess) {
+                    anyProviderSucceeded = true
                     val items = anilistTitleRes.getOrDefault(emptyList())
                     if (items.isNotEmpty()) {
                         return anilistTitleRes
@@ -1142,6 +1148,11 @@ object JikanApiClient {
                     lastException = anilistTitleRes.exceptionOrNull()
                 }
             }
+        }
+
+        // If any provider succeeded (even if zero relations found), return success with empty list
+        if (anyProviderSucceeded) {
+            return Result.success(emptyList())
         }
 
         // If we experienced an error during all attempts and malId or title was provided:

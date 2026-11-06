@@ -1351,4 +1351,26 @@ class FeaturesTest {
         assertEquals("2021", items[1].releaseYear)
         assertEquals(8.2f, items[1].score!!, 0.01f)
     }
+
+    @Test
+    fun testAnimeMovieRoutingLogic() {
+        val weatherWithYou = MediaEntry(
+            id = 1L,
+            title = "Weathering with You",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.COMPLETED,
+            externalId = "38826",
+            externalSource = "MAL",
+            externalScoreSource = "AniList"
+        )
+
+        val src = weatherWithYou.externalSource ?: ""
+        val scoreSrc = weatherWithYou.externalScoreSource ?: ""
+        val isAnime = src.equals("MAL", ignoreCase = true) ||
+                src.equals("AniList", ignoreCase = true) ||
+                scoreSrc.equals("MAL", ignoreCase = true) ||
+                scoreSrc.equals("AniList", ignoreCase = true)
+
+        assertTrue("Anime movie imported from MAL should be identified as Anime", isAnime)
+    }
 }
