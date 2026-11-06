@@ -17,10 +17,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +32,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
@@ -39,12 +43,15 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -59,6 +66,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Surface
@@ -78,12 +87,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.lx.tracklist.R
+import com.lx.tracklist.data.remote.JikanMediaDetails
+import com.lx.tracklist.data.remote.TmdbSearchResult
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -111,6 +124,11 @@ fun AddEditScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
+    val syncState by viewModel.syncState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showExternalSyncDialog by remember { mutableStateOf(false) }
+    var selectedExternalSource by remember { mutableStateOf(ExternalDbSource.MAL) }
+    val context = LocalContext.current
     val customCategories by viewModel.customCategories.collectAsState(initial = emptyList())
     val subCategories by viewModel.subCategories.collectAsState(initial = emptyList())
     var showCoverSearchDialog by remember { mutableStateOf(false) }
@@ -138,9 +156,18 @@ fun AddEditScreen(
         }
     }
 
+    LaunchedEffect(syncState.successMessage) {
+        val msg = syncState.successMessage
+        if (!msg.isNullOrBlank()) {
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearSyncMessage()
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = LXBackgroundBlack,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -203,6 +230,101 @@ fun AddEditScreen(
                 modifier = Modifier.fillMaxWidth(),
                 colors = outlinedColors()
             )
+
+            // Sync from External DB Option (shown once title is added)
+            if (state.title.isNotBlank()) {
+                var showSyncDropdown by remember { mutableStateOf(false) }
+
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { showSyncDropdown = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = LXSurfaceElevated.copy(alpha = 0.5f),
+                            contentColor = LXPrimaryGreen
+                        ),
+                        border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.6f)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = LXPrimaryGreen
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Sync from External DB",
+                            color = LXPrimaryGreen,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = LXPrimaryGreen
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showSyncDropdown,
+                        onDismissRequest = { showSyncDropdown = false },
+                        modifier = Modifier
+                            .background(LXSurfaceElevated)
+                            .border(1.dp, LXBorder, RoundedCornerShape(8.dp))
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text("🎌", fontSize = 16.sp)
+                                    Column {
+                                        Text("MyAnimeList (MAL)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                        Text("Anime, Manga, Manhwa, Light Novels", fontSize = 11.sp, color = LXTextSecondary)
+                                    }
+                                }
+                            },
+                            onClick = {
+                                showSyncDropdown = false
+                                selectedExternalSource = ExternalDbSource.MAL
+                                viewModel.searchExternalDb(state.title, ExternalDbSource.MAL, context)
+                                showExternalSyncDialog = true
+                            }
+                        )
+
+                        HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
+
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Image(
+                                        painter = painterResource(R.drawable.ic_tmdb_logo),
+                                        contentDescription = "TMDB",
+                                        modifier = Modifier.height(14.dp).width(20.dp)
+                                    )
+                                    Column {
+                                        Text("The Movie Database (TMDB)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                        Text("Movies & TV Shows", fontSize = 11.sp, color = LXTextSecondary)
+                                    }
+                                }
+                            },
+                            onClick = {
+                                showSyncDropdown = false
+                                selectedExternalSource = ExternalDbSource.TMDB
+                                viewModel.searchExternalDb(state.title, ExternalDbSource.TMDB, context)
+                                showExternalSyncDialog = true
+                            }
+                        )
+                    }
+                }
+            }
 
             // Alternate Titles (Support for multiple alternate titles)
             Column(
@@ -1059,6 +1181,24 @@ fun AddEditScreen(
                 )
             }
 
+            if (showExternalSyncDialog) {
+                ExternalDbSyncDialog(
+                    isOpen = showExternalSyncDialog,
+                    onDismiss = { showExternalSyncDialog = false },
+                    syncState = syncState,
+                    initialQuery = state.title,
+                    onSearch = { query, source -> viewModel.searchExternalDb(query, source, context) },
+                    onSelectMal = { item ->
+                        viewModel.applySelectedMalResult(item)
+                        showExternalSyncDialog = false
+                    },
+                    onSelectTmdb = { item ->
+                        viewModel.applySelectedTmdbResult(item, context)
+                        showExternalSyncDialog = false
+                    }
+                )
+            }
+
             // Tags
             OutlinedTextField(
                 value = state.tags,
@@ -1660,4 +1800,367 @@ private fun DatePickerField(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExternalDbSyncDialog(
+    isOpen: Boolean,
+    onDismiss: () -> Unit,
+    syncState: ExternalSyncUiState,
+    initialQuery: String,
+    onSearch: (String, ExternalDbSource) -> Unit,
+    onSelectMal: (JikanMediaDetails) -> Unit,
+    onSelectTmdb: (TmdbSearchResult) -> Unit
+) {
+    if (!isOpen) return
+
+    var searchInput by remember(initialQuery) { mutableStateOf(initialQuery) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Sync, contentDescription = null, tint = LXPrimaryGreen)
+                    Text(
+                        text = "Sync from External DB",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextPrimary
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = LXTextSecondary)
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Search input
+                OutlinedTextField(
+                    value = searchInput,
+                    onValueChange = { searchInput = it },
+                    label = { Text("Search Title") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        IconButton(onClick = { onSearch(searchInput, syncState.selectedSource) }) {
+                            Icon(Icons.Default.Search, contentDescription = "Search", tint = LXPrimaryGreen)
+                        }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = LXPrimaryGreen,
+                        unfocusedBorderColor = LXBorder,
+                        focusedLabelColor = LXPrimaryGreen,
+                        unfocusedLabelColor = LXTextSecondary,
+                        focusedTextColor = LXTextPrimary,
+                        unfocusedTextColor = LXTextPrimary,
+                        cursorColor = LXPrimaryGreen
+                    )
+                )
+
+                // Source Choice Chips: MAL vs TMDB
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = syncState.selectedSource == ExternalDbSource.MAL,
+                        onClick = {
+                            if (syncState.selectedSource != ExternalDbSource.MAL) {
+                                onSearch(searchInput, ExternalDbSource.MAL)
+                            }
+                        },
+                        label = { Text("🎌 MyAnimeList (MAL)", fontSize = 12.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LXPrimaryGreen,
+                            selectedLabelColor = LXBackgroundBlack,
+                            containerColor = LXSurfaceElevated,
+                            labelColor = LXTextSecondary
+                        )
+                    )
+
+                    FilterChip(
+                        selected = syncState.selectedSource == ExternalDbSource.TMDB,
+                        onClick = {
+                            if (syncState.selectedSource != ExternalDbSource.TMDB) {
+                                onSearch(searchInput, ExternalDbSource.TMDB)
+                            }
+                        },
+                        label = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Image(
+                                    painter = painterResource(R.drawable.ic_tmdb_logo),
+                                    contentDescription = "TMDB",
+                                    modifier = Modifier.height(12.dp).width(18.dp)
+                                )
+                                Text("TMDB", fontSize = 12.sp)
+                            }
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LXPrimaryGreen,
+                            selectedLabelColor = LXBackgroundBlack,
+                            containerColor = LXSurfaceElevated,
+                            labelColor = LXTextSecondary
+                        )
+                    )
+                }
+
+                // Results Container
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(340.dp)
+                ) {
+                    if (syncState.isSearching) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(color = LXPrimaryGreen, modifier = Modifier.size(36.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Searching ${syncState.selectedSource.shortName} for '$searchInput'...",
+                                color = LXTextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    } else if (syncState.errorMessage != null) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = syncState.errorMessage,
+                                color = LXTextSecondary,
+                                fontSize = 13.sp
+                            )
+                        }
+                    } else if (syncState.selectedSource == ExternalDbSource.MAL) {
+                        if (syncState.malResults.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("Enter a title and tap search.", color = LXTextSecondary, fontSize = 13.sp)
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(syncState.malResults) { item ->
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onSelectMal(item) },
+                                        colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, LXBorder)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (!item.posterUrl.isNullOrBlank()) {
+                                                AsyncImage(
+                                                    model = item.posterUrl,
+                                                    contentDescription = null,
+                                                    modifier = Modifier
+                                                        .size(width = 46.dp, height = 64.dp)
+                                                        .clip(RoundedCornerShape(4.dp)),
+                                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                )
+                                            } else {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(width = 46.dp, height = 64.dp)
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(LXBackgroundBlack),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(Icons.Default.Image, contentDescription = null, tint = LXTextSecondary.copy(alpha = 0.5f))
+                                                }
+                                            }
+
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = item.title ?: "Unknown",
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = LXTextPrimary,
+                                                    fontSize = 13.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                if (!item.alternateTitle.isNullOrBlank()) {
+                                                    Text(
+                                                        text = item.alternateTitle.replace("\n", " • "),
+                                                        color = LXTextSecondary,
+                                                        fontSize = 11.sp,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Row(
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    if (item.externalScore != null && item.externalScore > 0f) {
+                                                        Text("★ ${item.externalScore}", color = LXScoreGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                    if (item.totalEpisodes != null && item.totalEpisodes > 0) {
+                                                        Text("${item.totalEpisodes} eps", color = LXTextSecondary, fontSize = 11.sp)
+                                                    } else if (item.totalChapters != null && item.totalChapters > 0) {
+                                                        Text("${item.totalChapters} ch", color = LXTextSecondary, fontSize = 11.sp)
+                                                    }
+                                                    if (item.type != null) {
+                                                        Text(item.type, color = LXPrimaryGreen, fontSize = 11.sp)
+                                                    }
+                                                }
+                                            }
+
+                                            Button(
+                                                onClick = { onSelectMal(item) },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = LXPrimaryGreen,
+                                                    contentColor = LXBackgroundBlack
+                                                ),
+                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                shape = RoundedCornerShape(6.dp)
+                                            ) {
+                                                Text("Apply", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // TMDB results
+                        if (syncState.tmdbResults.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("Enter a title and tap search.", color = LXTextSecondary, fontSize = 13.sp)
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(syncState.tmdbResults) { item ->
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onSelectTmdb(item) },
+                                        colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, LXBorder)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (!item.posterUrl.isNullOrBlank()) {
+                                                AsyncImage(
+                                                    model = item.posterUrl,
+                                                    contentDescription = null,
+                                                    modifier = Modifier
+                                                        .size(width = 46.dp, height = 64.dp)
+                                                        .clip(RoundedCornerShape(4.dp)),
+                                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                )
+                                            } else {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(width = 46.dp, height = 64.dp)
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(LXBackgroundBlack),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(Icons.Default.Image, contentDescription = null, tint = LXTextSecondary.copy(alpha = 0.5f))
+                                                }
+                                            }
+
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = item.title,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = LXTextPrimary,
+                                                    fontSize = 13.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                if (!item.originalTitle.isNullOrBlank() && item.originalTitle != item.title) {
+                                                    Text(
+                                                        text = item.originalTitle,
+                                                        color = LXTextSecondary,
+                                                        fontSize = 11.sp,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Row(
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    if (item.voteAverage != null && item.voteAverage > 0f) {
+                                                        Text("★ ${String.format(Locale.US, "%.1f", item.voteAverage)}", color = LXScoreGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                    if (!item.releaseYear.isNullOrBlank()) {
+                                                        Text(item.releaseYear, color = LXTextSecondary, fontSize = 11.sp)
+                                                    }
+                                                    Text(if (item.isMovie) "Movie" else "TV Show", color = LXPrimaryGreen, fontSize = 11.sp)
+                                                }
+                                            }
+
+                                            Button(
+                                                onClick = { onSelectTmdb(item) },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = LXPrimaryGreen,
+                                                    contentColor = LXBackgroundBlack
+                                                ),
+                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                shape = RoundedCornerShape(6.dp)
+                                            ) {
+                                                Text("Apply", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = LXTextSecondary)
+            }
+        },
+        containerColor = LXSurfaceBlack,
+        shape = RoundedCornerShape(12.dp)
+    )
 }

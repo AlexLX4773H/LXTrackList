@@ -211,5 +211,16 @@ class TmdbIntegrationTest {
         assertTrue(disclaimer.contains("TMDB API"))
         assertTrue(disclaimer.contains("not endorsed or certified by TMDB"))
     }
+
+    @Test
+    fun testExternalDbSourcesInAddEdit() {
+        val malSource = com.lx.tracklist.ui.edit.ExternalDbSource.MAL
+        val tmdbSource = com.lx.tracklist.ui.edit.ExternalDbSource.TMDB
+
+        assertEquals("MyAnimeList (MAL)", malSource.displayName)
+        assertEquals("MAL", malSource.shortName)
+        assertEquals("The Movie Database (TMDB)", tmdbSource.displayName)
+        assertEquals("TMDB", tmdbSource.shortName)
+    }
 }
 

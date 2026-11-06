@@ -1,5 +1,6 @@
 package com.lx.tracklist.ui.edit
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -9,7 +10,14 @@ import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.Priority
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.data.remote.JikanApiClient
+import com.lx.tracklist.data.remote.JikanMediaDetails
+import com.lx.tracklist.data.remote.TmdbApiClient
+import com.lx.tracklist.data.remote.TmdbConfig
+import com.lx.tracklist.data.remote.TmdbMediaDetails
+import com.lx.tracklist.data.remote.TmdbSearchResult
 import com.lx.tracklist.data.repository.MediaRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -22,7 +30,23 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
+
+enum class ExternalDbSource(val displayName: String, val shortName: String) {
+    MAL("MyAnimeList (MAL)", "MAL"),
+    TMDB("The Movie Database (TMDB)", "TMDB")
+}
+
+data class ExternalSyncUiState(
+    val isSearching: Boolean = false,
+    val query: String = "",
+    val selectedSource: ExternalDbSource = ExternalDbSource.MAL,
+    val malResults: List<JikanMediaDetails> = emptyList(),
+    val tmdbResults: List<TmdbSearchResult> = emptyList(),
+    val errorMessage: String? = null,
+    val successMessage: String? = null
+)
 
 data class AddEditUiState(
     val id: Long = 0L,
@@ -101,6 +125,9 @@ class AddEditViewModel(
         }
     )
     val uiState: StateFlow<AddEditUiState> = _uiState.asStateFlow()
+
+    private val _syncState = MutableStateFlow(ExternalSyncUiState())
+    val syncState: StateFlow<ExternalSyncUiState> = _syncState.asStateFlow()
 
     private val _savedEvent = Channel<Unit>(Channel.BUFFERED)
     val savedEvent = _savedEvent.receiveAsFlow()
@@ -390,6 +417,198 @@ class AddEditViewModel(
             _uiState.update { it.copy(isSaved = true, startDate = effectiveStartDate) }
             _savedEvent.send(Unit)
         }
+    }
+
+    fun searchExternalDb(query: String, source: ExternalDbSource, context: Context? = null) {
+        val cleanQuery = query.trim()
+        if (cleanQuery.isBlank()) {
+            _syncState.update {
+                it.copy(
+                    query = "",
+                    malResults = emptyList(),
+                    tmdbResults = emptyList(),
+                    errorMessage = "Please enter a title to search."
+                )
+            }
+            return
+        }
+
+        _syncState.update {
+            it.copy(
+                isSearching = true,
+                query = cleanQuery,
+                selectedSource = source,
+                errorMessage = null
+            )
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                when (source) {
+                    ExternalDbSource.MAL -> {
+                        val isManga = _uiState.value.mediaType == MediaType.MANGA ||
+                                _uiState.value.mediaType == MediaType.MANHWA ||
+                                _uiState.value.mediaType == MediaType.BOOK
+                        val subType = if (_uiState.value.mediaType == MediaType.MANHWA) "manhwa" else null
+                        val res = JikanApiClient.searchJikanMultiple(cleanQuery, isManga = isManga, subType = subType, limit = 20)
+                        val items = res.getOrDefault(emptyList())
+                        _syncState.update {
+                            it.copy(
+                                isSearching = false,
+                                malResults = items,
+                                tmdbResults = emptyList(),
+                                errorMessage = if (items.isEmpty()) "No matches found on MyAnimeList for '$cleanQuery'" else null
+                            )
+                        }
+                    }
+                    ExternalDbSource.TMDB -> {
+                        if (!TmdbConfig.isConfigured(context)) {
+                            _syncState.update {
+                                it.copy(
+                                    isSearching = false,
+                                    tmdbResults = emptyList(),
+                                    malResults = emptyList(),
+                                    errorMessage = "TMDB Read Access Token is not configured. Please add your token in Settings > TMDB Sync."
+                                )
+                            }
+                            return@launch
+                        }
+
+                        val isTv = _uiState.value.mediaType == MediaType.SHOW
+
+                        // Search primary type first, then fallback to other if empty
+                        val primaryResults = if (isTv) {
+                            TmdbApiClient.searchTvMultiple(cleanQuery, context).getOrDefault(emptyList())
+                        } else {
+                            TmdbApiClient.searchMoviesMultiple(cleanQuery, context).getOrDefault(emptyList())
+                        }
+
+                        val finalResults = if (primaryResults.isNotEmpty()) {
+                            primaryResults
+                        } else {
+                            if (isTv) {
+                                TmdbApiClient.searchMoviesMultiple(cleanQuery, context).getOrDefault(emptyList())
+                            } else {
+                                TmdbApiClient.searchTvMultiple(cleanQuery, context).getOrDefault(emptyList())
+                            }
+                        }
+
+                        _syncState.update {
+                            it.copy(
+                                isSearching = false,
+                                tmdbResults = finalResults,
+                                malResults = emptyList(),
+                                errorMessage = if (finalResults.isEmpty()) "No matches found on TMDB for '$cleanQuery'" else null
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _syncState.update {
+                    it.copy(
+                        isSearching = false,
+                        errorMessage = e.message ?: "An error occurred while searching."
+                    )
+                }
+            }
+        }
+    }
+
+    fun applySelectedMalResult(item: JikanMediaDetails) {
+        _uiState.update { current ->
+            val isVideo = current.mediaType == MediaType.ANIME || current.mediaType == MediaType.MOVIE || current.mediaType == MediaType.SHOW
+            val altList = mutableListOf<String>()
+            item.alternateTitle?.split("\n")?.forEach { line ->
+                val clean = line.trim()
+                if (clean.isNotBlank() && !altList.contains(clean) && !clean.equals(item.title, ignoreCase = true)) {
+                    altList.add(clean)
+                }
+            }
+
+            // Align media type if current is generic or incompatible
+            val targetMediaType = if (!isVideo && (item.type.equals("TV", ignoreCase = true) || item.type.equals("Movie", ignoreCase = true))) {
+                if (item.type.equals("Movie", ignoreCase = true)) MediaType.MOVIE else MediaType.ANIME
+            } else {
+                current.mediaType
+            }
+
+            current.copy(
+                title = item.title ?: current.title,
+                alternateTitle = item.alternateTitle ?: current.alternateTitle,
+                alternateTitles = if (altList.isNotEmpty()) altList else current.alternateTitles,
+                mediaType = targetMediaType,
+                coverImageUri = item.posterUrl ?: current.coverImageUri,
+                externalId = (item.malId ?: 0L).takeIf { it > 0 }?.toString() ?: current.externalId,
+                externalSource = "MAL",
+                externalScore = item.externalScore ?: current.externalScore,
+                externalScoreSource = item.externalScoreSource ?: "MAL",
+                notes = item.synopsis ?: current.notes,
+                tags = item.tags ?: current.tags,
+                airedStartDate = item.airedStartDate ?: current.airedStartDate,
+                airedEndDate = item.airedEndDate ?: current.airedEndDate,
+                isAiring = item.isAiring ?: current.isAiring,
+                totalEpisodes = if (isVideo && item.totalEpisodes != null && item.totalEpisodes > 0) item.totalEpisodes else current.totalEpisodes,
+                episodeLengthMinutes = if (isVideo && item.durationMinutes != null && item.durationMinutes > 0) item.durationMinutes else current.episodeLengthMinutes,
+                durationMinutes = if (current.mediaType == MediaType.MOVIE && item.durationMinutes != null && item.durationMinutes > 0) item.durationMinutes else current.durationMinutes,
+                totalChapters = if (!isVideo && item.totalChapters != null && item.totalChapters > 0) item.totalChapters else current.totalChapters,
+                totalVolumes = if (!isVideo && item.totalVolumes != null && item.totalVolumes > 0) item.totalVolumes else current.totalVolumes
+            )
+        }
+        _syncState.update { it.copy(successMessage = "Applied '${item.title}' from MyAnimeList!") }
+    }
+
+    fun applySelectedTmdbResult(item: TmdbSearchResult, context: Context? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val tmdbId = item.tmdbId
+            val fullDetails = if (item.isMovie) {
+                TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()
+            } else {
+                TmdbApiClient.fetchTvDetails(tmdbId, context).getOrNull()
+            }
+
+            withContext(Dispatchers.Main) {
+                _uiState.update { current ->
+                    val isMovie = item.isMovie
+                    val targetMediaType = if (isMovie) MediaType.MOVIE else MediaType.SHOW
+                    val altList = mutableListOf<String>()
+                    fullDetails?.alternateTitle?.split("\n")?.forEach { line ->
+                        val clean = line.trim()
+                        if (clean.isNotBlank() && !altList.contains(clean) && !clean.equals(item.title, ignoreCase = true)) {
+                            altList.add(clean)
+                        }
+                    }
+                    if (altList.isEmpty() && !item.originalTitle.isNullOrBlank() && item.originalTitle != item.title) {
+                        altList.add(item.originalTitle)
+                    }
+
+                    current.copy(
+                        title = fullDetails?.title ?: item.title,
+                        alternateTitle = fullDetails?.alternateTitle ?: item.originalTitle ?: current.alternateTitle,
+                        alternateTitles = if (altList.isNotEmpty()) altList else current.alternateTitles,
+                        mediaType = targetMediaType,
+                        coverImageUri = fullDetails?.posterUrl ?: item.posterUrl ?: item.backdropUrl ?: current.coverImageUri,
+                        externalId = item.tmdbId.toString(),
+                        externalSource = "TMDB",
+                        externalScore = fullDetails?.externalScore ?: item.voteAverage ?: current.externalScore,
+                        externalScoreSource = "TMDB",
+                        notes = fullDetails?.synopsis ?: item.overview ?: current.notes,
+                        tags = fullDetails?.tags ?: current.tags,
+                        airedStartDate = fullDetails?.airedStartDate ?: item.releaseDate ?: current.airedStartDate,
+                        airedEndDate = fullDetails?.airedEndDate ?: current.airedEndDate,
+                        isAiring = fullDetails?.isAiring ?: current.isAiring,
+                        durationMinutes = if (isMovie) (fullDetails?.durationMinutes ?: current.durationMinutes) else current.durationMinutes,
+                        episodeLengthMinutes = if (!isMovie) (fullDetails?.durationMinutes ?: current.episodeLengthMinutes) else current.episodeLengthMinutes,
+                        totalEpisodes = if (!isMovie && fullDetails?.totalEpisodes != null && fullDetails.totalEpisodes > 0) fullDetails.totalEpisodes else current.totalEpisodes,
+                        totalSeasons = if (!isMovie && fullDetails?.totalSeasons != null && fullDetails.totalSeasons > 0) fullDetails.totalSeasons else current.totalSeasons
+                    )
+                }
+                _syncState.update { it.copy(successMessage = "Applied '${item.title}' from TMDB!") }
+            }
+        }
+    }
+
+    fun clearSyncMessage() {
+        _syncState.update { it.copy(successMessage = null) }
     }
 
     companion object {
