@@ -46,6 +46,7 @@ import com.lx.tracklist.LXApplication
 import com.lx.tracklist.R
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.components.UserSwitcherSheet
 import com.lx.tracklist.ui.detail.DetailScreen
 import com.lx.tracklist.ui.detail.DetailViewModel
@@ -200,26 +201,33 @@ fun AppNavigation() {
                                 initialStatus = status
                             )
                         )
-                    }
+                    },
+                    activeUser = homeState.activeUser,
+                    onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
                 )
             }
 
             is NavDestination.Search -> {
                 SearchScreen(
                     viewModel = searchViewModel,
-                    onNavigateToDetail = { entryId -> navigateTo(NavDestination.Detail(entryId)) }
+                    onNavigateToDetail = { entryId -> navigateTo(NavDestination.Detail(entryId)) },
+                    activeUser = homeState.activeUser,
+                    onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
                 )
             }
 
             is NavDestination.Stats -> {
                 com.lx.tracklist.ui.stats.StatsScreen(
-                    viewModel = statsViewModel
+                    viewModel = statsViewModel,
+                    activeUser = homeState.activeUser,
+                    onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
                 )
             }
 
             is NavDestination.Settings -> {
                 SettingsScreen(
-                    viewModel = settingsViewModel
+                    viewModel = settingsViewModel,
+                    onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
                 )
             }
 
@@ -232,7 +240,9 @@ fun AppNavigation() {
                     viewModel = detailViewModel,
                     onNavigateBack = { navigateBack() },
                     onEdit = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) },
-                    onNavigateToDetail = { targetEntryId -> navigateTo(NavDestination.Detail(targetEntryId)) }
+                    onNavigateToDetail = { targetEntryId -> navigateTo(NavDestination.Detail(targetEntryId)) },
+                    activeUser = homeState.activeUser,
+                    onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
                 )
             }
 
@@ -250,7 +260,9 @@ fun AppNavigation() {
                 )
                 AddEditScreen(
                     viewModel = addEditViewModel,
-                    onNavigateBack = { navigateBack() }
+                    onNavigateBack = { navigateBack() },
+                    activeUser = homeState.activeUser,
+                    onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
                 )
             }
         }
@@ -294,39 +306,13 @@ fun AppNavigation() {
                     .border(width = 1.dp, color = LXBorder),
                 header = {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .clickable { homeViewModel.setUserSwitcherOpen(true) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (!homeState.activeUser.avatarImageUri.isNullOrBlank()) {
-                            AsyncImage(
-                                model = homeState.activeUser.avatarImageUri,
-                                contentDescription = "Switch User (${homeState.activeUser.name})",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(CircleShape)
-                                    .border(2.dp, parseHexColor(homeState.activeUser.avatarColorHex), CircleShape)
-                            )
-                        } else {
-                            Image(
-                                painter = painterResource(R.drawable.lx_logo),
-                                contentDescription = "Switch User (LX Logo)",
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .size(12.dp)
-                                    .align(Alignment.BottomEnd)
-                                    .clip(CircleShape)
-                                    .background(parseHexColor(homeState.activeUser.avatarColorHex))
-                                    .border(1.5.dp, LXBackgroundBlack, CircleShape)
-                            )
-                        }
-                    }
+                    UserAvatarButton(
+                        activeUser = homeState.activeUser,
+                        onClick = { homeViewModel.setUserSwitcherOpen(true) },
+                        size = 46.dp,
+                        paddingStart = 0.dp,
+                        paddingEnd = 0.dp
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             ) {

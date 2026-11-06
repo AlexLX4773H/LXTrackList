@@ -113,9 +113,11 @@ import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.ui.components.AddRelatedToLibraryDialog
+import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.theme.LXAiringBlue
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
@@ -143,6 +145,8 @@ fun DetailScreen(
     onNavigateBack: () -> Unit,
     onEdit: (Long) -> Unit,
     onNavigateToDetail: ((Long) -> Unit)? = null,
+    activeUser: UserProfile? = null,
+    onUserAvatarClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val entry by viewModel.entry.collectAsState()
@@ -188,11 +192,23 @@ fun DetailScreen(
             TopAppBar(
                 title = { Text(if (isTablet) (entry?.title ?: "Details") else "Details", color = LXTextPrimary, maxLines = 1) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = LXPrimaryGreen
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(start = 4.dp)
+                    ) {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = LXPrimaryGreen
+                            )
+                        }
+                        UserAvatarButton(
+                            activeUser = activeUser,
+                            onClick = onUserAvatarClick,
+                            size = 32.dp,
+                            paddingStart = 0.dp,
+                            paddingEnd = 4.dp
                         )
                     }
                 },

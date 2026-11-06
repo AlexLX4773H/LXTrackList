@@ -114,7 +114,9 @@ import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.Priority
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.ui.components.CoverImageSearchDialog
+import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXErrorRed
@@ -130,6 +132,8 @@ import com.lx.tracklist.ui.theme.LXTextSecondary
 fun AddEditScreen(
     viewModel: AddEditViewModel,
     onNavigateBack: () -> Unit,
+    activeUser: UserProfile? = null,
+    onUserAvatarClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -187,11 +191,23 @@ fun AddEditScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = LXPrimaryGreen
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(start = 4.dp)
+                    ) {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = LXPrimaryGreen
+                            )
+                        }
+                        UserAvatarButton(
+                            activeUser = activeUser,
+                            onClick = onUserAvatarClick,
+                            size = 32.dp,
+                            paddingStart = 0.dp,
+                            paddingEnd = 4.dp
                         )
                     }
                 },

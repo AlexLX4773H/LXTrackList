@@ -141,42 +141,10 @@ fun TopNavBar(
             }
         },
         navigationIcon = {
-            Box(
-                modifier = Modifier
-                    .padding(start = 12.dp, end = 4.dp)
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onLogoClick),
-                contentAlignment = Alignment.Center
-            ) {
-                if (!activeUser?.avatarImageUri.isNullOrBlank()) {
-                    AsyncImage(
-                        model = activeUser.avatarImageUri,
-                        contentDescription = "Switch User (${activeUser.name})",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape)
-                            .border(1.5.dp, parseHexColor(activeUser.avatarColorHex), CircleShape)
-                    )
-                } else {
-                    Image(
-                        painter = painterResource(R.drawable.lx_logo),
-                        contentDescription = "Switch User (Logo)",
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    if (activeUser != null) {
-                        Box(
-                            modifier = Modifier
-                                .size(10.dp)
-                                .align(Alignment.BottomEnd)
-                                .clip(CircleShape)
-                                .background(parseHexColor(activeUser.avatarColorHex))
-                                .border(1.5.dp, LXBackgroundBlack, CircleShape)
-                        )
-                    }
-                }
-            }
+            UserAvatarButton(
+                activeUser = activeUser,
+                onClick = onLogoClick
+            )
         },
         actions = {
             IconButton(onClick = onToggleSearch) {

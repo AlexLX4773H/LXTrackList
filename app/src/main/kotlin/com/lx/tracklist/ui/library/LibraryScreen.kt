@@ -119,8 +119,10 @@ import androidx.compose.ui.unit.sp
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
+import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.ui.components.AddRelatedToLibraryDialog
 import com.lx.tracklist.ui.components.MediaCard
+import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXErrorRed
@@ -140,6 +142,8 @@ fun LibraryScreen(
     onEntryClick: (Long) -> Unit,
     onEditEntry: (Long) -> Unit,
     onAddNewEntry: ((mediaType: MediaType, customCategory: String?, subCategory: String?, status: MediaStatus) -> Unit)? = null,
+    activeUser: UserProfile? = null,
+    onUserAvatarClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -669,6 +673,12 @@ fun LibraryScreen(
             } else {
                 // Standard Top Bar
                 TopAppBar(
+                    navigationIcon = {
+                        UserAvatarButton(
+                            activeUser = activeUser,
+                            onClick = onUserAvatarClick
+                        )
+                    },
                     title = {
                         Text(
                             text = "Library (${state.totalCount})",

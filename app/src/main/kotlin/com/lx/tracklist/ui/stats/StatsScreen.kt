@@ -72,6 +72,8 @@ import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
@@ -89,6 +91,8 @@ import java.util.Locale
 @Composable
 fun StatsScreen(
     viewModel: StatsViewModel,
+    activeUser: UserProfile? = null,
+    onUserAvatarClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -132,6 +136,12 @@ fun StatsScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    UserAvatarButton(
+                        activeUser = activeUser,
+                        onClick = onUserAvatarClick
+                    )
+                },
                 title = {
                     Text(
                         text = "Statistics & Analytics",

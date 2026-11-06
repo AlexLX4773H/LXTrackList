@@ -99,7 +99,9 @@ import coil.compose.AsyncImage
 import com.lx.tracklist.R
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.TmdbConfig
+import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
@@ -115,6 +117,8 @@ import java.util.Locale
 fun SearchScreen(
     viewModel: SearchViewModel,
     onNavigateToDetail: (Long) -> Unit,
+    activeUser: UserProfile? = null,
+    onUserAvatarClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -173,6 +177,12 @@ fun SearchScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    UserAvatarButton(
+                        activeUser = activeUser,
+                        onClick = onUserAvatarClick
+                    )
+                },
                 title = {
                     Text(
                         text = "Search & Discover",

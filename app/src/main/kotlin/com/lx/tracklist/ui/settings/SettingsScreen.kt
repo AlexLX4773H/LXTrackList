@@ -127,6 +127,7 @@ import com.lx.tracklist.data.remote.JikanSyncProgress
 import com.lx.tracklist.data.remote.TmdbConfig
 import com.lx.tracklist.data.remote.TmdbSyncProgress
 import com.lx.tracklist.data.repository.ConflictStrategy
+import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.components.getCategoryIcon
 import com.lx.tracklist.ui.settings.ExportDestination
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
@@ -155,6 +156,7 @@ enum class SettingsSubMenu(val title: String) {
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
+    onUserAvatarClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -1116,6 +1118,11 @@ fun SettingsScreen(
                                 tint = LXPrimaryGreen
                             )
                         }
+                    } else {
+                        UserAvatarButton(
+                            activeUser = state.activeUser,
+                            onClick = onUserAvatarClick
+                        )
                     }
                 },
                 actions = {
