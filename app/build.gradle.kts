@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
@@ -6,14 +8,14 @@ plugins {
 }
 
 val envFile = rootProject.file(".env")
-val envProperties = java.util.Properties()
+val envProperties = Properties()
 if (envFile.exists()) {
   envFile.forEachLine { line ->
     val trimmed = line.trim()
     if (trimmed.isNotEmpty() && !trimmed.startsWith("#") && trimmed.contains("=")) {
       val key = trimmed.substringBefore("=").trim()
       val value = trimmed.substringAfter("=").trim()
-      envProperties[key] = value
+      envProperties.setProperty(key, value)
     }
   }
 }
