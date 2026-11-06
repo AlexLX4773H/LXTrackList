@@ -8,9 +8,8 @@ object TmdbConfig {
     private const val PREFS_NAME = "lx_tmdb_config"
     private const val KEY_CUSTOM_TOKEN = "custom_tmdb_token"
 
-    // Fallback embedded token in case BuildConfig is empty or not yet generated
-    private const val FALLBACK_READ_ACCESS_TOKEN =
-        "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiIxZTQ4OGE2MGQ0MDYyMzBhNjM5NWRiOTUzZDZhODU0NSIsIm5iZiI6MTc5Mzk1MzM4NS44NDUsInN1YiI6IjZhZWQ4ZTY5M2JhMGY1NThkMTNkMGI5YSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.qidQGBJhbJ-5DyHQqp4HMV_F4hcPs4LUs-A85cQz9sI"
+    // Fallback embedded token - keep empty in public repository; inject via .env or GitHub Secrets
+    private const val FALLBACK_READ_ACCESS_TOKEN = ""
 
     const val ATTRIBUTION_TEXT = "This product uses the TMDB API but is not endorsed or certified by TMDB."
 
