@@ -89,9 +89,25 @@ object JikanSyncManager {
             false
         }
 
+        val missingEpisodes = isVideo && entry.mediaType != MediaType.MOVIE && entry.totalEpisodes == 0
         val missingChapters = !isVideo && entry.totalChapters == 0
+        val missingVolumes = !isVideo && entry.totalVolumes == 0
+        val missingAiredDates = entry.airedStartDate == null
+        val missingAltTitles = entry.alternateTitle.isNullOrBlank()
+        val missingTags = entry.tags.isNullOrBlank()
+        val missingNotes = entry.notes.isNullOrBlank()
+        val missingExternalScore = entry.externalScore == null
 
-        return missingCover || missingRuntime || missingChapters
+        return missingCover ||
+               missingRuntime ||
+               missingEpisodes ||
+               missingChapters ||
+               missingVolumes ||
+               missingAiredDates ||
+               missingAltTitles ||
+               missingTags ||
+               missingNotes ||
+               missingExternalScore
     }
 
     fun startSync(
@@ -258,7 +274,10 @@ object JikanSyncManager {
 
                         // Determine runtime for anime/movies/shows
                         val newEpisodeLength = if (entry.mediaType != MediaType.MOVIE && !isManga) {
-                            if (details.durationMinutes != null && details.durationMinutes != entry.episodeLengthMinutes) {
+                            if (details.durationMinutes != null && details.durationMinutes > 0 &&
+                                (entry.episodeLengthMinutes == null || entry.episodeLengthMinutes == 0 || forceRefresh) &&
+                                details.durationMinutes != entry.episodeLengthMinutes
+                            ) {
                                 hasChanges = true
                                 details.durationMinutes
                             } else {
@@ -269,7 +288,10 @@ object JikanSyncManager {
                         }
 
                         val newDurationMinutes = if (entry.mediaType == MediaType.MOVIE) {
-                            if (details.durationMinutes != null && details.durationMinutes != entry.durationMinutes) {
+                            if (details.durationMinutes != null && details.durationMinutes > 0 &&
+                                (entry.durationMinutes == null || entry.durationMinutes == 0 || forceRefresh) &&
+                                details.durationMinutes != entry.durationMinutes
+                            ) {
                                 hasChanges = true
                                 details.durationMinutes
                             } else {
@@ -279,19 +301,131 @@ object JikanSyncManager {
                             entry.durationMinutes
                         }
 
-                        // Determine chapters & volumes for manga/manhwa
-                        val newTotalChapters = if (isManga && entry.totalChapters == 0 && details.totalChapters != null && details.totalChapters > 0) {
-                            hasChanges = true
-                            details.totalChapters
+                        // Determine total episodes for anime / shows
+                        val newTotalEpisodes = if (!isManga && entry.mediaType != MediaType.MOVIE) {
+                            if (details.totalEpisodes != null && details.totalEpisodes > 0 &&
+                                (entry.totalEpisodes == 0 || forceRefresh) &&
+                                details.totalEpisodes != entry.totalEpisodes
+                            ) {
+                                hasChanges = true
+                                details.totalEpisodes
+                            } else {
+                                entry.totalEpisodes
+                            }
+                        } else {
+                            entry.totalEpisodes
+                        }
+
+                        // Determine chapters & volumes for manga/manhwa/book
+                        val newTotalChapters = if (isManga) {
+                            if (details.totalChapters != null && details.totalChapters > 0 &&
+                                (entry.totalChapters == 0 || forceRefresh) &&
+                                details.totalChapters != entry.totalChapters
+                            ) {
+                                hasChanges = true
+                                details.totalChapters
+                            } else {
+                                entry.totalChapters
+                            }
                         } else {
                             entry.totalChapters
                         }
 
-                        val newTotalVolumes = if (isManga && entry.totalVolumes == 0 && details.totalVolumes != null && details.totalVolumes > 0) {
-                            hasChanges = true
-                            details.totalVolumes
+                        val newTotalVolumes = if (isManga) {
+                            if (details.totalVolumes != null && details.totalVolumes > 0 &&
+                                (entry.totalVolumes == 0 || forceRefresh) &&
+                                details.totalVolumes != entry.totalVolumes
+                            ) {
+                                hasChanges = true
+                                details.totalVolumes
+                            } else {
+                                entry.totalVolumes
+                            }
                         } else {
                             entry.totalVolumes
+                        }
+
+                        // Broadcast / Published start and end dates
+                        val newAiredStartDate = if (details.airedStartDate != null &&
+                            (entry.airedStartDate == null || forceRefresh) &&
+                            details.airedStartDate != entry.airedStartDate
+                        ) {
+                            hasChanges = true
+                            details.airedStartDate
+                        } else {
+                            entry.airedStartDate
+                        }
+
+                        val newAiredEndDate = if (details.airedEndDate != null &&
+                            (entry.airedEndDate == null || forceRefresh) &&
+                            details.airedEndDate != entry.airedEndDate
+                        ) {
+                            hasChanges = true
+                            details.airedEndDate
+                        } else {
+                            entry.airedEndDate
+                        }
+
+                        // Alternate titles (English, Japanese, Synonyms)
+                        val newAlternateTitle = if (!details.alternateTitle.isNullOrBlank() &&
+                            (entry.alternateTitle.isNullOrBlank() || forceRefresh) &&
+                            details.alternateTitle != entry.alternateTitle
+                        ) {
+                            hasChanges = true
+                            details.alternateTitle
+                        } else {
+                            entry.alternateTitle
+                        }
+
+                        // Tags (genres, themes, demographics)
+                        val newTags = if (!details.tags.isNullOrBlank() &&
+                            (entry.tags.isNullOrBlank() || forceRefresh) &&
+                            details.tags != entry.tags
+                        ) {
+                            hasChanges = true
+                            details.tags
+                        } else {
+                            entry.tags
+                        }
+
+                        // Notes (synopsis / description)
+                        val newNotes = if (!details.synopsis.isNullOrBlank() &&
+                            (entry.notes.isNullOrBlank() || forceRefresh) &&
+                            details.synopsis != entry.notes
+                        ) {
+                            hasChanges = true
+                            details.synopsis
+                        } else {
+                            entry.notes
+                        }
+
+                        // Airing status
+                        val newIsAiring = if (details.isAiring != null && details.isAiring != entry.isAiring) {
+                            hasChanges = true
+                            details.isAiring
+                        } else {
+                            entry.isAiring
+                        }
+
+                        // External Score (e.g. MAL / AniList score) - DO NOT update user personal score!
+                        val newExternalScore = if (details.externalScore != null &&
+                            (entry.externalScore == null || forceRefresh) &&
+                            details.externalScore != entry.externalScore
+                        ) {
+                            hasChanges = true
+                            details.externalScore
+                        } else {
+                            entry.externalScore
+                        }
+
+                        val newExternalScoreSource = if (details.externalScore != null &&
+                            (entry.externalScore == null || forceRefresh) &&
+                            (details.externalScoreSource ?: "MAL") != entry.externalScoreSource
+                        ) {
+                            hasChanges = true
+                            details.externalScoreSource ?: "MAL"
+                        } else {
+                            entry.externalScoreSource
                         }
 
                         if (hasChanges) {
@@ -299,8 +433,17 @@ object JikanSyncManager {
                                 coverImageUri = finalCoverUri ?: entry.coverImageUri,
                                 episodeLengthMinutes = newEpisodeLength,
                                 durationMinutes = newDurationMinutes,
+                                totalEpisodes = newTotalEpisodes,
                                 totalChapters = newTotalChapters,
                                 totalVolumes = newTotalVolumes,
+                                airedStartDate = newAiredStartDate,
+                                airedEndDate = newAiredEndDate,
+                                alternateTitle = newAlternateTitle,
+                                tags = newTags,
+                                notes = newNotes,
+                                isAiring = newIsAiring,
+                                externalScore = newExternalScore,
+                                externalScoreSource = newExternalScoreSource,
                                 externalId = finalExternalId,
                                 externalSource = finalExternalSource ?: entry.externalSource,
                                 updatedAt = System.currentTimeMillis()

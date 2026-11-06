@@ -450,6 +450,8 @@ class MediaRepository(
 
         return existing.copy(
             score = imported.score ?: existing.score,
+            externalScore = imported.externalScore ?: existing.externalScore,
+            externalScoreSource = imported.externalScoreSource ?: existing.externalScoreSource,
             status = if (imported.status == MediaStatus.COMPLETED) MediaStatus.COMPLETED else existing.status,
             startDate = imported.startDate ?: existing.startDate,
             finishDate = imported.finishDate ?: existing.finishDate,

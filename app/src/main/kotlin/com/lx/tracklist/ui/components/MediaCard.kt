@@ -340,6 +340,31 @@ fun MediaCard(
                                     color = LXScoreGold
                                 )
                             }
+                        } else if (entry.externalScore != null && entry.externalScore > 0f) {
+                            val scoreStr = if (entry.externalScore % 1.0f == 0.0f) {
+                                entry.externalScore.toInt().toString()
+                            } else {
+                                String.format(Locale.US, "%.1f", entry.externalScore)
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .background(LXScoreGold.copy(alpha = 0.10f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = LXScoreGold.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = scoreStr,
+                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp, fontWeight = FontWeight.Normal),
+                                    color = LXScoreGold.copy(alpha = 0.85f)
+                                )
+                            }
                         }
                     }
                 }

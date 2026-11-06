@@ -34,6 +34,8 @@ data class AddEditUiState(
     val subCategory: String? = null,
     val status: MediaStatus = MediaStatus.WATCHING,
     val score: Int? = null,
+    val externalScore: Float? = null,
+    val externalScoreSource: String = "",
     val priority: Priority = Priority.MEDIUM,
     val coverImageUri: String = "",
     val isFavorite: Boolean = false,
@@ -143,6 +145,8 @@ class AddEditViewModel(
                             subCategory = entry.subCategory,
                             status = entry.status,
                             score = entry.score,
+                            externalScore = entry.externalScore,
+                            externalScoreSource = entry.externalScoreSource ?: "",
                             priority = entry.priority,
                             coverImageUri = entry.coverImageUri ?: "",
                             isFavorite = entry.isFavorite,
@@ -276,6 +280,8 @@ class AddEditViewModel(
         }
     }
     fun updateScore(value: Int?) = _uiState.update { it.copy(score = value) }
+    fun updateExternalScore(value: Float?) = _uiState.update { it.copy(externalScore = value) }
+    fun updateExternalScoreSource(value: String) = _uiState.update { it.copy(externalScoreSource = value) }
     fun updatePriority(value: Priority) = _uiState.update { it.copy(priority = value) }
     fun updateCoverUri(value: String) = _uiState.update { it.copy(coverImageUri = value) }
     fun updateIsFavorite(value: Boolean) = _uiState.update { it.copy(isFavorite = value) }
@@ -338,6 +344,8 @@ class AddEditViewModel(
                 subCategory = s.subCategory?.trim()?.ifBlank { null },
                 status = s.status,
                 score = s.score,
+                externalScore = s.externalScore,
+                externalScoreSource = s.externalScoreSource.trim().ifBlank { null },
                 priority = s.priority,
                 coverImageUri = s.coverImageUri.trim().ifBlank { null },
                 isFavorite = s.isFavorite,

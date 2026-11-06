@@ -1,5 +1,7 @@
 package com.lx.tracklist
 
+import com.google.gson.Gson
+import com.google.gson.JsonObject
 import com.lx.tracklist.data.exporter.JsonExporter
 import com.lx.tracklist.data.importer.CsvImporter
 import com.lx.tracklist.data.importer.JsonImporter
@@ -843,6 +845,132 @@ class ImporterExporterTest {
         assertFalse(JikanSyncManager.isMangaType(MediaType.ANIME))
         assertFalse(JikanSyncManager.isMangaType(MediaType.MOVIE))
         assertFalse(JikanSyncManager.isMangaType(MediaType.SHOW))
+    }
+
+    @Test
+    fun testJikanAndAniListRichMetadataParsing() {
+        // 1. cleanSynopsis
+        val rawHtml = "This is a story of <i>heroes</i>.<br><br>They fight for &quot;justice&quot; &amp; freedom.<br/>[Written by MAL Rewrite]"
+        val cleaned = JikanApiClient.cleanSynopsis(rawHtml)
+        assertEquals("This is a story of heroes.\n\nThey fight for \"justice\" & freedom.\n[Written by MAL Rewrite]", cleaned)
+
+        // 2. Date parsing
+        val parsedIso = JikanApiClient.parseIsoOrSimpleDate("2008-04-06T00:00:00+00:00")
+        assertNotNull(parsedIso)
+        val parsedSimple = JikanApiClient.parseIsoOrSimpleDate("2008-04-06")
+        assertNotNull(parsedSimple)
+        assertEquals(parsedIso, parsedSimple)
+
+        // 3. Jikan JSON parsing
+        val jikanJson = """
+            {
+              "mal_id": 4038,
+              "title": "Zettai Karen Children",
+              "title_english": "Psychic Squad",
+              "title_japanese": "絶対可憐チルドレン",
+              "title_synonyms": ["Absolutely Lovely Children"],
+              "type": "TV",
+              "episodes": 51,
+              "status": "Finished Airing",
+              "airing": false,
+              "aired": {
+                "from": "2008-04-06T00:00:00+00:00",
+                "to": "2009-03-29T00:00:00+00:00"
+              },
+              "score": 7.18,
+              "duration": "24 min per ep",
+              "synopsis": "In the future, esper abilities have become commonplace.<br/>Three powerful young girls...",
+              "genres": [
+                { "name": "Action" },
+                { "name": "Comedy" }
+              ],
+              "themes": [
+                { "name": "Super Power" }
+              ],
+              "demographics": [
+                { "name": "Shounen" }
+              ],
+              "images": {
+                "jpg": {
+                  "large_image_url": "https://cdn.myanimelist.net/images/anime/8/4038l.jpg"
+                }
+              }
+            }
+        """.trimIndent()
+
+        val jikanObj = Gson().fromJson(jikanJson, JsonObject::class.java)
+        val jikanDetails = JikanApiClient.parseJikanData(jikanObj, fallbackMalId = 4038L)
+
+        assertEquals(4038L, jikanDetails.malId)
+        assertEquals("Zettai Karen Children", jikanDetails.title)
+        assertEquals("https://cdn.myanimelist.net/images/anime/8/4038l.jpg", jikanDetails.posterUrl)
+        assertEquals(24, jikanDetails.durationMinutes)
+        assertEquals(51, jikanDetails.totalEpisodes)
+        assertFalse(jikanDetails.isAiring ?: true)
+        assertEquals("Action, Comedy, Super Power, Shounen", jikanDetails.tags)
+        assertTrue(jikanDetails.alternateTitle?.contains("Psychic Squad") == true)
+        assertTrue(jikanDetails.alternateTitle?.contains("絶対可憐チルドレン") == true)
+        assertTrue(jikanDetails.alternateTitle?.contains("Absolutely Lovely Children") == true)
+        assertTrue(jikanDetails.synopsis?.contains("In the future, esper abilities have become commonplace.") == true)
+        assertFalse(jikanDetails.synopsis?.contains("<br/>") == true)
+        assertNotNull(jikanDetails.airedStartDate)
+        assertNotNull(jikanDetails.airedEndDate)
+        assertEquals(7.18f, jikanDetails.externalScore ?: 0f, 0.01f)
+        assertEquals("MAL", jikanDetails.externalScoreSource)
+
+        // 4. AniList JSON parsing
+        val anilistJson = """
+            {
+              "id": 4038,
+              "idMal": 4038,
+              "title": {
+                "romaji": "Zettai Karen Children",
+                "english": "Psychic Squad",
+                "native": "絶対可憐チルドレン"
+              },
+              "coverImage": {
+                "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx4038-abc.png"
+              },
+              "duration": 24,
+              "episodes": 51,
+              "status": "FINISHED",
+              "averageScore": 84,
+              "description": "Three Level 7 esper girls protect the world.",
+              "startDate": { "year": 2008, "month": 4, "day": 6 },
+              "endDate": { "year": 2009, "month": 3, "day": 29 },
+              "genres": ["Action", "Sci-Fi"],
+              "tags": [{ "name": "Espers" }]
+            }
+        """.trimIndent()
+
+        val anilistObj = Gson().fromJson(anilistJson, JsonObject::class.java)
+        val anilistDetails = JikanApiClient.parseAniListMedia(anilistObj, fallbackMalId = 4038L)
+
+        assertEquals(4038L, anilistDetails.malId)
+        assertEquals("Psychic Squad", anilistDetails.title)
+        assertEquals("https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx4038-abc.png", anilistDetails.posterUrl)
+        assertEquals(24, anilistDetails.durationMinutes)
+        assertEquals(51, anilistDetails.totalEpisodes)
+        assertFalse(anilistDetails.isAiring ?: true)
+        assertEquals("Action, Sci-Fi, Espers", anilistDetails.tags)
+        assertTrue(anilistDetails.alternateTitle?.contains("絶対可憐チルドレン") == true)
+        assertEquals("Three Level 7 esper girls protect the world.", anilistDetails.synopsis)
+        assertNotNull(anilistDetails.airedStartDate)
+        assertNotNull(anilistDetails.airedEndDate)
+        assertEquals(8.4f, anilistDetails.externalScore ?: 0f, 0.01f)
+        assertEquals("AniList", anilistDetails.externalScoreSource)
+
+        // 5. MediaEntry external score formatting
+        val entryWithScore = MediaEntry(
+            title = "Test",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.COMPLETED,
+            score = 9,
+            externalScore = 7.18f,
+            externalScoreSource = "MAL"
+        )
+        assertEquals("7.2 (MAL)", entryWithScore.formatExternalScore())
+        assertEquals(9, entryWithScore.score)
     }
 
     private fun writeVarint(out: ByteArrayOutputStream, value: Long) {

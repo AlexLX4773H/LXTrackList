@@ -121,6 +121,7 @@ fun AddEditScreen(
     var isForeignDbUnlocked by remember { mutableStateOf(false) }
     var showForeignDbWarningDialog by remember { mutableStateOf(false) }
     var databaseSourceExpanded by remember { mutableStateOf(false) }
+    var externalScoreSourceExpanded by remember { mutableStateOf(false) }
 
     BackHandler(onBack = onNavigateBack)
 
@@ -815,6 +816,105 @@ fun AddEditScreen(
                             readOnly = !isForeignDbUnlocked,
                             label = { Text("Foreign Database ID") },
                             placeholder = { Text("e.g. 38101") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1.5f),
+                            colors = outlinedColors()
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        ExposedDropdownMenuBox(
+                            expanded = externalScoreSourceExpanded && isForeignDbUnlocked,
+                            onExpandedChange = {
+                                if (!isForeignDbUnlocked) {
+                                    showForeignDbWarningDialog = true
+                                } else {
+                                    externalScoreSourceExpanded = it
+                                }
+                            },
+                            modifier = Modifier.weight(1.2f)
+                        ) {
+                            OutlinedTextField(
+                                value = state.externalScoreSource.ifBlank { "None" },
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Score Source") },
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = externalScoreSourceExpanded)
+                                },
+                                colors = outlinedColors(),
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth()
+                            )
+
+                            ExposedDropdownMenu(
+                                expanded = externalScoreSourceExpanded && isForeignDbUnlocked,
+                                onDismissRequest = { externalScoreSourceExpanded = false },
+                                modifier = Modifier.background(LXSurfaceElevated)
+                            ) {
+                                val allScoreSources = remember(state.externalScoreSource) {
+                                    val list = mutableListOf("MAL", "IMDb", "Rotten Tomatoes", "AniList", "TMDB", "Metacritic")
+                                    if (state.externalScoreSource.isNotBlank() && !list.contains(state.externalScoreSource)) {
+                                        list.add(0, state.externalScoreSource)
+                                    }
+                                    list
+                                }
+
+                                allScoreSources.forEach { source ->
+                                    val isSelected = state.externalScoreSource.equals(source, ignoreCase = true)
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = source,
+                                                color = if (isSelected) LXPrimaryGreen else LXTextPrimary,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        },
+                                        onClick = {
+                                            viewModel.updateExternalScoreSource(source)
+                                            externalScoreSourceExpanded = false
+                                        }
+                                    )
+                                }
+
+                                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
+
+                                val isNoneSelected = state.externalScoreSource.isBlank()
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "None (No Score Source)",
+                                            color = if (isNoneSelected) LXPrimaryGreen else LXTextSecondary,
+                                            fontWeight = if (isNoneSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    onClick = {
+                                        viewModel.updateExternalScoreSource("")
+                                        externalScoreSourceExpanded = false
+                                    }
+                                )
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = state.externalScore?.let {
+                                if (it % 1.0f == 0.0f) it.toInt().toString() else it.toString()
+                            } ?: "",
+                            onValueChange = { input ->
+                                if (isForeignDbUnlocked) {
+                                    viewModel.updateExternalScore(input.toFloatOrNull())
+                                } else {
+                                    showForeignDbWarningDialog = true
+                                }
+                            },
+                            readOnly = !isForeignDbUnlocked,
+                            label = { Text("External Score") },
+                            placeholder = { Text("e.g. 8.5") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true,
                             modifier = Modifier.weight(1.5f),
                             colors = outlinedColors()

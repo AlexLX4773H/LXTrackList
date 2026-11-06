@@ -39,6 +39,8 @@ data class MediaEntry(
     val mediaType: MediaType,
     val status: MediaStatus,
     val score: Int? = null,
+    val externalScore: Float? = null,
+    val externalScoreSource: String? = null,
     // User personal viewing / reading dates
     val startDate: Long? = null,
     val finishDate: Long? = null,
@@ -286,6 +288,17 @@ data class MediaEntry(
             ?.map { it.trim() }
             ?.filter { it.isNotBlank() }
             ?: emptyList()
+    }
+
+    fun formatExternalScore(): String? {
+        val sc = externalScore ?: return null
+        val src = externalScoreSource?.takeIf { it.isNotBlank() } ?: "External"
+        val formatted = if (sc % 1.0f == 0.0f) {
+            sc.toInt().toString()
+        } else {
+            String.format(Locale.US, "%.1f", sc)
+        }
+        return "$formatted ($src)"
     }
 
     fun formatAiredDateRange(): String {

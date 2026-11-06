@@ -2468,7 +2468,7 @@ private fun BackupStorageContent(
                 }
 
                 Text(
-                    text = "Automatically fetches official high-res posters, runtimes, and chapters/volumes from MyAnimeList via Jikan. Uses MAL ID if present, or searches by title to link the ID, poster, and details.",
+                    text = "Automatically fetches official high-res posters, runtimes, broadcast dates, total episodes, alternate titles, tags, and synopses from MyAnimeList via Jikan. Uses MAL ID if present, or searches by title to link the ID and details.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )

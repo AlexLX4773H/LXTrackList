@@ -277,6 +277,12 @@ fun DetailScreen(
                                 score = currentEntry.score,
                                 onScoreSelected = { viewModel.updateScore(it) }
                             )
+                            if (currentEntry.externalScore != null && currentEntry.externalScore > 0f) {
+                                ExternalScoreChip(
+                                    score = currentEntry.externalScore,
+                                    source = currentEntry.externalScoreSource
+                                )
+                            }
                             if (currentEntry.mediaType == MediaType.MOVIE && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
                                 val h = currentEntry.durationMinutes / 60
                                 val m = currentEntry.durationMinutes % 60
@@ -420,6 +426,12 @@ fun DetailScreen(
                                 score = currentEntry.score,
                                 onScoreSelected = { viewModel.updateScore(it) }
                             )
+                            if (currentEntry.externalScore != null && currentEntry.externalScore > 0f) {
+                                ExternalScoreChip(
+                                    score = currentEntry.externalScore,
+                                    source = currentEntry.externalScoreSource
+                                )
+                            }
                             if (currentEntry.mediaType == MediaType.MOVIE && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
                                 val h = currentEntry.durationMinutes / 60
                                 val m = currentEntry.durationMinutes % 60
@@ -834,11 +846,62 @@ private fun DetailTagsCard(entry: MediaEntry) {
 
 @Composable
 private fun DetailSourceText(entry: MediaEntry) {
+    val srcParts = mutableListOf<String>()
     if (!entry.externalSource.isNullOrBlank()) {
+        srcParts.add("Imported from ${entry.externalSource}" + if (entry.externalId != null) " (ID: ${entry.externalId})" else "")
+    }
+    if (entry.externalScore != null && entry.externalScore > 0f) {
+        val src = entry.externalScoreSource?.takeIf { it.isNotBlank() } ?: "MAL"
+        val scoreStr = if (entry.externalScore % 1.0f == 0.0f) {
+            entry.externalScore.toInt().toString()
+        } else {
+            String.format(Locale.US, "%.1f", entry.externalScore)
+        }
+        srcParts.add("$src Rating: ★ $scoreStr")
+    }
+    if (srcParts.isNotEmpty()) {
         Text(
-            text = "Imported from ${entry.externalSource}" + if (entry.externalId != null) " (ID: ${entry.externalId})" else "",
+            text = srcParts.joinToString(" • "),
             style = MaterialTheme.typography.bodySmall,
             color = LXTextSecondary.copy(alpha = 0.6f)
+        )
+    }
+}
+
+@Composable
+private fun ExternalScoreChip(
+    score: Float,
+    source: String?
+) {
+    val src = source?.takeIf { it.isNotBlank() } ?: "MAL"
+    val scoreStr = if (score % 1.0f == 0.0f) {
+        score.toInt().toString()
+    } else {
+        String.format(Locale.US, "%.1f", score)
+    }
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(LXScoreGold.copy(alpha = 0.12f))
+            .border(
+                width = 1.dp,
+                color = LXScoreGold.copy(alpha = 0.35f),
+                shape = RoundedCornerShape(6.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Star,
+            contentDescription = null,
+            tint = LXScoreGold,
+            modifier = Modifier.size(13.dp)
+        )
+        Spacer(modifier = Modifier.width(3.dp))
+        Text(
+            text = "$scoreStr ($src)",
+            color = LXScoreGold,
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
         )
     }
 }

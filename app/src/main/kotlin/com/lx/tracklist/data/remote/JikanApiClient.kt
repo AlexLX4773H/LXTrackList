@@ -8,6 +8,13 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.URLEncoder
+import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 data class JikanAnimeDetails(
@@ -24,8 +31,17 @@ data class JikanMediaDetails(
     val posterUrl: String?,
     val durationText: String? = null,
     val durationMinutes: Int? = null,
+    val totalEpisodes: Int? = null,
     val totalChapters: Int? = null,
     val totalVolumes: Int? = null,
+    val alternateTitle: String? = null,
+    val airedStartDate: Long? = null,
+    val airedEndDate: Long? = null,
+    val tags: String? = null,
+    val synopsis: String? = null,
+    val isAiring: Boolean? = null,
+    val externalScore: Float? = null,
+    val externalScoreSource: String? = null,
     val type: String? = null,
     val sourceProvider: String = "Jikan"
 )
@@ -150,37 +166,7 @@ object JikanApiClient {
             val dataObj = jsonObject?.getAsJsonObject("data")
                 ?: return Result.failure(Exception("Missing 'data' in Jikan response"))
 
-            val title = dataObj.get("title")?.takeIf { !it.isJsonNull }?.asString
-            val mediaTypeStr = dataObj.get("type")?.takeIf { !it.isJsonNull }?.asString
-
-            val imagesObj = dataObj.getAsJsonObject("images")
-            val webpObj = imagesObj?.getAsJsonObject("webp")
-            val jpgObj = imagesObj?.getAsJsonObject("jpg")
-
-            val posterUrl = webpObj?.get("large_image_url")?.takeIf { !it.isJsonNull }?.asString
-                ?: jpgObj?.get("large_image_url")?.takeIf { !it.isJsonNull }?.asString
-                ?: webpObj?.get("image_url")?.takeIf { !it.isJsonNull }?.asString
-                ?: jpgObj?.get("image_url")?.takeIf { !it.isJsonNull }?.asString
-
-            val durationText = dataObj.get("duration")?.takeIf { !it.isJsonNull }?.asString
-            val durationMinutes = parseDurationMinutes(durationText)
-
-            val totalChapters = dataObj.get("chapters")?.takeIf { !it.isJsonNull }?.asInt
-            val totalVolumes = dataObj.get("volumes")?.takeIf { !it.isJsonNull }?.asInt
-
-            Result.success(
-                JikanMediaDetails(
-                    malId = malId,
-                    title = title,
-                    posterUrl = posterUrl,
-                    durationText = durationText,
-                    durationMinutes = durationMinutes,
-                    totalChapters = totalChapters,
-                    totalVolumes = totalVolumes,
-                    type = mediaTypeStr,
-                    sourceProvider = "Jikan"
-                )
-            )
+            Result.success(parseJikanData(dataObj, fallbackMalId = malId))
         } catch (e: Exception) {
             Log.e(TAG, "Exception querying Jikan $endpoint", e)
             Result.failure(e)
@@ -194,12 +180,22 @@ object JikanApiClient {
               Media(idMal: ${'$'}idMal, type: ${'$'}type) {
                 id
                 idMal
-                title { romaji english }
+                title { romaji english native }
+                synonyms
                 coverImage { extraLarge large }
                 duration
+                episodes
                 chapters
                 volumes
                 format
+                status
+                averageScore
+                meanScore
+                description(asHtml: false)
+                startDate { year month day }
+                endDate { year month day }
+                genres
+                tags { name }
               }
             }
         """.trimIndent()
@@ -239,32 +235,7 @@ object JikanApiClient {
             val mediaObj = dataObj?.getAsJsonObject("Media")
                 ?: return Result.failure(NotFoundException("MAL ID #$malId not found on AniList"))
 
-            val titleObj = mediaObj.getAsJsonObject("title")
-            val title = titleObj?.get("english")?.takeIf { !it.isJsonNull }?.asString
-                ?: titleObj?.get("romaji")?.takeIf { !it.isJsonNull }?.asString
-
-            val coverObj = mediaObj.getAsJsonObject("coverImage")
-            val posterUrl = coverObj?.get("extraLarge")?.takeIf { !it.isJsonNull }?.asString
-                ?: coverObj?.get("large")?.takeIf { !it.isJsonNull }?.asString
-
-            val durationMinutes = mediaObj.get("duration")?.takeIf { !it.isJsonNull }?.asInt
-            val totalChapters = mediaObj.get("chapters")?.takeIf { !it.isJsonNull }?.asInt
-            val totalVolumes = mediaObj.get("volumes")?.takeIf { !it.isJsonNull }?.asInt
-            val format = mediaObj.get("format")?.takeIf { !it.isJsonNull }?.asString
-
-            Result.success(
-                JikanMediaDetails(
-                    malId = malId,
-                    title = title,
-                    posterUrl = posterUrl,
-                    durationText = durationMinutes?.let { "$it min" },
-                    durationMinutes = durationMinutes,
-                    totalChapters = totalChapters,
-                    totalVolumes = totalVolumes,
-                    type = format,
-                    sourceProvider = "AniList"
-                )
-            )
+            Result.success(parseAniListMedia(mediaObj, fallbackMalId = malId))
         } catch (e: Exception) {
             Log.e(TAG, "Exception querying AniList for MAL ID $malId", e)
             Result.failure(e)
@@ -395,37 +366,7 @@ object JikanApiClient {
             val malId = dataObj.get("mal_id")?.takeIf { !it.isJsonNull }?.asLong
                 ?: return Result.failure(NotFoundException("Missing 'mal_id' in Jikan search result"))
 
-            val title = dataObj.get("title")?.takeIf { !it.isJsonNull }?.asString
-            val mediaTypeStr = dataObj.get("type")?.takeIf { !it.isJsonNull }?.asString
-
-            val imagesObj = dataObj.getAsJsonObject("images")
-            val webpObj = imagesObj?.getAsJsonObject("webp")
-            val jpgObj = imagesObj?.getAsJsonObject("jpg")
-
-            val posterUrl = webpObj?.get("large_image_url")?.takeIf { !it.isJsonNull }?.asString
-                ?: jpgObj?.get("large_image_url")?.takeIf { !it.isJsonNull }?.asString
-                ?: webpObj?.get("image_url")?.takeIf { !it.isJsonNull }?.asString
-                ?: jpgObj?.get("image_url")?.takeIf { !it.isJsonNull }?.asString
-
-            val durationText = dataObj.get("duration")?.takeIf { !it.isJsonNull }?.asString
-            val durationMinutes = parseDurationMinutes(durationText)
-
-            val totalChapters = dataObj.get("chapters")?.takeIf { !it.isJsonNull }?.asInt
-            val totalVolumes = dataObj.get("volumes")?.takeIf { !it.isJsonNull }?.asInt
-
-            Result.success(
-                JikanMediaDetails(
-                    malId = malId,
-                    title = title,
-                    posterUrl = posterUrl,
-                    durationText = durationText,
-                    durationMinutes = durationMinutes,
-                    totalChapters = totalChapters,
-                    totalVolumes = totalVolumes,
-                    type = mediaTypeStr,
-                    sourceProvider = "Jikan"
-                )
-            )
+            Result.success(parseJikanData(dataObj, fallbackMalId = malId))
         } catch (e: Exception) {
             Log.e(TAG, "Exception querying Jikan title search $endpoint", e)
             Result.failure(e)
@@ -439,12 +380,22 @@ object JikanApiClient {
               Media(search: ${'$'}search, type: ${'$'}type) {
                 id
                 idMal
-                title { romaji english }
+                title { romaji english native }
+                synonyms
                 coverImage { extraLarge large }
                 duration
+                episodes
                 chapters
                 volumes
                 format
+                status
+                averageScore
+                meanScore
+                description(asHtml: false)
+                startDate { year month day }
+                endDate { year month day }
+                genres
+                tags { name }
               }
             }
         """.trimIndent()
@@ -486,36 +437,277 @@ object JikanApiClient {
 
             val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong
 
-            val titleObj = mediaObj.getAsJsonObject("title")
-            val title = titleObj?.get("english")?.takeIf { !it.isJsonNull }?.asString
-                ?: titleObj?.get("romaji")?.takeIf { !it.isJsonNull }?.asString
-
-            val coverObj = mediaObj.getAsJsonObject("coverImage")
-            val posterUrl = coverObj?.get("extraLarge")?.takeIf { !it.isJsonNull }?.asString
-                ?: coverObj?.get("large")?.takeIf { !it.isJsonNull }?.asString
-
-            val durationMinutes = mediaObj.get("duration")?.takeIf { !it.isJsonNull }?.asInt
-            val totalChapters = mediaObj.get("chapters")?.takeIf { !it.isJsonNull }?.asInt
-            val totalVolumes = mediaObj.get("volumes")?.takeIf { !it.isJsonNull }?.asInt
-            val format = mediaObj.get("format")?.takeIf { !it.isJsonNull }?.asString
-
-            Result.success(
-                JikanMediaDetails(
-                    malId = idMal,
-                    title = title,
-                    posterUrl = posterUrl,
-                    durationText = durationMinutes?.let { "$it min" },
-                    durationMinutes = durationMinutes,
-                    totalChapters = totalChapters,
-                    totalVolumes = totalVolumes,
-                    type = format,
-                    sourceProvider = "AniList"
-                )
-            )
+            Result.success(parseAniListMedia(mediaObj, fallbackMalId = idMal))
         } catch (e: Exception) {
             Log.e(TAG, "Exception querying AniList title search for '$searchTitle'", e)
             Result.failure(e)
         }
+    }
+
+    fun parseJikanData(dataObj: JsonObject, fallbackMalId: Long?): JikanMediaDetails {
+        val malId = dataObj.get("mal_id")?.takeIf { !it.isJsonNull }?.asLong ?: fallbackMalId
+        val title = dataObj.get("title")?.takeIf { !it.isJsonNull }?.asString
+        val mediaTypeStr = dataObj.get("type")?.takeIf { !it.isJsonNull }?.asString
+
+        val imagesObj = dataObj.getAsJsonObject("images")
+        val webpObj = imagesObj?.getAsJsonObject("webp")
+        val jpgObj = imagesObj?.getAsJsonObject("jpg")
+
+        val posterUrl = webpObj?.get("large_image_url")?.takeIf { !it.isJsonNull }?.asString
+            ?: jpgObj?.get("large_image_url")?.takeIf { !it.isJsonNull }?.asString
+            ?: webpObj?.get("image_url")?.takeIf { !it.isJsonNull }?.asString
+            ?: jpgObj?.get("image_url")?.takeIf { !it.isJsonNull }?.asString
+
+        val durationText = dataObj.get("duration")?.takeIf { !it.isJsonNull }?.asString
+        val durationMinutes = parseDurationMinutes(durationText)
+
+        val totalEpisodes = dataObj.get("episodes")?.takeIf { !it.isJsonNull }?.asInt
+        val totalChapters = dataObj.get("chapters")?.takeIf { !it.isJsonNull }?.asInt
+        val totalVolumes = dataObj.get("volumes")?.takeIf { !it.isJsonNull }?.asInt
+
+        // Airing status
+        val airing = dataObj.get("airing")?.takeIf { !it.isJsonNull }?.asBoolean
+        val publishing = dataObj.get("publishing")?.takeIf { !it.isJsonNull }?.asBoolean
+        val statusStr = dataObj.get("status")?.takeIf { !it.isJsonNull }?.asString
+        val isAiring = airing ?: publishing ?: (statusStr?.equals("Currently Airing", ignoreCase = true) == true || statusStr?.equals("Publishing", ignoreCase = true) == true)
+
+        // Broadcast / Published dates
+        val dateContainer = dataObj.getAsJsonObject("aired") ?: dataObj.getAsJsonObject("published")
+        val fromStr = dateContainer?.get("from")?.takeIf { !it.isJsonNull }?.asString
+        val toStr = dateContainer?.get("to")?.takeIf { !it.isJsonNull }?.asString
+        val propObj = dateContainer?.getAsJsonObject("prop")
+        val airedStartDate = parseDateStringOrProp(fromStr, propObj?.getAsJsonObject("from"))
+        val airedEndDate = parseDateStringOrProp(toStr, propObj?.getAsJsonObject("to"))
+
+        // Alternative titles
+        val altList = mutableListOf<String>()
+        val engTitle = dataObj.get("title_english")?.takeIf { !it.isJsonNull }?.asString?.trim()
+        val japTitle = dataObj.get("title_japanese")?.takeIf { !it.isJsonNull }?.asString?.trim()
+        if (!engTitle.isNullOrBlank() && !engTitle.equals(title, ignoreCase = true)) {
+            altList.add(engTitle)
+        }
+        if (!japTitle.isNullOrBlank() && !japTitle.equals(title, ignoreCase = true)) {
+            altList.add(japTitle)
+        }
+        dataObj.getAsJsonArray("title_synonyms")?.forEach { synElem ->
+            val syn = synElem?.takeIf { !it.isJsonNull }?.asString?.trim()
+            if (!syn.isNullOrBlank() && !syn.equals(title, ignoreCase = true) && !altList.contains(syn)) {
+                altList.add(syn)
+            }
+        }
+        dataObj.getAsJsonArray("titles")?.forEach { tElem ->
+            if (tElem.isJsonObject) {
+                val tObj = tElem.asJsonObject
+                val tStr = tObj.get("title")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                if (!tStr.isNullOrBlank() && !tStr.equals(title, ignoreCase = true) && !altList.contains(tStr)) {
+                    altList.add(tStr)
+                }
+            }
+        }
+        val alternateTitle = altList.distinct().joinToString("\n").takeIf { it.isNotBlank() }
+
+        // Tags (genres, themes, demographics, explicit_genres)
+        val tagList = mutableListOf<String>()
+        listOf("genres", "themes", "demographics", "explicit_genres").forEach { arrayKey ->
+            dataObj.getAsJsonArray(arrayKey)?.forEach { item ->
+                if (item.isJsonObject) {
+                    val name = item.asJsonObject.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                    if (!name.isNullOrBlank() && !tagList.contains(name)) {
+                        tagList.add(name)
+                    }
+                }
+            }
+        }
+        val tags = tagList.joinToString(", ").takeIf { it.isNotBlank() }
+
+        // Synopsis / Description
+        val rawSynopsis = dataObj.get("synopsis")?.takeIf { !it.isJsonNull }?.asString
+        val synopsis = cleanSynopsis(rawSynopsis)
+
+        // External Score (MAL score e.g. 7.18)
+        val rawScore = dataObj.get("score")?.takeIf { !it.isJsonNull }?.asFloat
+        val externalScore = rawScore?.takeIf { it > 0f }
+        val externalScoreSource = if (externalScore != null) "MAL" else null
+
+        return JikanMediaDetails(
+            malId = malId,
+            title = title,
+            posterUrl = posterUrl,
+            durationText = durationText,
+            durationMinutes = durationMinutes,
+            totalEpisodes = totalEpisodes,
+            totalChapters = totalChapters,
+            totalVolumes = totalVolumes,
+            alternateTitle = alternateTitle,
+            airedStartDate = airedStartDate,
+            airedEndDate = airedEndDate,
+            tags = tags,
+            synopsis = synopsis,
+            isAiring = isAiring,
+            externalScore = externalScore,
+            externalScoreSource = externalScoreSource,
+            type = mediaTypeStr,
+            sourceProvider = "Jikan"
+        )
+    }
+
+    fun parseAniListMedia(mediaObj: JsonObject, fallbackMalId: Long?): JikanMediaDetails {
+        val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong ?: fallbackMalId
+
+        val titleObj = mediaObj.getAsJsonObject("title")
+        val engTitle = titleObj?.get("english")?.takeIf { !it.isJsonNull }?.asString?.trim()
+        val romajiTitle = titleObj?.get("romaji")?.takeIf { !it.isJsonNull }?.asString?.trim()
+        val nativeTitle = titleObj?.get("native")?.takeIf { !it.isJsonNull }?.asString?.trim()
+        val title = engTitle ?: romajiTitle ?: nativeTitle
+
+        val coverObj = mediaObj.getAsJsonObject("coverImage")
+        val posterUrl = coverObj?.get("extraLarge")?.takeIf { !it.isJsonNull }?.asString
+            ?: coverObj?.get("large")?.takeIf { !it.isJsonNull }?.asString
+
+        val durationMinutes = mediaObj.get("duration")?.takeIf { !it.isJsonNull }?.asInt
+        val totalEpisodes = mediaObj.get("episodes")?.takeIf { !it.isJsonNull }?.asInt
+        val totalChapters = mediaObj.get("chapters")?.takeIf { !it.isJsonNull }?.asInt
+        val totalVolumes = mediaObj.get("volumes")?.takeIf { !it.isJsonNull }?.asInt
+        val format = mediaObj.get("format")?.takeIf { !it.isJsonNull }?.asString
+
+        val statusStr = mediaObj.get("status")?.takeIf { !it.isJsonNull }?.asString
+        val isAiring = statusStr?.equals("RELEASING", ignoreCase = true)
+
+        val airedStartDate = parseAniListDate(mediaObj.getAsJsonObject("startDate"))
+        val airedEndDate = parseAniListDate(mediaObj.getAsJsonObject("endDate"))
+
+        // Alternative titles
+        val altList = mutableListOf<String>()
+        listOfNotNull(engTitle, nativeTitle, romajiTitle).forEach { t ->
+            if (t.isNotBlank() && !t.equals(title, ignoreCase = true) && !altList.contains(t)) {
+                altList.add(t)
+            }
+        }
+        mediaObj.getAsJsonArray("synonyms")?.forEach { synElem ->
+            val syn = synElem?.takeIf { !it.isJsonNull }?.asString?.trim()
+            if (!syn.isNullOrBlank() && !syn.equals(title, ignoreCase = true) && !altList.contains(syn)) {
+                altList.add(syn)
+            }
+        }
+        val alternateTitle = altList.distinct().joinToString("\n").takeIf { it.isNotBlank() }
+
+        // Tags (genres + tags)
+        val tagList = mutableListOf<String>()
+        mediaObj.getAsJsonArray("genres")?.forEach { g ->
+            val name = g?.takeIf { !it.isJsonNull }?.asString?.trim()
+            if (!name.isNullOrBlank() && !tagList.contains(name)) tagList.add(name)
+        }
+        mediaObj.getAsJsonArray("tags")?.forEach { t ->
+            if (t.isJsonObject) {
+                val name = t.asJsonObject.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                if (!name.isNullOrBlank() && !tagList.contains(name)) tagList.add(name)
+            }
+        }
+        val tags = tagList.take(15).joinToString(", ").takeIf { it.isNotBlank() }
+
+        // Synopsis / Description
+        val rawDesc = mediaObj.get("description")?.takeIf { !it.isJsonNull }?.asString
+        val synopsis = cleanSynopsis(rawDesc)
+
+        // External Score (AniList averageScore is out of 100, convert to 10-point scale e.g. 84 -> 8.4)
+        val aniScoreInt = mediaObj.get("averageScore")?.takeIf { !it.isJsonNull }?.asInt
+            ?: mediaObj.get("meanScore")?.takeIf { !it.isJsonNull }?.asInt
+        val externalScore = aniScoreInt?.takeIf { it > 0 }?.let { it / 10.0f }
+        val externalScoreSource = if (externalScore != null) "AniList" else null
+
+        return JikanMediaDetails(
+            malId = idMal,
+            title = title,
+            posterUrl = posterUrl,
+            durationText = durationMinutes?.let { "$it min" },
+            durationMinutes = durationMinutes,
+            totalEpisodes = totalEpisodes,
+            totalChapters = totalChapters,
+            totalVolumes = totalVolumes,
+            alternateTitle = alternateTitle,
+            airedStartDate = airedStartDate,
+            airedEndDate = airedEndDate,
+            tags = tags,
+            synopsis = synopsis,
+            isAiring = isAiring,
+            externalScore = externalScore,
+            externalScoreSource = externalScoreSource,
+            type = format,
+            sourceProvider = "AniList"
+        )
+    }
+
+    fun parseDateStringOrProp(dateStr: String?, propObj: JsonObject?): Long? {
+        if (!dateStr.isNullOrBlank() && !dateStr.startsWith("0000")) {
+            val parsed = parseIsoOrSimpleDate(dateStr)
+            if (parsed != null) return parsed
+        }
+        if (propObj != null) {
+            val year = propObj.get("year")?.takeIf { !it.isJsonNull }?.asInt
+            val month = propObj.get("month")?.takeIf { !it.isJsonNull }?.asInt ?: 1
+            val day = propObj.get("day")?.takeIf { !it.isJsonNull }?.asInt ?: 1
+            if (year != null && year > 0) {
+                val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                    clear()
+                    set(year, (month - 1).coerceIn(0, 11), day.coerceIn(1, 31))
+                }
+                return cal.timeInMillis
+            }
+        }
+        return null
+    }
+
+    fun parseIsoOrSimpleDate(dateStr: String?): Long? {
+        if (dateStr.isNullOrBlank() || dateStr.startsWith("0000")) return null
+        val clean = dateStr.trim()
+        try {
+            if (clean.contains("T")) {
+                return OffsetDateTime.parse(clean).toInstant().toEpochMilli()
+            }
+        } catch (_: Exception) {}
+        try {
+            if (clean.length == 10 && clean.contains("-")) {
+                return LocalDate.parse(clean).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            }
+        } catch (_: Exception) {}
+        try {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+            }
+            val d = sdf.parse(clean)
+            if (d != null) return d.time
+        } catch (_: Exception) {}
+        return null
+    }
+
+    fun parseAniListDate(dateObj: JsonObject?): Long? {
+        if (dateObj == null) return null
+        val year = dateObj.get("year")?.takeIf { !it.isJsonNull }?.asInt ?: return null
+        val month = dateObj.get("month")?.takeIf { !it.isJsonNull }?.asInt ?: 1
+        val day = dateObj.get("day")?.takeIf { !it.isJsonNull }?.asInt ?: 1
+        if (year <= 0) return null
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+            clear()
+            set(year, (month - 1).coerceIn(0, 11), day.coerceIn(1, 31))
+        }
+        return cal.timeInMillis
+    }
+
+    fun cleanSynopsis(text: String?): String? {
+        if (text.isNullOrBlank()) return null
+        val noHtml = text
+            .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+            .replace(Regex("</?[a-zA-Z0-9]+[^>]*>"), "")
+            .replace("&quot;", "\"")
+            .replace("&#039;", "'")
+            .replace("&apos;", "'")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+            .trim()
+        return noHtml.ifBlank { null }
     }
 
     fun parseDurationMinutes(durationStr: String?): Int? {
