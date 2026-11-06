@@ -19,9 +19,11 @@ object NotificationHelper {
 
     const val CHANNEL_IMPORT_EXPORT = "channel_import_export"
     const val CHANNEL_JIKAN_SYNC = "jikan_sync_channel"
+    const val CHANNEL_TMDB_SYNC = "tmdb_sync_channel"
 
     const val NOTIFICATION_ID_IMPORT = 47010
     const val NOTIFICATION_ID_JIKAN = 47007
+    const val NOTIFICATION_ID_TMDB = 47008
 
     fun initNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -44,8 +46,17 @@ object NotificationHelper {
                 description = "Shows real-time progress and completion when syncing posters and metadata from MyAnimeList"
             }
 
+            val tmdbChannel = NotificationChannel(
+                CHANNEL_TMDB_SYNC,
+                "The Movie Database (TMDB) Sync",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Shows real-time progress and completion when syncing posters and metadata from TMDB"
+            }
+
             manager.createNotificationChannel(importChannel)
             manager.createNotificationChannel(jikanChannel)
+            manager.createNotificationChannel(tmdbChannel)
         }
     }
 
@@ -234,6 +245,86 @@ object NotificationHelper {
             getLargeIcon(context)?.let { builder.setLargeIcon(it) }
 
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_JIKAN, builder.build())
+        } catch (_: Exception) {}
+    }
+
+    fun showTmdbSyncProgress(
+        context: Context,
+        completed: Int,
+        total: Int,
+        currentTitle: String
+    ) {
+        if (!hasNotificationPermission(context)) return
+
+        try {
+            val pendingIntent = getMainActivityPendingIntent(context)
+            val text = if (currentTitle.isNotBlank()) "Fetching: $currentTitle" else "Updating TMDB entries..."
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_TMDB_SYNC)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("Syncing TMDB Metadata ($completed/$total)")
+                .setContentText(text)
+                .setProgress(total, completed, false)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+            getLargeIcon(context)?.let { builder.setLargeIcon(it) }
+
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_TMDB, builder.build())
+        } catch (_: Exception) {}
+    }
+
+    fun showTmdbSyncComplete(
+        context: Context,
+        completed: Int,
+        total: Int,
+        updated: Int,
+        failed: Int,
+        lastError: String?,
+        isCancelled: Boolean
+    ) {
+        if (!hasNotificationPermission(context)) return
+
+        try {
+            val pendingIntent = getMainActivityPendingIntent(context)
+            val title: String
+            val content: String
+            val expanded: String
+
+            if (isCancelled) {
+                title = "TMDB Sync Cancelled"
+                content = "$completed / $total completed ($updated updated)"
+                expanded = "Metadata sync was cancelled by user.\n• Processed: $completed / $total\n• Updated: $updated entries"
+            } else if (total == 0) {
+                title = "TMDB Sync"
+                content = if (lastError != null) lastError else "All TMDB entries are already up to date"
+                expanded = if (lastError != null) lastError else "All movie and show entries already have posters and details."
+            } else if (failed == 0) {
+                title = "TMDB Sync Completed"
+                content = "Updated $updated entries with posters & details"
+                expanded = "Successfully synced $total entries from The Movie Database!\n• Updated: $updated entries with official posters, runtimes & episode counts"
+            } else {
+                title = "TMDB Sync Finished"
+                content = "$updated updated, $failed failed"
+                expanded = "Sync finished with issues:\n• Updated: $updated entries\n• Failed: $failed entries${if (!lastError.isNullOrBlank()) "\n• Note: $lastError" else ""}"
+            }
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_TMDB_SYNC)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(title)
+                .setContentText(content)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
+                .setProgress(0, 0, false)
+                .setOngoing(false)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+            getLargeIcon(context)?.let { builder.setLargeIcon(it) }
+
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_TMDB, builder.build())
         } catch (_: Exception) {}
     }
 }

@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
@@ -145,6 +146,7 @@ fun LibraryScreen(
     var showStatusBatchDialog by remember { mutableStateOf(false) }
     var showFavoriteBatchDialog by remember { mutableStateOf(false) }
     var showJikanBatchDialog by remember { mutableStateOf(false) }
+    var showTmdbBatchDialog by remember { mutableStateOf(false) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -532,6 +534,78 @@ fun LibraryScreen(
         )
     }
 
+    // TMDB Sync Selected Entries Dialog
+    if (showTmdbBatchDialog) {
+        AlertDialog(
+            onDismissRequest = { showTmdbBatchDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Sync, contentDescription = null, tint = LXPrimaryGreen)
+                    Text(
+                        text = "TMDB Sync (${state.selectedIds.size} selected)",
+                        color = LXTextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Search and update posters, runtimes, seasons, episodes, and TMDB IDs for the selected ${state.selectedIds.size} entries using The Movie Database (TMDB).",
+                        color = LXTextSecondary
+                    )
+                    Text(
+                        text = "Only Movie and TV Show entries are synced. If an entry already has a TMDB ID, it will be used directly. Otherwise, it will search by title.",
+                        color = LXTextSecondary,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        text = "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                        color = LXTextSecondary.copy(alpha = 0.7f),
+                        fontSize = 11.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        ensureNotificationPermission()
+                        viewModel.syncSelectedWithTmdb(context, forceRefresh = false)
+                        showTmdbBatchDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXPrimaryGreen,
+                        contentColor = LXBackgroundBlack
+                    )
+                ) {
+                    Text("Fetch Missing", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            ensureNotificationPermission()
+                            viewModel.syncSelectedWithTmdb(context, forceRefresh = true)
+                            showTmdbBatchDialog = false
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                        border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f))
+                    ) {
+                        Text("Re-fetch All")
+                    }
+                    TextButton(onClick = { showTmdbBatchDialog = false }) {
+                        Text("Cancel", color = LXTextSecondary)
+                    }
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
+    }
+
     // Advanced Filter Modal Bottom Sheet
     if (state.isFilterSheetOpen) {
         AdvancedFilterSheet(
@@ -570,6 +644,11 @@ fun LibraryScreen(
                         // Jikan Sync Action
                         IconButton(onClick = { showJikanBatchDialog = true }) {
                             Icon(Icons.Default.Sync, contentDescription = "Sync Selected with Jikan", tint = LXPrimaryGreen)
+                        }
+
+                        // TMDB Sync Action
+                        IconButton(onClick = { showTmdbBatchDialog = true }) {
+                            Icon(Icons.Default.Movie, contentDescription = "Sync Selected with TMDB", tint = LXPrimaryGreen)
                         }
 
                         // Range Select
@@ -720,6 +799,11 @@ fun LibraryScreen(
                             icon = Icons.Default.Sync,
                             label = "Jikan Sync",
                             onClick = { showJikanBatchDialog = true }
+                        )
+                        BatchActionButton(
+                            icon = Icons.Default.Movie,
+                            label = "TMDB Sync",
+                            onClick = { showTmdbBatchDialog = true }
                         )
                     }
                 }

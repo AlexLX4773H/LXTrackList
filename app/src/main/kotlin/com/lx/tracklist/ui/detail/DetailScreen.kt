@@ -904,6 +904,9 @@ private fun DetailSourceText(entry: MediaEntry) {
     if (!entry.externalSource.isNullOrBlank()) {
         srcParts.add("Imported from ${entry.externalSource}" + if (entry.externalId != null) " (ID: ${entry.externalId})" else "")
     }
+    if (entry.externalSource?.equals("TMDB", ignoreCase = true) == true || entry.externalScoreSource?.equals("TMDB", ignoreCase = true) == true) {
+        srcParts.add("Data from TMDB")
+    }
     if (entry.externalScore != null && entry.externalScore > 0f) {
         val src = entry.externalScoreSource?.takeIf { it.isNotBlank() } ?: "MAL"
         val scoreStr = if (entry.externalScore % 1.0f == 0.0f) {

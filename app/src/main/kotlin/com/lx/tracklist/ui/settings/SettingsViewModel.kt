@@ -16,6 +16,7 @@ import com.lx.tracklist.data.local.CoverCacheManager
 import com.lx.tracklist.data.local.StorageFileInfo
 import com.lx.tracklist.data.local.StorageHelper
 import com.lx.tracklist.data.remote.JikanSyncManager
+import com.lx.tracklist.data.remote.TmdbSyncManager
 import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
@@ -252,6 +253,7 @@ data class SettingsUiState(
 class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     val jikanSyncState = JikanSyncManager.syncState
+    val tmdbSyncState = TmdbSyncManager.syncState
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -309,6 +311,14 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun cancelJikanSync(context: Context? = null) {
         JikanSyncManager.cancelSync(context)
+    }
+
+    fun startTmdbSync(context: Context, forceRefresh: Boolean = false) {
+        TmdbSyncManager.startSync(context, repository, forceRefresh)
+    }
+
+    fun cancelTmdbSync(context: Context? = null) {
+        TmdbSyncManager.cancelSync(context)
     }
 
     fun updateStartupDefaults(

@@ -11,6 +11,7 @@ import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.remote.JikanSyncManager
+import com.lx.tracklist.data.remote.TmdbSyncManager
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -564,6 +565,18 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         if (selected.isEmpty()) return
         clearSelection()
         JikanSyncManager.startSync(
+            context = context,
+            repository = repository,
+            forceRefresh = forceRefresh,
+            targetEntryIds = selected
+        )
+    }
+
+    fun syncSelectedWithTmdb(context: Context, forceRefresh: Boolean = false) {
+        val selected = _filterState.value.selectedIds.toSet()
+        if (selected.isEmpty()) return
+        clearSelection()
+        TmdbSyncManager.startSync(
             context = context,
             repository = repository,
             forceRefresh = forceRefresh,

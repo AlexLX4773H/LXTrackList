@@ -714,7 +714,7 @@ fun AddEditScreen(
                                 color = LXPrimaryGreen
                             )
                             Text(
-                                text = "Source database and external ID (e.g. MAL ID for Jikan sync)",
+                                text = "Source database and external ID (e.g. TMDB ID for Movies/Shows, MAL ID for Anime/Manga)",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = LXTextSecondary
                             )
@@ -1214,7 +1214,7 @@ fun AddEditScreen(
                     },
                     text = {
                         Text(
-                            text = "Modifying the foreign database ID or source may affect automated poster fetching and synchronization with external databases (such as MyAnimeList / Jikan). Are you sure you want to edit this?",
+                            text = "Modifying the foreign database ID or source may affect automated poster fetching and synchronization with external databases (such as TMDB or MyAnimeList). Are you sure you want to edit this?",
                             color = LXTextSecondary
                         )
                     },

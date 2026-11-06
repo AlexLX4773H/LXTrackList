@@ -5,6 +5,19 @@ plugins {
   alias(libs.plugins.ksp)
 }
 
+val envFile = rootProject.file(".env")
+val envProperties = java.util.Properties()
+if (envFile.exists()) {
+  envFile.forEachLine { line ->
+    val trimmed = line.trim()
+    if (trimmed.isNotEmpty() && !trimmed.startsWith("#") && trimmed.contains("=")) {
+      val key = trimmed.substringBefore("=").trim()
+      val value = trimmed.substringAfter("=").trim()
+      envProperties[key] = value
+    }
+  }
+}
+
 android {
   namespace = "com.lx.tracklist"
   compileSdk = 36
@@ -14,6 +27,13 @@ android {
     targetSdk = 36
     versionCode = 1
     versionName = "0.1.0"
+
+    val tmdbReadToken = envProperties.getProperty("TMDB_READ_ACCESS_TOKEN")
+      ?: envProperties.getProperty("TMDB_API_KEY")
+      ?: ""
+    val tmdbApiKey = envProperties.getProperty("TMDB_API_KEY") ?: ""
+    buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"$tmdbReadToken\"")
+    buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
   }
 
   buildTypes {
@@ -29,7 +49,7 @@ android {
   buildFeatures {
     compose = true
     aidl = false
-    buildConfig = false
+    buildConfig = true
     shaders = false
   }
 
