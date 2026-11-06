@@ -7,6 +7,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
 data class JikanAnimeDetails(
@@ -18,7 +19,7 @@ data class JikanAnimeDetails(
 )
 
 data class JikanMediaDetails(
-    val malId: Long,
+    val malId: Long?,
     val title: String?,
     val posterUrl: String?,
     val durationText: String? = null,
@@ -49,7 +50,7 @@ object JikanApiClient {
     ): Result<JikanAnimeDetails> {
         return fetchMediaDetails(malId, isManga = false, baseUrl = baseUrl).map { media ->
             JikanAnimeDetails(
-                malId = media.malId,
+                malId = media.malId ?: malId,
                 title = media.title,
                 posterUrl = media.posterUrl,
                 durationText = media.durationText,
@@ -266,6 +267,253 @@ object JikanApiClient {
             )
         } catch (e: Exception) {
             Log.e(TAG, "Exception querying AniList for MAL ID $malId", e)
+            Result.failure(e)
+        }
+    }
+
+    fun cleanSearchTitle(title: String): String {
+        val withoutBrackets = title
+            .replace(Regex("\\[.*?\\]"), "")
+            .replace(Regex("\\(.*?\\)"), "")
+            .trim()
+        return withoutBrackets.ifBlank { title.trim() }
+    }
+
+    fun searchMediaDetailsByTitle(
+        title: String,
+        isManga: Boolean,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<JikanMediaDetails> {
+        val rawTitle = title.trim()
+        if (rawTitle.isBlank()) return Result.failure(IllegalArgumentException("Title cannot be blank"))
+
+        val cleanedTitle = cleanSearchTitle(rawTitle)
+        val primaryType = if (isManga) "manga" else "anime"
+
+        // 1. Try Jikan search with cleaned title
+        var jikanResult = queryJikanByTitle(baseUrl, primaryType, cleanedTitle)
+        if (jikanResult.isSuccess && !jikanResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+            val details = jikanResult.getOrNull()
+            Log.d(TAG, "Successfully found by title on Jikan for '$cleanedTitle' (MAL ID ${details?.malId})")
+            return jikanResult
+        }
+
+        // 2. If cleanedTitle differs from rawTitle, try raw title on Jikan
+        if (cleanedTitle != rawTitle) {
+            val rawJikanResult = queryJikanByTitle(baseUrl, primaryType, rawTitle)
+            if (rawJikanResult.isSuccess && !rawJikanResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                val details = rawJikanResult.getOrNull()
+                Log.d(TAG, "Successfully found by raw title on Jikan for '$rawTitle' (MAL ID ${details?.malId})")
+                return rawJikanResult
+            }
+            if (rawJikanResult.isFailure && rawJikanResult.exceptionOrNull() is RateLimitException) {
+                jikanResult = rawJikanResult
+            }
+        }
+
+        val jikanErr = jikanResult.exceptionOrNull()
+        Log.w(TAG, "Jikan title search failed for '$rawTitle': ${jikanErr?.message}. Falling back to AniList...")
+
+        // 3. Fallback to AniList GraphQL search by title
+        var anilistResult = queryAniListByTitle(cleanedTitle, isManga)
+        if (anilistResult.isSuccess && !anilistResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+            val details = anilistResult.getOrNull()
+            Log.d(TAG, "Successfully found by title on AniList for '$cleanedTitle' (MAL ID ${details?.malId})")
+            return anilistResult
+        }
+
+        if (cleanedTitle != rawTitle) {
+            val rawAnilistResult = queryAniListByTitle(rawTitle, isManga)
+            if (rawAnilistResult.isSuccess && !rawAnilistResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                val details = rawAnilistResult.getOrNull()
+                Log.d(TAG, "Successfully found by raw title on AniList for '$rawTitle' (MAL ID ${details?.malId})")
+                return rawAnilistResult
+            }
+        }
+
+        // 4. Cross-fallback on Jikan (e.g. manga if anime or anime if manga)
+        val fallbackType = if (isManga) "anime" else "manga"
+        val jikanCrossResult = queryJikanByTitle(baseUrl, fallbackType, cleanedTitle)
+        if (jikanCrossResult.isSuccess && !jikanCrossResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+            val details = jikanCrossResult.getOrNull()
+            Log.d(TAG, "Successfully found by cross-type title on Jikan for '$cleanedTitle' (MAL ID ${details?.malId})")
+            return jikanCrossResult
+        }
+
+        // 5. Cross-fallback on AniList
+        val anilistCrossResult = queryAniListByTitle(cleanedTitle, !isManga)
+        if (anilistCrossResult.isSuccess && !anilistCrossResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+            val details = anilistCrossResult.getOrNull()
+            Log.d(TAG, "Successfully found by cross-type title on AniList for '$cleanedTitle' (MAL ID ${details?.malId})")
+            return anilistCrossResult
+        }
+
+        val errorSummary = "Jikan search: ${jikanErr?.message ?: "not found"}, AniList search: ${anilistResult.exceptionOrNull()?.message ?: "not found"}"
+        Log.e(TAG, "All title searches failed for '$rawTitle'. $errorSummary")
+        return Result.failure(NotFoundException(errorSummary))
+    }
+
+    private fun queryJikanByTitle(
+        baseUrl: String,
+        type: String, // "anime" or "manga"
+        queryTitle: String
+    ): Result<JikanMediaDetails> {
+        val encodedQuery = URLEncoder.encode(queryTitle, "UTF-8")
+        val endpoint = "${baseUrl.trimEnd('/')}/$type?q=$encodedQuery&limit=1"
+        return try {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json, text/plain, */*")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .get()
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string() ?: ""
+
+            Log.d(TAG, "Jikan title search HTTP $code for $endpoint")
+
+            if (code == 429) {
+                return Result.failure(RateLimitException("Jikan API rate limit (429) for search '$queryTitle'"))
+            }
+            if (code == 404) {
+                return Result.failure(NotFoundException("No Jikan results for '$queryTitle' in /$type/"))
+            }
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("HTTP $code from Jikan: ${bodyString.take(200)}"))
+            }
+
+            val jsonObject = gson.fromJson(bodyString, JsonObject::class.java)
+            val dataArray = jsonObject?.getAsJsonArray("data")
+            if (dataArray == null || dataArray.size() == 0) {
+                return Result.failure(NotFoundException("No search results found for '$queryTitle' on Jikan"))
+            }
+
+            val dataObj = dataArray.get(0).asJsonObject
+            val malId = dataObj.get("mal_id")?.takeIf { !it.isJsonNull }?.asLong
+                ?: return Result.failure(NotFoundException("Missing 'mal_id' in Jikan search result"))
+
+            val title = dataObj.get("title")?.takeIf { !it.isJsonNull }?.asString
+            val mediaTypeStr = dataObj.get("type")?.takeIf { !it.isJsonNull }?.asString
+
+            val imagesObj = dataObj.getAsJsonObject("images")
+            val webpObj = imagesObj?.getAsJsonObject("webp")
+            val jpgObj = imagesObj?.getAsJsonObject("jpg")
+
+            val posterUrl = webpObj?.get("large_image_url")?.takeIf { !it.isJsonNull }?.asString
+                ?: jpgObj?.get("large_image_url")?.takeIf { !it.isJsonNull }?.asString
+                ?: webpObj?.get("image_url")?.takeIf { !it.isJsonNull }?.asString
+                ?: jpgObj?.get("image_url")?.takeIf { !it.isJsonNull }?.asString
+
+            val durationText = dataObj.get("duration")?.takeIf { !it.isJsonNull }?.asString
+            val durationMinutes = parseDurationMinutes(durationText)
+
+            val totalChapters = dataObj.get("chapters")?.takeIf { !it.isJsonNull }?.asInt
+            val totalVolumes = dataObj.get("volumes")?.takeIf { !it.isJsonNull }?.asInt
+
+            Result.success(
+                JikanMediaDetails(
+                    malId = malId,
+                    title = title,
+                    posterUrl = posterUrl,
+                    durationText = durationText,
+                    durationMinutes = durationMinutes,
+                    totalChapters = totalChapters,
+                    totalVolumes = totalVolumes,
+                    type = mediaTypeStr,
+                    sourceProvider = "Jikan"
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying Jikan title search $endpoint", e)
+            Result.failure(e)
+        }
+    }
+
+    fun queryAniListByTitle(searchTitle: String, isManga: Boolean): Result<JikanMediaDetails> {
+        val type = if (isManga) "MANGA" else "ANIME"
+        val query = """
+            query (${'$'}search: String, ${'$'}type: MediaType) {
+              Media(search: ${'$'}search, type: ${'$'}type) {
+                id
+                idMal
+                title { romaji english }
+                coverImage { extraLarge large }
+                duration
+                chapters
+                volumes
+                format
+              }
+            }
+        """.trimIndent()
+
+        val jsonBody = JsonObject().apply {
+            addProperty("query", query)
+            val vars = JsonObject().apply {
+                addProperty("search", searchTitle)
+                addProperty("type", type)
+            }
+            add("variables", vars)
+        }
+
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val requestBody = jsonBody.toString().toRequestBody(mediaType)
+
+        val request = Request.Builder()
+            .url("https://graphql.anilist.co")
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "application/json")
+            .post(requestBody)
+            .build()
+
+        return try {
+            val response = okHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string() ?: ""
+
+            Log.d(TAG, "AniList title search HTTP $code for '$searchTitle' ($type)")
+
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("AniList HTTP $code: ${bodyString.take(200)}"))
+            }
+
+            val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
+            val dataObj = rootObj?.getAsJsonObject("data")
+            val mediaObj = dataObj?.getAsJsonObject("Media")
+                ?: return Result.failure(NotFoundException("Title '$searchTitle' not found on AniList"))
+
+            val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong
+
+            val titleObj = mediaObj.getAsJsonObject("title")
+            val title = titleObj?.get("english")?.takeIf { !it.isJsonNull }?.asString
+                ?: titleObj?.get("romaji")?.takeIf { !it.isJsonNull }?.asString
+
+            val coverObj = mediaObj.getAsJsonObject("coverImage")
+            val posterUrl = coverObj?.get("extraLarge")?.takeIf { !it.isJsonNull }?.asString
+                ?: coverObj?.get("large")?.takeIf { !it.isJsonNull }?.asString
+
+            val durationMinutes = mediaObj.get("duration")?.takeIf { !it.isJsonNull }?.asInt
+            val totalChapters = mediaObj.get("chapters")?.takeIf { !it.isJsonNull }?.asInt
+            val totalVolumes = mediaObj.get("volumes")?.takeIf { !it.isJsonNull }?.asInt
+            val format = mediaObj.get("format")?.takeIf { !it.isJsonNull }?.asString
+
+            Result.success(
+                JikanMediaDetails(
+                    malId = idMal,
+                    title = title,
+                    posterUrl = posterUrl,
+                    durationText = durationMinutes?.let { "$it min" },
+                    durationMinutes = durationMinutes,
+                    totalChapters = totalChapters,
+                    totalVolumes = totalVolumes,
+                    type = format,
+                    sourceProvider = "AniList"
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying AniList title search for '$searchTitle'", e)
             Result.failure(e)
         }
     }

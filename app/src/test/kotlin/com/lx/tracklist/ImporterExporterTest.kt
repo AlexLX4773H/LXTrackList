@@ -803,6 +803,12 @@ class ImporterExporterTest {
         assertNull(JikanApiClient.parseDurationMinutes("Unknown"))
         assertNull(JikanApiClient.parseDurationMinutes(""))
         assertNull(JikanApiClient.parseDurationMinutes(null))
+
+        assertEquals("Attack on Titan", JikanApiClient.cleanSearchTitle("Attack on Titan [1080p]"))
+        assertEquals("One Piece", JikanApiClient.cleanSearchTitle("One Piece (1999)"))
+        assertEquals("Naruto", JikanApiClient.cleanSearchTitle("Naruto [Dub] (TV)"))
+        assertEquals("Bleach", JikanApiClient.cleanSearchTitle("Bleach"))
+        assertEquals("[Official]", JikanApiClient.cleanSearchTitle("[Official]"))
     }
 
     @Test
@@ -814,12 +820,22 @@ class ImporterExporterTest {
         val bookMal = MediaEntry(title = "Novel", mediaType = MediaType.BOOK, status = MediaStatus.WATCHING, externalId = "3000", externalSource = null)
         val anilistEntry = MediaEntry(title = "Anilist", mediaType = MediaType.MANGA, status = MediaStatus.WATCHING, externalId = "30002", externalSource = "ANILIST")
 
+        // Title-only entries without an ID yet
+        val titleOnlyAnime = MediaEntry(title = "Frieren", mediaType = MediaType.ANIME, status = MediaStatus.PLAN_TO_WATCH, externalId = null, externalSource = null)
+        val titleOnlyManga = MediaEntry(title = "Berserk", mediaType = MediaType.MANGA, status = MediaStatus.WATCHING, externalId = null, externalSource = null)
+        val titleOnlyCustomSource = MediaEntry(title = "Custom", mediaType = MediaType.ANIME, status = MediaStatus.PLAN_TO_WATCH, externalId = null, externalSource = "CUSTOM_DB")
+
         assertTrue(JikanSyncManager.isMalSource(animeMal))
         assertTrue(JikanSyncManager.isMalSource(mangaMal))
         assertTrue(JikanSyncManager.isMalSource(manhwaMal))
         assertTrue(JikanSyncManager.isMalSource(movieMal))
         assertTrue(JikanSyncManager.isMalSource(bookMal))
         assertFalse(JikanSyncManager.isMalSource(anilistEntry))
+
+        // Title search eligibility
+        assertTrue(JikanSyncManager.isMalSource(titleOnlyAnime))
+        assertTrue(JikanSyncManager.isMalSource(titleOnlyManga))
+        assertFalse(JikanSyncManager.isMalSource(titleOnlyCustomSource))
 
         assertTrue(JikanSyncManager.isMangaType(MediaType.MANGA))
         assertTrue(JikanSyncManager.isMangaType(MediaType.MANHWA))

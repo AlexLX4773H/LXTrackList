@@ -48,11 +48,20 @@ object JikanSyncManager {
     private var syncJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
+    fun isEligibleMediaForMal(mediaType: MediaType): Boolean {
+        return mediaType == MediaType.ANIME ||
+               mediaType == MediaType.MANGA ||
+               mediaType == MediaType.MANHWA ||
+               mediaType == MediaType.MOVIE ||
+               mediaType == MediaType.SHOW ||
+               mediaType == MediaType.BOOK
+    }
+
     fun isMalSource(entry: MediaEntry): Boolean {
-        val malId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()
-        if (malId.isNullOrBlank() || malId.toLongOrNull() == null) return false
         val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim()
-        return src.isNullOrBlank() || src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)
+        val hasMalSource = src.isNullOrBlank() || src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)
+        val hasMalId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull() != null
+        return hasMalSource && (hasMalId || isEligibleMediaForMal(entry.mediaType))
     }
 
     fun isMangaType(mediaType: MediaType): Boolean {
@@ -61,6 +70,10 @@ object JikanSyncManager {
 
     private fun needsSync(entry: MediaEntry, forceRefresh: Boolean): Boolean {
         if (forceRefresh) return true
+
+        val malId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull()
+        // If it doesn't have a MAL ID yet, it needs sync to fetch the ID and details based on title!
+        if (malId == null) return true
 
         // Missing cover, or starts with leftover "file:" path
         val missingCover = entry.coverImageUri.isNullOrBlank() || entry.coverImageUri.startsWith("file:")
@@ -93,15 +106,15 @@ object JikanSyncManager {
 
             // Find eligible entries across all media types (anime, movies, manga, manhwa, etc.)
             val allEntries = repository.getAllEntriesSync()
-            val malEntries = allEntries.filter { isMalSource(it) }
+            val malEntries = allEntries.filter { isMalSource(it) && it.title.isNotBlank() }
             val eligible = malEntries.filter { needsSync(it, forceRefresh) }
 
             val total = eligible.size
             if (total == 0) {
                 val msg = if (malEntries.isEmpty()) {
-                    "No entries found with MyAnimeList (MAL) as foreign database source."
+                    "No eligible anime or manga entries found to sync."
                 } else {
-                    "All ${malEntries.size} MAL entries already have posters & details."
+                    "All ${malEntries.size} entries already have MAL IDs, posters & details."
                 }
                 _syncState.update {
                     it.copy(
@@ -151,13 +164,17 @@ object JikanSyncManager {
             for (entry in eligible) {
                 if (syncJob?.isCancelled == true) break
 
-                val malId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull() ?: continue
+                val malId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull()
                 val isManga = isMangaType(entry.mediaType)
 
                 _syncState.update {
                     it.copy(
                         currentTitle = entry.title,
-                        statusMessage = "Fetching ${entry.title} (#$malId)..."
+                        statusMessage = if (malId != null) {
+                            "Fetching ${entry.title} (#$malId)..."
+                        } else {
+                            "Searching MAL for ${entry.title}..."
+                        }
                     )
                 }
 
@@ -166,19 +183,38 @@ object JikanSyncManager {
                 // Rate limiting delay
                 delay(RATE_LIMIT_DELAY_MS)
 
-                // Attempt fetch (Jikan with automatic AniList fallback)
-                var detailsResult = JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga)
+                // Attempt fetch by ID if present, otherwise search by title
+                var detailsResult = if (malId != null) {
+                    JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga)
+                } else {
+                    JikanApiClient.searchMediaDetailsByTitle(title = entry.title, isManga = isManga)
+                }
+
                 if (detailsResult.isFailure && detailsResult.exceptionOrNull() is RateLimitException) {
                     delay(3000L)
-                    detailsResult = JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga)
+                    detailsResult = if (malId != null) {
+                        JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga)
+                    } else {
+                        JikanApiClient.searchMediaDetailsByTitle(title = entry.title, isManga = isManga)
+                    }
                 }
 
                 if (detailsResult.isSuccess) {
                     val details = detailsResult.getOrNull()
-                    Log.d(TAG, "Successfully fetched #${malId} (${entry.title}): poster=${details?.posterUrl}, duration=${details?.durationMinutes}, provider=${details?.sourceProvider}")
+                    Log.d(TAG, "Successfully resolved entry '${entry.title}' (malId=${details?.malId}): poster=${details?.posterUrl}, duration=${details?.durationMinutes}, provider=${details?.sourceProvider}")
                     if (details != null) {
                         var hasChanges = false
                         var finalCoverUri: String? = entry.coverImageUri
+                        var finalExternalId: String? = entry.externalId
+                        var finalExternalSource: String? = entry.externalSource
+
+                        // If it had no MAL ID, populate it now from search result!
+                        if (malId == null && details.malId != null) {
+                            val idStr = details.malId.toString()
+                            finalExternalId = idStr
+                            finalExternalSource = "MAL"
+                            hasChanges = true
+                        }
 
                         // Set poster URL if missing, leftover file: URI, or force refreshed
                         val needsPoster = entry.coverImageUri.isNullOrBlank() || entry.coverImageUri.startsWith("file:") || forceRefresh
@@ -243,7 +279,8 @@ object JikanSyncManager {
                                 durationMinutes = newDurationMinutes,
                                 totalChapters = newTotalChapters,
                                 totalVolumes = newTotalVolumes,
-                                externalSource = entry.externalSource ?: "MAL",
+                                externalId = finalExternalId,
+                                externalSource = finalExternalSource ?: entry.externalSource,
                                 updatedAt = System.currentTimeMillis()
                             )
                             repository.update(updatedEntry)
@@ -252,7 +289,7 @@ object JikanSyncManager {
                     }
                 } else {
                     val err = detailsResult.exceptionOrNull()?.message ?: "Unknown error"
-                    Log.e(TAG, "Failed to sync entry ${entry.title} (#$malId): $err", detailsResult.exceptionOrNull())
+                    Log.e(TAG, "Failed to sync entry ${entry.title} (malId=$malId): $err", detailsResult.exceptionOrNull())
                     lastError = err
                     failed++
                 }
