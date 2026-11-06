@@ -1373,4 +1373,118 @@ class FeaturesTest {
 
         assertTrue("Anime movie imported from MAL should be identified as Anime", isAnime)
     }
+
+    @Test
+    fun testExternalSyncWebUrlGeneration() {
+        // MAL anime
+        val animeItem = com.lx.tracklist.data.remote.JikanMediaDetails(
+            malId = 5114L,
+            title = "Fullmetal Alchemist: Brotherhood",
+            posterUrl = null,
+            type = "TV"
+        )
+        assertEquals("https://myanimelist.net/anime/5114", animeItem.webUrl)
+
+        // MAL manga
+        val mangaItem = com.lx.tracklist.data.remote.JikanMediaDetails(
+            malId = 3037L,
+            title = "Rosario+Vampire: Season II",
+            posterUrl = null,
+            totalChapters = 67,
+            type = "Manga"
+        )
+        assertEquals("https://myanimelist.net/manga/3037", mangaItem.webUrl)
+
+        // Custom URL provided from API
+        val customUrlItem = com.lx.tracklist.data.remote.JikanMediaDetails(
+            malId = 1234L,
+            title = "Custom",
+            posterUrl = null,
+            url = "https://myanimelist.net/manga/1234/custom"
+        )
+        assertEquals("https://myanimelist.net/manga/1234/custom", customUrlItem.webUrl)
+
+        // TMDB movie
+        val tmdbMovie = com.lx.tracklist.data.remote.TmdbSearchResult(
+            tmdbId = 550L,
+            title = "Fight Club",
+            isMovie = true
+        )
+        assertEquals("https://www.themoviedb.org/movie/550", tmdbMovie.webUrl)
+
+        // TMDB tv
+        val tmdbTv = com.lx.tracklist.data.remote.TmdbSearchResult(
+            tmdbId = 1399L,
+            title = "Game of Thrones",
+            isMovie = false
+        )
+        assertEquals("https://www.themoviedb.org/tv/1399", tmdbTv.webUrl)
+    }
+
+    @Test
+    fun testRelatedMediaItemExternalSourceId() {
+        val malRelated = com.lx.tracklist.data.model.RelatedMediaItem(
+            title = "Lazy Dungeon Master",
+            relationship = "Adaptation",
+            externalId = "86779",
+            externalSource = "MAL",
+            mediaType = MediaType.MANGA
+        )
+        assertEquals("86779", malRelated.externalId)
+        assertEquals("MAL", malRelated.externalSource)
+
+        val tmdbRelated = com.lx.tracklist.data.model.RelatedMediaItem(
+            title = "Interstellar",
+            relationship = "Related",
+            externalId = "157336",
+            externalSource = "TMDB",
+            mediaType = MediaType.MOVIE
+        )
+        assertEquals("157336", tmdbRelated.externalId)
+        assertEquals("TMDB", tmdbRelated.externalSource)
+
+        // Test AniList relations parser logic with idMal vs aniList id
+        val aniListMediaJson = com.google.gson.JsonObject().apply {
+            val relations = com.google.gson.JsonObject().apply {
+                val edges = com.google.gson.JsonArray().apply {
+                    val edge1 = com.google.gson.JsonObject().apply {
+                        addProperty("relationType", "ADAPTATION")
+                        val node = com.google.gson.JsonObject().apply {
+                            addProperty("id", 1001L)
+                            addProperty("idMal", 2002L)
+                            val titleObj = com.google.gson.JsonObject().apply {
+                                addProperty("english", "With MAL ID")
+                            }
+                            add("title", titleObj)
+                            addProperty("type", "MANGA")
+                        }
+                        add("node", node)
+                    }
+                    val edge2 = com.google.gson.JsonObject().apply {
+                        addProperty("relationType", "SEQUEL")
+                        val node = com.google.gson.JsonObject().apply {
+                            addProperty("id", 3003L)
+                            val titleObj = com.google.gson.JsonObject().apply {
+                                addProperty("english", "AniList Only")
+                            }
+                            add("title", titleObj)
+                            addProperty("type", "ANIME")
+                        }
+                        add("node", node)
+                    }
+                    add(edge1)
+                    add(edge2)
+                }
+                add("edges", edges)
+            }
+            add("relations", relations)
+        }
+
+        val parsed = com.lx.tracklist.data.remote.JikanApiClient.parseAniListRelations(aniListMediaJson)
+        assertEquals(2, parsed.size)
+        assertEquals("2002", parsed[0].externalId)
+        assertEquals("MAL", parsed[0].externalSource)
+        assertEquals("3003", parsed[1].externalId)
+        assertEquals("AniList", parsed[1].externalSource)
+    }
 }

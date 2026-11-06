@@ -45,8 +45,19 @@ data class JikanMediaDetails(
     val externalScore: Float? = null,
     val externalScoreSource: String? = null,
     val type: String? = null,
-    val sourceProvider: String = "Jikan"
-)
+    val sourceProvider: String = "Jikan",
+    val url: String? = null
+) {
+    val webUrl: String?
+        get() {
+            if (!url.isNullOrBlank()) return url
+            val id = malId?.takeIf { it > 0 } ?: return null
+            val typeLower = type?.lowercase(Locale.ROOT) ?: ""
+            val isMangaType = typeLower in listOf("manga", "manhwa", "manhua", "light novel", "novel", "one-shot", "doujinshi") ||
+                    (totalChapters != null && totalChapters > 0)
+            return if (isMangaType) "https://myanimelist.net/manga/$id" else "https://myanimelist.net/anime/$id"
+        }
+}
 
 object JikanApiClient {
 
@@ -445,6 +456,7 @@ object JikanApiClient {
               Media(search: ${'$'}search, type: ${'$'}type) {
                 id
                 idMal
+                siteUrl
                 title { romaji english native }
                 synonyms
                 coverImage { extraLarge large }
@@ -612,7 +624,8 @@ object JikanApiClient {
             externalScore = externalScore,
             externalScoreSource = externalScoreSource,
             type = mediaTypeStr,
-            sourceProvider = "Jikan"
+            sourceProvider = "Jikan",
+            url = dataObj.get("url")?.takeIf { !it.isJsonNull }?.asString
         )
     }
 
@@ -698,7 +711,8 @@ object JikanApiClient {
             externalScore = externalScore,
             externalScoreSource = externalScoreSource,
             type = format,
-            sourceProvider = "AniList"
+            sourceProvider = "AniList",
+            url = mediaObj.get("siteUrl")?.takeIf { !it.isJsonNull }?.asString
         )
     }
 
@@ -905,7 +919,7 @@ object JikanApiClient {
                     title = title,
                     relationship = formattedRel,
                     externalId = finalExternalId,
-                    externalSource = "MAL",
+                    externalSource = if (idMal != null) "MAL" else "AniList",
                     mediaType = mediaType,
                     posterUrl = posterUrl,
                     releaseYear = releaseYear,
@@ -933,6 +947,7 @@ object JikanApiClient {
                     node {
                       id
                       idMal
+                      siteUrl
                       title {
                         english
                         romaji
@@ -1011,6 +1026,7 @@ object JikanApiClient {
                     node {
                       id
                       idMal
+                      siteUrl
                       title {
                         english
                         romaji

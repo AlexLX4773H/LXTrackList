@@ -49,7 +49,10 @@ data class TmdbSearchResult(
     val releaseYear: String? = null,
     val voteAverage: Float? = null,
     val isMovie: Boolean
-)
+) {
+    val webUrl: String
+        get() = if (isMovie) "https://www.themoviedb.org/movie/$tmdbId" else "https://www.themoviedb.org/tv/$tmdbId"
+}
 
 object TmdbApiClient {
 

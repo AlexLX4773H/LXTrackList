@@ -1,7 +1,9 @@
 package com.lx.tracklist.ui.edit
 
 import android.app.DatePickerDialog
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,19 +29,24 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
@@ -87,8 +94,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1816,6 +1825,18 @@ private fun ExternalDbSyncDialog(
     if (!isOpen) return
 
     var searchInput by remember(initialQuery) { mutableStateOf(initialQuery) }
+    var expandedItemKey by remember { mutableStateOf<String?>(null) }
+    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+
+    fun openExternalUrl(url: String?) {
+        if (url.isNullOrBlank()) return
+        try {
+            uriHandler.openUri(url)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Could not open browser", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1853,8 +1874,16 @@ private fun ExternalDbSyncDialog(
                     label = { Text("Search Title") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {
+                        expandedItemKey = null
+                        onSearch(searchInput, syncState.selectedSource)
+                    }),
                     trailingIcon = {
-                        IconButton(onClick = { onSearch(searchInput, syncState.selectedSource) }) {
+                        IconButton(onClick = {
+                            expandedItemKey = null
+                            onSearch(searchInput, syncState.selectedSource)
+                        }) {
                             Icon(Icons.Default.Search, contentDescription = "Search", tint = LXPrimaryGreen)
                         }
                     },
@@ -1878,6 +1907,7 @@ private fun ExternalDbSyncDialog(
                         selected = syncState.selectedSource == ExternalDbSource.MAL,
                         onClick = {
                             if (syncState.selectedSource != ExternalDbSource.MAL) {
+                                expandedItemKey = null
                                 onSearch(searchInput, ExternalDbSource.MAL)
                             }
                         },
@@ -1894,6 +1924,7 @@ private fun ExternalDbSyncDialog(
                         selected = syncState.selectedSource == ExternalDbSource.TMDB,
                         onClick = {
                             if (syncState.selectedSource != ExternalDbSource.TMDB) {
+                                expandedItemKey = null
                                 onSearch(searchInput, ExternalDbSource.TMDB)
                             }
                         },
@@ -1923,7 +1954,7 @@ private fun ExternalDbSyncDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(340.dp)
+                        .height(380.dp)
                 ) {
                     if (syncState.isSearching) {
                         Column(
@@ -1964,89 +1995,268 @@ private fun ExternalDbSyncDialog(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 items(syncState.malResults) { item ->
+                                    val itemKey = "mal_${item.malId}_${item.title}"
+                                    val isExpanded = expandedItemKey == itemKey
+                                    val webUrl = item.webUrl
+
                                     Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable { onSelectMal(item) },
+                                            .animateContentSize(),
                                         colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
                                         shape = RoundedCornerShape(8.dp),
-                                        border = BorderStroke(1.dp, LXBorder)
+                                        border = BorderStroke(1.dp, if (isExpanded) LXPrimaryGreen.copy(alpha = 0.6f) else LXBorder)
                                     ) {
-                                        Row(
+                                        Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .padding(8.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                            verticalAlignment = Alignment.CenterVertically
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            if (!item.posterUrl.isNullOrBlank()) {
-                                                AsyncImage(
-                                                    model = item.posterUrl,
-                                                    contentDescription = null,
-                                                    modifier = Modifier
-                                                        .size(width = 46.dp, height = 64.dp)
-                                                        .clip(RoundedCornerShape(4.dp)),
-                                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                                )
-                                            } else {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(width = 46.dp, height = 64.dp)
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .background(LXBackgroundBlack),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Icon(Icons.Default.Image, contentDescription = null, tint = LXTextSecondary.copy(alpha = 0.5f))
+                                            // Header row: Clickable to expand/collapse
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .clickable { expandedItemKey = if (isExpanded) null else itemKey },
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                if (!item.posterUrl.isNullOrBlank()) {
+                                                    AsyncImage(
+                                                        model = item.posterUrl,
+                                                        contentDescription = null,
+                                                        modifier = Modifier
+                                                            .size(width = 46.dp, height = 64.dp)
+                                                            .clip(RoundedCornerShape(4.dp)),
+                                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                    )
+                                                } else {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(width = 46.dp, height = 64.dp)
+                                                            .clip(RoundedCornerShape(4.dp))
+                                                            .background(LXBackgroundBlack),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(Icons.Default.Image, contentDescription = null, tint = LXTextSecondary.copy(alpha = 0.5f))
+                                                    }
                                                 }
-                                            }
 
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = item.title ?: "Unknown",
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = LXTextPrimary,
-                                                    fontSize = 13.sp,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                if (!item.alternateTitle.isNullOrBlank()) {
+                                                Column(modifier = Modifier.weight(1f)) {
                                                     Text(
-                                                        text = item.alternateTitle.replace("\n", " • "),
-                                                        color = LXTextSecondary,
-                                                        fontSize = 11.sp,
-                                                        maxLines = 1,
+                                                        text = item.title ?: "Unknown",
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = LXTextPrimary,
+                                                        fontSize = 13.sp,
+                                                        maxLines = if (isExpanded) Int.MAX_VALUE else 2,
                                                         overflow = TextOverflow.Ellipsis
                                                     )
+                                                    if (!item.alternateTitle.isNullOrBlank()) {
+                                                        Text(
+                                                            text = item.alternateTitle.replace("\n", " • "),
+                                                            color = LXTextSecondary,
+                                                            fontSize = 11.sp,
+                                                            maxLines = if (isExpanded) 3 else 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Row(
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        if (item.externalScore != null && item.externalScore > 0f) {
+                                                            Text("★ ${item.externalScore}", color = LXScoreGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                        if (item.totalEpisodes != null && item.totalEpisodes > 0) {
+                                                            Text("${item.totalEpisodes} eps", color = LXTextSecondary, fontSize = 11.sp)
+                                                        } else if (item.totalChapters != null && item.totalChapters > 0) {
+                                                            Text("${item.totalChapters} ch", color = LXTextSecondary, fontSize = 11.sp)
+                                                        }
+                                                        if (item.type != null) {
+                                                            Text(item.type, color = LXPrimaryGreen, fontSize = 11.sp)
+                                                        }
+                                                    }
                                                 }
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                Row(
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
+
+                                                Column(
+                                                    horizontalAlignment = Alignment.End,
+                                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                                 ) {
-                                                    if (item.externalScore != null && item.externalScore > 0f) {
-                                                        Text("★ ${item.externalScore}", color = LXScoreGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    Button(
+                                                        onClick = { onSelectMal(item) },
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = LXPrimaryGreen,
+                                                            contentColor = LXBackgroundBlack
+                                                        ),
+                                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        modifier = Modifier.height(28.dp)
+                                                    ) {
+                                                        Text("Apply", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                     }
-                                                    if (item.totalEpisodes != null && item.totalEpisodes > 0) {
-                                                        Text("${item.totalEpisodes} eps", color = LXTextSecondary, fontSize = 11.sp)
-                                                    } else if (item.totalChapters != null && item.totalChapters > 0) {
-                                                        Text("${item.totalChapters} ch", color = LXTextSecondary, fontSize = 11.sp)
-                                                    }
-                                                    if (item.type != null) {
-                                                        Text(item.type, color = LXPrimaryGreen, fontSize = 11.sp)
+
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                    ) {
+                                                        if (webUrl != null) {
+                                                            IconButton(
+                                                                onClick = { openExternalUrl(webUrl) },
+                                                                modifier = Modifier.size(26.dp)
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                                                    contentDescription = "Open in MyAnimeList",
+                                                                    tint = LXTextSecondary,
+                                                                    modifier = Modifier.size(16.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                        IconButton(
+                                                            onClick = { expandedItemKey = if (isExpanded) null else itemKey },
+                                                            modifier = Modifier.size(26.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                                                contentDescription = if (isExpanded) "Collapse" else "Expand details",
+                                                                tint = LXPrimaryGreen,
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
 
-                                            Button(
-                                                onClick = { onSelectMal(item) },
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = LXPrimaryGreen,
-                                                    contentColor = LXBackgroundBlack
-                                                ),
-                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                                shape = RoundedCornerShape(6.dp)
-                                            ) {
-                                                Text("Apply", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            // Expanded details
+                                            if (isExpanded) {
+                                                HorizontalDivider(color = LXBorder.copy(alpha = 0.6f))
+
+                                                Column(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    if (!item.alternateTitle.isNullOrBlank()) {
+                                                        Text(
+                                                            text = "Alternative Titles:",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = LXTextSecondary
+                                                        )
+                                                        Text(
+                                                            text = item.alternateTitle.lines().filter { it.isNotBlank() }.joinToString("\n• ", prefix = "• "),
+                                                            fontSize = 11.sp,
+                                                            color = LXTextPrimary.copy(alpha = 0.9f)
+                                                        )
+                                                    }
+
+                                                    val dateRange = formatDateRange(item.airedStartDate, item.airedEndDate)
+                                                    if (dateRange != null) {
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Text("Aired:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = LXTextSecondary)
+                                                            Text(dateRange, fontSize = 11.sp, color = LXTextPrimary)
+                                                        }
+                                                    }
+
+                                                    if (item.isAiring != null) {
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Text("Status:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = LXTextSecondary)
+                                                            Text(
+                                                                text = if (item.isAiring) "Publishing / Airing" else "Finished",
+                                                                fontSize = 11.sp,
+                                                                color = if (item.isAiring) LXPrimaryGreen else LXTextPrimary
+                                                            )
+                                                        }
+                                                    }
+
+                                                    if (item.totalVolumes != null && item.totalVolumes > 0) {
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Text("Volumes:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = LXTextSecondary)
+                                                            Text("${item.totalVolumes} vol", fontSize = 11.sp, color = LXTextPrimary)
+                                                        }
+                                                    }
+
+                                                    if (item.durationMinutes != null && item.durationMinutes > 0) {
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Text("Duration:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = LXTextSecondary)
+                                                            Text("${item.durationMinutes} min/ep", fontSize = 11.sp, color = LXTextPrimary)
+                                                        }
+                                                    }
+
+                                                    if (!item.tags.isNullOrBlank()) {
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Text("Genres:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = LXTextSecondary)
+                                                            Text(item.tags, fontSize = 11.sp, color = LXTextPrimary)
+                                                        }
+                                                    }
+
+                                                    if (!item.synopsis.isNullOrBlank()) {
+                                                        Spacer(modifier = Modifier.height(2.dp))
+                                                        Column(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .background(LXBackgroundBlack, RoundedCornerShape(6.dp))
+                                                                .padding(8.dp)
+                        ) {
+                            Text(
+                                                                text = "Synopsis",
+                                                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = LXPrimaryGreen
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                                                text = item.synopsis,
+                                                                fontSize = 11.sp,
+                                                                color = LXTextPrimary.copy(alpha = 0.9f),
+                                                                lineHeight = 16.sp
+                                                            )
+                                                        }
+                                                    }
+
+                                                    Spacer(modifier = Modifier.height(2.dp))
+
+                                                    // Bottom expanded actions
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        if (webUrl != null) {
+                                                            OutlinedButton(
+                                                                onClick = { openExternalUrl(webUrl) },
+                                                                modifier = Modifier
+                                                                    .weight(1f)
+                                                                    .height(34.dp),
+                                                                shape = RoundedCornerShape(6.dp),
+                                                                border = BorderStroke(1.dp, LXBorder),
+                                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                                            ) {
+                                                                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                                Spacer(modifier = Modifier.width(6.dp))
+                                                                Text("Open on MAL", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                                            }
+                                                        }
+
+                                                        Button(
+                                                            onClick = { onSelectMal(item) },
+                                                            modifier = Modifier
+                                                                .weight(1f)
+                                                                .height(34.dp),
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            colors = ButtonDefaults.buttonColors(
+                                                                containerColor = LXPrimaryGreen,
+                                                                contentColor = LXBackgroundBlack
+                                                            ),
+                                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                                        ) {
+                                                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text("Apply", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -2065,85 +2275,225 @@ private fun ExternalDbSyncDialog(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 items(syncState.tmdbResults) { item ->
+                                    val itemKey = "tmdb_${item.tmdbId}_${item.title}"
+                                    val isExpanded = expandedItemKey == itemKey
+                                    val webUrl = item.webUrl
+
                                     Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable { onSelectTmdb(item) },
+                                            .animateContentSize(),
                                         colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
                                         shape = RoundedCornerShape(8.dp),
-                                        border = BorderStroke(1.dp, LXBorder)
+                                        border = BorderStroke(1.dp, if (isExpanded) LXPrimaryGreen.copy(alpha = 0.6f) else LXBorder)
                                     ) {
-                                        Row(
+                                        Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .padding(8.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                            verticalAlignment = Alignment.CenterVertically
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            if (!item.posterUrl.isNullOrBlank()) {
-                                                AsyncImage(
-                                                    model = item.posterUrl,
-                                                    contentDescription = null,
-                                                    modifier = Modifier
-                                                        .size(width = 46.dp, height = 64.dp)
-                                                        .clip(RoundedCornerShape(4.dp)),
-                                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
-                                                )
-                                            } else {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(width = 46.dp, height = 64.dp)
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .background(LXBackgroundBlack),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Icon(Icons.Default.Image, contentDescription = null, tint = LXTextSecondary.copy(alpha = 0.5f))
+                                            // Header row: Clickable to expand/collapse
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .clickable { expandedItemKey = if (isExpanded) null else itemKey },
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                if (!item.posterUrl.isNullOrBlank()) {
+                                                    AsyncImage(
+                                                        model = item.posterUrl,
+                                                        contentDescription = null,
+                                                        modifier = Modifier
+                                                            .size(width = 46.dp, height = 64.dp)
+                                                            .clip(RoundedCornerShape(4.dp)),
+                                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                    )
+                                                } else {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(width = 46.dp, height = 64.dp)
+                                                            .clip(RoundedCornerShape(4.dp))
+                                                            .background(LXBackgroundBlack),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(Icons.Default.Image, contentDescription = null, tint = LXTextSecondary.copy(alpha = 0.5f))
+                                                    }
                                                 }
-                                            }
 
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = item.title,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = LXTextPrimary,
-                                                    fontSize = 13.sp,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                if (!item.originalTitle.isNullOrBlank() && item.originalTitle != item.title) {
+                                                Column(modifier = Modifier.weight(1f)) {
                                                     Text(
-                                                        text = item.originalTitle,
-                                                        color = LXTextSecondary,
-                                                        fontSize = 11.sp,
-                                                        maxLines = 1,
+                                                        text = item.title,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = LXTextPrimary,
+                                                        fontSize = 13.sp,
+                                                        maxLines = if (isExpanded) Int.MAX_VALUE else 2,
                                                         overflow = TextOverflow.Ellipsis
                                                     )
+                                                    if (!item.originalTitle.isNullOrBlank() && item.originalTitle != item.title) {
+                                                        Text(
+                                                            text = item.originalTitle,
+                                                            color = LXTextSecondary,
+                                                            fontSize = 11.sp,
+                                                            maxLines = if (isExpanded) 3 else 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Row(
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        if (item.voteAverage != null && item.voteAverage > 0f) {
+                                                            Text("★ ${String.format(Locale.US, "%.1f", item.voteAverage)}", color = LXScoreGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                        if (!item.releaseYear.isNullOrBlank()) {
+                                                            Text(item.releaseYear, color = LXTextSecondary, fontSize = 11.sp)
+                                                        }
+                                                        Text(if (item.isMovie) "Movie" else "TV Show", color = LXPrimaryGreen, fontSize = 11.sp)
+                                                    }
                                                 }
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                Row(
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
+
+                                                Column(
+                                                    horizontalAlignment = Alignment.End,
+                                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                                 ) {
-                                                    if (item.voteAverage != null && item.voteAverage > 0f) {
-                                                        Text("★ ${String.format(Locale.US, "%.1f", item.voteAverage)}", color = LXScoreGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    Button(
+                                                        onClick = { onSelectTmdb(item) },
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = LXPrimaryGreen,
+                                                            contentColor = LXBackgroundBlack
+                                                        ),
+                                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        modifier = Modifier.height(28.dp)
+                                                    ) {
+                                                        Text("Apply", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                     }
-                                                    if (!item.releaseYear.isNullOrBlank()) {
-                                                        Text(item.releaseYear, color = LXTextSecondary, fontSize = 11.sp)
+
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                    ) {
+                                                        IconButton(
+                                                            onClick = { openExternalUrl(webUrl) },
+                                                            modifier = Modifier.size(26.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                                                contentDescription = "Open on TMDB",
+                                                                tint = LXTextSecondary,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                        }
+                                                        IconButton(
+                                                            onClick = { expandedItemKey = if (isExpanded) null else itemKey },
+                                                            modifier = Modifier.size(26.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                                                contentDescription = if (isExpanded) "Collapse" else "Expand details",
+                                                                tint = LXPrimaryGreen,
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        }
                                                     }
-                                                    Text(if (item.isMovie) "Movie" else "TV Show", color = LXPrimaryGreen, fontSize = 11.sp)
                                                 }
                                             }
 
-                                            Button(
-                                                onClick = { onSelectTmdb(item) },
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = LXPrimaryGreen,
-                                                    contentColor = LXBackgroundBlack
-                                                ),
-                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                                shape = RoundedCornerShape(6.dp)
-                                            ) {
-                                                Text("Apply", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            // Expanded details
+                                            if (isExpanded) {
+                                                HorizontalDivider(color = LXBorder.copy(alpha = 0.6f))
+
+                                                Column(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    if (!item.originalTitle.isNullOrBlank() && item.originalTitle != item.title) {
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Text("Original Title:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = LXTextSecondary)
+                                                            Text(item.originalTitle, fontSize = 11.sp, color = LXTextPrimary)
+                                                        }
+                                                    }
+
+                                                    if (!item.releaseYear.isNullOrBlank()) {
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Text("Release Year:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = LXTextSecondary)
+                                                            Text(item.releaseYear, fontSize = 11.sp, color = LXTextPrimary)
+                                                        }
+                                                    }
+
+                                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                        Text("Type:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = LXTextSecondary)
+                                                        Text(if (item.isMovie) "Movie" else "TV Show", fontSize = 11.sp, color = LXPrimaryGreen)
+                                                    }
+
+                                                    if (!item.overview.isNullOrBlank()) {
+                                                        Spacer(modifier = Modifier.height(2.dp))
+                                                        Column(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .background(LXBackgroundBlack, RoundedCornerShape(6.dp))
+                                                                .padding(8.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = "Overview",
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = LXPrimaryGreen
+                                                            )
+                                                            Spacer(modifier = Modifier.height(4.dp))
+                                                            Text(
+                                                                text = item.overview,
+                                                                fontSize = 11.sp,
+                                                                color = LXTextPrimary.copy(alpha = 0.9f),
+                                                                lineHeight = 16.sp
+                                                            )
+                                                        }
+                                                    }
+
+                                                    Spacer(modifier = Modifier.height(2.dp))
+
+                                                    // Bottom expanded actions
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        OutlinedButton(
+                                                            onClick = { openExternalUrl(webUrl) },
+                                                            modifier = Modifier
+                                                                .weight(1f)
+                                                                .height(34.dp),
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            border = BorderStroke(1.dp, LXBorder),
+                                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                                        ) {
+                                                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text("Open on TMDB", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                                        }
+
+                                                        Button(
+                                                            onClick = { onSelectTmdb(item) },
+                                                            modifier = Modifier
+                                                                .weight(1f)
+                                                                .height(34.dp),
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            colors = ButtonDefaults.buttonColors(
+                                                                containerColor = LXPrimaryGreen,
+                                                                contentColor = LXBackgroundBlack
+                                                            ),
+                                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                                        ) {
+                                                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text("Apply", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -2163,4 +2513,15 @@ private fun ExternalDbSyncDialog(
         containerColor = LXSurfaceBlack,
         shape = RoundedCornerShape(12.dp)
     )
+}
+
+private fun formatDateRange(startDate: Long?, endDate: Long?): String? {
+    if (startDate == null && endDate == null) return null
+    val sdf = SimpleDateFormat("MMM yyyy", Locale.getDefault())
+    return when {
+        startDate != null && endDate != null -> "${sdf.format(Date(startDate))} - ${sdf.format(Date(endDate))}"
+        startDate != null -> "Started ${sdf.format(Date(startDate))}"
+        endDate != null -> "Ended ${sdf.format(Date(endDate))}"
+        else -> null
+    }
 }

@@ -1,7 +1,9 @@
 package com.lx.tracklist.ui.detail
 
 import android.content.Context
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -26,9 +28,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -61,6 +65,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -86,10 +92,14 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -102,6 +112,7 @@ import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
+import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.ui.components.AddRelatedToLibraryDialog
@@ -359,6 +370,7 @@ fun DetailScreen(
                             entry = currentEntry,
                             onIncrement = { viewModel.increment() },
                             onDecrement = { viewModel.decrement() },
+                            onSetProgress = { viewModel.setProgress(it) },
                             onStartRewatch = { showStartRewatchDialog = true },
                             onFinishRewatch = { viewModel.finishRewatch() },
                             onCancelRewatch = { viewModel.cancelRewatch() }
@@ -512,6 +524,7 @@ fun DetailScreen(
                             entry = currentEntry,
                             onIncrement = { viewModel.increment() },
                             onDecrement = { viewModel.decrement() },
+                            onSetProgress = { viewModel.setProgress(it) },
                             onStartRewatch = { showStartRewatchDialog = true },
                             onFinishRewatch = { viewModel.finishRewatch() },
                             onCancelRewatch = { viewModel.cancelRewatch() }
@@ -660,25 +673,103 @@ fun DetailScreen(
     }
 }
 
+private data class ProgressInfo(
+    val current: Int,
+    val total: Int,
+    val totalStr: String,
+    val unit: String,
+    val description: String
+)
+
 @Composable
 private fun DetailProgressCard(
     entry: MediaEntry,
     onIncrement: () -> Unit,
     onDecrement: () -> Unit,
+    onSetProgress: (Int) -> Unit = {},
     onStartRewatch: () -> Unit,
     onFinishRewatch: () -> Unit,
     onCancelRewatch: () -> Unit
 ) {
+    var showEditDialog by remember { mutableStateOf(false) }
+
+    val isVideo = entry.mediaType == MediaType.ANIME || entry.mediaType == MediaType.SHOW
+    val isMangaOrBook = entry.mediaType == MediaType.MANGA || entry.mediaType == MediaType.MANHWA || entry.mediaType == MediaType.BOOK
+    val isMovie = entry.mediaType == MediaType.MOVIE
+
+    val info = when (entry.mediaType) {
+        MediaType.ANIME -> {
+            val total = entry.totalEpisodes
+            val totalStr = if (total > 0) "$total" else "?"
+            ProgressInfo(entry.currentEpisodes, total, totalStr, "Eps", "Episodes watched")
+        }
+        MediaType.SHOW -> {
+            val total = entry.totalEpisodes
+            val totalStr = if (total > 0) "$total" else "?"
+            val seasonStr = if (entry.currentSeasons > 0) "S${entry.currentSeasons} • " else ""
+            ProgressInfo(entry.currentEpisodes, total, totalStr, "Eps", "${seasonStr}Episodes watched")
+        }
+        MediaType.MANGA, MediaType.MANHWA -> {
+            when (entry.trackingUnit) {
+                TrackingUnit.VOLUMES -> {
+                    val total = entry.totalVolumes
+                    val totalStr = if (total > 0) "$total" else "?"
+                    ProgressInfo(entry.currentVolumes, total, totalStr, "Vol", "Volumes read")
+                }
+                TrackingUnit.PAGES -> {
+                    val total = entry.totalPages
+                    val totalStr = if (total > 0) "$total" else "?"
+                    ProgressInfo(entry.currentPages, total, totalStr, "Pages", "Pages read")
+                }
+                else -> {
+                    val total = entry.totalChapters
+                    val totalStr = if (total > 0) "$total" else "?"
+                    val sub = if (entry.currentVolumes > 0 || entry.totalVolumes > 0) {
+                        val vTot = if (entry.totalVolumes > 0) "${entry.totalVolumes}" else "?"
+                        "Vol ${entry.currentVolumes}/$vTot • Chapters read"
+                    } else {
+                        "Chapters read"
+                    }
+                    ProgressInfo(entry.currentChapters, total, totalStr, "Ch", sub)
+                }
+            }
+        }
+        MediaType.BOOK -> {
+            when (entry.trackingUnit) {
+                TrackingUnit.PAGES -> {
+                    val total = entry.totalPages
+                    val totalStr = if (total > 0) "$total" else "?"
+                    ProgressInfo(entry.currentPages, total, totalStr, "Pages", "Pages read")
+                }
+                TrackingUnit.CHAPTERS -> {
+                    val total = entry.totalChapters
+                    val totalStr = if (total > 0) "$total" else "?"
+                    ProgressInfo(entry.currentChapters, total, totalStr, "Ch", "Chapters read")
+                }
+                else -> {
+                    val total = entry.totalVolumes
+                    val totalStr = if (total > 0) "$total" else "?"
+                    ProgressInfo(entry.currentVolumes, total, totalStr, "Vol", "Volumes read")
+                }
+            }
+        }
+        MediaType.MOVIE -> {
+            val isDone = entry.status == MediaStatus.COMPLETED
+            ProgressInfo(if (isDone) 1 else 0, 1, "1", "Film", if (isDone) "Watched" else "Plan to watch")
+        }
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-        border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+        border = BorderStroke(1.dp, LXBorder),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Header Row: Title on left, Status / Completion badge on right
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -689,11 +780,51 @@ private fun DetailProgressCard(
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = LXTextPrimary
                 )
-                Text(
-                    text = entry.displayProgress,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = LXPrimaryGreen
-                )
+
+                if (entry.status == MediaStatus.COMPLETED) {
+                    Surface(
+                        color = LXPrimaryGreen.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.4f))
+                    ) {
+                        Text(
+                            text = "Completed",
+                            color = LXPrimaryGreen,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                } else if (info.total > 0) {
+                    val pct = (entry.progressFraction * 100).toInt()
+                    Surface(
+                        color = LXSurfaceElevated,
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, LXBorder)
+                    ) {
+                        Text(
+                            text = "$pct%",
+                            color = LXPrimaryGreen,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                } else if (entry.isAiring) {
+                    Surface(
+                        color = LXAiringBlue.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, LXAiringBlue.copy(alpha = 0.4f))
+                    ) {
+                        Text(
+                            text = "Airing",
+                            color = LXAiringBlue,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
             }
 
             // Rewatching banner & controls
@@ -723,7 +854,7 @@ private fun DetailProgressCard(
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         TextButton(
                             onClick = onCancelRewatch,
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text("Cancel", color = LXTextSecondary, fontSize = 11.sp)
                         }
@@ -733,7 +864,7 @@ private fun DetailProgressCard(
                                 containerColor = LXPrimaryGreen,
                                 contentColor = LXBackgroundBlack
                             ),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                             modifier = Modifier.height(28.dp),
                             shape = RoundedCornerShape(6.dp)
                         ) {
@@ -743,146 +874,306 @@ private fun DetailProgressCard(
                 }
             }
 
-            // If it is an airing show/anime, display user's episodes watched, aired episodes and total episodes
-            if (entry.isAiring && (entry.mediaType == MediaType.ANIME || entry.mediaType == MediaType.SHOW)) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(LXSurfaceElevated)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceAround
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Watched", color = LXTextSecondary, style = MaterialTheme.typography.labelSmall)
-                        Text(
-                            text = "${entry.currentEpisodes}",
-                            color = LXPrimaryGreen,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Aired", color = LXTextSecondary, style = MaterialTheme.typography.labelSmall)
-                        Text(
-                            text = if (entry.airedEpisodes > 0) "${entry.airedEpisodes}" else "-",
-                            color = LXAiringBlue,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Total", color = LXTextSecondary, style = MaterialTheme.typography.labelSmall)
-                        Text(
-                            text = if (entry.totalEpisodes > 0) "${entry.totalEpisodes}" else "?",
-                            color = LXTextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-            } else if (entry.isAiring && (entry.mediaType == MediaType.MANGA || entry.mediaType == MediaType.MANHWA)) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(LXSurfaceElevated)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceAround
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Read", color = LXTextSecondary, style = MaterialTheme.typography.labelSmall)
-                        Text(
-                            text = "${entry.currentChapters}",
-                            color = LXPrimaryGreen,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Released", color = LXTextSecondary, style = MaterialTheme.typography.labelSmall)
-                        Text(
-                            text = if (entry.airedChapters > 0) "${entry.airedChapters}" else "-",
-                            color = LXAiringBlue,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Total", color = LXTextSecondary, style = MaterialTheme.typography.labelSmall)
-                        Text(
-                            text = if (entry.totalChapters > 0) "${entry.totalChapters}" else "?",
-                            color = LXTextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(LXProgressTrack)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(entry.progressFraction)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(LXPrimaryGreen)
-                )
-            }
-
+            // Hero Progress Row: Number on left, steppers on right
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (entry.status == MediaStatus.COMPLETED && !entry.isRewatching) {
-                    OutlinedButton(
-                        onClick = onStartRewatch,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        modifier = Modifier.height(34.dp)
+                Column(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { showEditDialog = true }
+                        .padding(vertical = 2.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(15.dp))
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text("Start Rewatch", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "${info.current}",
+                            style = MaterialTheme.typography.headlineLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 32.sp
+                            ),
+                            color = LXPrimaryGreen
+                        )
+                        Text(
+                            text = "/ ${info.totalStr} ${info.unit}",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 16.sp
+                            ),
+                            color = LXTextSecondary,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Progress",
+                            tint = LXTextSecondary.copy(alpha = 0.4f),
+                            modifier = Modifier
+                                .size(14.dp)
+                                .padding(bottom = 5.dp)
+                        )
                     }
-                } else {
-                    Spacer(modifier = Modifier.width(1.dp))
+                    Text(
+                        text = info.description,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = LXTextSecondary.copy(alpha = 0.7f)
+                    )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = onDecrement,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(LXSurfaceElevated)
+                if (!isMovie) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.Remove, contentDescription = "Decrement", tint = LXTextPrimary)
-                    }
+                        IconButton(
+                            onClick = onDecrement,
+                            enabled = info.current > 0,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(if (info.current > 0) LXSurfaceElevated else LXSurfaceElevated.copy(alpha = 0.4f))
+                                .border(1.dp, LXBorder, CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Remove,
+                                contentDescription = "Decrement",
+                                tint = if (info.current > 0) LXTextPrimary else LXTextSecondary.copy(alpha = 0.4f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
 
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    IconButton(
-                        onClick = onIncrement,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(LXPrimaryGreen)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "Increment", tint = LXBackgroundBlack)
+                        Button(
+                            onClick = onIncrement,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.height(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "1",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
+
+            // Animated Progress Bar (only rendered when total is known)
+            if (info.total > 0) {
+                val progressAnimated by animateFloatAsState(
+                    targetValue = entry.progressFraction,
+                    label = "progress_bar_anim"
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(LXProgressTrack)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(progressAnimated)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(LXPrimaryGreen)
+                    )
+                }
+            }
+
+            // Airing / Release Status Panel
+            if (entry.isAiring && (isVideo || isMangaOrBook)) {
+                val (readWatched, airedReleased, total) = if (isVideo) {
+                    Triple(entry.currentEpisodes, entry.airedEpisodes, entry.totalEpisodes)
+                } else {
+                    Triple(entry.currentChapters, entry.airedChapters, entry.totalChapters)
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(LXSurfaceElevated)
+                            .border(1.dp, LXBorder.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (isVideo) "Watched" else "Read",
+                                color = LXTextSecondary,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "$readWatched",
+                                color = LXPrimaryGreen,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .height(26.dp)
+                                .width(1.dp)
+                                .background(LXBorder.copy(alpha = 0.6f))
+                        )
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (isVideo) "Aired" else "Released",
+                                color = LXTextSecondary,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (airedReleased > 0) "$airedReleased" else "-",
+                                color = if (airedReleased > 0) LXAiringBlue else LXTextSecondary,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .height(26.dp)
+                                .width(1.dp)
+                                .background(LXBorder.copy(alpha = 0.6f))
+                        )
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Total",
+                                color = LXTextSecondary,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (total > 0) "$total" else "?",
+                                color = LXTextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+
+                    if (airedReleased > 0) {
+                        val diff = airedReleased - readWatched
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = when {
+                                    diff > 0 -> "$diff ${if (isVideo) "episodes" else "chapters"} behind schedule"
+                                    diff == 0 -> "Up to date with latest release"
+                                    else -> "Ahead of latest release"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (diff > 0) LXAiringBlue else LXPrimaryGreen
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Start Rewatch button (if completed and not currently rewatching)
+            if (entry.status == MediaStatus.COMPLETED && !entry.isRewatching) {
+                OutlinedButton(
+                    onClick = onStartRewatch,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                    border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.fillMaxWidth().height(36.dp)
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Start Rewatch", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
         }
+    }
+
+    // Quick Edit Progress Dialog
+    if (showEditDialog) {
+        var editInput by remember { mutableStateOf("${info.current}") }
+        AlertDialog(
+            onDismissRequest = { showEditDialog = false },
+            title = {
+                Text(
+                    text = "Set Progress",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextPrimary
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Enter current ${info.description.lowercase()}:",
+                        color = LXTextSecondary,
+                        fontSize = 13.sp
+                    )
+                    OutlinedTextField(
+                        value = editInput,
+                        onValueChange = { if (it.all { c -> c.isDigit() }) editInput = it },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        label = { Text(info.unit) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = LXPrimaryGreen,
+                            unfocusedBorderColor = LXBorder,
+                            focusedLabelColor = LXPrimaryGreen,
+                            focusedTextColor = LXTextPrimary,
+                            unfocusedTextColor = LXTextPrimary,
+                            cursorColor = LXPrimaryGreen
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val parsed = editInput.toIntOrNull()
+                        if (parsed != null) {
+                            onSetProgress(parsed)
+                        }
+                        showEditDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXPrimaryGreen,
+                        contentColor = LXBackgroundBlack
+                    )
+                ) {
+                    Text("Set", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditDialog = false }) {
+                    Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceBlack,
+            shape = RoundedCornerShape(12.dp)
+        )
     }
 }
 
@@ -1584,6 +1875,16 @@ private fun RelatedItemRow(
                     )
                 }
 
+                val extId = item.externalId.takeIf { it.isNotBlank() && it != "0" }
+                if (extId != null) {
+                    Text(
+                        text = "#$extId",
+                        color = LXTextSecondary.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 9.sp
+                    )
+                }
+
                 if (item.score != null && item.score > 0f) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -1682,7 +1983,10 @@ private data class RelatedDetailedInfo(
     val totalUnits: Int? = null,
     val totalVolumes: Int? = null,
     val statusText: String? = null,
-    val isAiring: Boolean? = null
+    val isAiring: Boolean? = null,
+    val externalId: String? = null,
+    val externalSource: String? = null,
+    val webUrl: String? = null
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -1694,6 +1998,9 @@ private fun RelatedItemDetailSheet(
     onAddClick: () -> Unit,
     onViewInLibrary: (Long) -> Unit
 ) {
+    val uriHandler = LocalUriHandler.current
+    val clipboardManager = LocalClipboardManager.current
+
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val nestedScrollConnection = remember {
         object : NestedScrollConnection {
@@ -1717,6 +2024,8 @@ private fun RelatedItemDetailSheet(
                             val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = it }
                             cal.get(Calendar.YEAR).toString()
                         }
+                        val resolvedExtId = if (tmdbId > 0) tmdbId.toString() else item.externalId.takeIf { it.isNotBlank() && it != "0" }
+                        val resolvedUrl = if (tmdbId > 0) "https://www.themoviedb.org/movie/$tmdbId" else null
                         detailedInfo = RelatedDetailedInfo(
                             title = full?.title,
                             alternateTitle = full?.alternateTitle,
@@ -1727,7 +2036,10 @@ private fun RelatedItemDetailSheet(
                             scoreSource = "TMDB",
                             releaseYear = yr,
                             durationMinutes = full?.durationMinutes,
-                            statusText = "Movie"
+                            statusText = "Movie",
+                            externalId = resolvedExtId,
+                            externalSource = "TMDB",
+                            webUrl = resolvedUrl
                         )
                     } else {
                         val full = TmdbApiClient.fetchTvDetails(tmdbId, context).getOrNull()
@@ -1735,6 +2047,8 @@ private fun RelatedItemDetailSheet(
                             val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = it }
                             cal.get(Calendar.YEAR).toString()
                         }
+                        val resolvedExtId = if (tmdbId > 0) tmdbId.toString() else item.externalId.takeIf { it.isNotBlank() && it != "0" }
+                        val resolvedUrl = if (tmdbId > 0) "https://www.themoviedb.org/tv/$tmdbId" else null
                         detailedInfo = RelatedDetailedInfo(
                             title = full?.title,
                             alternateTitle = full?.alternateTitle,
@@ -1747,7 +2061,10 @@ private fun RelatedItemDetailSheet(
                             durationMinutes = full?.durationMinutes,
                             totalUnits = full?.totalEpisodes,
                             isAiring = full?.isAiring,
-                            statusText = if (full?.isAiring == true) "Airing" else "Finished"
+                            statusText = if (full?.isAiring == true) "Airing" else "Finished",
+                            externalId = resolvedExtId,
+                            externalSource = "TMDB",
+                            webUrl = resolvedUrl
                         )
                     }
                 } else {
@@ -1760,6 +2077,21 @@ private fun RelatedItemDetailSheet(
                     val yr = full?.airedStartDate?.let {
                         val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = it }
                         cal.get(Calendar.YEAR).toString()
+                    }
+                    val resolvedMalId = full?.malId?.takeIf { it > 0 } ?: malId.takeIf { it > 0 }
+                    val resolvedExtId = resolvedMalId?.toString() ?: item.externalId.takeIf { it.isNotBlank() && it != "0" }
+                    val resolvedSource = if (resolvedMalId != null) {
+                        "MAL"
+                    } else {
+                        full?.externalScoreSource ?: item.externalSource.ifBlank { "MAL" }
+                    }
+                    val typePath = if (isManga) "manga" else "anime"
+                    val resolvedWebUrl = full?.webUrl ?: run {
+                        if (resolvedSource.equals("AniList", ignoreCase = true) && resolvedExtId != null) {
+                            "https://anilist.co/$typePath/$resolvedExtId"
+                        } else if (resolvedMalId != null) {
+                            "https://myanimelist.net/$typePath/$resolvedMalId"
+                        } else null
                     }
                     detailedInfo = RelatedDetailedInfo(
                         title = full?.title,
@@ -1774,7 +2106,10 @@ private fun RelatedItemDetailSheet(
                         totalUnits = if (isManga) full?.totalChapters else full?.totalEpisodes,
                         totalVolumes = full?.totalVolumes,
                         isAiring = full?.isAiring,
-                        statusText = full?.type ?: item.mediaType.displayName
+                        statusText = full?.type ?: item.mediaType.displayName,
+                        externalId = resolvedExtId,
+                        externalSource = resolvedSource,
+                        webUrl = resolvedWebUrl
                     )
                 }
             } catch (_: Exception) {}
@@ -1790,6 +2125,24 @@ private fun RelatedItemDetailSheet(
     val displayAlternate = detailedInfo?.alternateTitle
     val displaySynopsis = detailedInfo?.synopsis
     val displayTags = detailedInfo?.tags
+    val displayExternalId = detailedInfo?.externalId ?: item.externalId.takeIf { it.isNotBlank() && it != "0" }
+    val displayExternalSource = detailedInfo?.externalSource ?: if (item.externalSource.equals("TMDB", ignoreCase = true)) "TMDB" else "MAL"
+    val displayWebUrl = detailedInfo?.webUrl ?: run {
+        if (displayExternalId != null) {
+            if (displayExternalSource.equals("TMDB", ignoreCase = true)) {
+                val typeStr = if (item.mediaType == MediaType.MOVIE) "movie" else "tv"
+                "https://www.themoviedb.org/$typeStr/$displayExternalId"
+            } else {
+                val isManga = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA || item.mediaType == MediaType.BOOK
+                val typeStr = if (isManga) "manga" else "anime"
+                if (displayExternalSource.equals("AniList", ignoreCase = true)) {
+                    "https://anilist.co/$typeStr/$displayExternalId"
+                } else {
+                    "https://myanimelist.net/$typeStr/$displayExternalId"
+                }
+            }
+        } else null
+    }
 
     val relColor = when {
         item.relationship.contains("Sequel", ignoreCase = true) -> LXPrimaryGreen
@@ -1966,6 +2319,48 @@ private fun RelatedItemDetailSheet(
                                     }
                                 }
                             }
+
+                            if (!displayExternalId.isNullOrBlank()) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = LXSurfaceElevated,
+                                    border = BorderStroke(1.dp, if (!displayWebUrl.isNullOrBlank()) LXPrimaryGreen.copy(alpha = 0.4f) else LXBorder),
+                                    modifier = Modifier.clickable {
+                                        if (!displayWebUrl.isNullOrBlank()) {
+                                            try {
+                                                uriHandler.openUri(displayWebUrl)
+                                            } catch (_: Exception) {
+                                                clipboardManager.setText(AnnotatedString(displayExternalId))
+                                                Toast.makeText(context, "Copied ID $displayExternalId to clipboard", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } else {
+                                            clipboardManager.setText(AnnotatedString(displayExternalId))
+                                            Toast.makeText(context, "Copied ID $displayExternalId to clipboard", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "$displayExternalSource ID: $displayExternalId",
+                                            color = LXTextSecondary,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        if (!displayWebUrl.isNullOrBlank()) {
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                                contentDescription = "Open in $displayExternalSource",
+                                                tint = LXPrimaryGreen,
+                                                modifier = Modifier.size(11.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         if (!unitsInfo.isNullOrBlank()) {
@@ -2072,6 +2467,40 @@ private fun RelatedItemDetailSheet(
                 }
 
                 // Bottom Actions
+                if (!displayWebUrl.isNullOrBlank()) {
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                uriHandler.openUri(displayWebUrl)
+                            } catch (_: Exception) {
+                                clipboardManager.setText(AnnotatedString(displayExternalId ?: ""))
+                                Toast.makeText(context, "Copied ID $displayExternalId", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = LXTextPrimary
+                        ),
+                        border = BorderStroke(1.dp, LXBorder),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = null,
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Open on $displayExternalSource" + (displayExternalId?.let { " (ID: $it)" } ?: ""),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+
                 if (item.inLibraryEntryId != null) {
                     Button(
                         onClick = {

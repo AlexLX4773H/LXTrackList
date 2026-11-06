@@ -227,6 +227,70 @@ class DetailViewModel(
         }
     }
 
+    fun setProgress(newProgress: Int) {
+        val cur = entry.value ?: return
+        val clamped = max(0, newProgress)
+        val now = System.currentTimeMillis()
+        viewModelScope.launch {
+            val updated = when (cur.mediaType) {
+                com.lx.tracklist.data.model.MediaType.ANIME, com.lx.tracklist.data.model.MediaType.SHOW -> {
+                    val isDone = cur.totalEpisodes > 0 && clamped >= cur.totalEpisodes
+                    val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
+                    cur.copy(
+                        currentEpisodes = clamped,
+                        status = newStatus,
+                        finishDate = if (newStatus == com.lx.tracklist.data.model.MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
+                        updatedAt = now
+                    )
+                }
+                com.lx.tracklist.data.model.MediaType.MANGA, com.lx.tracklist.data.model.MediaType.MANHWA, com.lx.tracklist.data.model.MediaType.BOOK -> {
+                    when (cur.trackingUnit) {
+                        TrackingUnit.VOLUMES -> {
+                            val isDone = cur.totalVolumes > 0 && clamped >= cur.totalVolumes
+                            val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
+                            cur.copy(
+                                currentVolumes = clamped,
+                                status = newStatus,
+                                finishDate = if (newStatus == com.lx.tracklist.data.model.MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
+                                updatedAt = now
+                            )
+                        }
+                        TrackingUnit.PAGES -> {
+                            val isDone = cur.totalPages > 0 && clamped >= cur.totalPages
+                            val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
+                            cur.copy(
+                                currentPages = clamped,
+                                status = newStatus,
+                                finishDate = if (newStatus == com.lx.tracklist.data.model.MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
+                                updatedAt = now
+                            )
+                        }
+                        TrackingUnit.CHAPTERS, TrackingUnit.COMBINED -> {
+                            val isDone = cur.totalChapters > 0 && clamped >= cur.totalChapters
+                            val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
+                            cur.copy(
+                                currentChapters = clamped,
+                                status = newStatus,
+                                finishDate = if (newStatus == com.lx.tracklist.data.model.MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
+                                updatedAt = now
+                            )
+                        }
+                    }
+                }
+                com.lx.tracklist.data.model.MediaType.MOVIE -> {
+                    val isDone = clamped > 0
+                    val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
+                    cur.copy(
+                        status = newStatus,
+                        finishDate = if (newStatus == com.lx.tracklist.data.model.MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
+                        updatedAt = now
+                    )
+                }
+            }
+            repository.update(updated)
+        }
+    }
+
     fun toggleFavorite() {
         val cur = entry.value ?: return
         viewModelScope.launch {
