@@ -10,6 +10,7 @@ import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
+import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -556,6 +557,18 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             repository.batchUpdateFavorite(selected, isFavorite)
             clearSelection()
         }
+    }
+
+    fun syncSelectedWithJikan(context: Context, forceRefresh: Boolean = false) {
+        val selected = _filterState.value.selectedIds.toSet()
+        if (selected.isEmpty()) return
+        clearSelection()
+        JikanSyncManager.startSync(
+            context = context,
+            repository = repository,
+            forceRefresh = forceRefresh,
+            targetEntryIds = selected
+        )
     }
 
     fun incrementProgress(entry: MediaEntry) {

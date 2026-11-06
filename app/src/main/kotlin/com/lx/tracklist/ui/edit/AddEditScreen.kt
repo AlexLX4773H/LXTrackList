@@ -120,6 +120,7 @@ fun AddEditScreen(
     var pendingSubCategoryChange by remember { mutableStateOf<PendingSubCategoryChange?>(null) }
     var isForeignDbUnlocked by remember { mutableStateOf(false) }
     var showForeignDbWarningDialog by remember { mutableStateOf(false) }
+    var databaseSourceExpanded by remember { mutableStateOf(false) }
 
     BackHandler(onBack = onNavigateBack)
 
@@ -732,19 +733,79 @@ fun AddEditScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        OutlinedTextField(
-                            value = state.externalSource,
-                            onValueChange = {
-                                if (isForeignDbUnlocked) viewModel.updateExternalSource(it)
-                                else showForeignDbWarningDialog = true
+                        ExposedDropdownMenuBox(
+                            expanded = databaseSourceExpanded && isForeignDbUnlocked,
+                            onExpandedChange = {
+                                if (!isForeignDbUnlocked) {
+                                    showForeignDbWarningDialog = true
+                                } else {
+                                    databaseSourceExpanded = it
+                                }
                             },
-                            readOnly = !isForeignDbUnlocked,
-                            label = { Text("Database Source") },
-                            placeholder = { Text("e.g. MAL") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
-                            colors = outlinedColors()
-                        )
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            OutlinedTextField(
+                                value = state.externalSource.ifBlank { "None" },
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Database Source") },
+                                trailingIcon = {
+                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = databaseSourceExpanded)
+                                },
+                                colors = outlinedColors(),
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth()
+                            )
+
+                            ExposedDropdownMenu(
+                                expanded = databaseSourceExpanded && isForeignDbUnlocked,
+                                onDismissRequest = { databaseSourceExpanded = false },
+                                modifier = Modifier.background(LXSurfaceElevated)
+                            ) {
+                                val allSources = remember(state.externalSource) {
+                                    val list = mutableListOf("MAL", "AniList", "Kitsu", "TMDB", "IMDb", "TVDb", "Tachiyomi")
+                                    if (state.externalSource.isNotBlank() && !list.contains(state.externalSource)) {
+                                        list.add(0, state.externalSource)
+                                    }
+                                    list
+                                }
+
+                                allSources.forEach { source ->
+                                    val isSelected = state.externalSource.equals(source, ignoreCase = true)
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = source,
+                                                color = if (isSelected) LXPrimaryGreen else LXTextPrimary,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        },
+                                        onClick = {
+                                            viewModel.updateExternalSource(source)
+                                            databaseSourceExpanded = false
+                                        }
+                                    )
+                                }
+
+                                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
+
+                                val isNoneSelected = state.externalSource.isBlank()
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "None (No External DB)",
+                                            color = if (isNoneSelected) LXPrimaryGreen else LXTextSecondary,
+                                            fontWeight = if (isNoneSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    onClick = {
+                                        viewModel.updateExternalSource("")
+                                        databaseSourceExpanded = false
+                                    }
+                                )
+                            }
+                        }
                         OutlinedTextField(
                             value = state.externalId,
                             onValueChange = {

@@ -1,6 +1,12 @@
 package com.lx.tracklist.ui.library
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -51,6 +57,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Style
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
@@ -73,6 +80,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
@@ -136,6 +144,19 @@ fun LibraryScreen(
     var showSubCategoryBatchDialog by remember { mutableStateOf(false) }
     var showStatusBatchDialog by remember { mutableStateOf(false) }
     var showFavoriteBatchDialog by remember { mutableStateOf(false) }
+    var showJikanBatchDialog by remember { mutableStateOf(false) }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
+    val ensureNotificationPermission = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
 
     val visibleIds = remember(state.entries) { state.entries.map { it.id } }
 
@@ -444,6 +465,73 @@ fun LibraryScreen(
         )
     }
 
+    // Jikan Sync Selected Entries Dialog
+    if (showJikanBatchDialog) {
+        AlertDialog(
+            onDismissRequest = { showJikanBatchDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Sync, contentDescription = null, tint = LXPrimaryGreen)
+                    Text(
+                        text = "Jikan Sync (${state.selectedIds.size} selected)",
+                        color = LXTextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Search and update posters, runtimes, and MAL IDs for the selected ${state.selectedIds.size} entries using MyAnimeList (Jikan).",
+                        color = LXTextSecondary
+                    )
+                    Text(
+                        text = "If an entry already has a MAL ID, it will be used directly. Otherwise, it will search by title.",
+                        color = LXTextSecondary,
+                        fontSize = 12.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        ensureNotificationPermission()
+                        viewModel.syncSelectedWithJikan(context, forceRefresh = false)
+                        showJikanBatchDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXPrimaryGreen,
+                        contentColor = LXBackgroundBlack
+                    )
+                ) {
+                    Text("Fetch Missing", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            ensureNotificationPermission()
+                            viewModel.syncSelectedWithJikan(context, forceRefresh = true)
+                            showJikanBatchDialog = false
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                        border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f))
+                    ) {
+                        Text("Re-fetch All")
+                    }
+                    TextButton(onClick = { showJikanBatchDialog = false }) {
+                        Text("Cancel", color = LXTextSecondary)
+                    }
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
+    }
+
     // Advanced Filter Modal Bottom Sheet
     if (state.isFilterSheetOpen) {
         AdvancedFilterSheet(
@@ -477,6 +565,11 @@ fun LibraryScreen(
                         // Select All
                         IconButton(onClick = { viewModel.selectAll(visibleIds) }) {
                             Icon(Icons.Default.SelectAll, contentDescription = "Select All", tint = LXTextPrimary)
+                        }
+
+                        // Jikan Sync Action
+                        IconButton(onClick = { showJikanBatchDialog = true }) {
+                            Icon(Icons.Default.Sync, contentDescription = "Sync Selected with Jikan", tint = LXPrimaryGreen)
                         }
 
                         // Range Select
@@ -622,6 +715,11 @@ fun LibraryScreen(
                             icon = Icons.Default.Favorite,
                             label = "Favorite",
                             onClick = { showFavoriteBatchDialog = true }
+                        )
+                        BatchActionButton(
+                            icon = Icons.Default.Sync,
+                            label = "Jikan Sync",
+                            onClick = { showJikanBatchDialog = true }
                         )
                     }
                 }

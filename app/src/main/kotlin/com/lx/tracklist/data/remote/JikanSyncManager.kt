@@ -97,7 +97,8 @@ object JikanSyncManager {
     fun startSync(
         context: Context,
         repository: MediaRepository,
-        forceRefresh: Boolean = false
+        forceRefresh: Boolean = false,
+        targetEntryIds: Set<Long>? = null
     ) {
         if (_syncState.value.isRunning) return
 
@@ -106,15 +107,31 @@ object JikanSyncManager {
 
             // Find eligible entries across all media types (anime, movies, manga, manhwa, etc.)
             val allEntries = repository.getAllEntriesSync()
-            val malEntries = allEntries.filter { isMalSource(it) && it.title.isNotBlank() }
+            val entriesPool = if (targetEntryIds != null) {
+                allEntries.filter { targetEntryIds.contains(it.id) }
+            } else {
+                allEntries
+            }
+
+            val malEntries = entriesPool.filter { isMalSource(it) && it.title.isNotBlank() }
             val eligible = malEntries.filter { needsSync(it, forceRefresh) }
 
             val total = eligible.size
             if (total == 0) {
-                val msg = if (malEntries.isEmpty()) {
-                    "No eligible anime or manga entries found to sync."
+                val msg = if (targetEntryIds != null) {
+                    if (entriesPool.isEmpty()) {
+                        "Selected entries not found."
+                    } else if (malEntries.isEmpty()) {
+                        "Selected entries are not eligible for MAL sync."
+                    } else {
+                        "Selected entries already have posters & details."
+                    }
                 } else {
-                    "All ${malEntries.size} entries already have MAL IDs, posters & details."
+                    if (malEntries.isEmpty()) {
+                        "No eligible anime or manga entries found to sync."
+                    } else {
+                        "All ${malEntries.size} entries already have MAL IDs, posters & details."
+                    }
                 }
                 _syncState.update {
                     it.copy(
@@ -141,6 +158,11 @@ object JikanSyncManager {
                 return@launch
             }
 
+            val startMsg = if (targetEntryIds != null) {
+                "Starting sync for $total selected entries..."
+            } else {
+                "Starting sync for $total MAL entries..."
+            }
             _syncState.update {
                 it.copy(
                     isRunning = true,
@@ -151,7 +173,7 @@ object JikanSyncManager {
                     failedCount = 0,
                     lastErrorMessage = null,
                     currentTitle = "",
-                    statusMessage = "Starting sync for $total MAL entries...",
+                    statusMessage = startMsg,
                     isCompleted = false
                 )
             }
