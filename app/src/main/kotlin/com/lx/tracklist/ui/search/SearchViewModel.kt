@@ -119,7 +119,7 @@ class SearchViewModel(
         searchJob?.cancel()
         if (newQuery.trim().length >= 2) {
             searchJob = viewModelScope.launch {
-                delay(500)
+                delay(600)
                 executeSearch(newQuery.trim(), _uiState.value.selectedCategory, context)
             }
         } else if (newQuery.isBlank()) {
@@ -161,10 +161,12 @@ class SearchViewModel(
                     SearchCategory.ANIME -> {
                         val res = JikanApiClient.searchJikanMultiple(query, isManga = false, limit = 20)
                         if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch anime")
-                        res.getOrDefault(emptyList()).map { details ->
+                        res.getOrDefault(emptyList()).mapIndexed { idx, details ->
+                            val extId = details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+                            val extSource = if (details.sourceProvider == "AniList" && (details.malId == null || details.malId == 0L)) "AniList" else "MAL"
                             SearchResultItem(
-                                externalId = (details.malId ?: 0L).toString(),
-                                externalSource = "MAL",
+                                externalId = extId,
+                                externalSource = extSource,
                                 mediaType = MediaType.ANIME,
                                 title = details.title ?: "Unknown",
                                 alternateTitle = details.alternateTitle,
@@ -182,10 +184,12 @@ class SearchViewModel(
                     SearchCategory.MANGA -> {
                         val res = JikanApiClient.searchJikanMultiple(query, isManga = true, limit = 20)
                         if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch manga")
-                        res.getOrDefault(emptyList()).map { details ->
+                        res.getOrDefault(emptyList()).mapIndexed { idx, details ->
+                            val extId = details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+                            val extSource = if (details.sourceProvider == "AniList" && (details.malId == null || details.malId == 0L)) "AniList" else "MAL"
                             SearchResultItem(
-                                externalId = (details.malId ?: 0L).toString(),
-                                externalSource = "MAL",
+                                externalId = extId,
+                                externalSource = extSource,
                                 mediaType = MediaType.MANGA,
                                 title = details.title ?: "Unknown",
                                 alternateTitle = details.alternateTitle,
@@ -203,10 +207,12 @@ class SearchViewModel(
                     SearchCategory.MANHWA -> {
                         val res = JikanApiClient.searchJikanMultiple(query, isManga = true, subType = "manhwa", limit = 20)
                         if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch manhwa")
-                        res.getOrDefault(emptyList()).map { details ->
+                        res.getOrDefault(emptyList()).mapIndexed { idx, details ->
+                            val extId = details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+                            val extSource = if (details.sourceProvider == "AniList" && (details.malId == null || details.malId == 0L)) "AniList" else "MAL"
                             SearchResultItem(
-                                externalId = (details.malId ?: 0L).toString(),
-                                externalSource = "MAL",
+                                externalId = extId,
+                                externalSource = extSource,
                                 mediaType = MediaType.MANHWA,
                                 title = details.title ?: "Unknown",
                                 alternateTitle = details.alternateTitle,
@@ -347,9 +353,9 @@ class SearchViewModel(
                     customCategory = customCategory,
                     subCategory = subCategory,
                     externalId = item.externalId,
-                    externalSource = "MAL",
+                    externalSource = item.externalSource,
                     externalScore = details?.externalScore ?: item.score,
-                    externalScoreSource = "MAL",
+                    externalScoreSource = details?.externalScoreSource ?: item.externalSource,
                     coverImageUri = details?.posterUrl ?: item.posterUrl,
                     totalEpisodes = if (isVideo) (details?.totalEpisodes ?: item.totalUnits ?: 0) else 0,
                     totalChapters = if (!isVideo) (details?.totalChapters ?: item.totalUnits ?: 0) else 0,

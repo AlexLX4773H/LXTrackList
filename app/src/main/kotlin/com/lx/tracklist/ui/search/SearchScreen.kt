@@ -322,6 +322,14 @@ fun SearchScreen(
                     )
                 }
             } else {
+                val isAniListBackup = state.results.isNotEmpty() && state.results.all {
+                    it.rawJikanDetails?.sourceProvider?.contains("AniList", ignoreCase = true) == true
+                }
+                val attributionText = if (isAniListBackup) {
+                    "Results fetched from AniList (MAL backup)"
+                } else {
+                    "Results fetched from MyAnimeList via Jikan API"
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -339,7 +347,7 @@ fun SearchScreen(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "Results fetched from MyAnimeList via Jikan API",
+                        text = attributionText,
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                         color = LXTextSecondary.copy(alpha = 0.75f)
                     )
@@ -409,7 +417,7 @@ fun SearchScreen(
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(state.results, key = { "${it.externalSource}_${it.externalId}" }) { item ->
+                        items(state.results, key = { "${it.externalSource}_${it.externalId}_${it.title.hashCode()}" }) { item ->
                             SearchResultCard(
                                 item = item,
                                 onAddClick = {

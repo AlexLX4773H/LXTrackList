@@ -2010,7 +2010,7 @@ private fun ExternalDbSyncDialog(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                items(syncState.malResults) { item ->
+                                items(syncState.malResults, key = { "mal_${it.malId}_${it.title.hashCode()}" }) { item ->
                                     val itemKey = "mal_${item.malId}_${item.title}"
                                     val isExpanded = expandedItemKey == itemKey
                                     val webUrl = item.webUrl
@@ -2093,6 +2093,8 @@ private fun ExternalDbSyncDialog(
                                                         if (item.type != null) {
                                                             Text(item.type, color = LXPrimaryGreen, fontSize = 11.sp)
                                                         }
+                                                        val provLabel = if (item.sourceProvider.contains("AniList")) "AniList" else "MAL"
+                                                        Text("($provLabel)", color = LXTextSecondary.copy(alpha = 0.6f), fontSize = 10.sp)
                                                     }
                                                 }
 

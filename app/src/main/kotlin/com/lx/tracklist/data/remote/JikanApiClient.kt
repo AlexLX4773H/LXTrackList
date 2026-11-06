@@ -2,6 +2,7 @@ package com.lx.tracklist.data.remote
 
 import android.util.Log
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
@@ -64,14 +65,20 @@ object JikanApiClient {
     private const val TAG = "JikanApiClient"
     private val gson = Gson()
     const val DEFAULT_BASE_URL = "https://api.jikan.moe/v4"
-    private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 16; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36 LXTrackList/1.0"
+    private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
     private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(6, TimeUnit.SECONDS)
-        .readTimeout(8, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
+
+    fun JsonObject.getSafeJsonArray(key: String): JsonArray? =
+        get(key)?.takeIf { it.isJsonArray }?.asJsonArray
+
+    fun JsonObject.getSafeJsonObject(key: String): JsonObject? =
+        get(key)?.takeIf { it.isJsonObject }?.asJsonObject
 
     fun fetchAnimeDetails(
         malId: Long,
@@ -361,13 +368,24 @@ object JikanApiClient {
                 .get()
                 .build()
 
-            val response = okHttpClient.newCall(request).execute()
-            val code = response.code
+            var response = okHttpClient.newCall(request).execute()
+            var code = response.code
+
+            // If rate limited (429), wait 1s and retry once
+            if (code == 429) {
+                Log.w(TAG, "Jikan search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                try {
+                    Thread.sleep(1000)
+                } catch (_: InterruptedException) {}
+                response = okHttpClient.newCall(request.newBuilder().build()).execute()
+                code = response.code
+            }
+
             val bodyString = response.body?.string() ?: ""
 
             if (response.isSuccessful) {
                 val jsonObject = gson.fromJson(bodyString, JsonObject::class.java)
-                val dataArray = jsonObject?.getAsJsonArray("data")
+                val dataArray = jsonObject?.getSafeJsonArray("data")
                 if (dataArray != null && dataArray.size() > 0) {
                     val list = mutableListOf<JikanMediaDetails>()
                     for (i in 0 until dataArray.size()) {
@@ -384,20 +402,163 @@ object JikanApiClient {
                             }
                         }
                     }
-                    if (list.isNotEmpty()) return Result.success(list)
+                    if (list.isNotEmpty()) {
+                        Log.d(TAG, "Jikan multiple search returned ${list.size} results for '$cleanTitle'")
+                        return Result.success(list)
+                    }
                 }
+            } else {
+                Log.w(TAG, "Jikan multiple search returned HTTP $code: ${bodyString.take(150)}")
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Jikan multiple search failed, trying fallback: ${e.message}")
+            Log.w(TAG, "Jikan multiple search failed with exception: ${e.message}")
         }
 
-        // Fallback: try AniList query if Jikan failed or was empty
-        val anilistFallback = queryAniListByTitle(cleanTitle, isManga)
-        if (anilistFallback.isSuccess) {
-            anilistFallback.getOrNull()?.let { return Result.success(listOf(it)) }
+        // Fallback: Query AniList multiple search
+        Log.i(TAG, "Falling back to AniList multiple search for '$cleanTitle' ($type, subType=$subType)")
+        val anilistMultiple = queryAniListMultiple(cleanTitle, isManga, subType, limit)
+        if (anilistMultiple.isSuccess) {
+            val list = anilistMultiple.getOrDefault(emptyList())
+            if (list.isNotEmpty()) {
+                Log.d(TAG, "AniList multiple search fallback returned ${list.size} results for '$cleanTitle'")
+                return Result.success(list)
+            }
         }
 
         return Result.success(emptyList())
+    }
+
+    fun queryAniListMultiple(
+        searchTitle: String,
+        isManga: Boolean,
+        subType: String? = null,
+        limit: Int = 20
+    ): Result<List<JikanMediaDetails>> {
+        val cleanTitle = searchTitle.trim()
+        if (cleanTitle.isBlank()) return Result.success(emptyList())
+
+        val type = if (isManga) "MANGA" else "ANIME"
+        val isManhwa = subType?.equals("manhwa", ignoreCase = true) == true
+        val country = if (isManhwa) "KR" else null
+
+        val query = if (country != null) {
+            """
+            query (${'$'}search: String, ${'$'}type: MediaType, ${'$'}perPage: Int, ${'$'}country: CountryCode) {
+              Page(page: 1, perPage: ${'$'}perPage) {
+                media(search: ${'$'}search, type: ${'$'}type, countryOfOrigin: ${'$'}country) {
+                  id
+                  idMal
+                  siteUrl
+                  title { romaji english native }
+                  synonyms
+                  coverImage { extraLarge large }
+                  duration
+                  episodes
+                  chapters
+                  volumes
+                  format
+                  status
+                  averageScore
+                  meanScore
+                  description(asHtml: false)
+                  startDate { year month day }
+                  endDate { year month day }
+                  genres
+                  tags { name }
+                }
+              }
+            }
+            """.trimIndent()
+        } else {
+            """
+            query (${'$'}search: String, ${'$'}type: MediaType, ${'$'}perPage: Int) {
+              Page(page: 1, perPage: ${'$'}perPage) {
+                media(search: ${'$'}search, type: ${'$'}type) {
+                  id
+                  idMal
+                  siteUrl
+                  title { romaji english native }
+                  synonyms
+                  coverImage { extraLarge large }
+                  duration
+                  episodes
+                  chapters
+                  volumes
+                  format
+                  status
+                  averageScore
+                  meanScore
+                  description(asHtml: false)
+                  startDate { year month day }
+                  endDate { year month day }
+                  genres
+                  tags { name }
+                }
+              }
+            }
+            """.trimIndent()
+        }
+
+        val jsonBody = JsonObject().apply {
+            addProperty("query", query)
+            val vars = JsonObject().apply {
+                addProperty("search", cleanTitle)
+                addProperty("type", type)
+                addProperty("perPage", limit.coerceIn(1, 50))
+                if (country != null) {
+                    addProperty("country", country)
+                }
+            }
+            add("variables", vars)
+        }
+
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val requestBody = jsonBody.toString().toRequestBody(mediaType)
+
+        val request = Request.Builder()
+            .url("https://graphql.anilist.co")
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "application/json")
+            .post(requestBody)
+            .build()
+
+        return try {
+            val response = okHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string() ?: ""
+
+            Log.d(TAG, "AniList multiple search HTTP $code for '$cleanTitle' ($type, country=$country)")
+
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("AniList HTTP $code: ${bodyString.take(200)}"))
+            }
+
+            val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
+            val dataObj = rootObj?.getSafeJsonObject("data")
+            val pageObj = dataObj?.getSafeJsonObject("Page")
+            val mediaArray = pageObj?.getSafeJsonArray("media")
+                ?: return Result.failure(NotFoundException("No search results on AniList for '$cleanTitle'"))
+
+            val list = mutableListOf<JikanMediaDetails>()
+            for (i in 0 until mediaArray.size()) {
+                val elem = mediaArray.get(i)
+                if (elem.isJsonObject) {
+                    val mediaObj = elem.asJsonObject
+                    val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong
+                    val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull }?.asLong
+                    val fallbackId = idMal ?: aniId
+                    try {
+                        list.add(parseAniListMedia(mediaObj, fallbackMalId = fallbackId))
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error parsing AniList item at index $i", e)
+                    }
+                }
+            }
+            Result.success(list)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying AniList multiple search for '$cleanTitle'", e)
+            Result.failure(e)
+        }
     }
 
     private fun queryJikanByTitle(
@@ -526,9 +687,9 @@ object JikanApiClient {
         val title = dataObj.get("title")?.takeIf { !it.isJsonNull }?.asString
         val mediaTypeStr = dataObj.get("type")?.takeIf { !it.isJsonNull }?.asString
 
-        val imagesObj = dataObj.getAsJsonObject("images")
-        val webpObj = imagesObj?.getAsJsonObject("webp")
-        val jpgObj = imagesObj?.getAsJsonObject("jpg")
+        val imagesObj = dataObj.getSafeJsonObject("images")
+        val webpObj = imagesObj?.getSafeJsonObject("webp")
+        val jpgObj = imagesObj?.getSafeJsonObject("jpg")
 
         val posterUrl = webpObj?.get("large_image_url")?.takeIf { !it.isJsonNull }?.asString
             ?: jpgObj?.get("large_image_url")?.takeIf { !it.isJsonNull }?.asString
@@ -549,12 +710,12 @@ object JikanApiClient {
         val isAiring = airing ?: publishing ?: (statusStr?.equals("Currently Airing", ignoreCase = true) == true || statusStr?.equals("Publishing", ignoreCase = true) == true)
 
         // Broadcast / Published dates
-        val dateContainer = dataObj.getAsJsonObject("aired") ?: dataObj.getAsJsonObject("published")
+        val dateContainer = dataObj.getSafeJsonObject("aired") ?: dataObj.getSafeJsonObject("published")
         val fromStr = dateContainer?.get("from")?.takeIf { !it.isJsonNull }?.asString
         val toStr = dateContainer?.get("to")?.takeIf { !it.isJsonNull }?.asString
-        val propObj = dateContainer?.getAsJsonObject("prop")
-        val airedStartDate = parseDateStringOrProp(fromStr, propObj?.getAsJsonObject("from"))
-        val airedEndDate = parseDateStringOrProp(toStr, propObj?.getAsJsonObject("to"))
+        val propObj = dateContainer?.getSafeJsonObject("prop")
+        val airedStartDate = parseDateStringOrProp(fromStr, propObj?.getSafeJsonObject("from"))
+        val airedEndDate = parseDateStringOrProp(toStr, propObj?.getSafeJsonObject("to"))
 
         // Alternative titles
         val altList = mutableListOf<String>()
@@ -566,13 +727,13 @@ object JikanApiClient {
         if (!japTitle.isNullOrBlank() && !japTitle.equals(title, ignoreCase = true)) {
             altList.add(japTitle)
         }
-        dataObj.getAsJsonArray("title_synonyms")?.forEach { synElem ->
+        dataObj.getSafeJsonArray("title_synonyms")?.forEach { synElem ->
             val syn = synElem?.takeIf { !it.isJsonNull }?.asString?.trim()
             if (!syn.isNullOrBlank() && !syn.equals(title, ignoreCase = true) && !altList.contains(syn)) {
                 altList.add(syn)
             }
         }
-        dataObj.getAsJsonArray("titles")?.forEach { tElem ->
+        dataObj.getSafeJsonArray("titles")?.forEach { tElem ->
             if (tElem.isJsonObject) {
                 val tObj = tElem.asJsonObject
                 val tStr = tObj.get("title")?.takeIf { !it.isJsonNull }?.asString?.trim()
@@ -586,7 +747,7 @@ object JikanApiClient {
         // Tags (genres, themes, demographics, explicit_genres)
         val tagList = mutableListOf<String>()
         listOf("genres", "themes", "demographics", "explicit_genres").forEach { arrayKey ->
-            dataObj.getAsJsonArray(arrayKey)?.forEach { item ->
+            dataObj.getSafeJsonArray(arrayKey)?.forEach { item ->
                 if (item.isJsonObject) {
                     val name = item.asJsonObject.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
                     if (!name.isNullOrBlank() && !tagList.contains(name)) {
@@ -630,15 +791,17 @@ object JikanApiClient {
     }
 
     fun parseAniListMedia(mediaObj: JsonObject, fallbackMalId: Long?): JikanMediaDetails {
-        val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong ?: fallbackMalId
+        val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong
+        val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull }?.asLong
+        val resolvedId = idMal ?: fallbackMalId ?: aniId
 
-        val titleObj = mediaObj.getAsJsonObject("title")
+        val titleObj = mediaObj.getSafeJsonObject("title")
         val engTitle = titleObj?.get("english")?.takeIf { !it.isJsonNull }?.asString?.trim()
         val romajiTitle = titleObj?.get("romaji")?.takeIf { !it.isJsonNull }?.asString?.trim()
         val nativeTitle = titleObj?.get("native")?.takeIf { !it.isJsonNull }?.asString?.trim()
         val title = engTitle ?: romajiTitle ?: nativeTitle
 
-        val coverObj = mediaObj.getAsJsonObject("coverImage")
+        val coverObj = mediaObj.getSafeJsonObject("coverImage")
         val posterUrl = coverObj?.get("extraLarge")?.takeIf { !it.isJsonNull }?.asString
             ?: coverObj?.get("large")?.takeIf { !it.isJsonNull }?.asString
 
@@ -651,8 +814,8 @@ object JikanApiClient {
         val statusStr = mediaObj.get("status")?.takeIf { !it.isJsonNull }?.asString
         val isAiring = statusStr?.equals("RELEASING", ignoreCase = true)
 
-        val airedStartDate = parseAniListDate(mediaObj.getAsJsonObject("startDate"))
-        val airedEndDate = parseAniListDate(mediaObj.getAsJsonObject("endDate"))
+        val airedStartDate = parseAniListDate(mediaObj.getSafeJsonObject("startDate"))
+        val airedEndDate = parseAniListDate(mediaObj.getSafeJsonObject("endDate"))
 
         // Alternative titles
         val altList = mutableListOf<String>()
@@ -661,7 +824,7 @@ object JikanApiClient {
                 altList.add(t)
             }
         }
-        mediaObj.getAsJsonArray("synonyms")?.forEach { synElem ->
+        mediaObj.getSafeJsonArray("synonyms")?.forEach { synElem ->
             val syn = synElem?.takeIf { !it.isJsonNull }?.asString?.trim()
             if (!syn.isNullOrBlank() && !syn.equals(title, ignoreCase = true) && !altList.contains(syn)) {
                 altList.add(syn)
@@ -671,11 +834,11 @@ object JikanApiClient {
 
         // Tags (genres + tags)
         val tagList = mutableListOf<String>()
-        mediaObj.getAsJsonArray("genres")?.forEach { g ->
+        mediaObj.getSafeJsonArray("genres")?.forEach { g ->
             val name = g?.takeIf { !it.isJsonNull }?.asString?.trim()
             if (!name.isNullOrBlank() && !tagList.contains(name)) tagList.add(name)
         }
-        mediaObj.getAsJsonArray("tags")?.forEach { t ->
+        mediaObj.getSafeJsonArray("tags")?.forEach { t ->
             if (t.isJsonObject) {
                 val name = t.asJsonObject.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
                 if (!name.isNullOrBlank() && !tagList.contains(name)) tagList.add(name)
@@ -694,7 +857,7 @@ object JikanApiClient {
         val externalScoreSource = if (externalScore != null) "AniList" else null
 
         return JikanMediaDetails(
-            malId = idMal,
+            malId = resolvedId,
             title = title,
             posterUrl = posterUrl,
             durationText = durationMinutes?.let { "$it min" },
@@ -711,7 +874,7 @@ object JikanApiClient {
             externalScore = externalScore,
             externalScoreSource = externalScoreSource,
             type = format,
-            sourceProvider = "AniList",
+            sourceProvider = if (idMal != null && idMal > 0) "MAL (AniList)" else "AniList",
             url = mediaObj.get("siteUrl")?.takeIf { !it.isJsonNull }?.asString
         )
     }
@@ -822,13 +985,13 @@ object JikanApiClient {
             }
 
             val jsonObject = gson.fromJson(bodyString, JsonObject::class.java)
-            val dataArray = jsonObject?.getAsJsonArray("data") ?: return Result.success(emptyList())
+            val dataArray = jsonObject?.getSafeJsonArray("data") ?: return Result.success(emptyList())
 
             val list = mutableListOf<RelatedMediaItem>()
             for (i in 0 until dataArray.size()) {
                 val relObj = dataArray.get(i).asJsonObject
                 val relationName = relObj.get("relation")?.takeIf { !it.isJsonNull }?.asString ?: "Related"
-                val entriesArray = relObj.getAsJsonArray("entry") ?: continue
+                val entriesArray = relObj.getSafeJsonArray("entry") ?: continue
 
                 for (j in 0 until entriesArray.size()) {
                     val entryObj = entriesArray.get(j).asJsonObject
@@ -874,8 +1037,8 @@ object JikanApiClient {
 
     fun parseAniListRelations(mediaObj: JsonObject?): List<RelatedMediaItem> {
         if (mediaObj == null) return emptyList()
-        val relationsObj = mediaObj.getAsJsonObject("relations") ?: return emptyList()
-        val edgesArray = relationsObj.getAsJsonArray("edges") ?: return emptyList()
+        val relationsObj = mediaObj.getSafeJsonObject("relations") ?: return emptyList()
+        val edgesArray = relationsObj.getSafeJsonArray("edges") ?: return emptyList()
 
         val list = mutableListOf<RelatedMediaItem>()
         for (i in 0 until edgesArray.size()) {

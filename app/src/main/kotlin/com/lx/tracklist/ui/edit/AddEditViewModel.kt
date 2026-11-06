@@ -538,6 +538,10 @@ class AddEditViewModel(
                 current.mediaType
             }
 
+            val isAniListDirect = item.sourceProvider == "AniList" && (item.malId == null || item.malId == 0L)
+            val externalSrc = if (isAniListDirect) "AniList" else "MAL"
+            val scoreSrc = item.externalScoreSource ?: externalSrc
+
             current.copy(
                 title = item.title ?: current.title,
                 alternateTitle = item.alternateTitle ?: current.alternateTitle,
@@ -545,9 +549,9 @@ class AddEditViewModel(
                 mediaType = targetMediaType,
                 coverImageUri = item.posterUrl ?: current.coverImageUri,
                 externalId = (item.malId ?: 0L).takeIf { it > 0 }?.toString() ?: current.externalId,
-                externalSource = "MAL",
+                externalSource = externalSrc,
                 externalScore = item.externalScore ?: current.externalScore,
-                externalScoreSource = item.externalScoreSource ?: "MAL",
+                externalScoreSource = scoreSrc,
                 notes = item.synopsis ?: current.notes,
                 tags = item.tags ?: current.tags,
                 airedStartDate = item.airedStartDate ?: current.airedStartDate,
@@ -560,7 +564,8 @@ class AddEditViewModel(
                 totalVolumes = if (!isVideo && item.totalVolumes != null && item.totalVolumes > 0) item.totalVolumes else current.totalVolumes
             )
         }
-        _syncState.update { it.copy(successMessage = "Applied '${item.title}' from MyAnimeList!") }
+        val sourceLabel = if (item.sourceProvider.startsWith("AniList")) "AniList" else "MyAnimeList"
+        _syncState.update { it.copy(successMessage = "Applied '${item.title}' from $sourceLabel!") }
     }
 
     fun applySelectedTmdbResult(item: TmdbSearchResult, context: Context? = null) {
