@@ -27,7 +27,7 @@ data class MediaEntry(
     val id: Long = 0L,
 
     // User profile association
-    val userId: Long = 1L,
+    val userId: Long = 0L,
 
     // Custom Category override (Top-level custom category, e.g. "Donghua", "Web Novels")
     val customCategory: String? = null,

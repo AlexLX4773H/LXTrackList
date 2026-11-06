@@ -274,7 +274,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 _uiState.update { state ->
                     state.copy(
                         activeUser = user,
-                        selectedProfileIdForDefaults = state.selectedProfileIdForDefaults ?: user.id
+                        selectedProfileIdForDefaults = user.id
                     )
                 }
             }
@@ -306,7 +306,14 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
     }
 
     fun startJikanSync(context: Context, forceRefresh: Boolean = false) {
-        JikanSyncManager.startSync(context, repository, forceRefresh)
+        val user = _uiState.value.activeUser
+        JikanSyncManager.startSync(
+            context = context,
+            repository = repository,
+            forceRefresh = forceRefresh,
+            targetProfileId = user.id,
+            targetProfileName = user.name
+        )
     }
 
     fun cancelJikanSync(context: Context? = null) {
@@ -314,7 +321,14 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
     }
 
     fun startTmdbSync(context: Context, forceRefresh: Boolean = false) {
-        TmdbSyncManager.startSync(context, repository, forceRefresh)
+        val user = _uiState.value.activeUser
+        TmdbSyncManager.startSync(
+            context = context,
+            repository = repository,
+            forceRefresh = forceRefresh,
+            targetProfileId = user.id,
+            targetProfileName = user.name
+        )
     }
 
     fun cancelTmdbSync(context: Context? = null) {
@@ -480,7 +494,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
             try {
                 val allEntries = withContext(Dispatchers.IO) {
-                    repository.getAllEntriesAllUsersSync()
+                    repository.getAllEntriesSync()
                 }
 
                 val result = CoverCacheManager.reindexCovers(context, allEntries) { current, total, success, failed ->
@@ -677,14 +691,17 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun confirmImport() {
         val preview = _uiState.value.importPreview ?: return
+        val activeUserId = _uiState.value.activeUser.id
+        val activeProfileName = _uiState.value.activeUser.name
         val selectedKeys = preview.selectedCategoryKeys
         val filteredEntries = preview.allEntries
             .filter { entry -> selectedKeys.contains(getCategoryKeyForEntry(entry)) }
             .map { entry ->
+                val base = entry.copy(id = 0L, userId = activeUserId)
                 if (preview.isTachiyomiSource) {
-                    entry.copy(isFavorite = preview.importFavorites)
+                    base.copy(isFavorite = preview.importFavorites)
                 } else {
-                    entry
+                    base
                 }
             }
 
@@ -708,7 +725,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
             }
 
             val appContext = LXApplication.instance.applicationContext
-            NotificationHelper.showImportProgress(appContext, preview.sourceName)
+            NotificationHelper.showImportProgress(appContext, preview.sourceName, profileName = activeProfileName)
 
             try {
                 val (inserted, updated) = withContext(Dispatchers.IO) {
@@ -720,7 +737,8 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                     sourceName = preview.sourceName,
                     totalCount = filteredEntries.size,
                     addedCount = inserted,
-                    updatedCount = updated
+                    updatedCount = updated,
+                    profileName = activeProfileName
                 )
 
                 _uiState.update {
@@ -735,7 +753,8 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 NotificationHelper.showImportFailed(
                     context = appContext,
                     sourceName = preview.sourceName,
-                    errorMessage = e.localizedMessage ?: "Unknown error"
+                    errorMessage = e.localizedMessage ?: "Unknown error",
+                    profileName = activeProfileName
                 )
 
                 _uiState.update {
@@ -1110,8 +1129,11 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     private suspend fun saveImportedEntries(entries: List<MediaEntry>, sourceName: String) {
         val appContext = LXApplication.instance.applicationContext
-        if (entries.isEmpty()) {
-            NotificationHelper.showImportFailed(appContext, sourceName, "No valid media entries found")
+        val activeUserId = _uiState.value.activeUser.id
+        val activeProfileName = _uiState.value.activeUser.name
+        val preparedEntries = entries.map { it.copy(id = 0L, userId = activeUserId) }
+        if (preparedEntries.isEmpty()) {
+            NotificationHelper.showImportFailed(appContext, sourceName, "No valid media entries found", profileName = activeProfileName)
             _uiState.update {
                 it.copy(
                     isImporting = false,
@@ -1122,18 +1144,19 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
             return
         }
 
-        NotificationHelper.showImportProgress(appContext, sourceName)
+        NotificationHelper.showImportProgress(appContext, sourceName, profileName = activeProfileName)
         try {
             val (inserted, updated) = withContext(Dispatchers.IO) {
-                repository.importEntries(entries, _uiState.value.selectedConflictStrategy)
+                repository.importEntries(preparedEntries, _uiState.value.selectedConflictStrategy)
             }
 
             NotificationHelper.showImportComplete(
                 context = appContext,
                 sourceName = sourceName,
-                totalCount = entries.size,
+                totalCount = preparedEntries.size,
                 addedCount = inserted,
-                updatedCount = updated
+                updatedCount = updated,
+                profileName = activeProfileName
             )
 
             _uiState.update {
@@ -1147,7 +1170,8 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
             NotificationHelper.showImportFailed(
                 context = appContext,
                 sourceName = sourceName,
-                errorMessage = e.localizedMessage ?: "Unknown error"
+                errorMessage = e.localizedMessage ?: "Unknown error",
+                profileName = activeProfileName
             )
             _uiState.update {
                 it.copy(

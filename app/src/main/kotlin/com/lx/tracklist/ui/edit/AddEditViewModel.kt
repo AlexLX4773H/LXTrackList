@@ -50,6 +50,7 @@ data class ExternalSyncUiState(
 
 data class AddEditUiState(
     val id: Long = 0L,
+    val userId: Long = 0L,
     val title: String = "",
     val alternateTitles: List<String> = emptyList(),
     val alternateTitle: String = "",
@@ -116,6 +117,7 @@ class AddEditViewModel(
         run {
             val status = initialStatus ?: MediaStatus.WATCHING
             AddEditUiState(
+                userId = repository.activeUser.value.id,
                 mediaType = initialMediaType ?: MediaType.ANIME,
                 customCategory = initialCustomCategory,
                 subCategory = initialSubCategory,
@@ -164,6 +166,7 @@ class AddEditViewModel(
                     _uiState.update {
                         it.copy(
                             id = entry.id,
+                            userId = entry.userId,
                             title = entry.title,
                             alternateTitles = altTitles,
                             alternateTitle = entry.alternateTitle ?: "",
@@ -215,6 +218,7 @@ class AddEditViewModel(
         } else {
             val status = initialStatus ?: MediaStatus.WATCHING
             _uiState.value = AddEditUiState(
+                userId = repository.activeUser.value.id,
                 mediaType = initialMediaType ?: MediaType.ANIME,
                 customCategory = initialCustomCategory,
                 subCategory = initialSubCategory,
@@ -362,8 +366,10 @@ class AddEditViewModel(
             } else {
                 s.startDate
             }
+            val effectiveUserId = if (s.userId > 0L) s.userId else repository.activeUser.value.id
             val entry = MediaEntry(
                 id = s.id,
+                userId = effectiveUserId,
                 title = s.title.trim(),
                 alternateTitle = formattedAltTitle,
                 mediaType = s.mediaType,

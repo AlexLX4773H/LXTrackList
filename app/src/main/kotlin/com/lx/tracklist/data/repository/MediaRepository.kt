@@ -43,23 +43,32 @@ class MediaRepository(
     private val prefs = context?.getSharedPreferences("lx_user_prefs", Context.MODE_PRIVATE)
 
     private val defaultUser = UserProfile(id = 1L, name = "Main Profile", avatarColorHex = "#A7EF60", isDefault = true)
-    private val _activeUser = MutableStateFlow(defaultUser)
+    private val savedInitialUserId = prefs?.getLong("active_user_id", 1L) ?: 1L
+    private val _activeUser = MutableStateFlow(
+        if (savedInitialUserId != 1L) UserProfile(id = savedInitialUserId, name = "Profile $savedInitialUserId", avatarColorHex = "#A7EF60") else defaultUser
+    )
     val activeUser: StateFlow<UserProfile> = _activeUser.asStateFlow()
 
-    private val _isSwipeToSwitchTabsEnabled = MutableStateFlow(prefs?.getBoolean("swipe_to_switch_tabs", true) ?: true)
+    private val _isSwipeToSwitchTabsEnabled = MutableStateFlow(
+        prefs?.getBoolean("swipe_to_switch_tabs_$savedInitialUserId", prefs?.getBoolean("swipe_to_switch_tabs", true) ?: true) ?: true
+    )
     val isSwipeToSwitchTabsEnabled: StateFlow<Boolean> = _isSwipeToSwitchTabsEnabled.asStateFlow()
 
     fun setSwipeToSwitchTabsEnabled(enabled: Boolean) {
         _isSwipeToSwitchTabsEnabled.value = enabled
-        prefs?.edit()?.putBoolean("swipe_to_switch_tabs", enabled)?.apply()
+        val userId = _activeUser.value.id
+        prefs?.edit()?.putBoolean("swipe_to_switch_tabs_$userId", enabled)?.apply()
     }
 
-    private val _isTachiyomiImportAsFavorites = MutableStateFlow(prefs?.getBoolean("tachiyomi_import_as_favorites", false) ?: false)
+    private val _isTachiyomiImportAsFavorites = MutableStateFlow(
+        prefs?.getBoolean("tachiyomi_import_as_favorites_$savedInitialUserId", prefs?.getBoolean("tachiyomi_import_as_favorites", false) ?: false) ?: false
+    )
     val isTachiyomiImportAsFavorites: StateFlow<Boolean> = _isTachiyomiImportAsFavorites.asStateFlow()
 
     fun setTachiyomiImportAsFavorites(enabled: Boolean) {
         _isTachiyomiImportAsFavorites.value = enabled
-        prefs?.edit()?.putBoolean("tachiyomi_import_as_favorites", enabled)?.apply()
+        val userId = _activeUser.value.id
+        prefs?.edit()?.putBoolean("tachiyomi_import_as_favorites_$userId", enabled)?.apply()
     }
 
     init {
@@ -79,6 +88,9 @@ class MediaRepository(
                         ?: userProfileDao.getAllProfilesSync().firstOrNull()
                         ?: defaultUser
                     _activeUser.value = profile
+                    _isSwipeToSwitchTabsEnabled.value = prefs?.getBoolean("swipe_to_switch_tabs_${profile.id}", true) ?: true
+                    _isTachiyomiImportAsFavorites.value = prefs?.getBoolean("tachiyomi_import_as_favorites_${profile.id}", false) ?: false
+                    dao.sanitizeZeroUserIds(defaultUser.id)
                 } catch (_: Exception) {}
             }
         }
@@ -88,8 +100,16 @@ class MediaRepository(
         get() = userProfileDao?.getAllProfiles() ?: emptyFlow()
 
     suspend fun switchUser(profile: UserProfile) {
+        // Cancel any running background sync for the previous profile so jobs don't cross over
+        try {
+            com.lx.tracklist.data.remote.JikanSyncManager.cancelSync(context)
+            com.lx.tracklist.data.remote.TmdbSyncManager.cancelSync(context)
+        } catch (_: Exception) {}
+
         _activeUser.value = profile
         prefs?.edit()?.putLong("active_user_id", profile.id)?.apply()
+        _isSwipeToSwitchTabsEnabled.value = prefs?.getBoolean("swipe_to_switch_tabs_${profile.id}", true) ?: true
+        _isTachiyomiImportAsFavorites.value = prefs?.getBoolean("tachiyomi_import_as_favorites_${profile.id}", false) ?: false
     }
 
     suspend fun createUser(
@@ -283,7 +303,7 @@ class MediaRepository(
     }
 
     suspend fun insert(entry: MediaEntry): Long {
-        val entryWithUser = if (entry.userId <= 0L || entry.userId == 1L) {
+        val entryWithUser = if (entry.userId <= 0L) {
             entry.copy(userId = _activeUser.value.id)
         } else {
             entry
@@ -291,32 +311,46 @@ class MediaRepository(
         return dao.insert(entryWithUser)
     }
 
-    suspend fun update(entry: MediaEntry) = dao.update(entry)
+    suspend fun update(entry: MediaEntry) {
+        val effectiveEntry = if (entry.userId <= 0L) {
+            val existing = dao.getEntryByIdSync(entry.id)
+            entry.copy(userId = existing?.userId ?: _activeUser.value.id)
+        } else {
+            entry
+        }
+        dao.update(effectiveEntry)
+    }
 
-    suspend fun delete(entry: MediaEntry) = dao.delete(entry)
+    suspend fun delete(entry: MediaEntry) {
+        val userId = if (entry.userId > 0L) entry.userId else _activeUser.value.id
+        dao.deleteByIdAndUser(entry.id, userId)
+    }
 
-    suspend fun deleteById(id: Long) = dao.deleteById(id)
+    suspend fun deleteById(id: Long) = dao.deleteByIdAndUser(id, _activeUser.value.id)
 
-    suspend fun deleteEntries(ids: List<Long>) = dao.deleteEntriesByIds(ids)
+    suspend fun deleteEntries(ids: List<Long>) {
+        if (ids.isEmpty()) return
+        dao.deleteEntriesByIdsAndUser(_activeUser.value.id, ids)
+    }
 
     suspend fun batchUpdateCategory(ids: List<Long>, mediaType: MediaType, customCategory: String?) {
         if (ids.isEmpty()) return
-        dao.updateCategoryForIds(ids, mediaType, customCategory, System.currentTimeMillis())
+        dao.updateCategoryForIdsAndUser(_activeUser.value.id, ids, mediaType, customCategory, System.currentTimeMillis())
     }
 
     suspend fun batchUpdateSubCategory(ids: List<Long>, subCategory: String?) {
         if (ids.isEmpty()) return
-        dao.updateSubCategoryForIds(ids, subCategory, System.currentTimeMillis())
+        dao.updateSubCategoryForIdsAndUser(_activeUser.value.id, ids, subCategory, System.currentTimeMillis())
     }
 
     suspend fun batchUpdateStatus(ids: List<Long>, status: MediaStatus) {
         if (ids.isEmpty()) return
-        dao.updateStatusForIds(ids, status, System.currentTimeMillis())
+        dao.updateStatusForIdsAndUser(_activeUser.value.id, ids, status, System.currentTimeMillis())
     }
 
     suspend fun batchUpdateFavorite(ids: List<Long>, isFavorite: Boolean) {
         if (ids.isEmpty()) return
-        dao.updateFavoriteForIds(ids, isFavorite, System.currentTimeMillis())
+        dao.updateFavoriteForIdsAndUser(_activeUser.value.id, ids, isFavorite, System.currentTimeMillis())
     }
 
     suspend fun toggleFavorite(entry: MediaEntry) {
@@ -395,11 +429,11 @@ class MediaRepository(
             } else if (entry.externalId != null) {
                 dao.findByAnyExternalId(targetUserId, entry.externalId)
             } else {
-                null
+                dao.findByTitleAndType(targetUserId, entry.title, entry.mediaType)
             }
 
             if (existing == null) {
-                dao.insert(entry)
+                dao.insert(entry.copy(id = 0L, userId = targetUserId))
                 inserted++
             } else {
                 when (strategy) {
@@ -411,7 +445,7 @@ class MediaRepository(
                         updated++
                     }
                     ConflictStrategy.MERGE -> {
-                        val merged = mergeEntries(existing, entry).copy(userId = targetUserId)
+                        val merged = mergeEntries(existing, entry).copy(id = existing.id, userId = targetUserId)
                         dao.update(merged)
                         updated++
                     }
@@ -425,6 +459,14 @@ class MediaRepository(
     suspend fun getAllEntriesSync(): List<MediaEntry> {
         return if (userProfileDao != null) {
             dao.getAllEntriesByUserSync(_activeUser.value.id)
+        } else {
+            dao.getAllEntriesSync()
+        }
+    }
+
+    suspend fun getAllEntriesForUserSync(userId: Long): List<MediaEntry> {
+        return if (userProfileDao != null) {
+            dao.getAllEntriesByUserSync(userId)
         } else {
             dao.getAllEntriesSync()
         }
@@ -484,15 +526,17 @@ class MediaRepository(
     suspend fun addRelatedItem(
         item: com.lx.tracklist.data.model.RelatedMediaItem,
         status: MediaStatus,
-        context: Context? = null
+        context: Context? = null,
+        targetUserId: Long? = null
     ): Long {
+        val effectiveUserId = targetUserId ?: activeUser.value.id
         return withContext(Dispatchers.IO) {
             val entry = if (item.externalSource.equals("TMDB", ignoreCase = true)) {
                 val tmdbId = item.externalId.toLongOrNull() ?: 0L
                 if (item.mediaType == MediaType.MOVIE) {
                     val fullDetails = com.lx.tracklist.data.remote.TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()
                     MediaEntry(
-                        userId = activeUser.value.id,
+                        userId = effectiveUserId,
                         title = fullDetails?.title ?: item.title,
                         alternateTitle = fullDetails?.alternateTitle,
                         mediaType = MediaType.MOVIE,
@@ -510,7 +554,7 @@ class MediaRepository(
                 } else {
                     val fullDetails = com.lx.tracklist.data.remote.TmdbApiClient.fetchTvDetails(tmdbId, context).getOrNull()
                     MediaEntry(
-                        userId = activeUser.value.id,
+                        userId = effectiveUserId,
                         title = fullDetails?.title ?: item.title,
                         alternateTitle = fullDetails?.alternateTitle,
                         mediaType = MediaType.SHOW,
@@ -535,7 +579,7 @@ class MediaRepository(
                 val details = com.lx.tracklist.data.remote.JikanApiClient.fetchMediaDetails(malId, isManga).getOrNull()
                 val isVideo = item.mediaType == MediaType.ANIME
                 MediaEntry(
-                    userId = activeUser.value.id,
+                    userId = effectiveUserId,
                     title = details?.title ?: item.title,
                     alternateTitle = details?.alternateTitle,
                     mediaType = item.mediaType,

@@ -69,6 +69,7 @@ enum class CoverImageFilterOption {
 
 data class LibraryUiState(
     val entries: List<MediaEntry> = emptyList(),
+    val allUserEntries: List<MediaEntry> = emptyList(),
     val searchQuery: String = "",
     val selectedCategoryFilter: MediaType? = null,
     val selectedCustomCategoryFilter: String? = null,
@@ -277,6 +278,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
 
         LibraryUiState(
             entries = sortedList,
+            allUserEntries = allEntries,
             searchQuery = filter.query,
             selectedCategoryFilter = filter.categoryFilter,
             selectedCustomCategoryFilter = filter.customCategoryFilter,
@@ -586,13 +588,16 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                 }
             }
 
+            val user = repository.activeUser.value
             withContext(Dispatchers.Main) {
                 if (jikanIds.isNotEmpty()) {
                     JikanSyncManager.startSync(
                         context = context,
                         repository = repository,
                         forceRefresh = forceRefresh,
-                        targetEntryIds = jikanIds
+                        targetEntryIds = jikanIds,
+                        targetProfileId = user.id,
+                        targetProfileName = user.name
                     )
                 }
                 if (tmdbIds.isNotEmpty()) {
@@ -600,7 +605,9 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                         context = context,
                         repository = repository,
                         forceRefresh = forceRefresh,
-                        targetEntryIds = tmdbIds
+                        targetEntryIds = tmdbIds,
+                        targetProfileId = user.id,
+                        targetProfileName = user.name
                     )
                 }
             }
@@ -611,11 +618,14 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         val selected = _filterState.value.selectedIds.toSet()
         if (selected.isEmpty()) return
         clearSelection()
+        val user = repository.activeUser.value
         JikanSyncManager.startSync(
             context = context,
             repository = repository,
             forceRefresh = forceRefresh,
-            targetEntryIds = selected
+            targetEntryIds = selected,
+            targetProfileId = user.id,
+            targetProfileName = user.name
         )
     }
 
@@ -623,11 +633,14 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         val selected = _filterState.value.selectedIds.toSet()
         if (selected.isEmpty()) return
         clearSelection()
+        val user = repository.activeUser.value
         TmdbSyncManager.startSync(
             context = context,
             repository = repository,
             forceRefresh = forceRefresh,
-            targetEntryIds = selected
+            targetEntryIds = selected,
+            targetProfileId = user.id,
+            targetProfileName = user.name
         )
     }
 
@@ -651,7 +664,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun addRelatedToLibrary(item: com.lx.tracklist.data.model.RelatedMediaItem, status: MediaStatus, context: Context? = null) {
         viewModelScope.launch {
-            repository.addRelatedItem(item, status, context)
+            repository.addRelatedItem(item, status, context, targetUserId = repository.activeUser.value.id)
         }
     }
 }

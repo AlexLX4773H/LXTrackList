@@ -187,7 +187,8 @@ class DetailViewModel(
     }
 
     suspend fun addRelatedToLibrary(item: RelatedMediaItem, status: MediaStatus, context: Context? = null): Long {
-        return repository.addRelatedItem(item, status, context)
+        val targetUserId = entry.value?.userId ?: repository.activeUser.value.id
+        return repository.addRelatedItem(item, status, context, targetUserId = targetUserId)
     }
 
     private val _isDeleted = MutableStateFlow(false)

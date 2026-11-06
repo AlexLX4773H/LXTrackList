@@ -31,6 +31,7 @@ data class HomeUiState(
     val isUserSwitcherOpen: Boolean = false,
     val isAddSubCategoryDialogOpen: Boolean = false,
     val entries: List<MediaEntry> = emptyList(),
+    val allUserEntries: List<MediaEntry> = emptyList(),
     val categoryEntries: List<MediaEntry> = emptyList(),
     val statusCounts: Map<MediaStatus, Int> = emptyMap(),
     val totalCount: Int = 0,
@@ -204,6 +205,7 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
             isUserSwitcherOpen = filter.isUserSwitcherOpen,
             isAddSubCategoryDialogOpen = filter.isAddSubCategoryDialogOpen,
             entries = sortedActiveFiltered,
+            allUserEntries = allEntries,
             categoryEntries = sortedCategoryEntries,
             statusCounts = stCounts,
             totalCount = categoryEntries.size,
@@ -333,7 +335,7 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun addRelatedToLibrary(item: com.lx.tracklist.data.model.RelatedMediaItem, status: MediaStatus, context: android.content.Context? = null) {
         viewModelScope.launch {
-            repository.addRelatedItem(item, status, context)
+            repository.addRelatedItem(item, status, context, targetUserId = repository.activeUser.value.id)
         }
     }
 }

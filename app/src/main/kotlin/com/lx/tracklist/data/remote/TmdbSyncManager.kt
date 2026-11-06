@@ -23,6 +23,8 @@ import kotlinx.coroutines.launch
 
 data class TmdbSyncProgress(
     val isRunning: Boolean = false,
+    val profileId: Long? = null,
+    val profileName: String? = null,
     val currentTitle: String = "",
     val completedCount: Int = 0,
     val totalCount: Int = 0,
@@ -103,14 +105,27 @@ object TmdbSyncManager {
         context: Context,
         repository: MediaRepository,
         forceRefresh: Boolean = false,
-        targetEntryIds: Set<Long>? = null
+        targetEntryIds: Set<Long>? = null,
+        targetProfileId: Long? = null,
+        targetProfileName: String? = null
     ) {
-        if (_syncState.value.isRunning) return
+        val profileId = targetProfileId ?: repository.activeUser.value.id
+        val profileName = targetProfileName ?: repository.activeUser.value.name
+
+        if (_syncState.value.isRunning) {
+            if (_syncState.value.profileId == profileId) {
+                return
+            } else {
+                cancelSync(context)
+            }
+        }
 
         if (!TmdbConfig.isConfigured(context)) {
             _syncState.update {
                 it.copy(
                     isRunning = false,
+                    profileId = profileId,
+                    profileName = profileName,
                     lastErrorMessage = "TMDB API credentials are missing. Please configure your Read Access Token.",
                     statusMessage = "TMDB API token missing",
                     isCompleted = true
@@ -123,7 +138,8 @@ object TmdbSyncManager {
                 updated = 0,
                 failed = 0,
                 lastError = "TMDB Read Access Token is not configured.",
-                isCancelled = false
+                isCancelled = false,
+                profileName = profileName
             )
             return
         }
@@ -131,7 +147,7 @@ object TmdbSyncManager {
         syncJob = scope.launch {
             NotificationHelper.initNotificationChannels(context)
 
-            val allEntries = repository.getAllEntriesSync()
+            val allEntries = repository.getAllEntriesForUserSync(profileId)
             val entriesPool = if (targetEntryIds != null) {
                 allEntries.filter { targetEntryIds.contains(it.id) }
             } else {
@@ -161,6 +177,8 @@ object TmdbSyncManager {
                 _syncState.update {
                     it.copy(
                         isRunning = false,
+                        profileId = profileId,
+                        profileName = profileName,
                         totalCount = 0,
                         completedCount = 0,
                         pendingCount = 0,
@@ -178,7 +196,8 @@ object TmdbSyncManager {
                     updated = 0,
                     failed = 0,
                     lastError = msg,
-                    isCancelled = false
+                    isCancelled = false,
+                    profileName = profileName
                 )
                 return@launch
             }
@@ -191,6 +210,8 @@ object TmdbSyncManager {
             _syncState.update {
                 it.copy(
                     isRunning = true,
+                    profileId = profileId,
+                    profileName = profileName,
                     totalCount = total,
                     completedCount = 0,
                     pendingCount = total,
@@ -216,6 +237,8 @@ object TmdbSyncManager {
 
                 _syncState.update {
                     it.copy(
+                        profileId = profileId,
+                        profileName = profileName,
                         currentTitle = entry.title,
                         statusMessage = if (tmdbId != null) {
                             "Fetching ${entry.title} (TMDB #$tmdbId)..."
@@ -225,7 +248,7 @@ object TmdbSyncManager {
                     )
                 }
 
-                NotificationHelper.showTmdbSyncProgress(context, completed, total, entry.title)
+                NotificationHelper.showTmdbSyncProgress(context, completed, total, entry.title, profileName = profileName)
 
                 // Rate limiting delay
                 delay(RATE_LIMIT_DELAY_MS)
@@ -463,7 +486,7 @@ object TmdbSyncManager {
                                 relatedEntriesJson = newRelatedJson,
                                 updatedAt = System.currentTimeMillis()
                             )
-                            repository.update(updatedEntry)
+                            repository.update(updatedEntry.copy(userId = profileId))
                             updated++
                         }
                     }
@@ -478,6 +501,8 @@ object TmdbSyncManager {
                 val pending = total - completed
                 _syncState.update {
                     it.copy(
+                        profileId = profileId,
+                        profileName = profileName,
                         completedCount = completed,
                         pendingCount = pending,
                         updatedCount = updated,
@@ -491,6 +516,8 @@ object TmdbSyncManager {
             _syncState.update {
                 it.copy(
                     isRunning = false,
+                    profileId = profileId,
+                    profileName = profileName,
                     currentTitle = "",
                     statusMessage = null,
                     isCompleted = true
@@ -504,13 +531,15 @@ object TmdbSyncManager {
                 updated = updated,
                 failed = failed,
                 lastError = lastError,
-                isCancelled = (syncJob?.isCancelled == true)
+                isCancelled = (syncJob?.isCancelled == true),
+                profileName = profileName
             )
         }
     }
 
     fun cancelSync(context: Context? = null) {
         val wasRunning = _syncState.value.isRunning
+        val profileName = _syncState.value.profileName
         val completed = _syncState.value.completedCount
         val total = _syncState.value.totalCount
         val updated = _syncState.value.updatedCount
@@ -520,6 +549,8 @@ object TmdbSyncManager {
         _syncState.update {
             it.copy(
                 isRunning = false,
+                profileId = null,
+                profileName = null,
                 currentTitle = "",
                 statusMessage = null,
                 isCompleted = false
@@ -534,7 +565,8 @@ object TmdbSyncManager {
                 updated = updated,
                 failed = failed,
                 lastError = null,
-                isCancelled = true
+                isCancelled = true,
+                profileName = profileName
             )
         }
     }

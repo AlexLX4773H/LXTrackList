@@ -287,11 +287,13 @@ class SearchViewModel(
         context: Context? = null
     ) {
         viewModelScope.launch(Dispatchers.IO) {
+            val targetUserId = repository.activeUser.value.id
             val entry: MediaEntry = if (item.externalSource == "TMDB") {
                 val tmdbId = item.externalId.toLongOrNull() ?: 0L
                 if (item.mediaType == MediaType.MOVIE) {
                     val fullDetails = TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()
                     MediaEntry(
+                        userId = targetUserId,
                         title = fullDetails?.title ?: item.title,
                         alternateTitle = fullDetails?.alternateTitle ?: item.alternateTitle,
                         mediaType = MediaType.MOVIE,
@@ -311,6 +313,7 @@ class SearchViewModel(
                 } else {
                     val fullDetails = TmdbApiClient.fetchTvDetails(tmdbId, context).getOrNull()
                     MediaEntry(
+                        userId = targetUserId,
                         title = fullDetails?.title ?: item.title,
                         alternateTitle = fullDetails?.alternateTitle ?: item.alternateTitle,
                         mediaType = MediaType.SHOW,
@@ -336,6 +339,7 @@ class SearchViewModel(
                 val details = item.rawJikanDetails
                 val isVideo = item.mediaType == MediaType.ANIME
                 MediaEntry(
+                    userId = targetUserId,
                     title = details?.title ?: item.title,
                     alternateTitle = details?.alternateTitle ?: item.alternateTitle,
                     mediaType = item.mediaType,

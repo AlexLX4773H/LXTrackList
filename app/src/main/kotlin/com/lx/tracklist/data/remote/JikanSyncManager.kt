@@ -24,6 +24,8 @@ import kotlinx.coroutines.withContext
 
 data class JikanSyncProgress(
     val isRunning: Boolean = false,
+    val profileId: Long? = null,
+    val profileName: String? = null,
     val currentTitle: String = "",
     val completedCount: Int = 0,
     val totalCount: Int = 0,
@@ -116,15 +118,26 @@ object JikanSyncManager {
         context: Context,
         repository: MediaRepository,
         forceRefresh: Boolean = false,
-        targetEntryIds: Set<Long>? = null
+        targetEntryIds: Set<Long>? = null,
+        targetProfileId: Long? = null,
+        targetProfileName: String? = null
     ) {
-        if (_syncState.value.isRunning) return
+        val profileId = targetProfileId ?: repository.activeUser.value.id
+        val profileName = targetProfileName ?: repository.activeUser.value.name
+
+        if (_syncState.value.isRunning) {
+            if (_syncState.value.profileId == profileId) {
+                return
+            } else {
+                cancelSync(context)
+            }
+        }
 
         syncJob = scope.launch {
             NotificationHelper.initNotificationChannels(context)
 
-            // Find eligible entries across all media types (anime, movies, manga, manhwa, etc.)
-            val allEntries = repository.getAllEntriesSync()
+            // Find eligible entries strictly for this profile
+            val allEntries = repository.getAllEntriesForUserSync(profileId)
             val entriesPool = if (targetEntryIds != null) {
                 allEntries.filter { targetEntryIds.contains(it.id) }
             } else {
@@ -154,6 +167,8 @@ object JikanSyncManager {
                 _syncState.update {
                     it.copy(
                         isRunning = false,
+                        profileId = profileId,
+                        profileName = profileName,
                         totalCount = 0,
                         completedCount = 0,
                         pendingCount = 0,
@@ -171,7 +186,8 @@ object JikanSyncManager {
                     updated = 0,
                     failed = 0,
                     lastError = msg,
-                    isCancelled = false
+                    isCancelled = false,
+                    profileName = profileName
                 )
                 return@launch
             }
@@ -184,6 +200,8 @@ object JikanSyncManager {
             _syncState.update {
                 it.copy(
                     isRunning = true,
+                    profileId = profileId,
+                    profileName = profileName,
                     totalCount = total,
                     completedCount = 0,
                     pendingCount = total,
@@ -209,6 +227,8 @@ object JikanSyncManager {
 
                 _syncState.update {
                     it.copy(
+                        profileId = profileId,
+                        profileName = profileName,
                         currentTitle = entry.title,
                         statusMessage = if (malId != null) {
                             "Fetching ${entry.title} (#$malId)..."
@@ -218,7 +238,7 @@ object JikanSyncManager {
                     )
                 }
 
-                NotificationHelper.showJikanSyncProgress(context, completed, total, entry.title)
+                NotificationHelper.showJikanSyncProgress(context, completed, total, entry.title, profileName = profileName)
 
                 // Rate limiting delay
                 delay(RATE_LIMIT_DELAY_MS)
@@ -456,6 +476,7 @@ object JikanSyncManager {
 
                         if (hasChanges) {
                             val updatedEntry = entry.copy(
+                                userId = profileId,
                                 coverImageUri = finalCoverUri ?: entry.coverImageUri,
                                 episodeLengthMinutes = newEpisodeLength,
                                 durationMinutes = newDurationMinutes,
@@ -490,6 +511,8 @@ object JikanSyncManager {
                 val pending = total - completed
                 _syncState.update {
                     it.copy(
+                        profileId = profileId,
+                        profileName = profileName,
                         completedCount = completed,
                         pendingCount = pending,
                         updatedCount = updated,
@@ -503,6 +526,8 @@ object JikanSyncManager {
             _syncState.update {
                 it.copy(
                     isRunning = false,
+                    profileId = profileId,
+                    profileName = profileName,
                     currentTitle = "",
                     statusMessage = null,
                     isCompleted = true
@@ -516,13 +541,15 @@ object JikanSyncManager {
                 updated = updated,
                 failed = failed,
                 lastError = lastError,
-                isCancelled = (syncJob?.isCancelled == true)
+                isCancelled = (syncJob?.isCancelled == true),
+                profileName = profileName
             )
         }
     }
 
     fun cancelSync(context: Context? = null) {
         val wasRunning = _syncState.value.isRunning
+        val profileName = _syncState.value.profileName
         val completed = _syncState.value.completedCount
         val total = _syncState.value.totalCount
         val updated = _syncState.value.updatedCount
@@ -532,6 +559,8 @@ object JikanSyncManager {
         _syncState.update {
             it.copy(
                 isRunning = false,
+                profileId = null,
+                profileName = null,
                 currentTitle = "",
                 statusMessage = null,
                 isCompleted = false
@@ -546,7 +575,8 @@ object JikanSyncManager {
                 updated = updated,
                 failed = failed,
                 lastError = null,
-                isCancelled = true
+                isCancelled = true,
+                profileName = profileName
             )
         }
     }

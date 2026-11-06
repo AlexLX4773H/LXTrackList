@@ -1136,7 +1136,7 @@ fun LibraryScreen(
                             isSelected = state.selectedIds.contains(entry.id),
                             onToggleSelect = { viewModel.toggleSelect(entry.id) },
                             onLongClick = { viewModel.toggleSelect(entry.id) },
-                            allLibraryEntries = state.entries,
+                            allLibraryEntries = state.allUserEntries,
                             onRelatedEntryClick = { onEntryClick(it) },
                             onAddRelatedItem = { item -> relatedItemToAdd = item }
                         )

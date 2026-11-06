@@ -307,7 +307,7 @@ fun HomeScreen(
                                 onToggleFavorite = { viewModel.toggleFavorite(entry) },
                                 onDelete = { viewModel.deleteEntry(entry) },
                                 onEdit = { onEditEntry(entry.id) },
-                                allLibraryEntries = state.entries,
+                                allLibraryEntries = state.allUserEntries,
                                 onRelatedEntryClick = { onEntryClick(it) },
                                 onAddRelatedItem = { item -> relatedItemToAdd = item }
                             )

@@ -61,6 +61,9 @@ interface MediaEntryDao {
     @Query("SELECT * FROM media_entries WHERE id = :id")
     suspend fun getEntryByIdSync(id: Long): MediaEntry?
 
+    @Query("SELECT * FROM media_entries WHERE id = :id AND userId = :userId LIMIT 1")
+    suspend fun getEntryByIdAndUserSync(id: Long, userId: Long): MediaEntry?
+
     @Query("SELECT * FROM media_entries WHERE userId = :userId AND externalId = :externalId AND externalSource = :externalSource LIMIT 1")
     suspend fun findByExternalId(userId: Long, externalId: String, externalSource: String): MediaEntry?
 
@@ -72,6 +75,9 @@ interface MediaEntryDao {
 
     @Query("SELECT * FROM media_entries WHERE externalId = :externalId LIMIT 1")
     suspend fun findByAnyExternalId(externalId: String): MediaEntry?
+
+    @Query("SELECT * FROM media_entries WHERE userId = :userId AND LOWER(title) = LOWER(:title) AND mediaType = :mediaType LIMIT 1")
+    suspend fun findByTitleAndType(userId: Long, title: String, mediaType: MediaType): MediaEntry?
 
     @Query("SELECT * FROM media_entries WHERE (title LIKE '%' || :query || '%' OR alternateTitle LIKE '%' || :query || '%') ORDER BY title ASC")
     fun searchEntries(query: String): Flow<List<MediaEntry>>
@@ -133,20 +139,41 @@ interface MediaEntryDao {
     @Query("UPDATE media_entries SET mediaType = :mediaType, customCategory = :customCategory, subCategory = NULL, updatedAt = :updatedAt WHERE id IN (:ids)")
     suspend fun updateCategoryForIds(ids: List<Long>, mediaType: MediaType, customCategory: String?, updatedAt: Long)
 
+    @Query("UPDATE media_entries SET mediaType = :mediaType, customCategory = :customCategory, subCategory = NULL, updatedAt = :updatedAt WHERE id IN (:ids) AND userId = :userId")
+    suspend fun updateCategoryForIdsAndUser(userId: Long, ids: List<Long>, mediaType: MediaType, customCategory: String?, updatedAt: Long)
+
     @Query("UPDATE media_entries SET subCategory = :subCategory, updatedAt = :updatedAt WHERE id IN (:ids)")
     suspend fun updateSubCategoryForIds(ids: List<Long>, subCategory: String?, updatedAt: Long)
+
+    @Query("UPDATE media_entries SET subCategory = :subCategory, updatedAt = :updatedAt WHERE id IN (:ids) AND userId = :userId")
+    suspend fun updateSubCategoryForIdsAndUser(userId: Long, ids: List<Long>, subCategory: String?, updatedAt: Long)
 
     @Query("UPDATE media_entries SET status = :status, updatedAt = :updatedAt WHERE id IN (:ids)")
     suspend fun updateStatusForIds(ids: List<Long>, status: MediaStatus, updatedAt: Long)
 
+    @Query("UPDATE media_entries SET status = :status, updatedAt = :updatedAt WHERE id IN (:ids) AND userId = :userId")
+    suspend fun updateStatusForIdsAndUser(userId: Long, ids: List<Long>, status: MediaStatus, updatedAt: Long)
+
     @Query("UPDATE media_entries SET isFavorite = :isFavorite, updatedAt = :updatedAt WHERE id IN (:ids)")
     suspend fun updateFavoriteForIds(ids: List<Long>, isFavorite: Boolean, updatedAt: Long)
+
+    @Query("UPDATE media_entries SET isFavorite = :isFavorite, updatedAt = :updatedAt WHERE id IN (:ids) AND userId = :userId")
+    suspend fun updateFavoriteForIdsAndUser(userId: Long, ids: List<Long>, isFavorite: Boolean, updatedAt: Long)
 
     @Query("DELETE FROM media_entries WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    @Query("DELETE FROM media_entries WHERE id = :id AND userId = :userId")
+    suspend fun deleteByIdAndUser(id: Long, userId: Long)
+
     @Query("DELETE FROM media_entries WHERE id IN (:ids)")
     suspend fun deleteEntriesByIds(ids: List<Long>)
+
+    @Query("DELETE FROM media_entries WHERE id IN (:ids) AND userId = :userId")
+    suspend fun deleteEntriesByIdsAndUser(userId: Long, ids: List<Long>)
+
+    @Query("UPDATE media_entries SET userId = :fallbackUserId WHERE userId <= 0")
+    suspend fun sanitizeZeroUserIds(fallbackUserId: Long = 1L)
 
     @Query("DELETE FROM media_entries WHERE userId = :userId")
     suspend fun deleteAllByUser(userId: Long)

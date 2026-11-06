@@ -261,10 +261,19 @@ fun AppNavigation() {
         UserSwitcherSheet(
             activeUser = homeState.activeUser,
             allUsers = homeState.allUsers,
-            onSelectUser = { homeViewModel.switchUser(it) },
-            onCreateUser = { name, color, avatarUri -> homeViewModel.createUser(name, color, avatarUri) },
+            onSelectUser = {
+                homeViewModel.switchUser(it)
+                backStack = listOf(NavDestination.Home)
+            },
+            onCreateUser = { name, color, avatarUri ->
+                homeViewModel.createUser(name, color, avatarUri)
+                backStack = listOf(NavDestination.Home)
+            },
             onUpdateUser = { homeViewModel.updateUser(it) },
-            onDeleteUser = { homeViewModel.deleteUser(it) },
+            onDeleteUser = {
+                homeViewModel.deleteUser(it)
+                backStack = listOf(NavDestination.Home)
+            },
             onDismiss = { homeViewModel.setUserSwitcherOpen(false) }
         )
     }

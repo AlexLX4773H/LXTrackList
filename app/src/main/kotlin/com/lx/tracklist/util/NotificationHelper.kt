@@ -91,15 +91,16 @@ object NotificationHelper {
         return afterSlash.substringAfterLast(':').ifBlank { trimmed }
     }
 
-    fun showImportProgress(context: Context, sourceName: String) {
+    fun showImportProgress(context: Context, sourceName: String, profileName: String? = null) {
         if (!hasNotificationPermission(context)) return
 
         try {
             val shortName = cleanSourceName(sourceName)
+            val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
             val pendingIntent = getMainActivityPendingIntent(context)
             val builder = NotificationCompat.Builder(context, CHANNEL_IMPORT_EXPORT)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("Importing $shortName")
+                .setContentTitle("${prefix}Importing $shortName")
                 .setContentText("Reading and importing entries into library...")
                 .setProgress(0, 0, true)
                 .setOngoing(true)
@@ -118,19 +119,21 @@ object NotificationHelper {
         sourceName: String,
         totalCount: Int,
         addedCount: Int,
-        updatedCount: Int
+        updatedCount: Int,
+        profileName: String? = null
     ) {
         if (!hasNotificationPermission(context)) return
 
         try {
             val shortName = cleanSourceName(sourceName)
+            val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
             val pendingIntent = getMainActivityPendingIntent(context)
             val summaryText = "Imported $totalCount entries ($addedCount added, $updatedCount updated)"
-            val expandedText = "Import completed successfully from $shortName\n• Total: $totalCount entries\n• Added: $addedCount new\n• Updated: $updatedCount existing"
+            val expandedText = "Import completed successfully from $shortName into ${profileName ?: "profile"}\n• Total: $totalCount entries\n• Added: $addedCount new\n• Updated: $updatedCount existing"
 
             val builder = NotificationCompat.Builder(context, CHANNEL_IMPORT_EXPORT)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("Import Completed")
+                .setContentTitle("${prefix}Import Completed")
                 .setContentText(summaryText)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
                 .setProgress(0, 0, false)
@@ -145,15 +148,16 @@ object NotificationHelper {
         } catch (_: Exception) {}
     }
 
-    fun showImportFailed(context: Context, sourceName: String, errorMessage: String) {
+    fun showImportFailed(context: Context, sourceName: String, errorMessage: String, profileName: String? = null) {
         if (!hasNotificationPermission(context)) return
 
         try {
             val shortName = cleanSourceName(sourceName)
+            val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
             val pendingIntent = getMainActivityPendingIntent(context)
             val builder = NotificationCompat.Builder(context, CHANNEL_IMPORT_EXPORT)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("Import Failed")
+                .setContentTitle("${prefix}Import Failed")
                 .setContentText("Failed to import $shortName: $errorMessage")
                 .setStyle(NotificationCompat.BigTextStyle().bigText("Failed to import $shortName\n$errorMessage"))
                 .setProgress(0, 0, false)
@@ -172,17 +176,19 @@ object NotificationHelper {
         context: Context,
         completed: Int,
         total: Int,
-        currentTitle: String
+        currentTitle: String,
+        profileName: String? = null
     ) {
         if (!hasNotificationPermission(context)) return
 
         try {
             val pendingIntent = getMainActivityPendingIntent(context)
+            val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
             val text = if (currentTitle.isNotBlank()) "Fetching: $currentTitle" else "Updating MAL entries..."
 
             val builder = NotificationCompat.Builder(context, CHANNEL_JIKAN_SYNC)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("Syncing MAL Metadata ($completed/$total)")
+                .setContentTitle("${prefix}Syncing MAL Metadata ($completed/$total)")
                 .setContentText(text)
                 .setProgress(total, completed, false)
                 .setOngoing(true)
@@ -203,32 +209,34 @@ object NotificationHelper {
         updated: Int,
         failed: Int,
         lastError: String?,
-        isCancelled: Boolean
+        isCancelled: Boolean,
+        profileName: String? = null
     ) {
         if (!hasNotificationPermission(context)) return
 
         try {
             val pendingIntent = getMainActivityPendingIntent(context)
+            val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
             val title: String
             val content: String
             val expanded: String
 
             if (isCancelled) {
-                title = "MAL Sync Cancelled"
+                title = "${prefix}MAL Sync Cancelled"
                 content = "$completed / $total completed ($updated updated)"
-                expanded = "Metadata sync was cancelled by user.\n• Processed: $completed / $total\n• Updated: $updated entries"
+                expanded = "Metadata sync was cancelled by user.\n• Profile: ${profileName ?: "Active"}\n• Processed: $completed / $total\n• Updated: $updated entries"
             } else if (total == 0) {
-                title = "MAL Sync"
+                title = "${prefix}MAL Sync"
                 content = if (lastError != null) lastError else "All MAL entries are already up to date"
                 expanded = if (lastError != null) lastError else "All entries with MyAnimeList source already have posters and details."
             } else if (failed == 0) {
-                title = "MAL Sync Completed"
+                title = "${prefix}MAL Sync Completed"
                 content = "Updated $updated MAL entries with posters & details"
-                expanded = "Successfully synced $total entries from MyAnimeList!\n• Updated: $updated entries with high-res posters & runtimes"
+                expanded = "Successfully synced $total entries for ${profileName ?: "profile"} from MyAnimeList!\n• Updated: $updated entries with high-res posters & runtimes"
             } else {
-                title = "MAL Sync Finished"
+                title = "${prefix}MAL Sync Finished"
                 content = "$updated updated, $failed failed"
-                expanded = "Sync finished with issues:\n• Updated: $updated entries\n• Failed: $failed entries${if (!lastError.isNullOrBlank()) "\n• Note: $lastError" else ""}"
+                expanded = "Sync finished for ${profileName ?: "profile"} with issues:\n• Updated: $updated entries\n• Failed: $failed entries${if (!lastError.isNullOrBlank()) "\n• Note: $lastError" else ""}"
             }
 
             val builder = NotificationCompat.Builder(context, CHANNEL_JIKAN_SYNC)
@@ -252,17 +260,19 @@ object NotificationHelper {
         context: Context,
         completed: Int,
         total: Int,
-        currentTitle: String
+        currentTitle: String,
+        profileName: String? = null
     ) {
         if (!hasNotificationPermission(context)) return
 
         try {
             val pendingIntent = getMainActivityPendingIntent(context)
+            val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
             val text = if (currentTitle.isNotBlank()) "Fetching: $currentTitle" else "Updating TMDB entries..."
 
             val builder = NotificationCompat.Builder(context, CHANNEL_TMDB_SYNC)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("Syncing TMDB Metadata ($completed/$total)")
+                .setContentTitle("${prefix}Syncing TMDB Metadata ($completed/$total)")
                 .setContentText(text)
                 .setProgress(total, completed, false)
                 .setOngoing(true)
@@ -283,32 +293,34 @@ object NotificationHelper {
         updated: Int,
         failed: Int,
         lastError: String?,
-        isCancelled: Boolean
+        isCancelled: Boolean,
+        profileName: String? = null
     ) {
         if (!hasNotificationPermission(context)) return
 
         try {
             val pendingIntent = getMainActivityPendingIntent(context)
+            val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
             val title: String
             val content: String
             val expanded: String
 
             if (isCancelled) {
-                title = "TMDB Sync Cancelled"
+                title = "${prefix}TMDB Sync Cancelled"
                 content = "$completed / $total completed ($updated updated)"
-                expanded = "Metadata sync was cancelled by user.\n• Processed: $completed / $total\n• Updated: $updated entries"
+                expanded = "Metadata sync was cancelled by user.\n• Profile: ${profileName ?: "Active"}\n• Processed: $completed / $total\n• Updated: $updated entries"
             } else if (total == 0) {
-                title = "TMDB Sync"
+                title = "${prefix}TMDB Sync"
                 content = if (lastError != null) lastError else "All TMDB entries are already up to date"
                 expanded = if (lastError != null) lastError else "All movie and show entries already have posters and details."
             } else if (failed == 0) {
-                title = "TMDB Sync Completed"
+                title = "${prefix}TMDB Sync Completed"
                 content = "Updated $updated entries with posters & details"
-                expanded = "Successfully synced $total entries from The Movie Database!\n• Updated: $updated entries with official posters, runtimes & episode counts"
+                expanded = "Successfully synced $total entries for ${profileName ?: "profile"} from The Movie Database!\n• Updated: $updated entries with official posters, runtimes & episode counts"
             } else {
-                title = "TMDB Sync Finished"
+                title = "${prefix}TMDB Sync Finished"
                 content = "$updated updated, $failed failed"
-                expanded = "Sync finished with issues:\n• Updated: $updated entries\n• Failed: $failed entries${if (!lastError.isNullOrBlank()) "\n• Note: $lastError" else ""}"
+                expanded = "Sync finished for ${profileName ?: "profile"} with issues:\n• Updated: $updated entries\n• Failed: $failed entries${if (!lastError.isNullOrBlank()) "\n• Note: $lastError" else ""}"
             }
 
             val builder = NotificationCompat.Builder(context, CHANNEL_TMDB_SYNC)
