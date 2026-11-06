@@ -3,6 +3,8 @@ package com.lx.tracklist.data.remote
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.RelatedMediaItem
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -781,6 +783,62 @@ object JikanApiClient {
         val mins = minsMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
         val total = (hours * 60) + mins
         return if (total > 0) total else null
+    }
+
+    fun fetchRelatedEntries(
+        malId: Long,
+        isManga: Boolean,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<RelatedMediaItem>> {
+        val type = if (isManga) "manga" else "anime"
+        val endpoint = "${baseUrl.trimEnd('/')}/$type/$malId/relations"
+        return try {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json")
+                .get()
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            val bodyString = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("Jikan HTTP ${response.code} for relations"))
+            }
+
+            val jsonObject = gson.fromJson(bodyString, JsonObject::class.java)
+            val dataArray = jsonObject?.getAsJsonArray("data") ?: return Result.success(emptyList())
+
+            val list = mutableListOf<RelatedMediaItem>()
+            for (i in 0 until dataArray.size()) {
+                val relObj = dataArray.get(i).asJsonObject
+                val relationName = relObj.get("relation")?.takeIf { !it.isJsonNull }?.asString ?: "Related"
+                val entriesArray = relObj.getAsJsonArray("entry") ?: continue
+
+                for (j in 0 until entriesArray.size()) {
+                    val entryObj = entriesArray.get(j).asJsonObject
+                    val id = entryObj.get("mal_id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
+                    val name = entryObj.get("name")?.takeIf { !it.isJsonNull }?.asString ?: continue
+                    val entryType = entryObj.get("type")?.takeIf { !it.isJsonNull }?.asString ?: type
+                    val mType = if (entryType.equals("anime", ignoreCase = true)) MediaType.ANIME else MediaType.MANGA
+
+                    list.add(
+                        RelatedMediaItem(
+                            title = name,
+                            relationship = relationName,
+                            externalId = id.toString(),
+                            externalSource = "MAL",
+                            mediaType = mType
+                        )
+                    )
+                }
+            }
+            Result.success(list)
+        } catch (e: Exception) {
+            Log.w(TAG, "Exception fetching Jikan relations for $malId: ${e.message}")
+            Result.failure(e)
+        }
     }
 }
 

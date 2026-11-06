@@ -231,7 +231,8 @@ fun AppNavigation() {
                 DetailScreen(
                     viewModel = detailViewModel,
                     onNavigateBack = { navigateBack() },
-                    onEdit = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) }
+                    onEdit = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) },
+                    onNavigateToDetail = { targetEntryId -> navigateTo(NavDestination.Detail(targetEntryId)) }
                 )
             }
 

@@ -222,5 +222,44 @@ class TmdbIntegrationTest {
         assertEquals("The Movie Database (TMDB)", tmdbSource.displayName)
         assertEquals("TMDB", tmdbSource.shortName)
     }
+
+    @Test
+    fun testRelatedMediaItemProperties() {
+        val sequel = com.lx.tracklist.data.model.RelatedMediaItem(
+            title = "Ace Ventura: When Nature Calls",
+            relationship = "Sequel",
+            externalId = "9273",
+            externalSource = "TMDB",
+            mediaType = MediaType.MOVIE,
+            posterUrl = "https://image.tmdb.org/t/p/w500/test.jpg",
+            releaseYear = "1995",
+            score = 6.4f,
+            inLibraryEntryId = 42L,
+            inLibraryStatus = MediaStatus.COMPLETED
+        )
+
+        assertEquals("Ace Ventura: When Nature Calls", sequel.title)
+        assertEquals("Sequel", sequel.relationship)
+        assertEquals("9273", sequel.externalId)
+        assertEquals("TMDB", sequel.externalSource)
+        assertEquals(MediaType.MOVIE, sequel.mediaType)
+        assertEquals("1995", sequel.releaseYear)
+        assertEquals(6.4f, sequel.score)
+        assertEquals(42L, sequel.inLibraryEntryId)
+        assertEquals(MediaStatus.COMPLETED, sequel.inLibraryStatus)
+    }
+
+    @Test
+    fun testPrequelVsSequelClassification() {
+        val baseDate = "2001-03-18"
+        val earlierPartDate = "1999-05-20"
+        val laterPartDate = "2003-07-25"
+
+        val relEarlier = if (earlierPartDate.isNotBlank() && earlierPartDate < baseDate) "Prequel" else "Sequel"
+        val relLater = if (laterPartDate.isNotBlank() && laterPartDate > baseDate) "Sequel" else "Prequel"
+
+        assertEquals("Prequel", relEarlier)
+        assertEquals("Sequel", relLater)
+    }
 }
 

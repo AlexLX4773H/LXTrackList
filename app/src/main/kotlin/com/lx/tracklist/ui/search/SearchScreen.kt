@@ -8,7 +8,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +19,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -51,9 +57,12 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -73,12 +82,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -96,7 +110,7 @@ import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SearchScreen(
     viewModel: SearchViewModel,
@@ -105,8 +119,11 @@ fun SearchScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     val snackbarHostState = remember { SnackbarHostState() }
     var itemToAdd by remember { mutableStateOf<SearchResultItem?>(null) }
+    var previewItem by remember { mutableStateOf<SearchResultItem?>(null) }
 
     LaunchedEffect(state.userAddedMessage) {
         state.userAddedMessage?.let { msg ->
@@ -131,6 +148,21 @@ fun SearchScreen(
                 itemToAdd = null
             },
             onDismiss = { itemToAdd = null }
+        )
+    }
+
+    if (previewItem != null) {
+        SearchResultDetailSheet(
+            item = previewItem!!,
+            onDismiss = { previewItem = null },
+            onAddClick = {
+                itemToAdd = previewItem
+                previewItem = null
+            },
+            onViewInLibrary = { entryId ->
+                previewItem = null
+                onNavigateToDetail(entryId)
+            }
         )
     }
 
@@ -370,8 +402,21 @@ fun SearchScreen(
                         items(state.results, key = { "${it.externalSource}_${it.externalId}" }) { item ->
                             SearchResultCard(
                                 item = item,
-                                onAddClick = { itemToAdd = item },
-                                onViewClick = { item.existingEntryId?.let(onNavigateToDetail) }
+                                onAddClick = {
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    itemToAdd = item
+                                },
+                                onViewClick = {
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    item.existingEntryId?.let(onNavigateToDetail)
+                                },
+                                onItemClick = {
+                                    keyboardController?.hide()
+                                    focusManager.clearFocus()
+                                    previewItem = item
+                                }
                             )
                         }
                     }
@@ -386,10 +431,13 @@ private fun SearchResultCard(
     item: SearchResultItem,
     onAddClick: () -> Unit,
     onViewClick: () -> Unit,
+    onItemClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onItemClick() },
         colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
         border = BorderStroke(1.dp, if (item.isAlreadyInLibrary) LXPrimaryGreen.copy(alpha = 0.4f) else LXBorder),
         shape = RoundedCornerShape(12.dp)
@@ -725,4 +773,320 @@ private fun AddToLibraryDialog(
         containerColor = LXSurfaceElevated,
         shape = RoundedCornerShape(14.dp)
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun SearchResultDetailSheet(
+    item: SearchResultItem,
+    onDismiss: () -> Unit,
+    onAddClick: () -> Unit,
+    onViewInLibrary: (Long) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                val isFlingingUp = available.y < 0
+                val isExpanded = sheetState.targetValue == SheetValue.Expanded
+                return if (isFlingingUp && isExpanded) {
+                    available
+                } else {
+                    Velocity.Zero
+                }
+            }
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = LXSurfaceBlack,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 10.dp)
+                    .width(36.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(LXBorder)
+            )
+        }
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .nestedScroll(nestedScrollConnection)
+        ) {
+            val maxSheetHeight = maxHeight * 0.90f
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxSheetHeight)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+            // Header: Poster + Title + Metadata
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Poster
+                Box(
+                    modifier = Modifier
+                        .width(100.dp)
+                        .height(148.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!item.posterUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = item.posterUrl,
+                            contentDescription = item.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Icon(
+                            imageVector = if (item.mediaType == MediaType.MOVIE) Icons.Default.Movie else Icons.Default.Tv,
+                            contentDescription = null,
+                            tint = LXTextSecondary.copy(alpha = 0.5f),
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                }
+
+                // Info Column
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = item.title,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextPrimary
+                    )
+
+                    if (!item.alternateTitle.isNullOrBlank() && !item.alternateTitle.equals(item.title, ignoreCase = true)) {
+                        Text(
+                            text = item.alternateTitle.replace("\n", " • "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LXTextSecondary.copy(alpha = 0.8f)
+                        )
+                    }
+
+                    // Chips row (Format, Year, Score)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = LXPrimaryGreen.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                text = item.statusText ?: item.mediaType.displayName,
+                                color = LXPrimaryGreen,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        if (!item.releaseYear.isNullOrBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = LXSurfaceElevated
+                            ) {
+                                Text(
+                                    text = item.releaseYear,
+                                    color = LXTextSecondary,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        if (item.score != null && item.score > 0f) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = LXScoreGold.copy(alpha = 0.15f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Star,
+                                        contentDescription = null,
+                                        tint = LXScoreGold,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Text(
+                                        text = "${String.format(Locale.US, "%.1f", item.score)} (${item.externalSource})",
+                                        color = LXScoreGold,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Units/Episodes/Runtime
+                    val unitsInfo = when (item.mediaType) {
+                        MediaType.ANIME, MediaType.SHOW -> {
+                            val eps = item.totalUnits?.takeIf { it > 0 }?.let { "$it Episodes" } ?: "Episodes unknown"
+                            val dur = item.durationMinutes?.takeIf { it > 0 }?.let { " • ${it}m/ep" } ?: ""
+                            eps + dur
+                        }
+                        MediaType.MOVIE -> {
+                            item.durationMinutes?.takeIf { it > 0 }?.let { "${it}m runtime" }
+                        }
+                        MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> {
+                            val chs = item.totalUnits?.takeIf { it > 0 }?.let { "$it Chapters" } ?: "Ongoing"
+                            val vols = item.totalVolumes?.takeIf { it > 0 }?.let { " • $it Volumes" } ?: ""
+                            chs + vols
+                        }
+                    }
+                    if (!unitsInfo.isNullOrBlank()) {
+                        Text(
+                            text = unitsInfo,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LXTextSecondary
+                        )
+                    }
+                }
+            }
+
+            // Tags / Genres
+            val rawTags = item.rawJikanDetails?.tags
+            if (!rawTags.isNullOrBlank()) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    rawTags.split(",").map { it.trim() }.filter { it.isNotBlank() }.forEach { tag ->
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = LXSurfaceElevated,
+                            border = BorderStroke(0.5.dp, LXBorder)
+                        ) {
+                            Text(
+                                text = "#$tag",
+                                color = LXTextSecondary,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Synopsis Card
+            if (!item.synopsis.isNullOrBlank()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, LXBorder)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Synopsis / Overview",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXPrimaryGreen
+                        )
+                        Text(
+                            text = item.synopsis,
+                            style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
+                            color = LXTextPrimary
+                        )
+                    }
+                }
+            }
+
+            // TMDB / Jikan Attribution Notice
+            if (item.externalSource == "TMDB") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_tmdb_logo),
+                        contentDescription = "TMDB",
+                        modifier = Modifier.height(14.dp).width(20.dp)
+                    )
+                    Text(
+                        text = "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                        color = LXTextSecondary.copy(alpha = 0.6f)
+                    )
+                }
+            }
+
+            // Bottom Actions
+            if (item.isAlreadyInLibrary && item.existingEntryId != null) {
+                Button(
+                    onClick = {
+                        onDismiss()
+                        onViewInLibrary(item.existingEntryId)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXPrimaryGreen,
+                        contentColor = LXBackgroundBlack
+                    ),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "View in Library (${item.existingStatus?.defaultLabel ?: "Saved"})",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            } else {
+                Button(
+                    onClick = onAddClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXPrimaryGreen,
+                        contentColor = LXBackgroundBlack
+                    ),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Add to Library",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
 }

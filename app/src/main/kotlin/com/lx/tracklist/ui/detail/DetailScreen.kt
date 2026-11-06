@@ -1,6 +1,7 @@
 package com.lx.tracklist.ui.detail
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
@@ -32,14 +34,18 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -59,6 +65,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,8 +74,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -78,6 +87,7 @@ import com.lx.tracklist.R
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.ui.theme.LXAiringBlue
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
@@ -89,6 +99,7 @@ import com.lx.tracklist.ui.theme.LXSurfaceBlack
 import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -99,15 +110,27 @@ fun DetailScreen(
     viewModel: DetailViewModel,
     onNavigateBack: () -> Unit,
     onEdit: (Long) -> Unit,
+    onNavigateToDetail: ((Long) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val entry by viewModel.entry.collectAsState()
     val isDeleted by viewModel.isDeleted.collectAsState()
+    val relatedEntries by viewModel.relatedEntries.collectAsState()
+    val isLoadingRelated by viewModel.isLoadingRelated.collectAsState()
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showStartRewatchDialog by remember { mutableStateOf(false) }
+    var relatedItemToAdd by remember { mutableStateOf<RelatedMediaItem?>(null) }
+    var isAddingRelated by remember { mutableStateOf(false) }
 
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 720
+
+    LaunchedEffect(entry?.id) {
+        entry?.let { viewModel.loadRelatedEntries(it, context) }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.deletedEvent.collect {
@@ -318,6 +341,17 @@ fun DetailScreen(
                             onCancelRewatch = { viewModel.cancelRewatch() }
                         )
                         DetailDatesCard(currentEntry)
+                        DetailRelatedCard(
+                            relatedEntries = relatedEntries,
+                            isLoading = isLoadingRelated,
+                            onRelatedClick = { item ->
+                                if (item.inLibraryEntryId != null) {
+                                    onNavigateToDetail?.invoke(item.inLibraryEntryId)
+                                } else {
+                                    relatedItemToAdd = item
+                                }
+                            }
+                        )
                         DetailNotesCard(currentEntry)
                         DetailTagsCard(currentEntry)
                         DetailSourceText(currentEntry)
@@ -462,6 +496,17 @@ fun DetailScreen(
                             onCancelRewatch = { viewModel.cancelRewatch() }
                         )
                         DetailDatesCard(currentEntry)
+                        DetailRelatedCard(
+                            relatedEntries = relatedEntries,
+                            isLoading = isLoadingRelated,
+                            onRelatedClick = { item ->
+                                if (item.inLibraryEntryId != null) {
+                                    onNavigateToDetail?.invoke(item.inLibraryEntryId)
+                                } else {
+                                    relatedItemToAdd = item
+                                }
+                            }
+                        )
                         DetailNotesCard(currentEntry)
                         DetailTagsCard(currentEntry)
                         DetailSourceText(currentEntry)
@@ -546,6 +591,36 @@ fun DetailScreen(
                 }
             }
         )
+    }
+
+    if (relatedItemToAdd != null) {
+        relatedItemToAdd?.let { item ->
+            AddRelatedToLibraryDialog(
+                item = item,
+                isAdding = isAddingRelated,
+                onConfirm = { status ->
+                    if (!isAddingRelated) {
+                        isAddingRelated = true
+                        coroutineScope.launch {
+                            try {
+                                val newId = viewModel.addRelatedToLibrary(item, status, context)
+                                relatedItemToAdd = null
+                                if (newId > 0) {
+                                    onNavigateToDetail?.invoke(newId)
+                                }
+                            } finally {
+                                isAddingRelated = false
+                            }
+                        }
+                    }
+                },
+                onDismiss = {
+                    if (!isAddingRelated) {
+                        relatedItemToAdd = null
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -802,24 +877,35 @@ private fun DetailDatesCard(entry: MediaEntry) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (hasAiredData) {
-                val airedTitle = when (entry.mediaType) {
-                    MediaType.ANIME, MediaType.SHOW -> "Aired / Broadcast Dates"
-                    MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "Publishing Period"
-                    MediaType.MOVIE -> "Release Date"
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(airedTitle, color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceAround
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("From", color = LXTextSecondary, style = MaterialTheme.typography.bodySmall)
-                            Text(airedStartStr ?: "-", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("To", color = LXTextSecondary, style = MaterialTheme.typography.bodySmall)
-                            Text(airedEndStr ?: "-", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                if (entry.mediaType == MediaType.MOVIE) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Release Date", color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = airedStartStr ?: airedEndStr ?: "-",
+                            color = LXTextPrimary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else {
+                    val airedTitle = when (entry.mediaType) {
+                        MediaType.ANIME, MediaType.SHOW -> "Aired / Broadcast Dates"
+                        else -> "Publishing Period"
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(airedTitle, color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceAround
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("From", color = LXTextSecondary, style = MaterialTheme.typography.bodySmall)
+                                Text(airedStartStr ?: "-", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("To", color = LXTextSecondary, style = MaterialTheme.typography.bodySmall)
+                                Text(airedEndStr ?: "-", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -1174,4 +1260,409 @@ private fun ScoreDropdownChip(
             }
         }
     }
+}
+
+@Composable
+private fun DetailRelatedCard(
+    relatedEntries: List<RelatedMediaItem>,
+    isLoading: Boolean,
+    onRelatedClick: (RelatedMediaItem) -> Unit
+) {
+    if (relatedEntries.isEmpty() && !isLoading) return
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+        border = BorderStroke(1.dp, LXBorder),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Related & Sequels",
+                        color = LXPrimaryGreen,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                    )
+                    if (relatedEntries.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(LXSurfaceElevated)
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = relatedEntries.size.toString(),
+                                color = LXTextSecondary,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                }
+
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = LXPrimaryGreen
+                    )
+                }
+            }
+
+            if (relatedEntries.isEmpty() && isLoading) {
+                Text(
+                    text = "Checking for sequels & related entries...",
+                    color = LXTextSecondary,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            } else {
+                var expanded by remember { mutableStateOf(false) }
+                val displayList = if (expanded || relatedEntries.size <= 4) relatedEntries else relatedEntries.take(4)
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    displayList.forEach { item ->
+                        RelatedItemRow(
+                            item = item,
+                            onClick = { onRelatedClick(item) }
+                        )
+                    }
+
+                    if (relatedEntries.size > 4) {
+                        TextButton(
+                            onClick = { expanded = !expanded },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = if (expanded) "Show Less" else "Show All (${relatedEntries.size})",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RelatedItemRow(
+    item: RelatedMediaItem,
+    onClick: () -> Unit
+) {
+    val isInLibrary = item.inLibraryEntryId != null
+    val relColor = when {
+        item.relationship.contains("Sequel", ignoreCase = true) -> LXPrimaryGreen
+        item.relationship.contains("Prequel", ignoreCase = true) -> Color(0xFF38BDF8)
+        item.relationship.contains("Collection", ignoreCase = true) || item.relationship.contains("Part", ignoreCase = true) -> LXScoreGold
+        item.relationship.contains("Spin", ignoreCase = true) || item.relationship.contains("Side", ignoreCase = true) -> Color(0xFFA78BFA)
+        else -> LXTextSecondary
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(LXSurfaceElevated.copy(alpha = 0.5f))
+            .clickable(onClick = onClick)
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Thumbnail poster
+        Box(
+            modifier = Modifier
+                .size(40.dp, 56.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(LXSurfaceBlack),
+            contentAlignment = Alignment.Center
+        ) {
+            if (!item.posterUrl.isNullOrBlank()) {
+                AsyncImage(
+                    model = item.posterUrl,
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Icon(
+                    imageVector = if (item.mediaType == MediaType.MOVIE) Icons.Default.Movie else Icons.Default.Tv,
+                    contentDescription = null,
+                    tint = LXTextSecondary.copy(alpha = 0.6f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        // Details
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Relationship tag
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(relColor.copy(alpha = 0.15f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = item.relationship.uppercase(),
+                        color = relColor,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        fontSize = 9.sp
+                    )
+                }
+
+                if (!item.releaseYear.isNullOrBlank()) {
+                    Text(
+                        text = item.releaseYear,
+                        color = LXTextSecondary,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+
+                if (item.score != null && item.score > 0f) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = LXScoreGold,
+                            modifier = Modifier.size(11.dp)
+                        )
+                        Text(
+                            text = String.format(Locale.US, "%.1f", item.score),
+                            color = LXScoreGold,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = item.title,
+                color = LXTextPrimary,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        // Action / Status Pill
+        if (isInLibrary) {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = LXPrimaryGreen,
+                    modifier = Modifier.size(13.dp)
+                )
+                Text(
+                    text = item.inLibraryStatus?.getDisplayLabel(item.mediaType) ?: "In Library",
+                    color = LXPrimaryGreen,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                    contentDescription = "View",
+                    tint = LXPrimaryGreen,
+                    modifier = Modifier.size(11.dp)
+                )
+            }
+        } else {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(LXSurfaceElevated)
+                    .border(BorderStroke(0.5.dp, LXBorder), RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = null,
+                    tint = LXPrimaryGreen,
+                    modifier = Modifier.size(13.dp)
+                )
+                Text(
+                    text = "Add",
+                    color = LXPrimaryGreen,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddRelatedToLibraryDialog(
+    item: RelatedMediaItem,
+    isAdding: Boolean,
+    onConfirm: (MediaStatus) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedStatus by remember {
+        mutableStateOf(MediaStatus.PLAN_TO_WATCH)
+    }
+
+    val availableStatuses = listOf(
+        MediaStatus.PLAN_TO_WATCH,
+        MediaStatus.WATCHING,
+        MediaStatus.COMPLETED,
+        MediaStatus.ON_HOLD,
+        MediaStatus.DROPPED
+    )
+
+    AlertDialog(
+        onDismissRequest = { if (!isAdding) onDismiss() },
+        title = {
+            Text("Add to Library & Open", color = LXTextPrimary, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (!item.posterUrl.isNullOrBlank()) {
+                        AsyncImage(
+                            model = item.posterUrl,
+                            contentDescription = item.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(46.dp, 64.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${item.relationship} • ${item.mediaType.displayName}" + if (!item.releaseYear.isNullOrBlank()) " (${item.releaseYear})" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LXTextSecondary
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
+
+                Text(
+                    text = "Initial Status",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = LXTextSecondary
+                )
+
+                var statusExpanded by remember { mutableStateOf(false) }
+                Box {
+                    OutlinedButton(
+                        onClick = { if (!isAdding) statusExpanded = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = LXSurfaceElevated,
+                            contentColor = LXTextPrimary
+                        ),
+                        border = BorderStroke(1.dp, LXBorder)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(selectedStatus.getDisplayLabel(item.mediaType), color = LXTextPrimary)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = LXTextSecondary)
+                        }
+                    }
+
+                    DropdownMenu(
+                        expanded = statusExpanded,
+                        onDismissRequest = { statusExpanded = false },
+                        modifier = Modifier.background(LXSurfaceBlack)
+                    ) {
+                        availableStatuses.forEach { status ->
+                            DropdownMenuItem(
+                                text = { Text(status.getDisplayLabel(item.mediaType), color = LXTextPrimary) },
+                                onClick = {
+                                    selectedStatus = status
+                                    statusExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        containerColor = LXSurfaceBlack,
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isAdding
+            ) {
+                Text("Cancel", color = LXTextSecondary)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(selectedStatus) },
+                enabled = !isAdding,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = LXPrimaryGreen,
+                    contentColor = LXBackgroundBlack
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                if (isAdding) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = LXBackgroundBlack
+                    )
+                } else {
+                    Text("Add & Open", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    )
 }

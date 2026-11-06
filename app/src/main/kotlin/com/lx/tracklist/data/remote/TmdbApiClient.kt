@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.RelatedMediaItem
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLEncoder
@@ -650,6 +652,154 @@ object TmdbApiClient {
             if (d != null) return d.time
         } catch (_: Exception) {}
         return null
+    }
+
+    fun fetchRelatedEntries(
+        tmdbId: Long,
+        isTv: Boolean,
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<RelatedMediaItem>> {
+        val token = TmdbConfig.getAccessToken(context)
+        if (token.isBlank()) {
+            return Result.failure(TmdbAuthException("TMDB token not configured"))
+        }
+
+        val list = mutableListOf<RelatedMediaItem>()
+        val seenIds = mutableSetOf<Long>()
+        seenIds.add(tmdbId)
+
+        return try {
+            if (!isTv) {
+                val movieEndpoint = "${baseUrl.trimEnd('/')}/movie/$tmdbId?append_to_response=recommendations"
+                val request = buildRequest(movieEndpoint, token)
+                val response = okHttpClient.newCall(request).execute()
+                val body = response.body?.string() ?: ""
+                if (response.isSuccessful) {
+                    val root = gson.fromJson(body, JsonObject::class.java)
+                    val currentReleaseDate = root.get("release_date")?.takeIf { !it.isJsonNull }?.asString ?: ""
+
+                    // Check collection (sequels / prequels in franchise)
+                    val collectionObj = root.getAsJsonObject("belongs_to_collection")
+                    val collectionId = collectionObj?.get("id")?.takeIf { !it.isJsonNull }?.asLong
+                    if (collectionId != null) {
+                        val collectionEndpoint = "${baseUrl.trimEnd('/')}/collection/$collectionId"
+                        val colReq = buildRequest(collectionEndpoint, token)
+                        val colResp = okHttpClient.newCall(colReq).execute()
+                        val colBody = colResp.body?.string() ?: ""
+                        if (colResp.isSuccessful) {
+                            val colJson = gson.fromJson(colBody, JsonObject::class.java)
+                            val parts = colJson.getAsJsonArray("parts")
+                            if (parts != null) {
+                                for (i in 0 until parts.size()) {
+                                    val part = parts.get(i).asJsonObject
+                                    val partId = part.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
+                                    if (seenIds.contains(partId)) continue
+                                    seenIds.add(partId)
+
+                                    val partTitle = part.get("title")?.takeIf { !it.isJsonNull }?.asString ?: continue
+                                    val partDate = part.get("release_date")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                                    val partPoster = buildImageUrl(part.get("poster_path")?.takeIf { !it.isJsonNull }?.asString)
+                                    val partScore = part.get("vote_average")?.takeIf { !it.isJsonNull }?.asFloat
+                                    val relYear = partDate.take(4).takeIf { it.length == 4 && it.all { c -> c.isDigit() } }
+
+                                    val relationship = if (partDate.isNotBlank() && currentReleaseDate.isNotBlank()) {
+                                        if (partDate > currentReleaseDate) "Sequel" else "Prequel"
+                                    } else {
+                                        "Part of Series"
+                                    }
+
+                                    list.add(
+                                        RelatedMediaItem(
+                                            title = partTitle,
+                                            relationship = relationship,
+                                            externalId = partId.toString(),
+                                            externalSource = "TMDB",
+                                            mediaType = MediaType.MOVIE,
+                                            posterUrl = partPoster,
+                                            releaseYear = relYear,
+                                            score = partScore
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Also recommendations
+                    val recResults = root.getAsJsonObject("recommendations")?.getAsJsonArray("results")
+                    if (recResults != null) {
+                        for (i in 0 until recResults.size().coerceAtMost(6)) {
+                            val rec = recResults.get(i).asJsonObject
+                            val recId = rec.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
+                            if (seenIds.contains(recId)) continue
+                            seenIds.add(recId)
+
+                            val recTitle = rec.get("title")?.takeIf { !it.isJsonNull }?.asString ?: continue
+                            val recDate = rec.get("release_date")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                            val recPoster = buildImageUrl(rec.get("poster_path")?.takeIf { !it.isJsonNull }?.asString)
+                            val recScore = rec.get("vote_average")?.takeIf { !it.isJsonNull }?.asFloat
+                            val relYear = recDate.take(4).takeIf { it.length == 4 && it.all { c -> c.isDigit() } }
+
+                            list.add(
+                                RelatedMediaItem(
+                                    title = recTitle,
+                                    relationship = "Related",
+                                    externalId = recId.toString(),
+                                    externalSource = "TMDB",
+                                    mediaType = MediaType.MOVIE,
+                                    posterUrl = recPoster,
+                                    releaseYear = relYear,
+                                    score = recScore
+                                )
+                            )
+                        }
+                    }
+                }
+            } else {
+                // TV recommendations
+                val tvEndpoint = "${baseUrl.trimEnd('/')}/tv/$tmdbId?append_to_response=recommendations"
+                val request = buildRequest(tvEndpoint, token)
+                val response = okHttpClient.newCall(request).execute()
+                val body = response.body?.string() ?: ""
+                if (response.isSuccessful) {
+                    val root = gson.fromJson(body, JsonObject::class.java)
+                    val recResults = root.getAsJsonObject("recommendations")?.getAsJsonArray("results")
+                    if (recResults != null) {
+                        for (i in 0 until recResults.size().coerceAtMost(6)) {
+                            val rec = recResults.get(i).asJsonObject
+                            val recId = rec.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
+                            if (seenIds.contains(recId)) continue
+                            seenIds.add(recId)
+
+                            val recTitle = rec.get("name")?.takeIf { !it.isJsonNull }?.asString
+                                ?: rec.get("original_name")?.takeIf { !it.isJsonNull }?.asString ?: continue
+                            val recDate = rec.get("first_air_date")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                            val recPoster = buildImageUrl(rec.get("poster_path")?.takeIf { !it.isJsonNull }?.asString)
+                            val recScore = rec.get("vote_average")?.takeIf { !it.isJsonNull }?.asFloat
+                            val relYear = recDate.take(4).takeIf { it.length == 4 && it.all { c -> c.isDigit() } }
+
+                            list.add(
+                                RelatedMediaItem(
+                                    title = recTitle,
+                                    relationship = "Related",
+                                    externalId = recId.toString(),
+                                    externalSource = "TMDB",
+                                    mediaType = MediaType.SHOW,
+                                    posterUrl = recPoster,
+                                    releaseYear = relYear,
+                                    score = recScore
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+            Result.success(list)
+        } catch (e: Exception) {
+            Log.w(TAG, "Exception fetching TMDB related entries for #$tmdbId", e)
+            Result.failure(e)
+        }
     }
 }
 
