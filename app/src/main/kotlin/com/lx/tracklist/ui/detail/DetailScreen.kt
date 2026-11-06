@@ -1853,6 +1853,12 @@ private fun RelatedItemRow(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Relationship tag
+                val displayRel = when {
+                    item.relationship.equals("Alternative Version", ignoreCase = true) || item.relationship.equals("Alternative", ignoreCase = true) -> "ALT VERSION"
+                    item.relationship.equals("Part of Series", ignoreCase = true) -> "SERIES"
+                    item.relationship.equals("Parent Story", ignoreCase = true) -> "PARENT"
+                    else -> item.relationship.uppercase()
+                }
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
@@ -1860,10 +1866,12 @@ private fun RelatedItemRow(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = item.relationship.uppercase(),
+                        text = displayRel,
                         color = relColor,
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        fontSize = 9.sp
+                        fontSize = 9.sp,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
 
@@ -1871,17 +1879,9 @@ private fun RelatedItemRow(
                     Text(
                         text = item.releaseYear,
                         color = LXTextSecondary,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-
-                val extId = item.externalId.takeIf { it.isNotBlank() && it != "0" }
-                if (extId != null) {
-                    Text(
-                        text = "#$extId",
-                        color = LXTextSecondary.copy(alpha = 0.7f),
                         style = MaterialTheme.typography.labelSmall,
-                        fontSize = 9.sp
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
 
@@ -1899,7 +1899,9 @@ private fun RelatedItemRow(
                         Text(
                             text = String.format(Locale.US, "%.1f", item.score),
                             color = LXScoreGold,
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
