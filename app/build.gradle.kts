@@ -28,7 +28,7 @@ android {
     minSdk = 26
     targetSdk = 36
     versionCode = 1
-    versionName = "0.1.2"
+    versionName = "0.1.3"
 
     val tmdbReadToken = envProperties.getProperty("TMDB_READ_ACCESS_TOKEN")
       ?: envProperties.getProperty("TMDB_API_KEY")
@@ -117,6 +117,7 @@ dependencies {
 
   // OkHttp (Networking & Remote Metadata Sync)
   implementation("com.squareup.okhttp3:okhttp:4.12.0")
+  implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
 
   // Tooling
   debugImplementation(libs.androidx.compose.ui.tooling)

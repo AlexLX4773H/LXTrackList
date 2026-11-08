@@ -8,7 +8,11 @@ import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.net.ConnectException
+import java.net.SocketException
+import java.net.SocketTimeoutException
 import java.net.URLEncoder
+import java.net.UnknownHostException
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -16,6 +20,7 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLException
 
 data class TmdbMediaDetails(
     val tmdbId: Long,
@@ -59,17 +64,97 @@ object TmdbApiClient {
     private const val TAG = "TmdbApiClient"
     private val gson = Gson()
     const val DEFAULT_BASE_URL = "https://api.themoviedb.org/3"
+    const val FALLBACK_BASE_URL = "https://api.tmdb.org/3"
     const val IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
     const val POSTER_SIZE_MEDIUM = "w500"
     const val POSTER_SIZE_ORIGINAL = "original"
     const val BACKDROP_SIZE = "w780"
 
-    private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .build()
+    @Volatile
+    private var okHttpClient: OkHttpClient = buildDefaultClient()
+
+    @Volatile
+    private var preferredBaseUrl: String = DEFAULT_BASE_URL
+
+    private fun buildDefaultClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+    }
+
+    /**
+     * Initializes the OkHttpClient with DNS-over-HTTPS.
+     * Call once from Application.onCreate() or lazily on first use.
+     */
+    fun initWithDoH(context: Context) {
+        try {
+            val dohResolver = TmdbDnsHelper.createDoHResolver(context)
+            okHttpClient = OkHttpClient.Builder()
+                .dns(dohResolver)
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(15, TimeUnit.SECONDS)
+                .followRedirects(true)
+                .followSslRedirects(true)
+                .build()
+            Log.i(TAG, "Initialized TMDB OkHttpClient with DNS-over-HTTPS resolver")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize DNS-over-HTTPS resolver for TMDB client", e)
+        }
+    }
+
+    fun getPreferredBaseUrl(): String = preferredBaseUrl
+
+    fun resetPreferredBaseUrl() {
+        preferredBaseUrl = DEFAULT_BASE_URL
+    }
+
+    private fun isConnectionFailure(ex: Throwable?): Boolean {
+        var current: Throwable? = ex
+        while (current != null) {
+            if (current is ConnectException ||
+                current is SocketTimeoutException ||
+                current is UnknownHostException ||
+                current is SocketException ||
+                current is SSLException
+            ) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
+    }
+
+    private inline fun <T> withFallback(
+        baseUrl: String = DEFAULT_BASE_URL,
+        operation: (baseUrl: String) -> Result<T>
+    ): Result<T> {
+        if (baseUrl != DEFAULT_BASE_URL) {
+            val result = operation(baseUrl)
+            if (result.isFailure && isConnectionFailure(result.exceptionOrNull())) {
+                val fallbackUrl = if (baseUrl == FALLBACK_BASE_URL) DEFAULT_BASE_URL else FALLBACK_BASE_URL
+                Log.w(TAG, "TMDB explicit domain $baseUrl unreachable, retrying with fallback $fallbackUrl")
+                return operation(fallbackUrl)
+            }
+            return result
+        }
+
+        val currentUrl = preferredBaseUrl
+        val result = operation(currentUrl)
+        if (result.isFailure && isConnectionFailure(result.exceptionOrNull())) {
+            val fallbackUrl = if (currentUrl == DEFAULT_BASE_URL) FALLBACK_BASE_URL else DEFAULT_BASE_URL
+            Log.w(TAG, "TMDB domain $currentUrl unreachable (${result.exceptionOrNull()?.javaClass?.simpleName}), switching to fallback $fallbackUrl")
+            val fallbackResult = operation(fallbackUrl)
+            if (fallbackResult.isSuccess) {
+                preferredBaseUrl = fallbackUrl
+                Log.i(TAG, "Sticky TMDB domain updated to $fallbackUrl")
+            }
+            return fallbackResult
+        }
+        return result
+    }
 
     fun buildImageUrl(path: String?, size: String = POSTER_SIZE_MEDIUM): String? {
         if (path.isNullOrBlank()) return null
@@ -94,6 +179,14 @@ object TmdbApiClient {
     }
 
     fun fetchMovieDetails(
+        tmdbId: Long,
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<TmdbMediaDetails> = withFallback(baseUrl) { activeBaseUrl ->
+        fetchMovieDetailsInternal(tmdbId, context, activeBaseUrl)
+    }
+
+    private fun fetchMovieDetailsInternal(
         tmdbId: Long,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
@@ -136,6 +229,14 @@ object TmdbApiClient {
     }
 
     fun fetchTvDetails(
+        tmdbId: Long,
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<TmdbMediaDetails> = withFallback(baseUrl) { activeBaseUrl ->
+        fetchTvDetailsInternal(tmdbId, context, activeBaseUrl)
+    }
+
+    private fun fetchTvDetailsInternal(
         tmdbId: Long,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
@@ -196,6 +297,14 @@ object TmdbApiClient {
         title: String,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
+    ): Result<TmdbMediaDetails> = withFallback(baseUrl) { activeBaseUrl ->
+        searchMovieByTitleInternal(title, context, activeBaseUrl)
+    }
+
+    private fun searchMovieByTitleInternal(
+        title: String,
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
     ): Result<TmdbMediaDetails> {
         val token = TmdbConfig.getAccessToken(context)
         if (token.isBlank()) {
@@ -239,6 +348,14 @@ object TmdbApiClient {
         title: String,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
+    ): Result<TmdbMediaDetails> = withFallback(baseUrl) { activeBaseUrl ->
+        searchTvByTitleInternal(title, context, activeBaseUrl)
+    }
+
+    private fun searchTvByTitleInternal(
+        title: String,
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
     ): Result<TmdbMediaDetails> {
         val token = TmdbConfig.getAccessToken(context)
         if (token.isBlank()) {
@@ -279,6 +396,14 @@ object TmdbApiClient {
     }
 
     fun searchMoviesMultiple(
+        title: String,
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<TmdbSearchResult>> = withFallback(baseUrl) { activeBaseUrl ->
+        searchMoviesMultipleInternal(title, context, activeBaseUrl)
+    }
+
+    private fun searchMoviesMultipleInternal(
         title: String,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
@@ -344,6 +469,14 @@ object TmdbApiClient {
     }
 
     fun searchTvMultiple(
+        title: String,
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<TmdbSearchResult>> = withFallback(baseUrl) { activeBaseUrl ->
+        searchTvMultipleInternal(title, context, activeBaseUrl)
+    }
+
+    private fun searchTvMultipleInternal(
         title: String,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
@@ -658,6 +791,15 @@ object TmdbApiClient {
     }
 
     fun fetchRelatedEntries(
+        tmdbId: Long,
+        isTv: Boolean,
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<RelatedMediaItem>> = withFallback(baseUrl) { activeBaseUrl ->
+        fetchRelatedEntriesInternal(tmdbId, isTv, context, activeBaseUrl)
+    }
+
+    private fun fetchRelatedEntriesInternal(
         tmdbId: Long,
         isTv: Boolean,
         context: Context? = null,

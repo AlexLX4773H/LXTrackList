@@ -261,5 +261,14 @@ class TmdbIntegrationTest {
         assertEquals("Prequel", relEarlier)
         assertEquals("Sequel", relLater)
     }
+
+    @Test
+    fun testBaseUrlsAndStickyPreference() {
+        assertEquals("https://api.themoviedb.org/3", TmdbApiClient.DEFAULT_BASE_URL)
+        assertEquals("https://api.tmdb.org/3", TmdbApiClient.FALLBACK_BASE_URL)
+
+        TmdbApiClient.resetPreferredBaseUrl()
+        assertEquals(TmdbApiClient.DEFAULT_BASE_URL, TmdbApiClient.getPreferredBaseUrl())
+    }
 }
 

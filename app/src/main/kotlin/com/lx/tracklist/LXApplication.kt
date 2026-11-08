@@ -7,8 +7,11 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.lx.tracklist.data.local.CoverCacheManager
 import com.lx.tracklist.data.local.LXTrackListDatabase
+import com.lx.tracklist.data.remote.TmdbApiClient
+import com.lx.tracklist.data.remote.TmdbDnsHelper
 import com.lx.tracklist.data.repository.MediaRepository
 import com.lx.tracklist.util.NotificationHelper
+import okhttp3.OkHttpClient
 
 class LXApplication : Application(), ImageLoaderFactory {
 
@@ -32,10 +35,16 @@ class LXApplication : Application(), ImageLoaderFactory {
         super.onCreate()
         instance = this
         NotificationHelper.initNotificationChannels(this)
+        TmdbApiClient.initWithDoH(this)
     }
 
     override fun newImageLoader(): ImageLoader {
+        val dohClient = OkHttpClient.Builder()
+            .dns(TmdbDnsHelper.createDoHResolver(this))
+            .build()
+
         return ImageLoader.Builder(this)
+            .okHttpClient(dohClient)
             .memoryCache {
                 MemoryCache.Builder(this)
                     .maxSizePercent(0.25)
