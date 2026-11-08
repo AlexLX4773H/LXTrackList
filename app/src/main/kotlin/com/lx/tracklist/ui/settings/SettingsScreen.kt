@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -54,6 +55,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
@@ -81,6 +83,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -127,6 +130,7 @@ import com.lx.tracklist.data.remote.JikanSyncProgress
 import com.lx.tracklist.data.remote.TmdbConfig
 import com.lx.tracklist.data.remote.TmdbSyncProgress
 import com.lx.tracklist.data.repository.ConflictStrategy
+import com.lx.tracklist.ui.components.PasskeyVerificationDialog
 import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.components.getCategoryIcon
 import com.lx.tracklist.ui.settings.ExportDestination
@@ -149,6 +153,7 @@ enum class SettingsSubMenu(val title: String) {
     EXPORT_GUIDES("Export Guides & Help"),
     STARTUP_VIEW("Default Startup View"),
     PREFERENCES("Gestures & Navigation"),
+    SECURITY("Security & Passkey"),
     ABOUT("About")
 }
 
@@ -1219,6 +1224,7 @@ fun SettingsScreen(
                             onSetTachiyomiImportAsFavorites = { viewModel.setTachiyomiImportAsFavorites(it) },
                             onReindexCovers = { viewModel.reindexCoverImages(context) },
                             onClearCoverCache = { viewModel.clearCoverCache(context) },
+                            onClearUnlinkedCoverCache = { viewModel.clearUnlinkedCoverCache(context) },
                             onNavigateToExportGuides = { activeSubMenu = SettingsSubMenu.EXPORT_GUIDES }
                         )
                         SettingsSubMenu.CONFLICTS -> ConflictResolutionContent(
@@ -1240,6 +1246,10 @@ fun SettingsScreen(
                             isSwipeToSwitchTabsEnabled = state.isSwipeToSwitchTabsEnabled,
                             onSetSwipeToSwitchTabsEnabled = { viewModel.setSwipeToSwitchTabsEnabled(it) },
                             onNavigateToStartupView = { activeSubMenu = SettingsSubMenu.STARTUP_VIEW }
+                        )
+                        SettingsSubMenu.SECURITY -> SecurityContent(
+                            activeUser = state.activeUser,
+                            onUpdatePassKey = { viewModel.updatePassKey(it) }
                         )
                         SettingsSubMenu.ABOUT -> AboutContent(
                             state = state
@@ -1313,6 +1323,7 @@ fun SettingsScreen(
                             onSetTachiyomiImportAsFavorites = { viewModel.setTachiyomiImportAsFavorites(it) },
                             onReindexCovers = { viewModel.reindexCoverImages(context) },
                             onClearCoverCache = { viewModel.clearCoverCache(context) },
+                            onClearUnlinkedCoverCache = { viewModel.clearUnlinkedCoverCache(context) },
                             onNavigateToExportGuides = { activeSubMenu = SettingsSubMenu.EXPORT_GUIDES },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
@@ -1346,6 +1357,13 @@ fun SettingsScreen(
                             isSwipeToSwitchTabsEnabled = state.isSwipeToSwitchTabsEnabled,
                             onSetSwipeToSwitchTabsEnabled = { viewModel.setSwipeToSwitchTabsEnabled(it) },
                             onNavigateToStartupView = { activeSubMenu = SettingsSubMenu.STARTUP_VIEW },
+                            modifier = Modifier.widthIn(max = 840.dp)
+                        )
+                    }
+                    SettingsSubMenu.SECURITY -> {
+                        SecurityContent(
+                            activeUser = state.activeUser,
+                            onUpdatePassKey = { viewModel.updatePassKey(it) },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -1493,6 +1511,19 @@ private fun SettingsMainMenu(
                 badgeColor = if (state.isSwipeToSwitchTabsEnabled) LXPrimaryGreen else LXTextSecondary,
                 isSelected = selectedSubMenu == SettingsSubMenu.PREFERENCES,
                 onClick = { onSelectSubMenu(SettingsSubMenu.PREFERENCES) }
+            )
+
+            SettingsMenuItem(
+                icon = Icons.Default.Lock,
+                iconBackgroundColor = LXPrimaryGreen.copy(alpha = 0.15f),
+                iconTintColor = LXPrimaryGreen,
+                title = "Security & Passkey",
+                subtitle = if (state.activeUser.passKey != null) "Passkey protection active for \"${state.activeUser.name}\""
+                else "Lock this profile with a 4-digit passkey",
+                badgeText = if (state.activeUser.passKey != null) "PROTECTED" else "OFF",
+                badgeColor = if (state.activeUser.passKey != null) LXPrimaryGreen else LXTextSecondary,
+                isSelected = selectedSubMenu == SettingsSubMenu.SECURITY,
+                onClick = { onSelectSubMenu(SettingsSubMenu.SECURITY) }
             )
         }
 
@@ -1862,6 +1893,7 @@ private fun BackupStorageContent(
     onSetTachiyomiImportAsFavorites: (Boolean) -> Unit,
     onReindexCovers: () -> Unit,
     onClearCoverCache: () -> Unit,
+    onClearUnlinkedCoverCache: () -> Unit,
     onNavigateToExportGuides: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -2504,23 +2536,74 @@ private fun BackupStorageContent(
                 onDismissRequest = { showClearCacheConfirmDialog = false },
                 title = { Text("Clear Cover Cache", color = LXTextPrimary, fontWeight = FontWeight.Bold) },
                 text = {
-                    Text(
-                        "This will delete all cached cover images from local storage. The images will reload when you view entries again while online.",
-                        color = LXTextSecondary,
-                        fontSize = 13.sp
-                    )
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            showClearCacheConfirmDialog = false
-                            onClearCoverCache()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = LXErrorRed, contentColor = Color.White)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text("Clear Cache", fontWeight = FontWeight.Bold)
+                        Text(
+                            "Choose which cached cover images you want to clear from local storage:",
+                            color = LXTextSecondary,
+                            fontSize = 13.sp
+                        )
+
+                        // Option 1: Clear Unlinked Only
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = LXSurfaceElevated,
+                            border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    showClearCacheConfirmDialog = false
+                                    onClearUnlinkedCoverCache()
+                                }
+                                .padding(12.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Delete, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Clear Unlinked Only (Recommended)", color = LXPrimaryGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                                Text(
+                                    "Only removes cached images that are NOT linked to any actively tracked entity in your library (e.g. search thumbnails, un-added entries).",
+                                    color = LXTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+
+                        // Option 2: Clear Entire Cache
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = LXSurfaceElevated,
+                            border = BorderStroke(1.dp, LXBorder),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    showClearCacheConfirmDialog = false
+                                    onClearCoverCache()
+                                }
+                                .padding(12.dp)
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Delete, contentDescription = null, tint = LXErrorRed, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Clear Entire Image Cache", color = LXErrorRed, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                                Text(
+                                    "Deletes all cached images. Actively tracked covers will re-download when viewed online.",
+                                    color = LXTextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
                     }
                 },
+                confirmButton = {},
                 dismissButton = {
                     TextButton(onClick = { showClearCacheConfirmDialog = false }) {
                         Text("Cancel", color = LXTextSecondary)
@@ -4612,4 +4695,268 @@ private fun GuideStepItem(
             )
         }
     }
+}
+
+@Composable
+private fun SecurityContent(
+    activeUser: UserProfile,
+    onUpdatePassKey: (String?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showSetPasskeyDialog by remember { mutableStateOf(false) }
+    var showVerifyForChangeDialog by remember { mutableStateOf(false) }
+    var showVerifyForRemoveDialog by remember { mutableStateOf(false) }
+
+    val hasPasskey = !activeUser.passKey.isNullOrBlank()
+
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Status Card
+        Card(
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+            border = BorderStroke(1.dp, if (hasPasskey) LXPrimaryGreen.copy(alpha = 0.5f) else LXBorder),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(if (hasPasskey) LXPrimaryGreen.copy(alpha = 0.15f) else LXSurfaceBlack),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = if (hasPasskey) LXPrimaryGreen else LXTextSecondary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = activeUser.name,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                        Text(
+                            text = if (hasPasskey) "Passkey Protection Enabled (4 digits)" else "No Passkey Protection",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (hasPasskey) LXPrimaryGreen else LXTextSecondary
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
+
+                Text(
+                    text = if (hasPasskey) {
+                        "When switching to this profile from the profile switcher, you will be required to enter the 4-digit passkey. If entered incorrectly 3 times, a 10-second cooldown is enforced."
+                    } else {
+                        "Protect \"${activeUser.name}\" with a 4-digit passkey. Switching to this profile will require this passkey. If entered incorrectly 3 times, a 10-second cooldown is enforced."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+
+        // Action Buttons
+        if (!hasPasskey) {
+            Button(
+                onClick = { showSetPasskeyDialog = true },
+                colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) {
+                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Set 4-Digit Passkey", fontWeight = FontWeight.Bold)
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = { showVerifyForChangeDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) {
+                    Text("Change Passkey", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+
+                OutlinedButton(
+                    onClick = { showVerifyForRemoveDialog = true },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LXErrorRed),
+                    border = BorderStroke(1.dp, LXErrorRed.copy(alpha = 0.6f)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) {
+                    Text("Remove Passkey", fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                }
+            }
+        }
+
+        // Verification dialog before changing passkey (with 3-attempt 10s cooldown)
+        if (showVerifyForChangeDialog) {
+            PasskeyVerificationDialog(
+                profileName = activeUser.name,
+                expectedPasskey = activeUser.passKey ?: "",
+                title = "Verify Current Passkey",
+                subtitle = "Enter current 4-digit passkey to continue",
+                onSuccess = {
+                    showVerifyForChangeDialog = false
+                    showSetPasskeyDialog = true
+                },
+                onDismiss = { showVerifyForChangeDialog = false }
+            )
+        }
+
+        // Verification dialog before removing passkey (with 3-attempt 10s cooldown)
+        if (showVerifyForRemoveDialog) {
+            PasskeyVerificationDialog(
+                profileName = activeUser.name,
+                expectedPasskey = activeUser.passKey ?: "",
+                title = "Remove Passkey",
+                subtitle = "Enter current 4-digit passkey to remove protection",
+                onSuccess = {
+                    showVerifyForRemoveDialog = false
+                    onUpdatePassKey(null)
+                },
+                onDismiss = { showVerifyForRemoveDialog = false }
+            )
+        }
+
+        // Set or Change Passkey Dialog
+        if (showSetPasskeyDialog) {
+            SetPasskeyDialog(
+                profileName = activeUser.name,
+                onSave = { newPin ->
+                    onUpdatePassKey(newPin)
+                    showSetPasskeyDialog = false
+                },
+                onDismiss = { showSetPasskeyDialog = false }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun SetPasskeyDialog(
+    profileName: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var pin by remember { mutableStateOf("") }
+    var confirmPin by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.Lock, contentDescription = null, tint = LXPrimaryGreen)
+                Text("Set 4-Digit Passkey", color = LXTextPrimary, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Choose a 4-digit PIN for profile \"$profileName\".",
+                    color = LXTextSecondary,
+                    fontSize = 13.sp
+                )
+
+                OutlinedTextField(
+                    value = pin,
+                    onValueChange = { input ->
+                        val digits = input.filter { it.isDigit() }.take(4)
+                        pin = digits
+                        error = null
+                    },
+                    label = { Text("4-Digit PIN") },
+                    placeholder = { Text("e.g. 1234") },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                    ),
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = LXPrimaryGreen,
+                        unfocusedBorderColor = LXBorder,
+                        focusedTextColor = LXTextPrimary,
+                        unfocusedTextColor = LXTextPrimary,
+                        cursorColor = LXPrimaryGreen
+                    )
+                )
+
+                OutlinedTextField(
+                    value = confirmPin,
+                    onValueChange = { input ->
+                        val digits = input.filter { it.isDigit() }.take(4)
+                        confirmPin = digits
+                        error = null
+                    },
+                    label = { Text("Confirm 4-Digit PIN") },
+                    placeholder = { Text("Re-enter PIN") },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                    ),
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = LXPrimaryGreen,
+                        unfocusedBorderColor = LXBorder,
+                        focusedTextColor = LXTextPrimary,
+                        unfocusedTextColor = LXTextPrimary,
+                        cursorColor = LXPrimaryGreen
+                    )
+                )
+
+                if (error != null) {
+                    Text(text = error ?: "", color = LXErrorRed, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (pin.length != 4) {
+                        error = "PIN must be exactly 4 digits"
+                    } else if (pin != confirmPin) {
+                        error = "PINs do not match"
+                    } else {
+                        onSave(pin)
+                    }
+                },
+                enabled = pin.length == 4 && confirmPin.length == 4,
+                colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack)
+            ) {
+                Text("Save Passkey", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = LXTextSecondary)
+            }
+        },
+        containerColor = LXSurfaceBlack,
+        shape = RoundedCornerShape(12.dp)
+    )
 }

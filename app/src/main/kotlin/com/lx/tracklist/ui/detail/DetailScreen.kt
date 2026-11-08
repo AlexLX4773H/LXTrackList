@@ -115,6 +115,7 @@ import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.JikanApiClient
+import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.ui.components.AddRelatedToLibraryDialog
 import com.lx.tracklist.ui.components.UserAvatarButton
@@ -154,11 +155,14 @@ fun DetailScreen(
     val relatedEntries by viewModel.relatedEntries.collectAsState()
     val isLoadingRelated by viewModel.isLoadingRelated.collectAsState()
     val relatedErrorMessage by viewModel.relatedErrorMessage.collectAsState()
+    val isRefreshingMetadata by viewModel.isRefreshingMetadata.collectAsState()
+    val metadataRefreshMessage by viewModel.metadataRefreshMessage.collectAsState()
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showStartRewatchDialog by remember { mutableStateOf(false) }
+    var showRefreshConfirmDialog by remember { mutableStateOf(false) }
     var relatedItemToAdd by remember { mutableStateOf<RelatedMediaItem?>(null) }
     var previewRelatedItem by remember { mutableStateOf<RelatedMediaItem?>(null) }
     var isAddingRelated by remember { mutableStateOf(false) }
@@ -168,6 +172,13 @@ fun DetailScreen(
 
     LaunchedEffect(entry?.id) {
         entry?.let { viewModel.loadRelatedEntries(it, context) }
+    }
+
+    LaunchedEffect(metadataRefreshMessage) {
+        metadataRefreshMessage?.let { msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            viewModel.clearRefreshMessage()
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -184,6 +195,58 @@ fun DetailScreen(
     }
 
     BackHandler(onBack = onNavigateBack)
+
+    if (showRefreshConfirmDialog && entry != null) {
+        val current = entry!!
+        val isMal = JikanSyncManager.isMalSource(current) || current.mediaType == MediaType.ANIME || current.mediaType == MediaType.MANGA || current.mediaType == MediaType.MANHWA
+        val sourceName = current.externalSource?.takeIf { it.isNotBlank() } ?: (if (isMal) "MyAnimeList (MAL)" else "The Movie Database (TMDB)")
+        val extId = current.externalId
+
+        AlertDialog(
+            onDismissRequest = { showRefreshConfirmDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, tint = LXPrimaryGreen)
+                    Text("Refresh Metadata?", color = LXTextPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Refresh official metadata for \"${current.title}\" from $sourceName${if (!extId.isNullOrBlank()) " using ID (#$extId)" else " by searching title"}?",
+                        color = LXTextPrimary,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = "This will update posters, episode/chapter counts, runtime, broadcast/air dates, scores, and synopsis to the latest information from the external database.",
+                        color = LXTextSecondary,
+                        fontSize = 12.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showRefreshConfirmDialog = false
+                        viewModel.refreshMetadataFromExternalSource(context)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack)
+                ) {
+                    Text("Refresh", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRefreshConfirmDialog = false }) {
+                    Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceElevated,
+            shape = RoundedCornerShape(12.dp)
+        )
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -214,6 +277,25 @@ fun DetailScreen(
                 },
                 actions = {
                     entry?.let { e ->
+                        // Refresh metadata button from external source
+                        IconButton(
+                            onClick = { showRefreshConfirmDialog = true },
+                            enabled = !isRefreshingMetadata
+                        ) {
+                            if (isRefreshingMetadata) {
+                                CircularProgressIndicator(
+                                    color = LXPrimaryGreen,
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Refresh Metadata",
+                                    tint = LXPrimaryGreen
+                                )
+                            }
+                        }
                         IconButton(onClick = { viewModel.toggleFavorite() }) {
                             Icon(
                                 imageVector = if (e.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,

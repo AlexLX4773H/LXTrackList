@@ -15,6 +15,7 @@ data class UserProfile(
     val defaultMediaType: MediaType? = null,
     val defaultCustomCategory: String? = null,
     val defaultSubCategory: String? = null,
-    val defaultStatus: MediaStatus? = null
+    val defaultStatus: MediaStatus? = null,
+    val passKey: String? = null
 )
 

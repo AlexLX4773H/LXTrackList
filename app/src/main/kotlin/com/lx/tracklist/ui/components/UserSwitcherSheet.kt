@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -77,7 +78,7 @@ fun UserSwitcherSheet(
     activeUser: UserProfile,
     allUsers: List<UserProfile>,
     onSelectUser: (UserProfile) -> Unit,
-    onCreateUser: (String, String, String?) -> Unit,
+    onCreateUser: (String, String, String?, String?) -> Unit,
     onUpdateUser: (UserProfile) -> Unit = {},
     onDeleteUser: (UserProfile) -> Unit,
     onDismiss: () -> Unit
@@ -90,6 +91,10 @@ fun UserSwitcherSheet(
     var newUserName by remember { mutableStateOf("") }
     var selectedColor by remember { mutableStateOf(avatarColors.first()) }
     var newAvatarUri by remember { mutableStateOf<String?>(null) }
+    var isProtectWithPasskey by remember { mutableStateOf(false) }
+    var newPasskey by remember { mutableStateOf("") }
+
+    var userPendingVerification by remember { mutableStateOf<UserProfile?>(null) }
 
     var userToDelete by remember { mutableStateOf<UserProfile?>(null) }
     var userToEdit by remember { mutableStateOf<UserProfile?>(null) }
@@ -453,6 +458,62 @@ fun UserSwitcherSheet(
                         }
                     }
 
+                    // Passkey toggle & input
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Protect with 4-Digit Passkey", style = MaterialTheme.typography.labelMedium, color = LXTextPrimary)
+                            Text("Requires passkey when switching to this profile", style = MaterialTheme.typography.bodySmall, color = LXTextSecondary, fontSize = 11.sp)
+                        }
+                        androidx.compose.material3.Switch(
+                            checked = isProtectWithPasskey,
+                            onCheckedChange = {
+                                isProtectWithPasskey = it
+                                if (!it) newPasskey = ""
+                            },
+                            colors = androidx.compose.material3.SwitchDefaults.colors(
+                                checkedThumbColor = LXBackgroundBlack,
+                                checkedTrackColor = LXPrimaryGreen,
+                                uncheckedThumbColor = LXTextSecondary,
+                                uncheckedTrackColor = LXSurfaceElevated
+                            )
+                        )
+                    }
+
+                    if (isProtectWithPasskey) {
+                        OutlinedTextField(
+                            value = newPasskey,
+                            onValueChange = { input ->
+                                val digits = input.filter { it.isDigit() }.take(4)
+                                newPasskey = digits
+                            },
+                            placeholder = { Text("4-digit PIN (e.g. 1234)", color = LXTextSecondary) },
+                            singleLine = true,
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                            ),
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = LXPrimaryGreen,
+                                unfocusedBorderColor = LXBorder,
+                                focusedTextColor = LXTextPrimary,
+                                unfocusedTextColor = LXTextPrimary,
+                                cursorColor = LXPrimaryGreen
+                            ),
+                            supportingText = {
+                                if (newPasskey.isNotEmpty() && newPasskey.length < 4) {
+                                    Text("${newPasskey.length}/4 digits entered", color = LXErrorRed, fontSize = 11.sp)
+                                } else if (newPasskey.length == 4) {
+                                    Text("4-digit passkey set", color = LXPrimaryGreen, fontSize = 11.sp)
+                                }
+                            }
+                        )
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End
@@ -461,6 +522,8 @@ fun UserSwitcherSheet(
                             isAddingUser = false
                             newUserName = ""
                             newAvatarUri = null
+                            isProtectWithPasskey = false
+                            newPasskey = ""
                         }) {
                             Text("Cancel", color = LXTextSecondary)
                         }
@@ -469,14 +532,18 @@ fun UserSwitcherSheet(
 
                         Button(
                             onClick = {
-                                if (newUserName.isNotBlank()) {
-                                    onCreateUser(newUserName, selectedColor, newAvatarUri)
+                                if (newUserName.isNotBlank() && (!isProtectWithPasskey || newPasskey.length == 4)) {
+                                    val finalPass = if (isProtectWithPasskey && newPasskey.length == 4) newPasskey else null
+                                    onCreateUser(newUserName, selectedColor, newAvatarUri, finalPass)
                                     isAddingUser = false
                                     newUserName = ""
                                     newAvatarUri = null
+                                    isProtectWithPasskey = false
+                                    newPasskey = ""
                                     onDismiss()
                                 }
                             },
+                            enabled = newUserName.isNotBlank() && (!isProtectWithPasskey || newPasskey.length == 4),
                             colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
                             shape = RoundedCornerShape(8.dp)
                         ) {
@@ -505,8 +572,12 @@ fun UserSwitcherSheet(
                                 shape = RoundedCornerShape(10.dp)
                             )
                             .clickable {
-                                onSelectUser(user)
-                                onDismiss()
+                                if (user.passKey != null && !isActive) {
+                                    userPendingVerification = user
+                                } else {
+                                    onSelectUser(user)
+                                    onDismiss()
+                                }
                             }
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -544,14 +615,27 @@ fun UserSwitcherSheet(
                             Spacer(modifier = Modifier.width(12.dp))
 
                             Column {
-                                Text(
-                                    text = user.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isActive) LXPrimaryGreen else LXTextPrimary
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = user.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isActive) LXPrimaryGreen else LXTextPrimary
+                                    )
+                                    if (user.passKey != null) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = "Passkey Protected",
+                                            tint = LXPrimaryGreen,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
                                 if (isActive) {
                                     Text("Active Profile", fontSize = 11.sp, color = LXPrimaryGreen)
+                                } else if (user.passKey != null) {
+                                    Text("Passkey Protected", fontSize = 11.sp, color = LXTextSecondary)
                                 }
                             }
                         }
@@ -584,6 +668,27 @@ fun UserSwitcherSheet(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+
+    if (userPendingVerification != null) {
+        userPendingVerification?.let { pendingUser ->
+            val pass = pendingUser.passKey ?: ""
+            PasskeyVerificationDialog(
+                profileName = pendingUser.name,
+                expectedPasskey = pass,
+                title = "Unlock Profile",
+                subtitle = "Enter 4-digit passkey to switch to \"${pendingUser.name}\"",
+                onSuccess = {
+                    val target = pendingUser
+                    userPendingVerification = null
+                    onSelectUser(target)
+                    onDismiss()
+                },
+                onDismiss = {
+                    userPendingVerification = null
+                }
+            )
         }
     }
 }

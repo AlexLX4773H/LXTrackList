@@ -376,6 +376,19 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         repository.setSwipeToSwitchTabsEnabled(enabled)
     }
 
+    fun updatePassKey(newPassKey: String?) {
+        viewModelScope.launch {
+            val user = _uiState.value.activeUser
+            repository.updatePassKey(user.id, newPassKey)
+            _uiState.update {
+                it.copy(
+                    statusMessage = if (newPassKey != null) "Passkey updated successfully for \"${user.name}\"" else "Passkey removed for \"${user.name}\"",
+                    isErrorMessage = false
+                )
+            }
+        }
+    }
+
     fun setTachiyomiImportAsFavorites(enabled: Boolean) {
         repository.setTachiyomiImportAsFavorites(enabled)
     }
@@ -472,7 +485,33 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 it.copy(
                     coverCacheSizeFormatted = formatted,
                     coverCacheCount = count,
-                    statusMessage = "Cover image cache cleared",
+                    statusMessage = "All cover image cache cleared",
+                    isErrorMessage = false
+                )
+            }
+        }
+    }
+
+    fun clearUnlinkedCoverCache(context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val allEntries = repository.getAllEntriesAllUsersSync()
+            val allProfiles = repository.getAllUsersSync()
+            val activeUrls = mutableSetOf<String>()
+            allEntries.forEach { entry ->
+                entry.coverImageUri?.trim()?.let { if (it.isNotBlank()) activeUrls.add(it) }
+            }
+            allProfiles.forEach { profile ->
+                profile.avatarImageUri?.trim()?.let { if (it.isNotBlank()) activeUrls.add(it) }
+            }
+
+            val stats = CoverCacheManager.clearUnlinkedCache(context, activeUrls)
+            val formatted = CoverCacheManager.formatBytes(stats.remainingBytes)
+            val freedFormatted = CoverCacheManager.formatBytes(stats.freedBytes)
+            _uiState.update {
+                it.copy(
+                    coverCacheSizeFormatted = formatted,
+                    coverCacheCount = stats.remainingFiles,
+                    statusMessage = "Cleared ${stats.freedFiles} unlinked cached files ($freedFormatted freed). Active library covers preserved.",
                     isErrorMessage = false
                 )
             }

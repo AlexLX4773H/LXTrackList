@@ -99,6 +99,8 @@ class MediaRepository(
     val allUsers: Flow<List<UserProfile>>
         get() = userProfileDao?.getAllProfiles() ?: emptyFlow()
 
+    suspend fun getAllUsersSync(): List<UserProfile> = userProfileDao?.getAllProfilesSync() ?: emptyList()
+
     suspend fun switchUser(profile: UserProfile) {
         // Cancel any running background sync for the previous profile so jobs don't cross over
         try {
@@ -115,18 +117,30 @@ class MediaRepository(
     suspend fun createUser(
         name: String,
         avatarColorHex: String = "#A7EF60",
-        avatarImageUri: String? = null
+        avatarImageUri: String? = null,
+        passKey: String? = null
     ): UserProfile {
         val newProfile = UserProfile(
             name = name.trim().ifBlank { "User" },
             avatarColorHex = avatarColorHex,
             avatarImageUri = avatarImageUri,
-            isDefault = false
+            isDefault = false,
+            passKey = passKey?.trim()?.takeIf { it.length == 4 && it.all { ch -> ch.isDigit() } }
         )
         val id = userProfileDao?.insert(newProfile) ?: 1L
         val saved = newProfile.copy(id = id)
         switchUser(saved)
         return saved
+    }
+
+    suspend fun updatePassKey(profileId: Long, newPassKey: String?) {
+        val profile = userProfileDao?.getProfileById(profileId) ?: return
+        val sanitized = newPassKey?.trim()?.takeIf { it.length == 4 && it.all { ch -> ch.isDigit() } }
+        val updated = profile.copy(passKey = sanitized)
+        userProfileDao?.update(updated)
+        if (_activeUser.value.id == profileId) {
+            _activeUser.value = updated
+        }
     }
 
     suspend fun deleteUser(profile: UserProfile) {

@@ -10,6 +10,7 @@ import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.remote.JikanApiClient
+import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +45,16 @@ class DetailViewModel(
 
     private val _relatedErrorMessage = MutableStateFlow<String?>(null)
     val relatedErrorMessage: StateFlow<String?> = _relatedErrorMessage.asStateFlow()
+
+    private val _isRefreshingMetadata = MutableStateFlow(false)
+    val isRefreshingMetadata: StateFlow<Boolean> = _isRefreshingMetadata.asStateFlow()
+
+    private val _metadataRefreshMessage = MutableStateFlow<String?>(null)
+    val metadataRefreshMessage: StateFlow<String?> = _metadataRefreshMessage.asStateFlow()
+
+    fun clearRefreshMessage() {
+        _metadataRefreshMessage.value = null
+    }
 
     val relatedEntries: StateFlow<List<RelatedMediaItem>> = combine(
         _rawRelatedEntries,
@@ -395,6 +406,103 @@ class DetailViewModel(
             repository.delete(cur)
             _isDeleted.value = true
             _deletedEvent.send(Unit)
+        }
+    }
+
+    fun refreshMetadataFromExternalSource(context: Context) {
+        val cur = entry.value ?: return
+        if (_isRefreshingMetadata.value) return
+
+        viewModelScope.launch {
+            _isRefreshingMetadata.value = true
+            try {
+                val isMal = JikanSyncManager.isMalSource(cur) || isAnimeOrManga(cur)
+                val extId = cur.externalId?.trim()?.toLongOrNull()
+
+                if (isMal) {
+                    val isManga = JikanSyncManager.isMangaType(cur.mediaType)
+                    val result = if (extId != null) {
+                        JikanApiClient.fetchMediaDetails(malId = extId, isManga = isManga)
+                    } else {
+                        JikanApiClient.searchMediaDetailsByTitle(title = cur.title, isManga = isManga)
+                    }
+
+                    if (result.isSuccess) {
+                        val details = result.getOrNull()
+                        if (details != null) {
+                            val now = System.currentTimeMillis()
+                            val newExtId = (details.malId ?: extId)?.toString() ?: cur.externalId
+                            val updated = cur.copy(
+                                externalId = newExtId,
+                                externalSource = "MAL",
+                                coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else cur.coverImageUri,
+                                alternateTitle = if (!details.alternateTitle.isNullOrBlank()) details.alternateTitle else cur.alternateTitle,
+                                totalEpisodes = if (details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else cur.totalEpisodes,
+                                totalChapters = if (details.totalChapters != null && details.totalChapters > 0) details.totalChapters else cur.totalChapters,
+                                totalVolumes = if (details.totalVolumes != null && details.totalVolumes > 0) details.totalVolumes else cur.totalVolumes,
+                                episodeLengthMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.episodeLengthMinutes,
+                                durationMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.durationMinutes,
+                                airedStartDate = details.airedStartDate ?: cur.airedStartDate,
+                                airedEndDate = details.airedEndDate ?: cur.airedEndDate,
+                                externalScore = details.externalScore ?: cur.externalScore,
+                                externalScoreSource = details.externalScoreSource ?: "MAL",
+                                tags = if (!details.tags.isNullOrBlank()) details.tags else cur.tags,
+                                notes = if (!details.synopsis.isNullOrBlank()) details.synopsis else cur.notes,
+                                isAiring = details.isAiring ?: cur.isAiring,
+                                updatedAt = now
+                            )
+                            repository.update(updated)
+                            _metadataRefreshMessage.value = "Metadata refreshed from MyAnimeList (MAL #${newExtId})"
+                        } else {
+                            _metadataRefreshMessage.value = "No metadata returned from MyAnimeList"
+                        }
+                    } else {
+                        _metadataRefreshMessage.value = "Failed to refresh from MAL: ${result.exceptionOrNull()?.localizedMessage ?: "Unknown error"}"
+                    }
+                } else {
+                    // TMDB for Movie / Show
+                    val isTv = cur.mediaType == MediaType.SHOW
+                    val result = if (extId != null) {
+                        TmdbApiClient.fetchMediaDetails(tmdbId = extId, isTv = isTv, context = context)
+                    } else {
+                        TmdbApiClient.searchMediaDetailsByTitle(title = cur.title, isTv = isTv, context = context)
+                    }
+
+                    if (result.isSuccess) {
+                        val details = result.getOrNull()
+                        if (details != null) {
+                            val now = System.currentTimeMillis()
+                            val updated = cur.copy(
+                                externalId = details.tmdbId.toString(),
+                                externalSource = "TMDB",
+                                coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else cur.coverImageUri,
+                                alternateTitle = if (!details.alternateTitle.isNullOrBlank()) details.alternateTitle else cur.alternateTitle,
+                                totalEpisodes = if (details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else cur.totalEpisodes,
+                                durationMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.durationMinutes,
+                                episodeLengthMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.episodeLengthMinutes,
+                                airedStartDate = details.airedStartDate ?: cur.airedStartDate,
+                                airedEndDate = details.airedEndDate ?: cur.airedEndDate,
+                                externalScore = details.externalScore ?: cur.externalScore,
+                                externalScoreSource = "TMDB",
+                                tags = if (!details.tags.isNullOrBlank()) details.tags else cur.tags,
+                                notes = if (!details.synopsis.isNullOrBlank()) details.synopsis else cur.notes,
+                                isAiring = details.isAiring ?: cur.isAiring,
+                                updatedAt = now
+                            )
+                            repository.update(updated)
+                            _metadataRefreshMessage.value = "Metadata refreshed from TMDB (TMDB #${details.tmdbId})"
+                        } else {
+                            _metadataRefreshMessage.value = "No metadata returned from The Movie Database"
+                        }
+                    } else {
+                        _metadataRefreshMessage.value = "Failed to refresh from TMDB: ${result.exceptionOrNull()?.localizedMessage ?: "Unknown error"}"
+                    }
+                }
+            } catch (e: Exception) {
+                _metadataRefreshMessage.value = "Error refreshing metadata: ${e.localizedMessage ?: "Unknown error"}"
+            } finally {
+                _isRefreshingMetadata.value = false
+            }
         }
     }
 }

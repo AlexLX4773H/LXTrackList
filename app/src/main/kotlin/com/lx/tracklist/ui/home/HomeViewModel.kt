@@ -297,9 +297,9 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
         }
     }
 
-    fun createUser(name: String, colorHex: String, avatarImageUri: String? = null) {
+    fun createUser(name: String, colorHex: String, avatarImageUri: String? = null, passKey: String? = null) {
         viewModelScope.launch {
-            repository.createUser(name, colorHex, avatarImageUri)
+            repository.createUser(name, colorHex, avatarImageUri, passKey)
         }
     }
 

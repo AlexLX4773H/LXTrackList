@@ -5,13 +5,17 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,7 +43,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.lx.tracklist.LXApplication
@@ -277,8 +283,8 @@ fun AppNavigation() {
                 homeViewModel.switchUser(it)
                 backStack = listOf(NavDestination.Home)
             },
-            onCreateUser = { name, color, avatarUri ->
-                homeViewModel.createUser(name, color, avatarUri)
+            onCreateUser = { name, color, avatarUri, passKey ->
+                homeViewModel.createUser(name, color, avatarUri, passKey)
                 backStack = listOf(NavDestination.Home)
             },
             onUpdateUser = { homeViewModel.updateUser(it) },
@@ -356,34 +362,62 @@ fun AppNavigation() {
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             bottomBar = {
                 if (isTopLevelScreen && !isMultiSelectActive) {
-                    NavigationBar(
-                        containerColor = LXSurfaceBlack,
-                        contentColor = LXTextPrimary,
+                    androidx.compose.material3.Surface(
+                        color = LXSurfaceBlack,
+                        tonalElevation = 6.dp,
                         modifier = Modifier
+                            .fillMaxWidth()
                             .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                             .border(1.dp, LXBorder, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                     ) {
-                        navItems.forEach { (screen, dest) ->
-                            val isSelected = currentDestination == dest
-                            NavigationBarItem(
-                                selected = isSelected,
-                                onClick = { navigateTo(dest) },
-                                icon = {
-                                    Icon(
-                                        imageVector = screen.icon,
-                                        contentDescription = screen.title,
-                                        modifier = Modifier.size(22.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .height(64.dp)
+                                .padding(horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceAround,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            navItems.forEach { (screen, dest) ->
+                                val isSelected = currentDestination == dest
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable { navigateTo(dest) }
+                                        .padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .height(28.dp)
+                                            .width(48.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(if (isSelected) LXPrimaryGreen else Color.Transparent),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = screen.icon,
+                                            contentDescription = screen.title,
+                                            tint = if (isSelected) LXBackgroundBlack else LXTextSecondary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        text = screen.title,
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontSize = 11.sp,
+                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+                                        ),
+                                        color = if (isSelected) LXPrimaryGreen else LXTextSecondary,
+                                        maxLines = 1
                                     )
-                                },
-                                label = { Text(screen.title) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = LXBackgroundBlack,
-                                    selectedTextColor = LXPrimaryGreen,
-                                    indicatorColor = LXPrimaryGreen,
-                                    unselectedIconColor = LXTextSecondary,
-                                    unselectedTextColor = LXTextSecondary
-                                )
-                            )
+                                }
+                            }
                         }
                     }
                 }

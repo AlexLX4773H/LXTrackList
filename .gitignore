@@ -22,6 +22,9 @@ gradle-app.setting
 !gradle-wrapper.jar
 .gradletasknamecache
 
+# Kotlin daemon and build caches
+.kotlin/
+
 # Local configuration file (SDK location, signing keys)
 local.properties
 

@@ -22,9 +22,26 @@ data class ReindexResult(
     val failed: Int
 )
 
+data class ClearCacheStats(
+    val freedBytes: Long,
+    val freedFiles: Int,
+    val remainingBytes: Long,
+    val remainingFiles: Int
+)
+
 object CoverCacheManager {
 
     const val COVER_CACHE_DIR_NAME = "cover_cache"
+
+    fun sha256Hex(input: String): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        val bytes = md.digest(input.toByteArray(Charsets.UTF_8))
+        val sb = StringBuilder(bytes.size * 2)
+        for (b in bytes) {
+            sb.append(String.format(Locale.US, "%02x", b))
+        }
+        return sb.toString()
+    }
 
     fun getCacheDir(context: Context): File {
         val dir = File(context.filesDir, COVER_CACHE_DIR_NAME)
@@ -78,6 +95,62 @@ object CoverCacheManager {
                 dir.mkdirs()
             }
         } catch (_: Exception) {}
+    }
+
+    fun clearUnlinkedCache(context: Context, activeUrls: Set<String>): ClearCacheStats {
+        var freedBytes = 0L
+        var freedFiles = 0
+
+        val dir = File(context.filesDir, COVER_CACHE_DIR_NAME)
+        if (!dir.exists()) {
+            return ClearCacheStats(0L, 0, 0L, 0)
+        }
+
+        val imageLoader = Coil.imageLoader(context)
+        val activeFileNames = mutableSetOf<String>()
+
+        activeUrls.filter { it.isNotBlank() }.forEach { url ->
+            val hash = sha256Hex(url)
+            activeFileNames.add("$hash.0")
+            activeFileNames.add("$hash.1")
+            try {
+                val snapshot = imageLoader.diskCache?.openSnapshot(url)
+                if (snapshot != null) {
+                    activeFileNames.add(snapshot.data.toFile().name)
+                    activeFileNames.add(snapshot.metadata.toFile().name)
+                    snapshot.close()
+                }
+            } catch (_: Exception) {}
+        }
+
+        try {
+            imageLoader.memoryCache?.clear()
+        } catch (_: Exception) {}
+
+        try {
+            dir.listFiles()?.forEach { file ->
+                val name = file.name
+                if (name != "journal" && name != "journal.tmp" && name != "journal.bkp") {
+                    if (file.isFile && !activeFileNames.contains(name)) {
+                        val len = file.length()
+                        if (file.delete()) {
+                            freedBytes += len
+                            freedFiles++
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        val remainingBytes = getCacheSizeBytes(context)
+        val remainingFiles = getCachedFileCount(context)
+
+        return ClearCacheStats(
+            freedBytes = freedBytes,
+            freedFiles = freedFiles,
+            remainingBytes = remainingBytes,
+            remainingFiles = remainingFiles
+        )
     }
 
     fun filterEligibleUrls(entries: List<MediaEntry>): List<String> {

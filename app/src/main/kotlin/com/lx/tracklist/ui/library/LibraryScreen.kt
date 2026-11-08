@@ -839,42 +839,53 @@ fun LibraryScreen(
                 .padding(paddingValues)
         ) {
             // Search Input
-            TextField(
+            OutlinedTextField(
                 value = state.searchQuery,
                 onValueChange = { viewModel.setSearchQuery(it) },
-                placeholder = { Text("Search title, alternate title, tags...", color = LXTextSecondary) },
+                placeholder = {
+                    Text(
+                        "Search title, alternate title, tags...",
+                        color = LXTextSecondary,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
                 singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary, fontSize = 13.sp),
                 leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = LXPrimaryGreen)
+                    Icon(Icons.Default.Search, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(20.dp))
                 },
                 trailingIcon = {
                     if (state.searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = LXTextSecondary)
+                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = LXTextSecondary, modifier = Modifier.size(18.dp))
                         }
                     }
                 },
-                colors = TextFieldDefaults.colors(
+                colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = LXSurfaceVariant,
                     unfocusedContainerColor = LXSurfaceVariant,
+                    focusedBorderColor = LXPrimaryGreen.copy(alpha = 0.5f),
+                    unfocusedBorderColor = Color.Transparent,
                     focusedTextColor = LXTextPrimary,
                     unfocusedTextColor = LXTextPrimary,
-                    cursorColor = LXPrimaryGreen,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent
+                    cursorColor = LXPrimaryGreen
                 ),
+                shape = RoundedCornerShape(10.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .heightIn(min = 44.dp, max = 46.dp)
+                    .padding(horizontal = 14.dp, vertical = 4.dp)
             )
 
             // Quick Category Horizontal Chips
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 14.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 item {
                     FilterChip(
@@ -883,12 +894,18 @@ fun LibraryScreen(
                             viewModel.setCategoryFilter(null)
                             viewModel.setCustomCategoryFilter(null)
                         },
-                        label = { Text("All Categories", fontSize = 12.sp) },
+                        label = { Text("All Categories", fontSize = 12.sp, fontWeight = if (state.selectedCategoryFilter == null && state.selectedCustomCategoryFilter == null) FontWeight.Bold else FontWeight.Normal) },
+                        modifier = Modifier.height(34.dp),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = LXPrimaryGreen,
                             selectedLabelColor = LXBackgroundBlack,
                             containerColor = LXSurfaceElevated,
                             labelColor = LXTextSecondary
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = state.selectedCategoryFilter == null && state.selectedCustomCategoryFilter == null,
+                            borderColor = if (state.selectedCategoryFilter == null && state.selectedCustomCategoryFilter == null) LXPrimaryGreen else LXBorder
                         )
                     )
                 }
@@ -898,12 +915,18 @@ fun LibraryScreen(
                     FilterChip(
                         selected = isSelected,
                         onClick = { viewModel.setCategoryFilter(if (isSelected) null else cat) },
-                        label = { Text(cat.displayName, fontSize = 12.sp) },
+                        label = { Text(cat.displayName, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                        modifier = Modifier.height(34.dp),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = LXPrimaryGreen,
                             selectedLabelColor = LXBackgroundBlack,
                             containerColor = LXSurfaceElevated,
                             labelColor = LXTextSecondary
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = if (isSelected) LXPrimaryGreen else LXBorder
                         )
                     )
                 }
@@ -914,12 +937,18 @@ fun LibraryScreen(
                     FilterChip(
                         selected = isSelected,
                         onClick = { viewModel.setCustomCategoryFilter(if (isSelected) null else customCat.name) },
-                        label = { Text(customCat.name, fontSize = 12.sp) },
+                        label = { Text(customCat.name, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                        modifier = Modifier.height(34.dp),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = LXPrimaryGreen,
                             selectedLabelColor = LXBackgroundBlack,
                             containerColor = LXSurfaceElevated,
                             labelColor = LXTextSecondary
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = if (isSelected) LXPrimaryGreen else LXBorder
                         )
                     )
                 }
