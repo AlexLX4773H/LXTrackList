@@ -42,7 +42,8 @@ data class HomeUiState(
     val subCategoryCounts: Map<String, Int> = emptyMap(),
     val activeUser: UserProfile = UserProfile(id = 1L, name = "Main Profile", isDefault = true),
     val allUsers: List<UserProfile> = emptyList(),
-    val isSwipeToSwitchTabsEnabled: Boolean = true
+    val isSwipeToSwitchTabsEnabled: Boolean = true,
+    val isUserInitialized: Boolean = false
 )
 
 private data class FilterState(
@@ -61,7 +62,8 @@ private data class FilterState(
 private data class UserAndSettingsContext(
     val activeUser: UserProfile,
     val allUsers: List<UserProfile>,
-    val isSwipeEnabled: Boolean
+    val isSwipeEnabled: Boolean,
+    val isUserInitialized: Boolean
 )
 
 class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
@@ -111,8 +113,9 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
     private val userAndSettingsContextFlow = combine(
         repository.activeUser,
         repository.allUsers,
-        repository.isSwipeToSwitchTabsEnabled
-    ) { active, all, swipe -> UserAndSettingsContext(active, all, swipe) }
+        repository.isSwipeToSwitchTabsEnabled,
+        repository.isUserInitialized
+    ) { active, all, swipe, initialized -> UserAndSettingsContext(active, all, swipe, initialized) }
 
     val uiState: StateFlow<HomeUiState> = combine(
         _filterState,
@@ -216,7 +219,8 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
             subCategoryCounts = subCatCounts,
             activeUser = ctx.activeUser,
             allUsers = ctx.allUsers,
-            isSwipeToSwitchTabsEnabled = ctx.isSwipeEnabled
+            isSwipeToSwitchTabsEnabled = ctx.isSwipeEnabled,
+            isUserInitialized = ctx.isUserInitialized
         )
     }.stateIn(
         scope = viewModelScope,

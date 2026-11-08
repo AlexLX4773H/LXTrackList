@@ -846,15 +846,20 @@ fun LibraryScreen(
                     Text(
                         "Search title, alternate title, tags...",
                         color = LXTextSecondary,
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 },
                 singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary, fontSize = 13.sp),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
                 leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(20.dp))
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = LXPrimaryGreen,
+                        modifier = Modifier.size(20.dp)
+                    )
                 },
                 trailingIcon = {
                     if (state.searchQuery.isNotEmpty()) {
@@ -864,19 +869,18 @@ fun LibraryScreen(
                     }
                 },
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = LXSurfaceVariant,
-                    unfocusedContainerColor = LXSurfaceVariant,
-                    focusedBorderColor = LXPrimaryGreen.copy(alpha = 0.5f),
-                    unfocusedBorderColor = Color.Transparent,
+                    focusedContainerColor = LXSurfaceElevated,
+                    unfocusedContainerColor = LXSurfaceElevated,
+                    focusedBorderColor = LXPrimaryGreen,
+                    unfocusedBorderColor = LXBorder,
                     focusedTextColor = LXTextPrimary,
                     unfocusedTextColor = LXTextPrimary,
                     cursorColor = LXPrimaryGreen
                 ),
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 44.dp, max = 46.dp)
-                    .padding(horizontal = 14.dp, vertical = 4.dp)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
             )
 
             // Quick Category Horizontal Chips

@@ -54,6 +54,9 @@ fun PasskeyVerificationDialog(
     expectedPasskey: String,
     title: String = "Enter Passkey",
     subtitle: String = "Enter 4-digit passkey for \"$profileName\"",
+    dismissButtonText: String = "Cancel",
+    onSecondaryAction: (() -> Unit)? = null,
+    secondaryActionText: String? = null,
     onSuccess: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -279,10 +282,16 @@ fun PasskeyVerificationDialog(
                 }
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            if (onSecondaryAction != null && secondaryActionText != null) {
+                TextButton(onClick = onSecondaryAction) {
+                    Text(secondaryActionText, color = LXPrimaryGreen, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = LXTextSecondary)
+                Text(dismissButtonText, color = LXTextSecondary)
             }
         },
         containerColor = LXBackgroundBlack,

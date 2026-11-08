@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
@@ -91,6 +92,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -98,6 +100,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -110,9 +113,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -184,6 +190,21 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         viewModel.checkStorageStatus(context)
+    }
+
+    // Auto-dismiss status notification after 6 seconds
+    LaunchedEffect(state.statusMessage) {
+        if (state.statusMessage != null) {
+            delay(6000L)
+            viewModel.clearStatusMessage()
+        }
+    }
+
+    // Clear notification when leaving the Settings screen so it does not persist across tabs
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.clearStatusMessage()
+        }
     }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -1136,11 +1157,17 @@ fun SettingsScreen(
                             Icon(Icons.Default.Add, contentDescription = "Add Category", tint = LXPrimaryGreen)
                         }
                     } else if (!isTablet && activeSubMenu == SettingsSubMenu.STORAGE) {
-                        IconButton(onClick = { viewModel.checkStorageStatus(context) }) {
+                        IconButton(onClick = {
+                            viewModel.clearStatusMessage()
+                            viewModel.checkStorageStatus(context)
+                        }) {
                             Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = LXPrimaryGreen)
                         }
                     } else if (activeSubMenu == null || isTablet) {
-                        IconButton(onClick = { viewModel.checkStorageStatus(context) }) {
+                        IconButton(onClick = {
+                            viewModel.clearStatusMessage()
+                            viewModel.checkStorageStatus(context)
+                        }) {
                             Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = LXPrimaryGreen)
                         }
                     }
@@ -1173,7 +1200,8 @@ fun SettingsScreen(
                         jikanSyncState = jikanSyncState,
                         tmdbSyncState = tmdbSyncState,
                         selectedSubMenu = currentSelection,
-                        onSelectSubMenu = { activeSubMenu = it }
+                        onSelectSubMenu = { activeSubMenu = it },
+                        onDismissStatusMessage = { viewModel.clearStatusMessage() }
                     )
                 }
 
@@ -1273,6 +1301,7 @@ fun SettingsScreen(
                             tmdbSyncState = tmdbSyncState,
                             selectedSubMenu = null,
                             onSelectSubMenu = { activeSubMenu = it },
+                            onDismissStatusMessage = { viewModel.clearStatusMessage() },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -1386,6 +1415,7 @@ private fun SettingsMainMenu(
     tmdbSyncState: TmdbSyncProgress,
     selectedSubMenu: SettingsSubMenu?,
     onSelectSubMenu: (SettingsSubMenu) -> Unit,
+    onDismissStatusMessage: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -1398,7 +1428,8 @@ private fun SettingsMainMenu(
         if (state.statusMessage != null) {
             StatusMessageBanner(
                 message = state.statusMessage,
-                isError = state.isErrorMessage
+                isError = state.isErrorMessage,
+                onDismiss = onDismissStatusMessage
             )
         }
 
@@ -1665,6 +1696,7 @@ private fun SettingsMenuItem(
 private fun StatusMessageBanner(
     message: String,
     isError: Boolean,
+    onDismiss: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -1679,20 +1711,38 @@ private fun StatusMessageBanner(
         shape = RoundedCornerShape(10.dp)
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Icon(
-                imageVector = Icons.Default.Info,
-                contentDescription = null,
-                tint = if (isError) LXErrorRed else LXPrimaryGreen
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = message,
-                color = LXTextPrimary,
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = if (isError) LXErrorRed else LXPrimaryGreen
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = message,
+                    color = LXTextPrimary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Dismiss",
+                    tint = LXTextSecondary,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
     }
 }
@@ -2534,11 +2584,19 @@ private fun BackupStorageContent(
         if (showClearCacheConfirmDialog) {
             AlertDialog(
                 onDismissRequest = { showClearCacheConfirmDialog = false },
-                title = { Text("Clear Cover Cache", color = LXTextPrimary, fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, tint = LXPrimaryGreen)
+                        Text("Clear Cover Cache", color = LXTextPrimary, fontWeight = FontWeight.Bold)
+                    }
+                },
                 text = {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
                             "Choose which cached cover images you want to clear from local storage:",
@@ -2546,58 +2604,111 @@ private fun BackupStorageContent(
                             fontSize = 13.sp
                         )
 
-                        // Option 1: Clear Unlinked Only
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = LXSurfaceElevated,
-                            border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                        // Option 1: Clear Unlinked Only (Recommended)
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
                                 .clickable {
                                     showClearCacheConfirmDialog = false
                                     onClearUnlinkedCoverCache()
-                                }
-                                .padding(12.dp)
+                                },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                            border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.6f))
                         ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Delete, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Clear Unlinked Only (Recommended)", color = LXPrimaryGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(LXPrimaryGreen.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = null,
+                                            tint = LXPrimaryGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "Clear Unlinked Only",
+                                        color = LXPrimaryGreen,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
                                 }
                                 Text(
-                                    "Only removes cached images that are NOT linked to any actively tracked entity in your library (e.g. search thumbnails, un-added entries).",
+                                    text = buildAnnotatedString {
+                                        withStyle(SpanStyle(color = LXPrimaryGreen, fontWeight = FontWeight.SemiBold)) {
+                                            append("Recommended: ")
+                                        }
+                                        append("Preserves all covers of actively tracked entries in your library. Only removes unlinked search thumbnails and orphan files.")
+                                    },
                                     color = LXTextSecondary,
-                                    fontSize = 11.sp
+                                    fontSize = 12.sp,
+                                    lineHeight = 17.sp
                                 )
                             }
                         }
 
                         // Option 2: Clear Entire Cache
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = LXSurfaceElevated,
-                            border = BorderStroke(1.dp, LXBorder),
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
                                 .clickable {
                                     showClearCacheConfirmDialog = false
                                     onClearCoverCache()
-                                }
-                                .padding(12.dp)
+                                },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                            border = BorderStroke(1.dp, LXBorder)
                         ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Delete, contentDescription = null, tint = LXErrorRed, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Clear Entire Image Cache", color = LXErrorRed, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(LXErrorRed.copy(alpha = 0.12f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = null,
+                                            tint = LXErrorRed,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "Clear Entire Image Cache",
+                                        color = LXErrorRed,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
                                 }
                                 Text(
-                                    "Deletes all cached images. Actively tracked covers will re-download when viewed online.",
+                                    text = "Deletes all cached images. Actively tracked covers will re-download when viewed online.",
                                     color = LXTextSecondary,
-                                    fontSize = 11.sp
+                                    fontSize = 12.sp,
+                                    lineHeight = 17.sp
                                 )
                             }
                         }
@@ -2610,7 +2721,7 @@ private fun BackupStorageContent(
                     }
                 },
                 containerColor = LXSurfaceBlack,
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(16.dp)
             )
         }
 

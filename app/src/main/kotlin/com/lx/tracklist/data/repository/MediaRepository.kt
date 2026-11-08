@@ -49,6 +49,9 @@ class MediaRepository(
     )
     val activeUser: StateFlow<UserProfile> = _activeUser.asStateFlow()
 
+    private val _isUserInitialized = MutableStateFlow(false)
+    val isUserInitialized: StateFlow<Boolean> = _isUserInitialized.asStateFlow()
+
     private val _isSwipeToSwitchTabsEnabled = MutableStateFlow(
         prefs?.getBoolean("swipe_to_switch_tabs_$savedInitialUserId", prefs?.getBoolean("swipe_to_switch_tabs", true) ?: true) ?: true
     )
@@ -91,8 +94,13 @@ class MediaRepository(
                     _isSwipeToSwitchTabsEnabled.value = prefs?.getBoolean("swipe_to_switch_tabs_${profile.id}", true) ?: true
                     _isTachiyomiImportAsFavorites.value = prefs?.getBoolean("tachiyomi_import_as_favorites_${profile.id}", false) ?: false
                     dao.sanitizeZeroUserIds(defaultUser.id)
-                } catch (_: Exception) {}
+                } catch (_: Exception) {
+                } finally {
+                    _isUserInitialized.value = true
+                }
             }
+        } else {
+            _isUserInitialized.value = true
         }
     }
 

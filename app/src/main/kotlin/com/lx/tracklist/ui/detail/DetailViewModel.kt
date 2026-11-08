@@ -413,7 +413,7 @@ class DetailViewModel(
         val cur = entry.value ?: return
         if (_isRefreshingMetadata.value) return
 
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             _isRefreshingMetadata.value = true
             try {
                 val isMal = JikanSyncManager.isMalSource(cur) || isAnimeOrManga(cur)
@@ -457,7 +457,8 @@ class DetailViewModel(
                             _metadataRefreshMessage.value = "No metadata returned from MyAnimeList"
                         }
                     } else {
-                        _metadataRefreshMessage.value = "Failed to refresh from MAL: ${result.exceptionOrNull()?.localizedMessage ?: "Unknown error"}"
+                        val err = result.exceptionOrNull()
+                        _metadataRefreshMessage.value = "Failed to refresh from MAL: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}"
                     }
                 } else {
                     // TMDB for Movie / Show
@@ -495,11 +496,12 @@ class DetailViewModel(
                             _metadataRefreshMessage.value = "No metadata returned from The Movie Database"
                         }
                     } else {
-                        _metadataRefreshMessage.value = "Failed to refresh from TMDB: ${result.exceptionOrNull()?.localizedMessage ?: "Unknown error"}"
+                        val err = result.exceptionOrNull()
+                        _metadataRefreshMessage.value = "Failed to refresh from TMDB: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}"
                     }
                 }
             } catch (e: Exception) {
-                _metadataRefreshMessage.value = "Error refreshing metadata: ${e.localizedMessage ?: "Unknown error"}"
+                _metadataRefreshMessage.value = "Error refreshing metadata: ${e.message ?: e.localizedMessage ?: "Unknown error"}"
             } finally {
                 _isRefreshingMetadata.value = false
             }
