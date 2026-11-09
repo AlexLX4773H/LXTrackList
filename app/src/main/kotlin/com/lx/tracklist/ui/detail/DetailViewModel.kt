@@ -13,6 +13,7 @@ import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.MangaDexApiClient
+import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.mal.MalSyncManager
 import com.lx.tracklist.data.repository.MediaRepository
@@ -522,28 +523,33 @@ class DetailViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             _isRefreshingMetadata.value = true
             try {
-                val isMal = JikanSyncManager.isMalSource(cur) || isAnimeOrManga(cur)
                 val isTachiyomi = JikanSyncManager.isTachiyomiSource(cur)
+                if (isTachiyomi) {
+                    val outcome = TachiyomiResolverManager.matchAndResolveEntry(cur, repository, context)
+                    when (outcome) {
+                        is TachiyomiResolverManager.ResolutionOutcome.Success -> {
+                            val r = outcome.report
+                            _metadataRefreshMessage.value = "Resolved & linked to ${r.resolvedSource} (#${r.resolvedExternalId}): ${r.resolvedTitle}"
+                        }
+                        is TachiyomiResolverManager.ResolutionOutcome.Skipped -> {
+                            _metadataRefreshMessage.value = "No confident exact match found for \"${cur.title}\""
+                        }
+                        is TachiyomiResolverManager.ResolutionOutcome.Failed -> {
+                            _metadataRefreshMessage.value = "Failed to resolve: ${outcome.report.errorMessage}"
+                        }
+                    }
+                    return@launch
+                }
+
+                val isMal = JikanSyncManager.isMalSource(cur) || isAnimeOrManga(cur)
                 val extIdStr = cur.externalId?.trim()
                 val isManga = JikanSyncManager.isMangaType(cur.mediaType)
-                val isManhwa = cur.mediaType == MediaType.MANHWA
-
-                val extractedMangaDexUuid = if (isTachiyomi && !extIdStr.isNullOrBlank()) {
-                    JikanSyncManager.extractMangaDexUuid(extIdStr)
-                } else null
-                val extractedMalId = if (isTachiyomi && !extIdStr.isNullOrBlank()) {
-                    JikanSyncManager.extractNumericMalId(extIdStr)
-                } else null
-
-                val extId = if (isTachiyomi) extractedMalId else extIdStr?.toLongOrNull()
-                val isMangaDex = (!isTachiyomi && cur.externalSource?.equals("MangaDex", ignoreCase = true) == true) || extractedMangaDexUuid != null
-                val mangaDexIdToUse = extractedMangaDexUuid ?: (if (isMangaDex) extIdStr else null)
+                val extId = extIdStr?.toLongOrNull()
+                val isMangaDex = cur.externalSource?.equals("MangaDex", ignoreCase = true) == true
+                val mangaDexIdToUse = if (isMangaDex) extIdStr else null
 
                 if (isMangaDex && !mangaDexIdToUse.isNullOrBlank()) {
-                    var result = MangaDexApiClient.fetchMangaDetails(mangaDexIdToUse)
-                    if (result.isFailure && isTachiyomi) {
-                        result = JikanApiClient.searchMediaDetailsByTitle(title = cur.title, isManga = isManga, isManhwa = isManhwa)
-                    }
+                    val result = MangaDexApiClient.fetchMangaDetails(mangaDexIdToUse)
                     if (result.isSuccess) {
                         val details = result.getOrNull()
                         if (details != null) {
@@ -575,39 +581,37 @@ class DetailViewModel(
                         _metadataRefreshMessage.value = "Failed to refresh from MangaDex: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}"
                     }
                 } else if (isMal) {
-                    var result = if (extId != null && extId > 0) {
-                        JikanApiClient.fetchMediaDetails(malId = extId, isManga = isManga, title = cur.title, isManhwa = isManhwa)
+                    val result = if (extId != null && extId > 0) {
+                        JikanApiClient.fetchMediaDetails(malId = extId, isManga = isManga, title = cur.title)
                     } else {
-                        JikanApiClient.searchMediaDetailsByTitle(title = cur.title, isManga = isManga, isManhwa = isManhwa)
-                    }
-                    if (result.isFailure && isTachiyomi) {
-                        result = JikanApiClient.searchMediaDetailsByTitle(title = cur.title, isManga = isManga, isManhwa = isManhwa)
+                        JikanApiClient.searchMediaDetailsByTitle(title = cur.title, isManga = isManga)
                     }
 
                     if (result.isSuccess) {
                         val details = result.getOrNull()
                         if (details != null) {
                             val now = System.currentTimeMillis()
-                            val resolvedSource = when (details.sourceProvider) {
-                                "MangaDex" -> "MangaDex"
-                                "AniList" -> if (details.malId != null && details.malId > 0) "MAL" else "AniList"
-                                "Kitsu" -> "Kitsu"
-                                else -> if (details.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
+                            val resolvedSource = when {
+                                details.sourceProvider == "MangaDex" -> "MangaDex"
+                                details.sourceProvider.startsWith("MAL") -> "MAL"
+                                details.sourceProvider.contains("AniList") -> "AniList"
+                                details.sourceProvider.equals("Kitsu", ignoreCase = true) -> "Kitsu"
+                                else -> "MAL"
                             }
                             val newExtId = when {
                                 details.sourceProvider == "MangaDex" -> {
-                                    details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: (if (isTachiyomi) null else cur.externalId)
+                                    details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: cur.externalId
                                 }
                                 details.sourceProvider.contains("AniList") -> {
                                     (details.malId?.takeIf { it > 0 } ?: details.url?.substringAfterLast('/')?.toLongOrNull())?.toString()
-                                        ?: (if (isTachiyomi) null else cur.externalId)
+                                        ?: cur.externalId
                                 }
                                 details.sourceProvider.equals("Kitsu", ignoreCase = true) -> {
                                     details.malId?.toString() ?: details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-                                        ?: (if (isTachiyomi) null else cur.externalId)
+                                        ?: cur.externalId
                                 }
                                 else -> {
-                                    (details.malId ?: extId)?.toString() ?: (if (isTachiyomi) null else cur.externalId)
+                                    (details.malId ?: extId)?.toString() ?: cur.externalId
                                 }
                             }
                             val updated = cur.copy(

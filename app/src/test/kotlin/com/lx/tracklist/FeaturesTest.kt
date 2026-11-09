@@ -1290,7 +1290,7 @@ class FeaturesTest {
             id = 1L,
             title = "King of Gold",
             mediaType = MediaType.MANHWA,
-            status = MediaStatus.READING,
+            status = MediaStatus.WATCHING,
             externalSource = "TACHIYOMI",
             externalId = "/manga/king-of-gold"
         )
@@ -1298,7 +1298,7 @@ class FeaturesTest {
             id = 2L,
             title = "Martial Peak",
             mediaType = MediaType.MANGA,
-            status = MediaStatus.READING,
+            status = MediaStatus.WATCHING,
             externalSource = null,
             externalId = "/manga/martial-peak"
         )
@@ -1306,7 +1306,7 @@ class FeaturesTest {
             id = 3L,
             title = "One Piece",
             mediaType = MediaType.MANGA,
-            status = MediaStatus.READING,
+            status = MediaStatus.WATCHING,
             externalSource = "MAL",
             externalId = "13"
         )
@@ -1331,9 +1331,47 @@ class FeaturesTest {
         assertEquals(67890L, com.lx.tracklist.data.remote.JikanSyncManager.extractNumericMalId("/manga/67890"))
         assertNull(com.lx.tracklist.data.remote.JikanSyncManager.extractNumericMalId("/manga/king-of-gold"))
 
-        // Tachiyomi entries for Anime/Manga/Manhwa are eligible for sync
-        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.isMalSource(tachiEntry1))
-        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.isMalSource(tachiEntry2))
+        // Tachiyomi entries are handled by the separate TachiyomiResolverManager, not generic MAL sync
+        assertFalse(com.lx.tracklist.data.remote.JikanSyncManager.isMalSource(tachiEntry1))
+        assertFalse(com.lx.tracklist.data.remote.JikanSyncManager.isMalSource(tachiEntry2))
+        assertTrue(com.lx.tracklist.data.remote.TachiyomiResolverManager.isEligibleTachiyomiEntry(tachiEntry1))
+        assertTrue(com.lx.tracklist.data.remote.TachiyomiResolverManager.isEligibleTachiyomiEntry(tachiEntry2))
+        assertFalse(com.lx.tracklist.data.remote.TachiyomiResolverManager.isEligibleTachiyomiEntry(normalEntry))
+    }
+
+    @Test
+    fun testTachiyomiResolverHighConfidenceMatching() {
+        // Normalization testing
+        assertEquals("king of gold", com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle("King of Gold"))
+        assertEquals("king of gold", com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle("king-of-gold"))
+        assertEquals("kings gold", com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle("King's Gold!"))
+        assertEquals("solo leveling ragnarok", com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle("Solo Leveling: Ragnarok"))
+        assertEquals("solo leveling ragnarok", com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle("Solo Leveling - Ragnarok"))
+
+        // Confident match on primary title
+        val candidate1 = com.lx.tracklist.data.remote.JikanMediaDetails(
+            malId = 100L,
+            title = "King of Gold",
+            alternateTitle = "황금의 제왕\nKing of Gold: System of Wealth"
+        )
+        assertTrue(com.lx.tracklist.data.remote.TachiyomiResolverManager.isConfidentExactMatch("King of Gold", candidate1))
+        assertTrue(com.lx.tracklist.data.remote.TachiyomiResolverManager.isConfidentExactMatch("king-of-gold", candidate1))
+        assertTrue(com.lx.tracklist.data.remote.TachiyomiResolverManager.isConfidentExactMatch("King of Gold (Manhwa)", candidate1))
+
+        // Confident match on alternate title
+        val candidate2 = com.lx.tracklist.data.remote.JikanMediaDetails(
+            malId = 200L,
+            title = "Na Honjaman Level Up",
+            alternateTitle = "Solo Leveling\nI Alone Level Up"
+        )
+        assertTrue(com.lx.tracklist.data.remote.TachiyomiResolverManager.isConfidentExactMatch("Solo Leveling", candidate2))
+        assertTrue(com.lx.tracklist.data.remote.TachiyomiResolverManager.isConfidentExactMatch("solo-leveling", candidate2))
+        assertTrue(com.lx.tracklist.data.remote.TachiyomiResolverManager.isConfidentExactMatch("I Alone Level Up", candidate2))
+
+        // Non-matches / partial matches MUST be rejected for safety
+        assertFalse(com.lx.tracklist.data.remote.TachiyomiResolverManager.isConfidentExactMatch("King of Gold", candidate2))
+        assertFalse(com.lx.tracklist.data.remote.TachiyomiResolverManager.isConfidentExactMatch("Solo Leveling: Ragnarok", candidate2))
+        assertFalse(com.lx.tracklist.data.remote.TachiyomiResolverManager.isConfidentExactMatch("Solo Leveling Season 2", candidate2))
     }
 
     @Test
@@ -1562,5 +1600,55 @@ class FeaturesTest {
         assertEquals("MAL", parsed[0].externalSource)
         assertEquals("3003", parsed[1].externalId)
         assertEquals("AniList", parsed[1].externalSource)
+    }
+
+    @Test
+    fun testTachiyomiResolutionNeverDieExtra() {
+        val resolver = com.lx.tracklist.data.remote.TachiyomiResolverManager
+
+        // Candidate returned from MangaDex (or via JikanApiClient's fallback)
+        val mangaDexCandidate = com.lx.tracklist.data.remote.JikanMediaDetails(
+            malId = null,
+            title = "Never Die Extra",
+            alternateTitle = "Neverdie Extra\n죽지 않는 엑스트라",
+            posterUrl = "https://uploads.mangadex.org/covers/8df71822-b883-49aa-9b16-4663efbf2234/cover.jpg",
+            totalChapters = 60,
+            type = "Manhwa",
+            sourceProvider = "MangaDex",
+            url = "https://mangadex.org/title/8df71822-b883-49aa-9b16-4663efbf2234"
+        )
+
+        // 1. Confident exact match checks
+        assertTrue("Exact title match must succeed", resolver.isConfidentExactMatch("Never Die Extra", mangaDexCandidate))
+        assertTrue("Space-agnostic match for compound title 'Neverdie Extra' must succeed", resolver.isConfidentExactMatch("Neverdie Extra", mangaDexCandidate))
+        assertTrue("Title with bracketed suffix must succeed", resolver.isConfidentExactMatch("Never Die Extra (Manhwa)", mangaDexCandidate))
+        assertTrue("Korean title in candidate alternate titles must succeed", resolver.isConfidentExactMatch("죽지 않는 엑스트라", mangaDexCandidate))
+
+        // 2. Extract external source and ID checks
+        val sourceAndId = resolver.extractCandidateSourceAndId(mangaDexCandidate)
+        assertNotNull("MangaDex candidate must yield non-null source and ID", sourceAndId)
+        assertEquals("MangaDex", sourceAndId?.first)
+        assertEquals("8df71822-b883-49aa-9b16-4663efbf2234", sourceAndId?.second)
+
+        // 3. Test AniList and MAL candidate source extractions
+        val aniCandidate = com.lx.tracklist.data.remote.JikanMediaDetails(
+            malId = 4567L,
+            title = "Solo Leveling",
+            sourceProvider = "AniList",
+            url = "https://anilist.co/manga/4567"
+        )
+        val aniSourceAndId = resolver.extractCandidateSourceAndId(aniCandidate)
+        assertEquals("AniList", aniSourceAndId?.first)
+        assertEquals("4567", aniSourceAndId?.second)
+
+        val malCandidate = com.lx.tracklist.data.remote.JikanMediaDetails(
+            malId = 121496L,
+            title = "Solo Leveling",
+            sourceProvider = "Jikan",
+            url = "https://myanimelist.net/manga/121496"
+        )
+        val malSourceAndId = resolver.extractCandidateSourceAndId(malCandidate)
+        assertEquals("MAL", malSourceAndId?.first)
+        assertEquals("121496", malSourceAndId?.second)
     }
 }

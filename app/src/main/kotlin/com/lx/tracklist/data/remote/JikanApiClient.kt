@@ -31,7 +31,7 @@ data class JikanAnimeDetails(
 data class JikanMediaDetails(
     val malId: Long?,
     val title: String?,
-    val posterUrl: String?,
+    val posterUrl: String? = null,
     val durationText: String? = null,
     val durationMinutes: Int? = null,
     val totalEpisodes: Int? = null,

@@ -18,6 +18,7 @@ import com.lx.tracklist.data.local.StorageHelper
 import com.lx.tracklist.data.remote.AppUpdateChecker
 import com.lx.tracklist.data.remote.AppUpdateStatus
 import com.lx.tracklist.data.remote.JikanSyncManager
+import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbSyncManager
 import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
@@ -264,6 +265,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
     val jikanSyncState = JikanSyncManager.syncState
     val tmdbSyncState = TmdbSyncManager.syncState
     val malSyncState = com.lx.tracklist.data.remote.mal.MalSyncManager.syncState
+    val tachiyomiResolveState = TachiyomiResolverManager.resolveState
 
     private val _uiState = MutableStateFlow(SettingsUiState(selectedConflictStrategy = repository.getConflictStrategy()))
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -345,6 +347,20 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun cancelTmdbSync(context: Context? = null) {
         TmdbSyncManager.cancelSync(context)
+    }
+
+    fun startTachiyomiResolution(context: Context) {
+        val user = _uiState.value.activeUser
+        TachiyomiResolverManager.startResolution(
+            context = context,
+            repository = repository,
+            targetProfileId = user.id,
+            targetProfileName = user.name
+        )
+    }
+
+    fun cancelTachiyomiResolution(context: Context) {
+        TachiyomiResolverManager.cancelResolution(context)
     }
 
     fun refreshMalStatus(context: Context = LXApplication.instance.applicationContext) {

@@ -69,6 +69,7 @@ import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -143,6 +144,7 @@ import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.JikanSyncProgress
+import com.lx.tracklist.data.remote.TachiyomiResolveProgress
 import com.lx.tracklist.data.remote.TmdbConfig
 import com.lx.tracklist.data.remote.TmdbSyncProgress
 import com.lx.tracklist.data.repository.ConflictStrategy
@@ -185,6 +187,7 @@ fun SettingsScreen(
     val jikanSyncState by viewModel.jikanSyncState.collectAsState()
     val tmdbSyncState by viewModel.tmdbSyncState.collectAsState()
     val malSyncState by viewModel.malSyncState.collectAsState()
+    val tachiyomiResolveState by viewModel.tachiyomiResolveState.collectAsState()
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 600
@@ -1033,6 +1036,7 @@ fun SettingsScreen(
                         SettingsSubMenu.SYNC_JOBS -> SyncJobsContent(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
+                            tachiyomiResolveState = tachiyomiResolveState,
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
                                 viewModel.startJikanSync(context, force)
@@ -1042,7 +1046,12 @@ fun SettingsScreen(
                                 ensureNotificationPermission()
                                 viewModel.startTmdbSync(context, force)
                             },
-                            onCancelTmdbSync = { viewModel.cancelTmdbSync(context) }
+                            onCancelTmdbSync = { viewModel.cancelTmdbSync(context) },
+                            onStartTachiyomiResolution = {
+                                ensureNotificationPermission()
+                                viewModel.startTachiyomiResolution(context)
+                            },
+                            onCancelTachiyomiResolution = { viewModel.cancelTachiyomiResolution(context) }
                         )
                         SettingsSubMenu.STORAGE -> BackupStorageContent(
                             state = state,
@@ -1150,6 +1159,7 @@ fun SettingsScreen(
                         SyncJobsContent(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
+                            tachiyomiResolveState = tachiyomiResolveState,
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
                                 viewModel.startJikanSync(context, force)
@@ -1160,6 +1170,11 @@ fun SettingsScreen(
                                 viewModel.startTmdbSync(context, force)
                             },
                             onCancelTmdbSync = { viewModel.cancelTmdbSync(context) },
+                            onStartTachiyomiResolution = {
+                                ensureNotificationPermission()
+                                viewModel.startTachiyomiResolution(context)
+                            },
+                            onCancelTachiyomiResolution = { viewModel.cancelTachiyomiResolution(context) },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -2041,6 +2056,20 @@ private fun BackupStorageContent(
                         )
                         Text(
                             text = "${state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }}/output",
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
+                            color = LXTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Data: ",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextSecondary
+                        )
+                        Text(
+                            text = "${state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }}/data",
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
                             color = LXTextPrimary,
                             maxLines = 1,
@@ -3128,10 +3157,13 @@ private fun ExternalTrackingContent(
 private fun SyncJobsContent(
     jikanSyncState: JikanSyncProgress,
     tmdbSyncState: TmdbSyncProgress,
+    tachiyomiResolveState: TachiyomiResolveProgress,
     onStartJikanSync: (Boolean) -> Unit,
     onCancelJikanSync: () -> Unit,
     onStartTmdbSync: (Boolean) -> Unit,
     onCancelTmdbSync: () -> Unit,
+    onStartTachiyomiResolution: () -> Unit,
+    onCancelTachiyomiResolution: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -3564,6 +3596,168 @@ private fun SyncJobsContent(
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
+                    }
+                }
+            }
+        }
+
+        // Tachiyomi ID Resolution Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = LXScoreGold,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Tachiyomi ID Resolution",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    if (tachiyomiResolveState.isRunning) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXScoreGold.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "RESOLVING",
+                                color = LXScoreGold,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Find and link official external IDs (MyAnimeList, MangaDex, AniList, Kitsu) for Manga and Manhwa entries imported from Tachiyomi. Only links when title match is exact and confident. Generates a full audit report in /LXTrackList/data.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                if (tachiyomiResolveState.isRunning) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Progress (${tachiyomiResolveState.completedCount}/${tachiyomiResolveState.totalCount}) • ${tachiyomiResolveState.resolvedCount} linked",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = LXTextPrimary
+                            )
+                            Text(
+                                text = "${(tachiyomiResolveState.progressFraction * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = LXScoreGold
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(LXBorder)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(tachiyomiResolveState.progressFraction)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(LXScoreGold)
+                            )
+                        }
+
+                        if (tachiyomiResolveState.currentTitle.isNotBlank()) {
+                            Text(
+                                text = "Current: ${tachiyomiResolveState.currentTitle}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Text(
+                            text = "Pending: ${tachiyomiResolveState.pendingCount} remaining • ${tachiyomiResolveState.skippedCount} skipped${if (tachiyomiResolveState.failedCount > 0) " • ${tachiyomiResolveState.failedCount} failed" else ""}",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = LXTextSecondary
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            OutlinedButton(
+                                onClick = onCancelTachiyomiResolution,
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXErrorRed),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, LXErrorRed.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Cancel Resolution", fontSize = 12.sp, color = LXErrorRed)
+                            }
+                        }
+                    }
+                } else {
+                    if (!tachiyomiResolveState.lastReportPath.isNullOrBlank()) {
+                        Text(
+                            text = "Last Report: ${tachiyomiResolveState.lastReportPath}",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontFamily = FontFamily.Monospace),
+                            color = LXTextSecondary
+                        )
+                    }
+
+                    Button(
+                        onClick = onStartTachiyomiResolution,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LXScoreGold,
+                            contentColor = LXBackgroundBlack
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Resolve Tachiyomi IDs",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
                     }
                 }
             }
@@ -4887,6 +5081,10 @@ private fun AboutContent(
                 StorageLocationItem(
                     label = "Output Folder",
                     path = "${state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }}/output"
+                )
+                StorageLocationItem(
+                    label = "Data Folder",
+                    path = "${state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }}/data"
                 )
 
                 HorizontalDivider(color = LXBorder, thickness = 1.dp)

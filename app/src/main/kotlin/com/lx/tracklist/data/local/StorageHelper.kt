@@ -100,6 +100,33 @@ object StorageHelper {
         return folder
     }
 
+    fun getDataFolder(): File {
+        val folder = File(getBaseDir(), "data")
+        if (!folder.exists()) {
+            folder.mkdirs()
+        }
+        return folder
+    }
+
+    fun listDataFiles(): List<StorageFileInfo> {
+        val dataDir = getDataFolder()
+        val files = dataDir.listFiles() ?: return emptyList()
+
+        return files
+            .filter { it.isFile }
+            .sortedByDescending { it.lastModified() }
+            .map { file ->
+                val type = detectType(file.name)
+                StorageFileInfo(
+                    file = file,
+                    name = file.name,
+                    sizeBytes = file.length(),
+                    lastModified = file.lastModified(),
+                    fileType = type
+                )
+            }
+    }
+
     fun listInputFiles(): List<StorageFileInfo> {
         val inputDir = getInputFolder()
         val files = inputDir.listFiles() ?: return emptyList()
@@ -171,6 +198,7 @@ object StorageHelper {
             lower.endsWith(".xml") -> "MAL XML"
             lower.endsWith(".csv") -> "CSV"
             lower.endsWith(".json") -> "JSON"
+            lower.endsWith(".txt") || lower.endsWith(".md") -> "Report / Text"
             else -> "Data"
         }
     }

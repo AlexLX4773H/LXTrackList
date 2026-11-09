@@ -11,6 +11,7 @@ import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.remote.JikanSyncManager
+import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbSyncManager
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.Dispatchers
@@ -675,6 +676,20 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             context = context,
             repository = repository,
             forceRefresh = forceRefresh,
+            targetEntryIds = selected,
+            targetProfileId = user.id,
+            targetProfileName = user.name
+        )
+    }
+
+    fun resolveTachiyomiSelected(context: Context) {
+        val selected = _filterState.value.selectedIds.toSet()
+        if (selected.isEmpty()) return
+        clearSelection()
+        val user = repository.activeUser.value
+        TachiyomiResolverManager.startResolution(
+            context = context,
+            repository = repository,
             targetEntryIds = selected,
             targetProfileId = user.id,
             targetProfileName = user.name

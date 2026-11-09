@@ -647,6 +647,11 @@ fun LibraryScreen(
                         fontSize = 12.sp
                     )
                     Text(
+                        text = "Tap 'Resolve Tachiyomi' to find and link official IDs (MAL, MangaDex, AniList, Kitsu) for Tachiyomi manga/manhwa with confident exact title matching and audit reports.",
+                        color = LXScoreGold.copy(alpha = 0.9f),
+                        fontSize = 11.sp
+                    )
+                    Text(
                         text = "Existing external IDs will be used directly. Otherwise, it searches by title.",
                         color = LXTextSecondary.copy(alpha = 0.8f),
                         fontSize = 11.sp
@@ -654,38 +659,76 @@ fun LibraryScreen(
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        ensureNotificationPermission()
-                        viewModel.syncSelectedWithExternalDb(context, forceRefresh = false)
-                        showExternalDbBatchDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = LXPrimaryGreen,
-                        contentColor = LXBackgroundBlack
-                    )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Fetch Missing", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                ensureNotificationPermission()
+                                viewModel.syncSelectedWithExternalDb(context, forceRefresh = false)
+                                showExternalDbBatchDialog = false
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Fetch Missing", fontWeight = FontWeight.Bold, maxLines = 1)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                ensureNotificationPermission()
+                                viewModel.syncSelectedWithExternalDb(context, forceRefresh = true)
+                                showExternalDbBatchDialog = false
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                            border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Re-fetch All", fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        }
+                    }
+
+                    Button(
                         onClick = {
                             ensureNotificationPermission()
-                            viewModel.syncSelectedWithExternalDb(context, forceRefresh = true)
+                            viewModel.resolveTachiyomiSelected(context)
                             showExternalDbBatchDialog = false
                         },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                        border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f))
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LXScoreGold,
+                            contentColor = LXBackgroundBlack
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Re-fetch All")
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Resolve Tachiyomi IDs", fontWeight = FontWeight.Bold)
                     }
-                    TextButton(onClick = { showExternalDbBatchDialog = false }) {
+
+                    TextButton(
+                        onClick = { showExternalDbBatchDialog = false }
+                    ) {
                         Text("Cancel", color = LXTextSecondary)
                     }
                 }
             },
+            dismissButton = null,
             containerColor = LXSurfaceElevated
         )
     }

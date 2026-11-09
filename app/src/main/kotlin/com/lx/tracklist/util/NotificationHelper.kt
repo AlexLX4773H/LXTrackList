@@ -20,10 +20,12 @@ object NotificationHelper {
     const val CHANNEL_IMPORT_EXPORT = "channel_import_export"
     const val CHANNEL_JIKAN_SYNC = "jikan_sync_channel"
     const val CHANNEL_TMDB_SYNC = "tmdb_sync_channel"
+    const val CHANNEL_TACHIYOMI_RESOLVE = "tachiyomi_resolve_channel"
 
     const val NOTIFICATION_ID_IMPORT = 47010
     const val NOTIFICATION_ID_JIKAN = 47007
     const val NOTIFICATION_ID_TMDB = 47008
+    const val NOTIFICATION_ID_TACHIYOMI = 47009
 
     fun initNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -54,9 +56,18 @@ object NotificationHelper {
                 description = "Shows real-time progress and completion when syncing posters and metadata from TMDB"
             }
 
+            val tachiyomiChannel = NotificationChannel(
+                CHANNEL_TACHIYOMI_RESOLVE,
+                "Tachiyomi ID Resolution",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Shows real-time progress and report generation when resolving Tachiyomi imports to official external IDs"
+            }
+
             manager.createNotificationChannel(importChannel)
             manager.createNotificationChannel(jikanChannel)
             manager.createNotificationChannel(tmdbChannel)
+            manager.createNotificationChannel(tachiyomiChannel)
         }
     }
 
@@ -337,6 +348,88 @@ object NotificationHelper {
             getLargeIcon(context)?.let { builder.setLargeIcon(it) }
 
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_TMDB, builder.build())
+        } catch (_: Exception) {}
+    }
+
+    fun showTachiyomiResolveProgress(
+        context: Context,
+        completed: Int,
+        total: Int,
+        currentTitle: String,
+        profileName: String? = null
+    ) {
+        if (!hasNotificationPermission(context)) return
+
+        try {
+            val pendingIntent = getMainActivityPendingIntent(context)
+            val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
+            val text = if (currentTitle.isNotBlank()) "Resolving: $currentTitle" else "Matching titles across databases..."
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_TACHIYOMI_RESOLVE)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("${prefix}Resolving Tachiyomi IDs ($completed/$total)")
+                .setContentText(text)
+                .setProgress(total, completed, false)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+            getLargeIcon(context)?.let { builder.setLargeIcon(it) }
+
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_TACHIYOMI, builder.build())
+        } catch (_: Exception) {}
+    }
+
+    fun showTachiyomiResolveComplete(
+        context: Context,
+        completed: Int,
+        total: Int,
+        resolved: Int,
+        skipped: Int,
+        failed: Int,
+        reportPath: String?,
+        isCancelled: Boolean,
+        profileName: String? = null
+    ) {
+        if (!hasNotificationPermission(context)) return
+
+        try {
+            val pendingIntent = getMainActivityPendingIntent(context)
+            val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
+            val title: String
+            val content: String
+            val expanded: String
+
+            if (isCancelled) {
+                title = "${prefix}Tachiyomi Resolution Cancelled"
+                content = "$completed / $total processed ($resolved linked)"
+                expanded = "Resolution was cancelled by user.\n• Processed: $completed / $total\n• Linked: $resolved\n• Skipped: $skipped"
+            } else if (total == 0) {
+                title = "${prefix}Tachiyomi Resolution"
+                content = "No Tachiyomi entries needed resolution"
+                expanded = "All manga/manhwa entries already have official external IDs linked."
+            } else {
+                title = "${prefix}Tachiyomi Resolution Finished"
+                content = "$resolved linked, $skipped skipped${if (failed > 0) ", $failed failed" else ""}"
+                val reportLine = if (!reportPath.isNullOrBlank()) "\n• Report saved: $reportPath" else ""
+                expanded = "Resolution summary for ${profileName ?: "profile"}:\n• Processed: $completed / $total\n• Successfully Linked: $resolved\n• Skipped (No Exact Match): $skipped${if (failed > 0) "\n• Errors: $failed" else ""}$reportLine"
+            }
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_TACHIYOMI_RESOLVE)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(title)
+                .setContentText(content)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
+                .setProgress(0, 0, false)
+                .setOngoing(false)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+            getLargeIcon(context)?.let { builder.setLargeIcon(it) }
+
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_TACHIYOMI, builder.build())
         } catch (_: Exception) {}
     }
 }
