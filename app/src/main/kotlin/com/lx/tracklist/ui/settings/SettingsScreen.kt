@@ -1442,8 +1442,8 @@ private fun SettingsMainMenu(
                 iconBackgroundColor = LXPrimaryGreen.copy(alpha = 0.15f),
                 iconTintColor = LXPrimaryGreen,
                 title = "External Sync Jobs",
-                subtitle = "Automated metadata, poster & episode sync with MyAnimeList & TMDB",
-                badgeText = if (isSyncing) "SYNCING" else "MAL & TMDB",
+                subtitle = "Automated metadata, poster & episode sync with online databases",
+                badgeText = if (isSyncing) "SYNCING" else "ONLINE",
                 badgeColor = LXPrimaryGreen,
                 isSelected = selectedSubMenu == SettingsSubMenu.SYNC_JOBS,
                 onClick = { onSelectSubMenu(SettingsSubMenu.SYNC_JOBS) }
@@ -2771,14 +2771,14 @@ private fun SyncJobsContent(
                     )
                 }
                 Text(
-                    text = "Automate fetching official high-resolution posters, runtimes, broadcast dates, season & episode counts, tags, and ratings from MyAnimeList (Jikan) and The Movie Database (TMDB).",
+                    text = "Automate fetching official high-resolution posters, runtimes, broadcast dates, season & episode counts, tags, and ratings from MyAnimeList (Jikan), MangaDex, AniList, and The Movie Database (TMDB).",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
             }
         }
 
-        // MyAnimeList (Jikan) Sync Card
+        // Anime / Manga Sync Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
@@ -2806,7 +2806,7 @@ private fun SyncJobsContent(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "MyAnimeList (Jikan) Sync",
+                            text = "Anime / Manga Sync",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = LXTextPrimary,
                             maxLines = 1,
@@ -2833,7 +2833,7 @@ private fun SyncJobsContent(
                 }
 
                 Text(
-                    text = "Fetches official posters, runtimes, broadcast dates, total episodes/chapters, alternate titles, tags, and synopses from MyAnimeList (Jikan) with automatic MangaDex & AniList fallbacks for Manga and Manhwa.",
+                    text = "Fetches official posters, runtimes, broadcast dates, total episodes/chapters, alternate titles, tags, and synopses from MyAnimeList (Jikan) with automatic MangaDex, AniList, and Kitsu fallbacks for Manga and Manhwa.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
@@ -2957,7 +2957,7 @@ private fun SyncJobsContent(
             }
         }
 
-        // The Movie Database (TMDB) Sync Card
+        // Movies / TV Sync Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
@@ -2977,14 +2977,15 @@ private fun SyncJobsContent(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f).padding(end = 8.dp)
                     ) {
-                        Image(
-                            painter = painterResource(R.drawable.ic_tmdb_logo),
-                            contentDescription = "TMDB",
-                            modifier = Modifier.height(20.dp).width(28.dp)
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = null,
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "TMDB Sync",
+                            text = "Movies / TV Sync",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = LXTextPrimary,
                             maxLines = 1,
@@ -3027,7 +3028,7 @@ private fun SyncJobsContent(
                 }
 
                 Text(
-                    text = "Fetches official posters, runtimes, broadcast dates, season & episode counts, tags, and ratings for Movies and TV Shows from The Movie Database.",
+                    text = "Fetches official posters, runtimes, broadcast dates, season & episode counts, tags, and ratings for Movies and TV Shows from The Movie Database (TMDB).",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
