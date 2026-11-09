@@ -61,9 +61,14 @@ object JikanSyncManager {
 
     fun isMalSource(entry: MediaEntry): Boolean {
         val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim()
-        val hasMalSource = src.isNullOrBlank() || src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)
-        val hasMalId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull() != null
-        return hasMalSource && (hasMalId || isEligibleMediaForMal(entry.mediaType))
+        val isSupportedSource = src.isNullOrBlank() ||
+                src.equals("MAL", ignoreCase = true) ||
+                src.equals("MyAnimeList", ignoreCase = true) ||
+                src.equals("MangaDex", ignoreCase = true) ||
+                src.equals("AniList", ignoreCase = true) ||
+                src.equals("Kitsu", ignoreCase = true)
+        val hasValidId = !entry.externalId.isNullOrBlank() || !entry.foreignDatabaseId.isNullOrBlank()
+        return isSupportedSource && (hasValidId || isEligibleMediaForMal(entry.mediaType))
     }
 
     fun isMangaType(mediaType: MediaType): Boolean {
@@ -222,15 +227,22 @@ object JikanSyncManager {
             for (entry in eligible) {
                 if (syncJob?.isCancelled == true) break
 
-                val malId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull()
+                val extIdStr = (entry.externalId ?: entry.foreignDatabaseId)?.trim()
+                val malId = extIdStr?.toLongOrNull()
                 val isManga = isMangaType(entry.mediaType)
+                val isManhwa = entry.mediaType == MediaType.MANHWA
+                val isMangaDexSource = entry.externalSource?.equals("MangaDex", ignoreCase = true) == true
 
                 _syncState.update {
                     it.copy(
                         profileId = profileId,
                         profileName = profileName,
                         currentTitle = entry.title,
-                        statusMessage = if (malId != null) {
+                        statusMessage = if (isMangaDexSource && !extIdStr.isNullOrBlank()) {
+                            "Fetching ${entry.title} from MangaDex..."
+                        } else if (isManhwa) {
+                            "Searching MangaDex / AniList for ${entry.title}..."
+                        } else if (malId != null) {
                             "Fetching ${entry.title} (#$malId)..."
                         } else {
                             "Searching MAL for ${entry.title}..."
@@ -243,19 +255,23 @@ object JikanSyncManager {
                 // Rate limiting delay
                 delay(RATE_LIMIT_DELAY_MS)
 
-                // Attempt fetch by ID if present, otherwise search by title
-                var detailsResult = if (malId != null) {
-                    JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga)
+                // Attempt fetch by ID if present, otherwise search by title with fallback chain
+                var detailsResult: Result<JikanMediaDetails> = if (isMangaDexSource && !extIdStr.isNullOrBlank()) {
+                    MangaDexApiClient.fetchMangaDetails(extIdStr)
+                } else if (malId != null) {
+                    JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga, title = entry.title, isManhwa = isManhwa)
                 } else {
-                    JikanApiClient.searchMediaDetailsByTitle(title = entry.title, isManga = isManga)
+                    JikanApiClient.searchMediaDetailsByTitle(title = entry.title, isManga = isManga, isManhwa = isManhwa)
                 }
 
                 if (detailsResult.isFailure && detailsResult.exceptionOrNull() is RateLimitException) {
                     delay(3000L)
-                    detailsResult = if (malId != null) {
-                        JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga)
+                    detailsResult = if (isMangaDexSource && !extIdStr.isNullOrBlank()) {
+                        MangaDexApiClient.fetchMangaDetails(extIdStr)
+                    } else if (malId != null) {
+                        JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga, title = entry.title, isManhwa = isManhwa)
                     } else {
-                        JikanApiClient.searchMediaDetailsByTitle(title = entry.title, isManga = isManga)
+                        JikanApiClient.searchMediaDetailsByTitle(title = entry.title, isManga = isManga, isManhwa = isManhwa)
                     }
                 }
 
@@ -268,12 +284,24 @@ object JikanSyncManager {
                         var finalExternalId: String? = entry.externalId
                         var finalExternalSource: String? = entry.externalSource
 
-                        // If it had no MAL ID, populate it now from search result!
-                        if (malId == null && details.malId != null) {
-                            val idStr = details.malId.toString()
-                            finalExternalId = idStr
-                            finalExternalSource = "MAL"
-                            hasChanges = true
+                        // If it had no external ID, populate it now from details!
+                        if (finalExternalId.isNullOrBlank()) {
+                            if (details.sourceProvider == "MangaDex") {
+                                val mdId = details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                                if (!mdId.isNullOrBlank()) {
+                                    finalExternalId = mdId
+                                    finalExternalSource = "MangaDex"
+                                    hasChanges = true
+                                }
+                            } else if (details.sourceProvider.contains("AniList")) {
+                                finalExternalId = details.malId?.toString() ?: details.url?.substringAfterLast('/')
+                                finalExternalSource = if (details.malId != null && details.malId > 0) "MAL" else "AniList"
+                                hasChanges = true
+                            } else if (details.malId != null && details.malId > 0) {
+                                finalExternalId = details.malId.toString()
+                                finalExternalSource = "MAL"
+                                hasChanges = true
+                            }
                         }
 
                         // Set poster URL if missing, leftover file: URI, or force refreshed

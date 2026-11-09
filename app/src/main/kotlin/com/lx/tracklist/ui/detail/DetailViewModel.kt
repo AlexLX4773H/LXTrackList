@@ -11,6 +11,7 @@ import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanSyncManager
+import com.lx.tracklist.data.remote.MangaDexApiClient
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.Dispatchers
@@ -448,24 +449,68 @@ class DetailViewModel(
             _isRefreshingMetadata.value = true
             try {
                 val isMal = JikanSyncManager.isMalSource(cur) || isAnimeOrManga(cur)
-                val extId = cur.externalId?.trim()?.toLongOrNull()
+                val extIdStr = cur.externalId?.trim()
+                val extId = extIdStr?.toLongOrNull()
+                val isMangaDex = cur.externalSource?.equals("MangaDex", ignoreCase = true) == true
+                val isManhwa = cur.mediaType == MediaType.MANHWA
 
-                if (isMal) {
+                if (isMangaDex && !extIdStr.isNullOrBlank()) {
+                    val result = MangaDexApiClient.fetchMangaDetails(extIdStr)
+                    if (result.isSuccess) {
+                        val details = result.getOrNull()
+                        if (details != null) {
+                            val now = System.currentTimeMillis()
+                            val updated = cur.copy(
+                                externalId = extIdStr,
+                                externalSource = "MangaDex",
+                                coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else cur.coverImageUri,
+                                alternateTitle = if (!details.alternateTitle.isNullOrBlank()) details.alternateTitle else cur.alternateTitle,
+                                totalChapters = if (details.totalChapters != null && details.totalChapters > 0) details.totalChapters else cur.totalChapters,
+                                totalVolumes = if (details.totalVolumes != null && details.totalVolumes > 0) details.totalVolumes else cur.totalVolumes,
+                                airedStartDate = details.airedStartDate ?: cur.airedStartDate,
+                                airedEndDate = details.airedEndDate ?: cur.airedEndDate,
+                                externalScore = details.externalScore ?: cur.externalScore,
+                                externalScoreSource = details.externalScoreSource ?: "MangaDex",
+                                tags = if (!details.tags.isNullOrBlank()) details.tags else cur.tags,
+                                notes = if (!details.synopsis.isNullOrBlank()) details.synopsis else cur.notes,
+                                isAiring = details.isAiring ?: cur.isAiring,
+                                updatedAt = now
+                            )
+                            repository.update(updated)
+                            _metadataRefreshMessage.value = "Metadata refreshed from MangaDex (${details.title})"
+                        } else {
+                            _metadataRefreshMessage.value = "No metadata returned from MangaDex"
+                        }
+                    } else {
+                        val err = result.exceptionOrNull()
+                        _metadataRefreshMessage.value = "Failed to refresh from MangaDex: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}"
+                    }
+                } else if (isMal) {
                     val isManga = JikanSyncManager.isMangaType(cur.mediaType)
                     val result = if (extId != null) {
-                        JikanApiClient.fetchMediaDetails(malId = extId, isManga = isManga)
+                        JikanApiClient.fetchMediaDetails(malId = extId, isManga = isManga, title = cur.title, isManhwa = isManhwa)
                     } else {
-                        JikanApiClient.searchMediaDetailsByTitle(title = cur.title, isManga = isManga)
+                        JikanApiClient.searchMediaDetailsByTitle(title = cur.title, isManga = isManga, isManhwa = isManhwa)
                     }
 
                     if (result.isSuccess) {
                         val details = result.getOrNull()
                         if (details != null) {
                             val now = System.currentTimeMillis()
-                            val newExtId = (details.malId ?: extId)?.toString() ?: cur.externalId
+                            val resolvedSource = when (details.sourceProvider) {
+                                "MangaDex" -> "MangaDex"
+                                "AniList" -> "AniList"
+                                "Kitsu" -> "Kitsu"
+                                else -> if (details.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
+                            }
+                            val newExtId = if (details.sourceProvider == "MangaDex") {
+                                details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: cur.externalId
+                            } else {
+                                (details.malId ?: extId)?.toString() ?: cur.externalId
+                            }
                             val updated = cur.copy(
                                 externalId = newExtId,
-                                externalSource = "MAL",
+                                externalSource = resolvedSource,
                                 coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else cur.coverImageUri,
                                 alternateTitle = if (!details.alternateTitle.isNullOrBlank()) details.alternateTitle else cur.alternateTitle,
                                 totalEpisodes = if (details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else cur.totalEpisodes,
@@ -476,20 +521,20 @@ class DetailViewModel(
                                 airedStartDate = details.airedStartDate ?: cur.airedStartDate,
                                 airedEndDate = details.airedEndDate ?: cur.airedEndDate,
                                 externalScore = details.externalScore ?: cur.externalScore,
-                                externalScoreSource = details.externalScoreSource ?: "MAL",
+                                externalScoreSource = details.externalScoreSource ?: resolvedSource,
                                 tags = if (!details.tags.isNullOrBlank()) details.tags else cur.tags,
                                 notes = if (!details.synopsis.isNullOrBlank()) details.synopsis else cur.notes,
                                 isAiring = details.isAiring ?: cur.isAiring,
                                 updatedAt = now
                             )
                             repository.update(updated)
-                            _metadataRefreshMessage.value = "Metadata refreshed from MyAnimeList (MAL #${newExtId})"
+                            _metadataRefreshMessage.value = "Metadata refreshed from $resolvedSource" + (newExtId?.let { " (#$it)" } ?: "")
                         } else {
-                            _metadataRefreshMessage.value = "No metadata returned from MyAnimeList"
+                            _metadataRefreshMessage.value = "No metadata returned from external source"
                         }
                     } else {
                         val err = result.exceptionOrNull()
-                        _metadataRefreshMessage.value = "Failed to refresh from MAL: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}"
+                        _metadataRefreshMessage.value = "Failed to refresh: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}"
                     }
                 } else {
                     // TMDB for Movie / Show

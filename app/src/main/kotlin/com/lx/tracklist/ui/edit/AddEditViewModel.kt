@@ -12,6 +12,7 @@ import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanMediaDetails
+import com.lx.tracklist.data.remote.MangaDexApiClient
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.TmdbConfig
 import com.lx.tracklist.data.remote.TmdbMediaDetails
@@ -35,6 +36,7 @@ import java.util.Calendar
 
 enum class ExternalDbSource(val displayName: String, val shortName: String) {
     MAL("MyAnimeList (MAL)", "MAL"),
+    MANGADEX("MangaDex", "MangaDex"),
     TMDB("The Movie Database (TMDB)", "TMDB")
 }
 
@@ -467,6 +469,19 @@ class AddEditViewModel(
                             )
                         }
                     }
+                    ExternalDbSource.MANGADEX -> {
+                        val isManhwa = _uiState.value.mediaType == MediaType.MANHWA
+                        val res = MangaDexApiClient.searchMangaMultiple(cleanQuery, isManhwa = isManhwa, limit = 20)
+                        val items = res.getOrDefault(emptyList<JikanMediaDetails>())
+                        _syncState.update {
+                            it.copy(
+                                isSearching = false,
+                                malResults = items,
+                                tmdbResults = emptyList(),
+                                errorMessage = if (items.isEmpty()) "No matches found on MangaDex for '$cleanQuery'" else null
+                            )
+                        }
+                    }
                     ExternalDbSource.TMDB -> {
                         if (!TmdbConfig.isConfigured(context)) {
                             _syncState.update {
@@ -534,13 +549,25 @@ class AddEditViewModel(
             // Align media type if current is generic or incompatible
             val targetMediaType = if (!isVideo && (item.type.equals("TV", ignoreCase = true) || item.type.equals("Movie", ignoreCase = true))) {
                 if (item.type.equals("Movie", ignoreCase = true)) MediaType.MOVIE else MediaType.ANIME
+            } else if (item.type.equals("Manhwa", ignoreCase = true)) {
+                MediaType.MANHWA
             } else {
                 current.mediaType
             }
 
-            val isAniListDirect = item.sourceProvider == "AniList" && (item.malId == null || item.malId == 0L)
-            val externalSrc = if (isAniListDirect) "AniList" else "MAL"
+            val externalSrc = when (item.sourceProvider) {
+                "MangaDex" -> "MangaDex"
+                "Kitsu" -> "Kitsu"
+                "AniList" -> "AniList"
+                else -> if (item.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
+            }
             val scoreSrc = item.externalScoreSource ?: externalSrc
+
+            val resolvedExtId = if (item.sourceProvider == "MangaDex") {
+                item.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: current.externalId
+            } else {
+                (item.malId ?: 0L).takeIf { it > 0 }?.toString() ?: current.externalId
+            }
 
             current.copy(
                 title = item.title ?: current.title,
@@ -548,7 +575,7 @@ class AddEditViewModel(
                 alternateTitles = if (altList.isNotEmpty()) altList else current.alternateTitles,
                 mediaType = targetMediaType,
                 coverImageUri = item.posterUrl ?: current.coverImageUri,
-                externalId = (item.malId ?: 0L).takeIf { it > 0 }?.toString() ?: current.externalId,
+                externalId = resolvedExtId,
                 externalSource = externalSrc,
                 externalScore = item.externalScore ?: current.externalScore,
                 externalScoreSource = scoreSrc,
@@ -564,7 +591,7 @@ class AddEditViewModel(
                 totalVolumes = if (!isVideo && item.totalVolumes != null && item.totalVolumes > 0) item.totalVolumes else current.totalVolumes
             )
         }
-        val sourceLabel = if (item.sourceProvider.startsWith("AniList")) "AniList" else "MyAnimeList"
+        val sourceLabel = item.sourceProvider
         _syncState.update { it.copy(successMessage = "Applied '${item.title}' from $sourceLabel!") }
     }
 

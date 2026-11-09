@@ -98,8 +98,48 @@ object JikanApiClient {
     fun fetchMediaDetails(
         malId: Long,
         isManga: Boolean,
-        baseUrl: String = DEFAULT_BASE_URL
+        baseUrl: String = DEFAULT_BASE_URL,
+        title: String? = null,
+        isManhwa: Boolean = false
     ): Result<JikanMediaDetails> {
+        // If it's Manhwa, skip Jikan first and prioritize MangaDex -> AniList -> Kitsu
+        if (isManhwa) {
+            if (!title.isNullOrBlank()) {
+                val mdRes = MangaDexApiClient.searchMangaDetailsByTitle(title, isManhwa = true)
+                if (mdRes.isSuccess && !mdRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully fetched Manhwa from MangaDex for '$title'")
+                    return mdRes
+                }
+
+                val aniRes = queryAniListByTitle(title, isManga = true, isManhwa = true)
+                if (aniRes.isSuccess && !aniRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully fetched Manhwa from AniList for '$title'")
+                    return aniRes
+                }
+
+                val kitsuRes = KitsuApiClient.searchMangaDetailsByTitle(title)
+                if (kitsuRes.isSuccess && !kitsuRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully fetched Manhwa from Kitsu for '$title'")
+                    return kitsuRes
+                }
+            }
+
+            // Fallback to AniList by MAL ID if available
+            if (malId > 0) {
+                val aniIdRes = queryAniList(malId, isManga = true)
+                if (aniIdRes.isSuccess && !aniIdRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully fetched Manhwa from AniList by MAL ID $malId")
+                    return aniIdRes
+                }
+            }
+
+            // Last resort for Manhwa: try Jikan
+            val jikanRes = queryJikan(baseUrl, "manga", malId)
+            if (jikanRes.isSuccess && !jikanRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                return jikanRes
+            }
+        }
+
         val primaryType = if (isManga) "manga" else "anime"
 
         // 1. Try Jikan API
@@ -113,9 +153,18 @@ object JikanApiClient {
         }
 
         val jikanErr = jikanResult.exceptionOrNull()
-        Log.w(TAG, "Jikan lookup failed for MAL ID $malId: ${jikanErr?.message}. Falling back to AniList...")
+        Log.w(TAG, "Jikan lookup failed for MAL ID $malId: ${jikanErr?.message}. Checking fallback sources...")
 
-        // 2. Fallback to AniList GraphQL API using idMal
+        // 2. If Manga, try MangaDex by title before or in parallel with AniList
+        if (isManga && !title.isNullOrBlank()) {
+            val mdRes = MangaDexApiClient.searchMangaDetailsByTitle(title, isManhwa = false)
+            if (mdRes.isSuccess && !mdRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                Log.d(TAG, "Successfully fetched Manga fallback from MangaDex for '$title'")
+                return mdRes
+            }
+        }
+
+        // 3. Fallback to AniList GraphQL API using idMal
         val anilistResult = queryAniList(malId, isManga)
         if (anilistResult.isSuccess) {
             val details = anilistResult.getOrNull()
@@ -125,7 +174,25 @@ object JikanApiClient {
             }
         }
 
-        // 3. Cross-fallback (try alternate media type on AniList in case media type is misclassified)
+        // 4. Fallback to AniList by title if available
+        if (!title.isNullOrBlank()) {
+            val aniTitleRes = queryAniListByTitle(title, isManga = isManga, isManhwa = isManhwa)
+            if (aniTitleRes.isSuccess && !aniTitleRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                Log.d(TAG, "Successfully fetched from AniList by title for '$title'")
+                return aniTitleRes
+            }
+        }
+
+        // 5. If Manga, fallback to Kitsu by title
+        if (isManga && !title.isNullOrBlank()) {
+            val kitsuRes = KitsuApiClient.searchMangaDetailsByTitle(title)
+            if (kitsuRes.isSuccess && !kitsuRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                Log.d(TAG, "Successfully fetched Manga fallback from Kitsu for '$title'")
+                return kitsuRes
+            }
+        }
+
+        // 6. Cross-fallback (try alternate media type on AniList in case media type is misclassified)
         val anilistCrossResult = queryAniList(malId, !isManga)
         if (anilistCrossResult.isSuccess) {
             val details = anilistCrossResult.getOrNull()
@@ -135,7 +202,7 @@ object JikanApiClient {
             }
         }
 
-        // 4. Cross-fallback on Jikan
+        // 7. Cross-fallback on Jikan
         val fallbackType = if (isManga) "anime" else "manga"
         val jikanCrossResult = queryJikan(baseUrl, fallbackType, malId)
         if (jikanCrossResult.isSuccess) {
@@ -215,6 +282,7 @@ object JikanApiClient {
                 startDate { year month day }
                 endDate { year month day }
                 genres
+                countryOfOrigin
                 tags { name }
               }
             }
@@ -273,12 +341,61 @@ object JikanApiClient {
     fun searchMediaDetailsByTitle(
         title: String,
         isManga: Boolean,
-        baseUrl: String = DEFAULT_BASE_URL
+        baseUrl: String = DEFAULT_BASE_URL,
+        isManhwa: Boolean = false
     ): Result<JikanMediaDetails> {
         val rawTitle = title.trim()
         if (rawTitle.isBlank()) return Result.failure(IllegalArgumentException("Title cannot be blank"))
 
         val cleanedTitle = cleanSearchTitle(rawTitle)
+
+        // For Manhwa specifically: Skip Jikan entirely and go straight to MangaDex -> AniList -> Kitsu
+        if (isManhwa) {
+            Log.d(TAG, "Searching Manhwa title '$rawTitle' via MangaDex first...")
+            val mdResult = MangaDexApiClient.searchMangaDetailsByTitle(cleanedTitle, isManhwa = true)
+            if (mdResult.isSuccess && !mdResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                Log.d(TAG, "Successfully found Manhwa on MangaDex for '$cleanedTitle'")
+                return mdResult
+            }
+            if (cleanedTitle != rawTitle) {
+                val rawMdResult = MangaDexApiClient.searchMangaDetailsByTitle(rawTitle, isManhwa = true)
+                if (rawMdResult.isSuccess && !rawMdResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully found Manhwa on MangaDex for '$rawTitle'")
+                    return rawMdResult
+                }
+            }
+
+            // Fallback 2: AniList (KR country filter)
+            Log.d(TAG, "Falling back to AniList for Manhwa title '$rawTitle'...")
+            val aniResult = queryAniListByTitle(cleanedTitle, isManga = true, isManhwa = true)
+            if (aniResult.isSuccess && !aniResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                Log.d(TAG, "Successfully found Manhwa on AniList for '$cleanedTitle'")
+                return aniResult
+            }
+            if (cleanedTitle != rawTitle) {
+                val rawAniResult = queryAniListByTitle(rawTitle, isManga = true, isManhwa = true)
+                if (rawAniResult.isSuccess && !rawAniResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully found Manhwa on AniList for '$rawTitle'")
+                    return rawAniResult
+                }
+            }
+
+            // Fallback 3: Kitsu
+            Log.d(TAG, "Falling back to Kitsu for Manhwa title '$rawTitle'...")
+            val kitsuResult = KitsuApiClient.searchMangaDetailsByTitle(cleanedTitle)
+            if (kitsuResult.isSuccess && !kitsuResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                Log.d(TAG, "Successfully found Manhwa on Kitsu for '$cleanedTitle'")
+                return kitsuResult
+            }
+
+            // Last resort: Jikan
+            val jikanManhwaResult = queryJikanByTitle(baseUrl, "manga", cleanedTitle)
+            if (jikanManhwaResult.isSuccess && !jikanManhwaResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                return jikanManhwaResult
+            }
+            return Result.failure(NotFoundException("Could not find Manhwa '$rawTitle' across MangaDex, AniList, Kitsu, or Jikan"))
+        }
+
         val primaryType = if (isManga) "manga" else "anime"
 
         // 1. Try Jikan search with cleaned title
@@ -303,9 +420,25 @@ object JikanApiClient {
         }
 
         val jikanErr = jikanResult.exceptionOrNull()
-        Log.w(TAG, "Jikan title search failed for '$rawTitle': ${jikanErr?.message}. Falling back to AniList...")
+        Log.w(TAG, "Jikan title search failed for '$rawTitle': ${jikanErr?.message}. Falling back to secondary sources...")
 
-        // 3. Fallback to AniList GraphQL search by title
+        // 3. If Manga, Fallback 1 is MangaDex!
+        if (isManga) {
+            val mdResult = MangaDexApiClient.searchMangaDetailsByTitle(cleanedTitle, isManhwa = false)
+            if (mdResult.isSuccess && !mdResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                Log.d(TAG, "Successfully found Manga on MangaDex for '$cleanedTitle'")
+                return mdResult
+            }
+            if (cleanedTitle != rawTitle) {
+                val rawMdResult = MangaDexApiClient.searchMangaDetailsByTitle(rawTitle, isManhwa = false)
+                if (rawMdResult.isSuccess && !rawMdResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully found Manga on MangaDex for '$rawTitle'")
+                    return rawMdResult
+                }
+            }
+        }
+
+        // 4. Fallback 2: AniList GraphQL search by title
         var anilistResult = queryAniListByTitle(cleanedTitle, isManga)
         if (anilistResult.isSuccess && !anilistResult.getOrNull()?.posterUrl.isNullOrBlank()) {
             val details = anilistResult.getOrNull()
@@ -322,7 +455,23 @@ object JikanApiClient {
             }
         }
 
-        // 4. Cross-fallback on Jikan (e.g. manga if anime or anime if manga)
+        // 5. If Manga, Fallback 3 is Kitsu
+        if (isManga) {
+            val kitsuResult = KitsuApiClient.searchMangaDetailsByTitle(cleanedTitle)
+            if (kitsuResult.isSuccess && !kitsuResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                Log.d(TAG, "Successfully found Manga on Kitsu for '$cleanedTitle'")
+                return kitsuResult
+            }
+            if (cleanedTitle != rawTitle) {
+                val rawKitsuResult = KitsuApiClient.searchMangaDetailsByTitle(rawTitle)
+                if (rawKitsuResult.isSuccess && !rawKitsuResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully found Manga on Kitsu for '$rawTitle'")
+                    return rawKitsuResult
+                }
+            }
+        }
+
+        // 6. Cross-fallback on Jikan (e.g. manga if anime or anime if manga)
         val fallbackType = if (isManga) "anime" else "manga"
         val jikanCrossResult = queryJikanByTitle(baseUrl, fallbackType, cleanedTitle)
         if (jikanCrossResult.isSuccess && !jikanCrossResult.getOrNull()?.posterUrl.isNullOrBlank()) {
@@ -331,7 +480,7 @@ object JikanApiClient {
             return jikanCrossResult
         }
 
-        // 5. Cross-fallback on AniList
+        // 7. Cross-fallback on AniList
         val anilistCrossResult = queryAniListByTitle(cleanedTitle, !isManga)
         if (anilistCrossResult.isSuccess && !anilistCrossResult.getOrNull()?.posterUrl.isNullOrBlank()) {
             val details = anilistCrossResult.getOrNull()
@@ -353,6 +502,40 @@ object JikanApiClient {
     ): Result<List<JikanMediaDetails>> {
         val cleanTitle = queryTitle.trim()
         if (cleanTitle.isBlank()) return Result.success(emptyList())
+
+        val isManhwa = subType?.equals("manhwa", ignoreCase = true) == true
+
+        // For Manhwa specifically: Skip Jikan entirely and go straight to MangaDex -> AniList -> Kitsu
+        if (isManga && isManhwa) {
+            Log.i(TAG, "Searching Manhwa multiple for '$cleanTitle' using MangaDex first...")
+            val mdResult = MangaDexApiClient.searchMangaMultiple(cleanTitle, isManhwa = true, limit = limit)
+            if (mdResult.isSuccess) {
+                val list = mdResult.getOrDefault(emptyList())
+                if (list.isNotEmpty()) {
+                    Log.d(TAG, "MangaDex returned ${list.size} Manhwa results for '$cleanTitle'")
+                    return Result.success(list)
+                }
+            }
+
+            Log.i(TAG, "Falling back to AniList for Manhwa multiple search '$cleanTitle'...")
+            val anilistMultiple = queryAniListMultiple(cleanTitle, isManga = true, subType = "manhwa", limit = limit)
+            if (anilistMultiple.isSuccess) {
+                val list = anilistMultiple.getOrDefault(emptyList())
+                if (list.isNotEmpty()) {
+                    Log.d(TAG, "AniList returned ${list.size} Manhwa results for '$cleanTitle'")
+                    return Result.success(list)
+                }
+            }
+
+            Log.i(TAG, "Falling back to Kitsu for Manhwa multiple search '$cleanTitle'...")
+            val kitsuMultiple = KitsuApiClient.searchMangaMultiple(cleanTitle, limit = limit)
+            if (kitsuMultiple.isSuccess) {
+                val list = kitsuMultiple.getOrDefault(emptyList())
+                if (list.isNotEmpty()) {
+                    return Result.success(list)
+                }
+            }
+        }
 
         val type = if (isManga) "manga" else "anime"
         val encodedQuery = URLEncoder.encode(cleanTitle, "UTF-8")
@@ -414,6 +597,19 @@ object JikanApiClient {
             Log.w(TAG, "Jikan multiple search failed with exception: ${e.message}")
         }
 
+        // If Manga and Jikan returned empty or failed, fallback to MangaDex first!
+        if (isManga) {
+            Log.i(TAG, "Falling back to MangaDex multiple search for '$cleanTitle'...")
+            val mdResult = MangaDexApiClient.searchMangaMultiple(cleanTitle, isManhwa = isManhwa, limit = limit)
+            if (mdResult.isSuccess) {
+                val list = mdResult.getOrDefault(emptyList())
+                if (list.isNotEmpty()) {
+                    Log.d(TAG, "MangaDex multiple search fallback returned ${list.size} results for '$cleanTitle'")
+                    return Result.success(list)
+                }
+            }
+        }
+
         // Fallback: Query AniList multiple search
         Log.i(TAG, "Falling back to AniList multiple search for '$cleanTitle' ($type, subType=$subType)")
         val anilistMultiple = queryAniListMultiple(cleanTitle, isManga, subType, limit)
@@ -422,6 +618,19 @@ object JikanApiClient {
             if (list.isNotEmpty()) {
                 Log.d(TAG, "AniList multiple search fallback returned ${list.size} results for '$cleanTitle'")
                 return Result.success(list)
+            }
+        }
+
+        // Fallback: Query Kitsu multiple search for manga
+        if (isManga) {
+            Log.i(TAG, "Falling back to Kitsu multiple search for '$cleanTitle'...")
+            val kitsuMultiple = KitsuApiClient.searchMangaMultiple(cleanTitle, limit = limit)
+            if (kitsuMultiple.isSuccess) {
+                val list = kitsuMultiple.getOrDefault(emptyList())
+                if (list.isNotEmpty()) {
+                    Log.d(TAG, "Kitsu multiple search fallback returned ${list.size} results for '$cleanTitle'")
+                    return Result.success(list)
+                }
             }
         }
 
@@ -610,9 +819,43 @@ object JikanApiClient {
         }
     }
 
-    fun queryAniListByTitle(searchTitle: String, isManga: Boolean): Result<JikanMediaDetails> {
+    fun queryAniListByTitle(
+        searchTitle: String,
+        isManga: Boolean,
+        isManhwa: Boolean = false
+    ): Result<JikanMediaDetails> {
         val type = if (isManga) "MANGA" else "ANIME"
-        val query = """
+        val country = if (isManhwa) "KR" else null
+
+        val query = if (country != null) {
+            """
+            query (${'$'}search: String, ${'$'}type: MediaType, ${'$'}country: CountryCode) {
+              Media(search: ${'$'}search, type: ${'$'}type, countryOfOrigin: ${'$'}country) {
+                id
+                idMal
+                siteUrl
+                title { romaji english native }
+                synonyms
+                coverImage { extraLarge large }
+                duration
+                episodes
+                chapters
+                volumes
+                format
+                status
+                averageScore
+                meanScore
+                description(asHtml: false)
+                startDate { year month day }
+                endDate { year month day }
+                genres
+                countryOfOrigin
+                tags { name }
+              }
+            }
+            """.trimIndent()
+        } else {
+            """
             query (${'$'}search: String, ${'$'}type: MediaType) {
               Media(search: ${'$'}search, type: ${'$'}type) {
                 id
@@ -633,16 +876,21 @@ object JikanApiClient {
                 startDate { year month day }
                 endDate { year month day }
                 genres
+                countryOfOrigin
                 tags { name }
               }
             }
-        """.trimIndent()
+            """.trimIndent()
+        }
 
         val jsonBody = JsonObject().apply {
             addProperty("query", query)
             val vars = JsonObject().apply {
                 addProperty("search", searchTitle)
                 addProperty("type", type)
+                if (country != null) {
+                    addProperty("country", country)
+                }
             }
             add("variables", vars)
         }
@@ -662,7 +910,7 @@ object JikanApiClient {
             val code = response.code
             val bodyString = response.body?.string() ?: ""
 
-            Log.d(TAG, "AniList title search HTTP $code for '$searchTitle' ($type)")
+            Log.d(TAG, "AniList title search HTTP $code for '$searchTitle' ($type, isManhwa=$isManhwa)")
 
             if (!response.isSuccessful) {
                 return Result.failure(Exception("AniList HTTP $code: ${bodyString.take(200)}"))
@@ -856,6 +1104,13 @@ object JikanApiClient {
         val externalScore = aniScoreInt?.takeIf { it > 0 }?.let { it / 10.0f }
         val externalScoreSource = if (externalScore != null) "AniList" else null
 
+        val countryOfOrigin = mediaObj.get("countryOfOrigin")?.takeIf { !it.isJsonNull }?.asString
+        val resolvedType = when {
+            countryOfOrigin == "KR" && (format?.equals("MANGA", ignoreCase = true) == true || format?.equals("ONE_SHOT", ignoreCase = true) == true || format.isNullOrBlank()) -> "Manhwa"
+            (countryOfOrigin == "CN" || countryOfOrigin == "HK" || countryOfOrigin == "TW") && format?.equals("MANGA", ignoreCase = true) == true -> "Manhua"
+            else -> format
+        }
+
         return JikanMediaDetails(
             malId = resolvedId,
             title = title,
@@ -873,7 +1128,7 @@ object JikanApiClient {
             isAiring = isAiring,
             externalScore = externalScore,
             externalScoreSource = externalScoreSource,
-            type = format,
+            type = resolvedType,
             sourceProvider = if (idMal != null && idMal > 0) "MAL (AniList)" else "AniList",
             url = mediaObj.get("siteUrl")?.takeIf { !it.isJsonNull }?.asString
         )

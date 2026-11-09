@@ -2833,7 +2833,7 @@ private fun SyncJobsContent(
                 }
 
                 Text(
-                    text = "Fetches official posters, runtimes, broadcast dates, total episodes, alternate titles, tags, and synopses from MyAnimeList via Jikan API.",
+                    text = "Fetches official posters, runtimes, broadcast dates, total episodes/chapters, alternate titles, tags, and synopses from MyAnimeList (Jikan) with automatic MangaDex & AniList fallbacks for Manga and Manhwa.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )

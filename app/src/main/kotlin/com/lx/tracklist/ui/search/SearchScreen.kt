@@ -213,8 +213,8 @@ fun SearchScreen(
                         Text(
                             text = when (state.selectedCategory) {
                                 SearchCategory.ANIME -> "Search anime titles on MyAnimeList..."
-                                SearchCategory.MANGA -> "Search manga titles on MyAnimeList..."
-                                SearchCategory.MANHWA -> "Search manhwa titles on MyAnimeList..."
+                                SearchCategory.MANGA -> "Search manga titles on MAL / MangaDex..."
+                                SearchCategory.MANHWA -> "Search manhwa titles on MangaDex..."
                                 SearchCategory.MOVIES -> "Search movies on TMDB..."
                                 SearchCategory.TV_SHOWS -> "Search TV shows on TMDB..."
                             },
@@ -322,13 +322,15 @@ fun SearchScreen(
                     )
                 }
             } else {
+                val hasMangaDex = state.results.any { it.externalSource == "MangaDex" }
                 val isAniListBackup = state.results.isNotEmpty() && state.results.all {
                     it.rawJikanDetails?.sourceProvider?.contains("AniList", ignoreCase = true) == true
                 }
-                val attributionText = if (isAniListBackup) {
-                    "Results fetched from AniList (MAL backup)"
-                } else {
-                    "Results fetched from MyAnimeList"
+                val attributionText = when {
+                    hasMangaDex -> "Results from MangaDex (with MAL/AniList backup)"
+                    isAniListBackup -> "Results fetched from AniList (MAL backup)"
+                    state.selectedCategory == SearchCategory.MANHWA -> "Results fetched from MangaDex / AniList"
+                    else -> "Results fetched from MyAnimeList"
                 }
                 Row(
                     modifier = Modifier

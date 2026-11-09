@@ -2237,6 +2237,10 @@ private fun RelatedItemDetailSheet(
             if (displayExternalSource.equals("TMDB", ignoreCase = true)) {
                 val typeStr = if (item.mediaType == MediaType.MOVIE) "movie" else "tv"
                 "https://www.themoviedb.org/$typeStr/$displayExternalId"
+            } else if (displayExternalSource.equals("MangaDex", ignoreCase = true)) {
+                "https://mangadex.org/title/$displayExternalId"
+            } else if (displayExternalSource.equals("Kitsu", ignoreCase = true)) {
+                "https://kitsu.app/manga/$displayExternalId"
             } else {
                 val isManga = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA || item.mediaType == MediaType.BOOK
                 val typeStr = if (isManga) "manga" else "anime"

@@ -29,8 +29,8 @@ import kotlinx.coroutines.withContext
 
 enum class SearchCategory(val displayName: String, val sourceName: String) {
     ANIME("Anime", "MAL"),
-    MANGA("Manga", "MAL"),
-    MANHWA("Manhwa", "MAL"),
+    MANGA("Manga", "MAL / MangaDex"),
+    MANHWA("Manhwa", "MangaDex"),
     MOVIES("Movies", "TMDB"),
     TV_SHOWS("TV Shows", "TMDB")
 }
@@ -188,8 +188,18 @@ class SearchViewModel(
                         val res = JikanApiClient.searchJikanMultiple(query, isManga = true, limit = 20)
                         if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch manga")
                         res.getOrDefault(emptyList()).mapIndexed { idx, details ->
-                            val extId = details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
-                            val extSource = if (details.sourceProvider == "AniList" && (details.malId == null || details.malId == 0L)) "AniList" else "MAL"
+                            val extSource = when (details.sourceProvider) {
+                                "MangaDex" -> "MangaDex"
+                                "Kitsu" -> "Kitsu"
+                                "AniList" -> "AniList"
+                                else -> if (details.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
+                            }
+                            val extId = if (details.sourceProvider == "MangaDex") {
+                                details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                                    ?: "md_${details.title?.hashCode() ?: idx}_$idx"
+                            } else {
+                                details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+                            }
                             SearchResultItem(
                                 externalId = extId,
                                 externalSource = extSource,
@@ -211,8 +221,18 @@ class SearchViewModel(
                         val res = JikanApiClient.searchJikanMultiple(query, isManga = true, subType = "manhwa", limit = 20)
                         if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch manhwa")
                         res.getOrDefault(emptyList()).mapIndexed { idx, details ->
-                            val extId = details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
-                            val extSource = if (details.sourceProvider == "AniList" && (details.malId == null || details.malId == 0L)) "AniList" else "MAL"
+                            val extSource = when (details.sourceProvider) {
+                                "MangaDex" -> "MangaDex"
+                                "Kitsu" -> "Kitsu"
+                                "AniList" -> "AniList"
+                                else -> if (details.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
+                            }
+                            val extId = if (details.sourceProvider == "MangaDex") {
+                                details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                                    ?: "md_${details.title?.hashCode() ?: idx}_$idx"
+                            } else {
+                                details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+                            }
                             SearchResultItem(
                                 externalId = extId,
                                 externalSource = extSource,

@@ -329,6 +329,29 @@ fun AddEditScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
+                                    Text("📖", fontSize = 16.sp)
+                                    Column {
+                                        Text("MangaDex", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                        Text("Manga, Manhwa, Manhua", fontSize = 11.sp, color = LXTextSecondary)
+                                    }
+                                }
+                            },
+                            onClick = {
+                                showSyncDropdown = false
+                                selectedExternalSource = ExternalDbSource.MANGADEX
+                                viewModel.searchExternalDb(state.title, ExternalDbSource.MANGADEX, context)
+                                showExternalSyncDialog = true
+                            }
+                        )
+
+                        HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
+
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
                                     Image(
                                         painter = painterResource(R.drawable.ic_tmdb_logo),
                                         contentDescription = "TMDB",
@@ -912,7 +935,7 @@ fun AddEditScreen(
                                 modifier = Modifier.background(LXSurfaceElevated)
                             ) {
                                 val allSources = remember(state.externalSource) {
-                                    val list = mutableListOf("MAL", "AniList", "Kitsu", "TMDB", "IMDb", "TVDb", "Tachiyomi")
+                                    val list = mutableListOf("MAL", "MangaDex", "AniList", "Kitsu", "TMDB", "IMDb", "TVDb", "Tachiyomi")
                                     if (state.externalSource.isNotBlank() && !list.contains(state.externalSource)) {
                                         list.add(0, state.externalSource)
                                     }
@@ -1004,7 +1027,7 @@ fun AddEditScreen(
                                 modifier = Modifier.background(LXSurfaceElevated)
                             ) {
                                 val allScoreSources = remember(state.externalScoreSource) {
-                                    val list = mutableListOf("MAL", "IMDb", "Rotten Tomatoes", "AniList", "TMDB", "Metacritic")
+                                    val list = mutableListOf("MAL", "MangaDex", "AniList", "Kitsu", "TMDB", "IMDb", "Rotten Tomatoes", "Metacritic")
                                     if (state.externalScoreSource.isNotBlank() && !list.contains(state.externalScoreSource)) {
                                         list.add(0, state.externalScoreSource)
                                     }
@@ -1914,7 +1937,7 @@ private fun ExternalDbSyncDialog(
                     )
                 )
 
-                // Source Choice Chips: MAL vs TMDB
+                // Source Choice Chips: MAL vs MangaDex vs TMDB
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1927,7 +1950,24 @@ private fun ExternalDbSyncDialog(
                                 onSearch(searchInput, ExternalDbSource.MAL)
                             }
                         },
-                        label = { Text("🎌 MyAnimeList (MAL)", fontSize = 12.sp) },
+                        label = { Text("🎌 MAL", fontSize = 12.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LXPrimaryGreen,
+                            selectedLabelColor = LXBackgroundBlack,
+                            containerColor = LXSurfaceElevated,
+                            labelColor = LXTextSecondary
+                        )
+                    )
+
+                    FilterChip(
+                        selected = syncState.selectedSource == ExternalDbSource.MANGADEX,
+                        onClick = {
+                            if (syncState.selectedSource != ExternalDbSource.MANGADEX) {
+                                expandedItemKey = null
+                                onSearch(searchInput, ExternalDbSource.MANGADEX)
+                            }
+                        },
+                        label = { Text("📖 MangaDex", fontSize = 12.sp) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = LXPrimaryGreen,
                             selectedLabelColor = LXBackgroundBlack,
@@ -2000,7 +2040,7 @@ private fun ExternalDbSyncDialog(
                                 fontSize = 13.sp
                             )
                         }
-                    } else if (syncState.selectedSource == ExternalDbSource.MAL) {
+                    } else if (syncState.selectedSource == ExternalDbSource.MAL || syncState.selectedSource == ExternalDbSource.MANGADEX) {
                         if (syncState.malResults.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Text("Enter a title and tap search.", color = LXTextSecondary, fontSize = 13.sp)
@@ -2010,8 +2050,8 @@ private fun ExternalDbSyncDialog(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                items(syncState.malResults, key = { "mal_${it.malId}_${it.title.hashCode()}" }) { item ->
-                                    val itemKey = "mal_${item.malId}_${item.title}"
+                                items(syncState.malResults, key = { "${it.sourceProvider}_${it.malId ?: it.url}_${it.title.hashCode()}" }) { item ->
+                                    val itemKey = "${item.sourceProvider}_${item.malId ?: item.url}_${item.title}"
                                     val isExpanded = expandedItemKey == itemKey
                                     val webUrl = item.webUrl
 
@@ -2093,7 +2133,7 @@ private fun ExternalDbSyncDialog(
                                                         if (item.type != null) {
                                                             Text(item.type, color = LXPrimaryGreen, fontSize = 11.sp)
                                                         }
-                                                        val provLabel = if (item.sourceProvider.contains("AniList")) "AniList" else "MAL"
+                                                        val provLabel = item.sourceProvider
                                                         Text("($provLabel)", color = LXTextSecondary.copy(alpha = 0.6f), fontSize = 10.sp)
                                                     }
                                                 }
@@ -2253,7 +2293,8 @@ private fun ExternalDbSyncDialog(
                                                             ) {
                                                                 Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
                                                                 Spacer(modifier = Modifier.width(6.dp))
-                                                                Text("Open on MAL", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                                                val openLabel = if (item.sourceProvider == "MangaDex") "Open on MangaDex" else if (item.sourceProvider.startsWith("AniList")) "Open on AniList" else if (item.sourceProvider == "Kitsu") "Open on Kitsu" else "Open on MAL"
+                                                                Text(openLabel, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                                                             }
                                                         }
 
