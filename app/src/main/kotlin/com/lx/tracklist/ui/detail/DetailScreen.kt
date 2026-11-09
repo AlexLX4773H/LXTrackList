@@ -572,13 +572,6 @@ fun DetailScreen(
                             onCancelRewatch = { viewModel.cancelRewatch() }
                         )
                         DetailDatesCard(currentEntry)
-                        DetailExternalTrackingCard(
-                            entry = currentEntry,
-                            activeUser = effectiveUser,
-                            isPushing = isPushingToExternalTracker,
-                            onToggleTracking = { viewModel.setExternalTracking(it) },
-                            onPushToExternalTracker = { viewModel.pushToExternalTracker(context) }
-                        )
                         DetailRelatedCard(
                             relatedEntries = relatedEntries,
                             isLoading = isLoadingRelated,
@@ -589,6 +582,13 @@ fun DetailScreen(
                             onViewInLibraryClick = { entryId -> onNavigateToDetail?.invoke(entryId) }
                         )
                         DetailNotesCard(currentEntry)
+                        DetailExternalTrackingCard(
+                            entry = currentEntry,
+                            activeUser = effectiveUser,
+                            isPushing = isPushingToExternalTracker,
+                            onToggleTracking = { viewModel.setExternalTracking(it) },
+                            onPushToExternalTracker = { viewModel.pushToExternalTracker(context) }
+                        )
                         DetailTagsCard(currentEntry)
                         DetailSourceText(currentEntry)
                     }
@@ -739,13 +739,6 @@ fun DetailScreen(
                             onCancelRewatch = { viewModel.cancelRewatch() }
                         )
                         DetailDatesCard(currentEntry)
-                        DetailExternalTrackingCard(
-                            entry = currentEntry,
-                            activeUser = effectiveUser,
-                            isPushing = isPushingToExternalTracker,
-                            onToggleTracking = { viewModel.setExternalTracking(it) },
-                            onPushToExternalTracker = { viewModel.pushToExternalTracker(context) }
-                        )
                         DetailRelatedCard(
                             relatedEntries = relatedEntries,
                             isLoading = isLoadingRelated,
@@ -756,6 +749,13 @@ fun DetailScreen(
                             onViewInLibraryClick = { entryId -> onNavigateToDetail?.invoke(entryId) }
                         )
                         DetailNotesCard(currentEntry)
+                        DetailExternalTrackingCard(
+                            entry = currentEntry,
+                            activeUser = effectiveUser,
+                            isPushing = isPushingToExternalTracker,
+                            onToggleTracking = { viewModel.setExternalTracking(it) },
+                            onPushToExternalTracker = { viewModel.pushToExternalTracker(context) }
+                        )
                         DetailTagsCard(currentEntry)
                         DetailSourceText(currentEntry)
 
