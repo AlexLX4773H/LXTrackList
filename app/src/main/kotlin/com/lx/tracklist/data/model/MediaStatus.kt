@@ -2,10 +2,10 @@ package com.lx.tracklist.data.model
 
 enum class MediaStatus(val defaultLabel: String) {
     WATCHING("Watching"),
+    PLAN_TO_WATCH("Plan to Watch"),
     COMPLETED("Completed"),
     ON_HOLD("On Hold"),
-    DROPPED("Dropped"),
-    PLAN_TO_WATCH("Plan to Watch");
+    DROPPED("Dropped");
 
     fun getDisplayLabel(mediaType: MediaType): String {
         return when (this) {
@@ -22,10 +22,10 @@ enum class MediaStatus(val defaultLabel: String) {
             val normalized = value.trim().uppercase().replace(" ", "_").replace("-", "_")
             return when {
                 normalized.contains("WATCHING") || normalized.contains("READING") -> WATCHING
+                normalized.contains("PLAN") -> PLAN_TO_WATCH
                 normalized.contains("COMPLETE") -> COMPLETED
                 normalized.contains("HOLD") -> ON_HOLD
                 normalized.contains("DROP") -> DROPPED
-                normalized.contains("PLAN") -> PLAN_TO_WATCH
                 else -> WATCHING
             }
         }

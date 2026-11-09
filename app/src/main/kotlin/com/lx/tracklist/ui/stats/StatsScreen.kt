@@ -527,10 +527,10 @@ private fun StatusBreakdownCard(state: StatsUiState, modifier: Modifier = Modifi
                     val fraction = if (state.totalEntries > 0) count.toFloat() / state.totalEntries else 0f
                     val statusColor = when (st) {
                         MediaStatus.WATCHING -> Color(0xFF2ECC71)
+                        MediaStatus.PLAN_TO_WATCH -> Color(0xFF7F8C8D)
                         MediaStatus.COMPLETED -> Color(0xFF2980B9)
                         MediaStatus.ON_HOLD -> Color(0xFFF1C40F)
                         MediaStatus.DROPPED -> Color(0xFFE74C3C)
-                        MediaStatus.PLAN_TO_WATCH -> Color(0xFF7F8C8D)
                     }
 
                     Column {
@@ -715,11 +715,11 @@ fun MalCategoryStatsCard(
 
             // Proportional Multi-color Stacked Bar (matching MAL Image 2)
             val watchingCount = summary.statusCounts[MediaStatus.WATCHING] ?: 0
+            val planToCount = summary.statusCounts[MediaStatus.PLAN_TO_WATCH] ?: 0
             val completedCount = summary.statusCounts[MediaStatus.COMPLETED] ?: 0
             val onHoldCount = summary.statusCounts[MediaStatus.ON_HOLD] ?: 0
             val droppedCount = summary.statusCounts[MediaStatus.DROPPED] ?: 0
-            val planToCount = summary.statusCounts[MediaStatus.PLAN_TO_WATCH] ?: 0
-            val totalInStatus = watchingCount + completedCount + onHoldCount + droppedCount + planToCount
+            val totalInStatus = watchingCount + planToCount + completedCount + onHoldCount + droppedCount
 
             val barHeight = 14.dp
             if (totalInStatus == 0) {
@@ -746,6 +746,14 @@ fun MalCategoryStatsCard(
                                 .background(Color(0xFF2ECC71)) // MAL Watching green
                         )
                     }
+                    if (planToCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .weight(planToCount.toFloat())
+                                .fillMaxHeight()
+                                .background(Color(0xFF7F8C8D)) // MAL Plan to watch/read grey
+                        )
+                    }
                     if (completedCount > 0) {
                         Box(
                             modifier = Modifier
@@ -770,14 +778,6 @@ fun MalCategoryStatsCard(
                                 .background(Color(0xFFE74C3C)) // MAL Dropped red
                         )
                     }
-                    if (planToCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .weight(planToCount.toFloat())
-                                .fillMaxHeight()
-                                .background(Color(0xFF7F8C8D)) // MAL Plan to watch/read grey
-                        )
-                    }
                 }
             }
 
@@ -798,6 +798,11 @@ fun MalCategoryStatsCard(
                         count = watchingCount
                     )
                     MalStatusRow(
+                        color = Color(0xFF7F8C8D),
+                        label = if (isWatch) "Plan to Watch" else "Plan to Read",
+                        count = planToCount
+                    )
+                    MalStatusRow(
                         color = Color(0xFF2980B9),
                         label = "Completed",
                         count = completedCount
@@ -811,11 +816,6 @@ fun MalCategoryStatsCard(
                         color = Color(0xFFE74C3C),
                         label = "Dropped",
                         count = droppedCount
-                    )
-                    MalStatusRow(
-                        color = Color(0xFF7F8C8D),
-                        label = if (isWatch) "Plan to Watch" else "Plan to Read",
-                        count = planToCount
                     )
                 }
 
@@ -1045,17 +1045,17 @@ private fun CategoryDistributionSheet(
                             val pct = if (activeSummary.totalEntries > 0) (count * 100f / activeSummary.totalEntries) else 0f
                             val statusColor = when (status) {
                                 MediaStatus.WATCHING -> Color(0xFF2ECC71)
+                                MediaStatus.PLAN_TO_WATCH -> Color(0xFF7F8C8D)
                                 MediaStatus.COMPLETED -> Color(0xFF2980B9)
                                 MediaStatus.ON_HOLD -> Color(0xFFF1C40F)
                                 MediaStatus.DROPPED -> Color(0xFFE74C3C)
-                                MediaStatus.PLAN_TO_WATCH -> Color(0xFF7F8C8D)
                             }
                             val label = when (status) {
                                 MediaStatus.WATCHING -> if (activeSummary.isVideo) "Watching" else "Reading"
+                                MediaStatus.PLAN_TO_WATCH -> if (activeSummary.isVideo) "Plan to Watch" else "Plan to Read"
                                 MediaStatus.COMPLETED -> "Completed"
                                 MediaStatus.ON_HOLD -> "On Hold"
                                 MediaStatus.DROPPED -> "Dropped"
-                                MediaStatus.PLAN_TO_WATCH -> if (activeSummary.isVideo) "Plan to Watch" else "Plan to Read"
                             }
 
                             Column {

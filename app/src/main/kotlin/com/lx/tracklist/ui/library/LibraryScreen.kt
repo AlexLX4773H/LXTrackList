@@ -2017,7 +2017,7 @@ private fun AdvancedFilterSheet(
                             FilterChip(
                                 selected = isSelected,
                                 onClick = { viewModel.setStatusFilter(if (isSelected) null else st) },
-                                label = { Text(st.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                                label = { Text(st.defaultLabel) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = LXPrimaryGreen,
                                     selectedLabelColor = LXBackgroundBlack,

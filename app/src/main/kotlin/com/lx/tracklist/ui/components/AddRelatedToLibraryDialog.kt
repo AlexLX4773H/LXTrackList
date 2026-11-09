@@ -59,13 +59,7 @@ fun AddRelatedToLibraryDialog(
         mutableStateOf(MediaStatus.PLAN_TO_WATCH)
     }
 
-    val availableStatuses = listOf(
-        MediaStatus.PLAN_TO_WATCH,
-        MediaStatus.WATCHING,
-        MediaStatus.COMPLETED,
-        MediaStatus.ON_HOLD,
-        MediaStatus.DROPPED
-    )
+    val availableStatuses = MediaStatus.entries
 
     AlertDialog(
         onDismissRequest = { if (!isAdding) onDismiss() },

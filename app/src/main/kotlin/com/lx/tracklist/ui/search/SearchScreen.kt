@@ -696,11 +696,10 @@ private fun AddToLibraryDialog(
                         style = MaterialTheme.typography.labelMedium,
                         color = LXTextSecondary
                     )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         MediaStatus.entries.forEach { status ->
                             val isSelected = selectedStatus == status
@@ -711,7 +710,7 @@ private fun AddToLibraryDialog(
                                 modifier = Modifier.clickable { selectedStatus = status }
                             ) {
                                 Text(
-                                    text = status.defaultLabel,
+                                    text = status.getDisplayLabel(item.mediaType),
                                     color = if (isSelected) LXBackgroundBlack else LXTextPrimary,
                                     fontSize = 12.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
