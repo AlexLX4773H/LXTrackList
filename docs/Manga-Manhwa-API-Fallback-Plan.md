@@ -20,18 +20,18 @@
 
 ### Comparison at a Glance
 
-| Feature | **MangaDex** | **AniList** | **MyAnimeList (Official)** | **Kitsu** | **MangaUpdates** |
-|---|---|---|---|---|---|
-| **Cost** | 100% Free | 100% Free | Free (needs key) | 100% Free | Free (scrape/API) |
-| **API Key Required** | ❌ No | ❌ No (GraphQL) | ✅ Yes (OAuth) | ❌ No | ⚠️ Partial |
-| **Manga Coverage** | ✅ Massive | ✅ Good | ✅ Good | ⚠️ Moderate | ✅ Excellent |
-| **Manhwa Coverage** | ✅ Excellent | ✅ Good | ⚠️ Poor | ⚠️ Limited | ✅ Excellent |
-| **Manhua Coverage** | ✅ Excellent | ⚠️ Limited | ⚠️ Poor | ❌ Limited | ✅ Good |
-| **Cover Images** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ❌ No |
-| **Chapter Count** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Volume Count** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Rate Limit** | Reasonable | Generous | Strict | Generous | Low |
-| **Closest to Jikan?** | ⭐ **Best match** | ⭐ **2nd best** | ⚠️ Setup needed | ✅ Good | ⚠️ Scrape-only |
+| Feature | **MangaDex** | **AniList** | **Kitsu** | **MangaUpdates** |
+|---|---|---|---|---|
+| **Cost** | 100% Free | 100% Free | 100% Free | Free (scrape/API) |
+| **API Key Required** | ❌ No | ❌ No (GraphQL) | ❌ No | ⚠️ Partial |
+| **Manga Coverage** | ✅ Massive | ✅ Good | ⚠️ Moderate | ✅ Excellent |
+| **Manhwa Coverage** | ✅ Excellent | ✅ Good | ⚠️ Limited | ✅ Excellent |
+| **Manhua Coverage** | ✅ Excellent | ⚠️ Limited | ❌ Limited | ✅ Good |
+| **Cover Images** | ✅ Yes | ✅ Yes | ✅ Yes | ❌ No |
+| **Chapter Count** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Volume Count** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Rate Limit** | Reasonable | Generous | Generous | Low |
+| **Closest to Jikan?** | ⭐ **Best match** | ⭐ **2nd best** | ✅ Good | ⚠️ Scrape-only |
 
 ---
 
@@ -223,42 +223,7 @@ GET https://kitsu.app/api/edge/manga?filter[text]=solo+leveling&page[limit]=5
 
 ---
 
-## 4. MyAnimeList Official API (MAL v2) — Optional Setup
-
-**Base URL:** `https://api.myanimelist.net/v2`
-
-MAL's own official API. More reliable than Jikan (which wraps MAL anyway), but requires a free account and client ID.
-
-### Why Consider It
-
-- **Same data as Jikan**, but direct — no wrapper downtime
-- **Higher rate limits** than Jikan's community server
-- **Better for cases where Jikan is down** but MAL itself is up
-
-### Setup Required (Free)
-
-1. Go to [myanimelist.net/apiconfig](https://myanimelist.net/apiconfig)
-2. Click **Create ID**
-3. Fill in the app name and redirect URI (use `https://localhost` for a local app)
-4. Copy the **Client ID**
-5. Add to your `.env` / `local.properties`: `MAL_CLIENT_ID=your_id_here`
-
-### Key Endpoints
-
-```
-# Search manga
-GET https://api.myanimelist.net/v2/manga?q=solo+leveling&limit=5&fields=id,title,main_picture,num_chapters,num_volumes,status,start_date,end_date,genres,media_type
-Headers: X-MAL-CLIENT-ID: {your_client_id}
-```
-
-### Notes
-
-- Manhwa coverage is still MAL-limited (same as Jikan) — don't use for Manhwa-first searches
-- Best used as a "same data, more reliable connection" alternative when Jikan is flaky
-
----
-
-## 5. MangaUpdates — Specialized Source
+## 4. MangaUpdates — Specialized Source
 
 **URL:** `https://api.mangaupdates.com/v1`
 
@@ -288,8 +253,6 @@ Fallback 1: MangaDex (api.mangadex.org) — no key, best Manhwa coverage, has co
 Fallback 2: AniList (graphql.anilist.co) — no key, GraphQL, good metadata + covers
    ↓ (not found)
 Fallback 3: Kitsu (kitsu.app/api/edge) — no key, lightweight
-   ↓ (still not found, user has MAL client ID set up)
-Fallback 4: MAL Official API (api.myanimelist.net/v2) — requires free client ID
 ```
 
 > **For Manhwa specifically:** Skip Jikan entirely and go straight to **MangaDex → AniList**.
@@ -415,27 +378,9 @@ class MangaMetadataRepository(
 
 ## What You Need to Do
 
-### No Setup Required (MangaDex + AniList)
+### No Setup Required — Everything is Zero-Auth
 
-Both primary fallbacks require **zero account creation or API keys**. You can implement them immediately.
-
-### Optional Setup (MAL Official API — only if needed)
-
-If you want MAL v2 as an additional fallback:
-
-1. Visit [myanimelist.net/apiconfig](https://myanimelist.net/apiconfig)
-2. Log in → **Create ID**
-3. App name: anything (e.g. `LX Track List`)
-4. App type: `other`
-5. Redirect URI: `https://localhost` (required field, not actually used)
-6. Copy the **Client ID**
-7. Add to `local.properties`:
-   ```
-   MAL_CLIENT_ID=your_client_id_here
-   ```
-8. Read it in Gradle and pass to your app via `BuildConfig`
-
-> This is **optional** — MangaDex + AniList cover the vast majority of titles without any setup.
+All fallbacks require **zero account creation or API keys**. You can implement them immediately with no prerequisites.
 
 ---
 
@@ -447,7 +392,6 @@ If you want MAL v2 as an additional fallback:
 | ✅ Always ON | **MangaDex** | None | Manhwa, Manhua, any manga |
 | ✅ Always ON | **AniList** | None | Manga + Manhwa with clean metadata |
 | ⚙️ Optional | **Kitsu** | None | Lightweight fallback |
-| ⚙️ Optional | **MAL v2** | Free client ID | Direct MAL access without Jikan wrapper |
 
 **Bottom line:** Implement MangaDex as your first fallback and AniList as your second. Both are free, require no API key, and together they cover virtually every Manga and Manhwa title that exists.
 
