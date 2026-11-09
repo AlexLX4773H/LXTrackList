@@ -1525,8 +1525,7 @@ private fun SettingsMainMenu(
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SettingsSectionHeader("Preferences")
 
-            val currentProfileId = state.selectedProfileIdForDefaults ?: state.activeUser.id
-            val targetUser = state.allUsers.firstOrNull { it.id == currentProfileId } ?: state.activeUser
+            val targetUser = state.activeUser
             val defaultCatName = targetUser.defaultCustomCategory ?: (targetUser.defaultMediaType ?: MediaType.ANIME).displayName
             val defaultTabName = targetUser.defaultSubCategory ?: (targetUser.defaultStatus?.getDisplayLabel(targetUser.defaultMediaType ?: MediaType.ANIME) ?: "All")
 
@@ -4055,13 +4054,12 @@ private fun PreferencesContent(
 @Composable
 private fun StartupViewContent(
     state: SettingsUiState,
-    onSelectProfile: (Long) -> Unit,
+    onSelectProfile: (Long) -> Unit = {},
     onUpdateStartupDefaults: (Long, MediaType?, String?, String?, MediaStatus?) -> Unit,
     onResetStartupDefaults: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val currentProfileId = state.selectedProfileIdForDefaults ?: state.activeUser.id
-    val targetProfile = state.allUsers.firstOrNull { it.id == currentProfileId } ?: state.activeUser
+    val targetProfile = state.activeUser
 
     val currentMediaType = targetProfile.defaultMediaType ?: MediaType.ANIME
     val currentCustomCat = targetProfile.defaultCustomCategory
@@ -4077,123 +4075,6 @@ private fun StartupViewContent(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Profile Selector Header
-        if (state.allUsers.size > 1) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-                border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Target Profile",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextPrimary
-                        )
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Text(
-                                text = "Per-Profile Setting",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = LXPrimaryGreen
-                            )
-                        }
-                    }
-                    Text(
-                        text = "Select which profile's startup default view you want to configure:",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = LXTextSecondary
-                    )
-
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(state.allUsers) { user ->
-                            val isSelected = user.id == targetProfile.id
-                            val isActive = user.id == state.activeUser.id
-                            val color = parseHexColor(user.avatarColorHex)
-
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (isSelected) LXPrimaryGreen.copy(alpha = 0.15f) else LXSurfaceElevated)
-                                    .border(
-                                        width = if (isSelected) 1.5.dp else 1.dp,
-                                        color = if (isSelected) LXPrimaryGreen else LXBorder,
-                                        shape = RoundedCornerShape(10.dp)
-                                    )
-                                    .clickable { onSelectProfile(user.id) }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .clip(CircleShape)
-                                        .background(color),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (!user.avatarImageUri.isNullOrBlank()) {
-                                        AsyncImage(
-                                            model = user.avatarImageUri,
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .clip(CircleShape)
-                                        )
-                                    } else {
-                                        Text(
-                                            text = user.name.take(1).uppercase(),
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
-                                            color = Color.Black
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = user.name,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                    ),
-                                    color = if (isSelected) LXPrimaryGreen else LXTextPrimary
-                                )
-                                if (isActive) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(LXPrimaryGreen.copy(alpha = 0.2f))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                                    ) {
-                                        Text(
-                                            text = "Active",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                            color = LXPrimaryGreen
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         // Active Boot Target Summary Card
         Card(
             modifier = Modifier.fillMaxWidth(),
