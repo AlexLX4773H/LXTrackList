@@ -1697,8 +1697,6 @@ private fun DetailRelatedCard(
     onAddClick: (RelatedMediaItem) -> Unit,
     onViewInLibraryClick: (Long) -> Unit
 ) {
-    if (relatedEntries.isEmpty() && !isLoading && errorMessage == null) return
-
     val trackingCount = remember(relatedEntries) { relatedEntries.count { it.inLibraryEntryId != null } }
     val untrackedCount = remember(relatedEntries) { relatedEntries.size - trackingCount }
     var filterTab by remember { mutableStateOf("ALL") } // "ALL", "TRACKING", "UNTRACKED"
@@ -1784,6 +1782,13 @@ private fun DetailRelatedCard(
                             Text("Retry", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
+                } else {
+                    Text(
+                        text = "There are no related entries.",
+                        color = LXTextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
                 }
             } else {
                 // Tracking vs Untracked Stats Pills & Filter Tabs

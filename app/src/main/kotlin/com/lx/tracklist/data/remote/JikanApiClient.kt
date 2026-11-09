@@ -1336,6 +1336,12 @@ object JikanApiClient {
 
         // If we experienced an error during all attempts and malId or title was provided:
         if (lastException != null && (malId != null || !title.isNullOrBlank())) {
+            if (lastException is NotFoundException ||
+                lastException.message?.contains("404", ignoreCase = true) == true ||
+                lastException.message?.contains("not found", ignoreCase = true) == true
+            ) {
+                return Result.success(emptyList())
+            }
             return Result.failure(lastException)
         }
 

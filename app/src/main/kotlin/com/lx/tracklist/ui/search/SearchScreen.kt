@@ -328,7 +328,7 @@ fun SearchScreen(
                 val attributionText = if (isAniListBackup) {
                     "Results fetched from AniList (MAL backup)"
                 } else {
-                    "Results fetched from MyAnimeList via Jikan API"
+                    "Results fetched from MyAnimeList"
                 }
                 Row(
                     modifier = Modifier

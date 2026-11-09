@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -63,9 +65,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lx.tracklist.data.model.CustomCategory
@@ -296,7 +301,7 @@ fun StatsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "MAL Stats & Distribution",
+                            text = "Stats & Distribution",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = LXPrimaryGreen
                         )
@@ -910,6 +915,14 @@ private fun CategoryDistributionSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedCategoryKey by remember { mutableStateOf(initialCategoryKey) }
 
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                return available
+            }
+        }
+    }
+
     val activeSummary = remember(entries, selectedCategoryKey, customCategories) {
         calculateCategoryStatSummary(entries, selectedCategoryKey, customCategories)
     }
@@ -918,6 +931,7 @@ private fun CategoryDistributionSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = LXSurfaceBlack,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         sheetMaxWidth = if (isTablet) 720.dp else Dp.Unspecified,
         dragHandle = {
             Box(
@@ -930,14 +944,21 @@ private fun CategoryDistributionSheet(
             )
         }
     ) {
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .nestedScroll(nestedScrollConnection)
         ) {
+            val maxSheetHeight = maxHeight * 0.90f
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxSheetHeight)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -951,7 +972,7 @@ private fun CategoryDistributionSheet(
                         color = LXTextPrimary
                     )
                     Text(
-                        text = "Detailed counts, status distribution & MAL metrics",
+                        text = "Detailed counts, status distribution & metrics",
                         style = MaterialTheme.typography.bodySmall,
                         color = LXTextSecondary
                     )
@@ -1155,6 +1176,7 @@ private fun CategoryDistributionSheet(
         }
     }
 }
+}
 
 private fun Int.formatCommas(): String = NumberFormat.getNumberInstance(Locale.US).format(this)
 
@@ -1192,10 +1214,19 @@ private fun ScoreDistributionSheet(
         }
     }
 
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                return available
+            }
+        }
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = LXSurfaceBlack,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         sheetMaxWidth = if (isTablet) 720.dp else Dp.Unspecified,
         dragHandle = {
             Box(
@@ -1208,14 +1239,21 @@ private fun ScoreDistributionSheet(
             )
         }
     ) {
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .nestedScroll(nestedScrollConnection)
         ) {
+            val maxSheetHeight = maxHeight * 0.90f
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxSheetHeight)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             // Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1646,6 +1684,7 @@ private fun ScoreDistributionSheet(
             Spacer(modifier = Modifier.height(20.dp))
         }
     }
+}
 }
 
 @Composable

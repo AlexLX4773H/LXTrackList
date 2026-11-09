@@ -118,7 +118,7 @@ class DetailViewModel(
         loadedForEntryId = cur.id
 
         val localRelated = cur.getRelatedMediaItems()
-        if (localRelated.isNotEmpty()) {
+        if (localRelated.isNotEmpty() || cur.relatedEntriesJson == "[]") {
             _rawRelatedEntries.value = localRelated
             _isLoadingRelated.value = false
             _relatedErrorMessage.value = null
@@ -134,11 +134,12 @@ class DetailViewModel(
                 val isManga = cur.mediaType == MediaType.MANGA ||
                         cur.mediaType == MediaType.MANHWA ||
                         cur.mediaType == MediaType.BOOK
+                val isVideo = cur.mediaType == MediaType.MOVIE || cur.mediaType == MediaType.SHOW
                 val src = cur.externalSource ?: ""
                 var extId = cur.externalId?.toLongOrNull()
 
                 if (extId == null && cur.title.isNotBlank()) {
-                    if (!isAnime && (src.equals("TMDB", ignoreCase = true) || cur.mediaType == MediaType.MOVIE || cur.mediaType == MediaType.SHOW)) {
+                    if (!isAnime && (src.equals("TMDB", ignoreCase = true) || isVideo)) {
                         val tmdbRes = if (cur.mediaType == MediaType.MOVIE) {
                             TmdbApiClient.searchMovieByTitle(cur.title, context).getOrNull()
                         } else {
@@ -153,12 +154,11 @@ class DetailViewModel(
 
                 val fetchResult: Result<List<RelatedMediaItem>> = if (isAnime || src.equals("MAL", ignoreCase = true) || src.equals("AniList", ignoreCase = true)) {
                     JikanApiClient.fetchRelatedEntries(malId = extId, isManga = isManga, title = cur.title)
-                } else if ((src.equals("TMDB", ignoreCase = true) || cur.mediaType == MediaType.MOVIE || cur.mediaType == MediaType.SHOW) && extId != null) {
-                    val tmdbRes = TmdbApiClient.fetchRelatedEntries(extId, isTv = cur.mediaType == MediaType.SHOW, context)
-                    if (tmdbRes.isFailure) {
-                        JikanApiClient.fetchRelatedEntries(malId = null, isManga = false, title = cur.title)
+                } else if (src.equals("TMDB", ignoreCase = true) || isVideo) {
+                    if (extId != null) {
+                        TmdbApiClient.fetchRelatedEntries(extId, isTv = cur.mediaType == MediaType.SHOW, context)
                     } else {
-                        tmdbRes
+                        Result.success(emptyList())
                     }
                 } else {
                     JikanApiClient.fetchRelatedEntries(malId = extId, isManga = isManga, title = cur.title)
@@ -179,18 +179,42 @@ class DetailViewModel(
                     _rawRelatedEntries.value = filtered
                     _relatedErrorMessage.value = null
 
-                    if (filtered.isNotEmpty()) {
-                        val json = com.google.gson.Gson().toJson(filtered)
-                        if (json != cur.relatedEntriesJson) {
-                            repository.update(cur.copy(relatedEntriesJson = json, updatedAt = System.currentTimeMillis()))
-                        }
+                    val json = com.google.gson.Gson().toJson(filtered)
+                    if (json != cur.relatedEntriesJson) {
+                        repository.update(cur.copy(relatedEntriesJson = json, updatedAt = System.currentTimeMillis()))
                     }
                 } else {
-                    val err = fetchResult.exceptionOrNull()?.localizedMessage ?: "Failed to load related entries"
-                    _relatedErrorMessage.value = "Unable to load related entries. Tap to retry."
+                    val ex = fetchResult.exceptionOrNull()
+                    val isNotFound = ex is com.lx.tracklist.data.remote.NotFoundException ||
+                            ex is com.lx.tracklist.data.remote.TmdbNotFoundException ||
+                            ex?.message?.contains("not found", ignoreCase = true) == true ||
+                            ex?.message?.contains("404", ignoreCase = true) == true
+
+                    if (isNotFound) {
+                        _rawRelatedEntries.value = emptyList()
+                        _relatedErrorMessage.value = null
+                        if (cur.relatedEntriesJson != "[]") {
+                            repository.update(cur.copy(relatedEntriesJson = "[]", updatedAt = System.currentTimeMillis()))
+                        }
+                    } else {
+                        _relatedErrorMessage.value = "Unable to load related entries. Tap to retry."
+                    }
                 }
             } catch (e: Exception) {
-                _relatedErrorMessage.value = "Failed to load related entries (${e.localizedMessage ?: "network error"}). Tap to retry."
+                val isNotFound = e is com.lx.tracklist.data.remote.NotFoundException ||
+                        e is com.lx.tracklist.data.remote.TmdbNotFoundException ||
+                        e.message?.contains("not found", ignoreCase = true) == true ||
+                        e.message?.contains("404", ignoreCase = true) == true
+
+                if (isNotFound) {
+                    _rawRelatedEntries.value = emptyList()
+                    _relatedErrorMessage.value = null
+                    if (cur.relatedEntriesJson != "[]") {
+                        repository.update(cur.copy(relatedEntriesJson = "[]", updatedAt = System.currentTimeMillis()))
+                    }
+                } else {
+                    _relatedErrorMessage.value = "Failed to load related entries (${e.localizedMessage ?: "network error"}). Tap to retry."
+                }
             } finally {
                 _isLoadingRelated.value = false
             }
@@ -201,7 +225,7 @@ class DetailViewModel(
         val cur = entry.value ?: return
         loadedForEntryId = null
         _relatedErrorMessage.value = null
-        loadRelatedEntries(cur, context)
+        loadRelatedEntries(cur.copy(relatedEntriesJson = null), context)
     }
 
     suspend fun addRelatedToLibrary(item: RelatedMediaItem, status: MediaStatus, context: Context? = null): Long {
