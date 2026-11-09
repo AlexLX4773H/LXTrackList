@@ -199,8 +199,8 @@ class TmdbIntegrationTest {
         val categories = com.lx.tracklist.ui.search.SearchCategory.entries
         assertEquals(5, categories.size)
         assertEquals("MAL", com.lx.tracklist.ui.search.SearchCategory.ANIME.sourceName)
-        assertEquals("MAL", com.lx.tracklist.ui.search.SearchCategory.MANGA.sourceName)
-        assertEquals("MAL", com.lx.tracklist.ui.search.SearchCategory.MANHWA.sourceName)
+        assertEquals("MAL / MangaDex", com.lx.tracklist.ui.search.SearchCategory.MANGA.sourceName)
+        assertEquals("MangaDex", com.lx.tracklist.ui.search.SearchCategory.MANHWA.sourceName)
         assertEquals("TMDB", com.lx.tracklist.ui.search.SearchCategory.MOVIES.sourceName)
         assertEquals("TMDB", com.lx.tracklist.ui.search.SearchCategory.TV_SHOWS.sourceName)
     }

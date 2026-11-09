@@ -15,6 +15,8 @@ import com.lx.tracklist.data.importer.TachiyomiImporter
 import com.lx.tracklist.data.local.CoverCacheManager
 import com.lx.tracklist.data.local.StorageFileInfo
 import com.lx.tracklist.data.local.StorageHelper
+import com.lx.tracklist.data.remote.AppUpdateChecker
+import com.lx.tracklist.data.remote.AppUpdateStatus
 import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.TmdbSyncManager
 import com.lx.tracklist.data.model.CustomCategory
@@ -247,7 +249,8 @@ data class SettingsUiState(
     val coverCacheCount: Int = 0,
     val isReindexingCovers: Boolean = false,
     val reindexProgress: Float = 0f,
-    val reindexStatusText: String? = null
+    val reindexStatusText: String? = null,
+    val updateStatus: AppUpdateStatus = AppUpdateStatus.Idle
 )
 
 class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
@@ -589,6 +592,40 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun clearStatusMessage() {
         _uiState.update { it.copy(statusMessage = null) }
+    }
+
+    fun checkForUpdates() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(updateStatus = AppUpdateStatus.Checking) }
+            val result = AppUpdateChecker.checkForUpdate()
+            result.fold(
+                onSuccess = { info ->
+                    _uiState.update {
+                        it.copy(
+                            updateStatus = if (info.isUpdateAvailable) {
+                                AppUpdateStatus.UpdateAvailable(info)
+                            } else {
+                                AppUpdateStatus.UpToDate(info)
+                            }
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(
+                            updateStatus = AppUpdateStatus.Error(
+                                message = error.message ?: "Failed to connect to GitHub Releases",
+                                fallbackUrl = AppUpdateChecker.RELEASES_PAGE_URL
+                            )
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    fun resetUpdateStatus() {
+        _uiState.update { it.copy(updateStatus = AppUpdateStatus.Idle) }
     }
 
     fun importLocalFile(context: Context, fileInfo: StorageFileInfo) {

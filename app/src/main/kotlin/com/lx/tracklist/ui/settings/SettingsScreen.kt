@@ -1,13 +1,18 @@
 package com.lx.tracklist.ui.settings
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import com.lx.tracklist.data.remote.AppUpdateChecker
+import com.lx.tracklist.data.remote.AppUpdateStatus
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -44,10 +49,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FileDownload
@@ -58,10 +65,12 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
@@ -1280,7 +1289,8 @@ fun SettingsScreen(
                             onUpdatePassKey = { viewModel.updatePassKey(it) }
                         )
                         SettingsSubMenu.ABOUT -> AboutContent(
-                            state = state
+                            state = state,
+                            onCheckForUpdates = { viewModel.checkForUpdates() }
                         )
                     }
                 }
@@ -1399,6 +1409,7 @@ fun SettingsScreen(
                     SettingsSubMenu.ABOUT -> {
                         AboutContent(
                             state = state,
+                            onCheckForUpdates = { viewModel.checkForUpdates() },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -4002,8 +4013,21 @@ private fun StartupViewContent(
 @Composable
 private fun AboutContent(
     state: SettingsUiState,
+    onCheckForUpdates: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val openUrl: (String) -> Unit = { url ->
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Could not open browser: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
@@ -4047,6 +4071,406 @@ private fun AboutContent(
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                         color = LXTextSecondary.copy(alpha = 0.8f)
                     )
+                }
+            }
+        }
+
+        // App Updates Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = BorderStroke(
+                1.dp,
+                if (state.updateStatus is AppUpdateStatus.UpdateAvailable) LXPrimaryGreen else LXBorder
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (state.updateStatus is AppUpdateStatus.UpdateAvailable)
+                                        LXPrimaryGreen.copy(alpha = 0.15f)
+                                    else
+                                        LXSurfaceElevated
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = when (state.updateStatus) {
+                                    is AppUpdateStatus.UpdateAvailable -> Icons.Default.NewReleases
+                                    is AppUpdateStatus.UpToDate -> Icons.Default.CheckCircle
+                                    is AppUpdateStatus.Error -> Icons.Default.ErrorOutline
+                                    else -> Icons.Default.SystemUpdate
+                                },
+                                contentDescription = "App Updates",
+                                tint = when (state.updateStatus) {
+                                    is AppUpdateStatus.UpdateAvailable -> LXPrimaryGreen
+                                    is AppUpdateStatus.UpToDate -> LXPrimaryGreen
+                                    is AppUpdateStatus.Error -> Color(0xFFEF4444)
+                                    else -> LXTextSecondary
+                                },
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Column {
+                            Text(
+                                text = "Check for Updates",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = LXTextPrimary
+                            )
+                            Text(
+                                text = "Current version: v${com.lx.tracklist.BuildConfig.VERSION_NAME}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LXTextSecondary
+                            )
+                        }
+                    }
+
+                    // Status Badge
+                    when (state.updateStatus) {
+                        is AppUpdateStatus.UpdateAvailable -> {
+                            Surface(
+                                color = LXPrimaryGreen.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.4f))
+                            ) {
+                                Text(
+                                    text = "Update Available",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    ),
+                                    color = LXPrimaryGreen,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                        is AppUpdateStatus.UpToDate -> {
+                            Surface(
+                                color = LXSurfaceElevated,
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, LXBorder)
+                            ) {
+                                Text(
+                                    text = "Latest Version",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 11.sp
+                                    ),
+                                    color = LXTextSecondary,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                        else -> Unit
+                    }
+                }
+
+                HorizontalDivider(color = LXBorder, thickness = 1.dp)
+
+                when (val status = state.updateStatus) {
+                    AppUpdateStatus.Idle -> {
+                        Text(
+                            text = "Check GitHub Releases to see if a newer version is available. On click, the release page will open in your browser.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LXTextSecondary
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onCheckForUpdates,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = LXPrimaryGreen,
+                                    contentColor = Color.Black
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Check for Updates", fontWeight = FontWeight.SemiBold)
+                            }
+
+                            OutlinedButton(
+                                onClick = { openUrl(AppUpdateChecker.RELEASES_PAGE_URL) },
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, LXBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Releases")
+                            }
+                        }
+                    }
+
+                    AppUpdateStatus.Checking -> {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(LXSurfaceElevated)
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = LXPrimaryGreen,
+                                strokeWidth = 2.dp
+                            )
+                            Text(
+                                text = "Checking GitHub Releases for updates...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LXTextPrimary
+                            )
+                        }
+                    }
+
+                    is AppUpdateStatus.UpdateAvailable -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.08f))
+                                .border(1.dp, LXPrimaryGreen.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                .clickable { openUrl(status.updateInfo.releaseUrl) }
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = status.updateInfo.releaseName ?: "New Release ${status.updateInfo.latestVersion}",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXPrimaryGreen
+                                )
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                    contentDescription = "Open Release Page",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            Text(
+                                text = "A new version (${status.updateInfo.latestVersion}) is available on GitHub! Click anywhere on this banner or below to open the release page and download the APK.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LXTextPrimary
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { openUrl(status.updateInfo.releaseUrl) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = LXPrimaryGreen,
+                                    contentColor = Color.Black
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Open GitHub Release (${status.updateInfo.latestVersion})", fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = onCheckForUpdates,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, LXBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    is AppUpdateStatus.UpToDate -> {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(LXSurfaceElevated)
+                                .clickable { openUrl(status.updateInfo.releaseUrl) }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = LXPrimaryGreen,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "You are up to date!",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = LXTextPrimary
+                                )
+                                Text(
+                                    text = "Version ${status.updateInfo.currentVersion} is the latest available release.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LXTextSecondary
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                contentDescription = "Open Releases",
+                                tint = LXTextSecondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onCheckForUpdates,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, LXBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextPrimary),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Check Again")
+                            }
+
+                            OutlinedButton(
+                                onClick = { openUrl(status.updateInfo.releaseUrl) },
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, LXBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("View on GitHub")
+                            }
+                        }
+                    }
+
+                    is AppUpdateStatus.Error -> {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFEF4444).copy(alpha = 0.1f))
+                                .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                .clickable { openUrl(status.fallbackUrl) }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                tint = Color(0xFFEF4444),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Update check failed",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = Color(0xFFEF4444)
+                                )
+                                Text(
+                                    text = status.message,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = LXTextSecondary
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onCheckForUpdates,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = LXSurfaceElevated,
+                                    contentColor = LXTextPrimary
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Retry")
+                            }
+
+                            OutlinedButton(
+                                onClick = { openUrl(status.fallbackUrl) },
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, LXBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Open GitHub")
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -64,6 +65,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -85,6 +87,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -121,6 +124,8 @@ fun SearchScreen(
     onUserAvatarClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val configuration = LocalConfiguration.current
+    val isTablet = configuration.screenWidthDp >= 600
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -173,7 +178,7 @@ fun SearchScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = LXBackgroundBlack,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        contentWindowInsets = if (isTablet) ScaffoldDefaults.contentWindowInsets else WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
@@ -190,7 +195,7 @@ fun SearchScreen(
                         color = LXTextPrimary
                     )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = LXSurfaceElevated)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = LXBackgroundBlack)
             )
         }
     ) { paddingValues ->
@@ -200,75 +205,73 @@ fun SearchScreen(
                 .padding(paddingValues)
         ) {
             // Search Input Field
-            Box(
+            OutlinedTextField(
+                value = state.query,
+                onValueChange = { viewModel.onQueryChanged(it, context) },
+                placeholder = {
+                    Text(
+                        text = when (state.selectedCategory) {
+                            SearchCategory.ANIME -> "Search anime titles on MyAnimeList..."
+                            SearchCategory.MANGA -> "Search manga titles on MAL / MangaDex..."
+                            SearchCategory.MANHWA -> "Search manhwa titles on MangaDex..."
+                            SearchCategory.MOVIES -> "Search movies on TMDB..."
+                            SearchCategory.TV_SHOWS -> "Search TV shows on TMDB..."
+                        },
+                        color = LXTextSecondary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = LXPrimaryGreen,
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                trailingIcon = {
+                    if (state.isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = LXPrimaryGreen,
+                            strokeWidth = 2.dp
+                        )
+                    } else if (state.query.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.onQueryChanged("", context) }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = LXTextSecondary, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = LXSurfaceElevated,
+                    unfocusedContainerColor = LXSurfaceElevated,
+                    focusedBorderColor = LXPrimaryGreen,
+                    unfocusedBorderColor = LXBorder,
+                    focusedTextColor = LXTextPrimary,
+                    unfocusedTextColor = LXTextPrimary,
+                    cursorColor = LXPrimaryGreen
+                ),
+                shape = RoundedCornerShape(12.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { viewModel.submitSearch(context) }),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-                OutlinedTextField(
-                    value = state.query,
-                    onValueChange = { viewModel.onQueryChanged(it, context) },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = {
-                        Text(
-                            text = when (state.selectedCategory) {
-                                SearchCategory.ANIME -> "Search anime titles on MyAnimeList..."
-                                SearchCategory.MANGA -> "Search manga titles on MAL / MangaDex..."
-                                SearchCategory.MANHWA -> "Search manhwa titles on MangaDex..."
-                                SearchCategory.MOVIES -> "Search movies on TMDB..."
-                                SearchCategory.TV_SHOWS -> "Search TV shows on TMDB..."
-                            },
-                            color = LXTextSecondary.copy(alpha = 0.7f),
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = LXPrimaryGreen
-                        )
-                    },
-                    trailingIcon = {
-                        if (state.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = LXPrimaryGreen,
-                                strokeWidth = 2.dp
-                            )
-                        } else if (state.query.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.onQueryChanged("", context) }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = LXTextSecondary)
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = LXSurfaceBlack,
-                        unfocusedContainerColor = LXSurfaceBlack,
-                        focusedBorderColor = LXPrimaryGreen,
-                        unfocusedBorderColor = LXBorder,
-                        focusedTextColor = LXTextPrimary,
-                        unfocusedTextColor = LXTextPrimary
-                    ),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { viewModel.submitSearch(context) })
-                )
-            }
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+            )
 
             // Category Filter Chips
-            Row(
+            LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = 14.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SearchCategory.entries.forEach { category ->
+                items(SearchCategory.entries) { category ->
                     val isSelected = state.selectedCategory == category
                     FilterChip(
                         selected = isSelected,
@@ -280,18 +283,18 @@ fun SearchScreen(
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                             )
                         },
+                        modifier = Modifier.height(34.dp),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = LXPrimaryGreen,
                             selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceBlack,
+                            containerColor = LXSurfaceElevated,
                             labelColor = LXTextSecondary
                         ),
                         border = FilterChipDefaults.filterChipBorder(
                             enabled = true,
                             selected = isSelected,
                             borderColor = if (isSelected) LXPrimaryGreen else LXBorder
-                        ),
-                        shape = RoundedCornerShape(8.dp)
+                        )
                     )
                 }
             }

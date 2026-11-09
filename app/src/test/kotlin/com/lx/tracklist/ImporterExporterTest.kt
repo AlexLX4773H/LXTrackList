@@ -821,6 +821,7 @@ class ImporterExporterTest {
         val movieMal = MediaEntry(title = "Movie", mediaType = MediaType.MOVIE, status = MediaStatus.COMPLETED, externalId = "199", externalSource = "mal")
         val bookMal = MediaEntry(title = "Novel", mediaType = MediaType.BOOK, status = MediaStatus.WATCHING, externalId = "3000", externalSource = null)
         val anilistEntry = MediaEntry(title = "Anilist", mediaType = MediaType.MANGA, status = MediaStatus.WATCHING, externalId = "30002", externalSource = "ANILIST")
+        val unsupportedEntry = MediaEntry(title = "Unknown", mediaType = MediaType.MANGA, status = MediaStatus.WATCHING, externalId = "999", externalSource = "UNKNOWN_DB")
 
         // Title-only entries without an ID yet
         val titleOnlyAnime = MediaEntry(title = "Frieren", mediaType = MediaType.ANIME, status = MediaStatus.PLAN_TO_WATCH, externalId = null, externalSource = null)
@@ -832,7 +833,8 @@ class ImporterExporterTest {
         assertTrue(JikanSyncManager.isMalSource(manhwaMal))
         assertTrue(JikanSyncManager.isMalSource(movieMal))
         assertTrue(JikanSyncManager.isMalSource(bookMal))
-        assertFalse(JikanSyncManager.isMalSource(anilistEntry))
+        assertTrue(JikanSyncManager.isMalSource(anilistEntry))
+        assertFalse(JikanSyncManager.isMalSource(unsupportedEntry))
 
         // Title search eligibility
         assertTrue(JikanSyncManager.isMalSource(titleOnlyAnime))
