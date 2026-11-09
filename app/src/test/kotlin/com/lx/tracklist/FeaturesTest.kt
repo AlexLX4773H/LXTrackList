@@ -1358,6 +1358,20 @@ class FeaturesTest {
         assertTrue(com.lx.tracklist.data.remote.TachiyomiResolverManager.isConfidentExactMatch("king-of-gold", candidate1))
         assertTrue(com.lx.tracklist.data.remote.TachiyomiResolverManager.isConfidentExactMatch("King of Gold (Manhwa)", candidate1))
 
+        // Stripping bracketed suffixes and (Uncensored)
+        val resolver = com.lx.tracklist.data.remote.TachiyomiResolverManager
+        assertEquals("Is There an Empty Room?", resolver.stripBracketedSuffixes("Is There an Empty Room? (Uncensored)"))
+        assertEquals("Is There an Empty Room?", resolver.stripBracketedSuffixes("Is There an Empty Room? [Uncensored]"))
+        assertEquals("Is There an Empty Room?", resolver.stripBracketedSuffixes("Is There an Empty Room? 【Uncensored】"))
+        assertEquals("Is There an Empty Room?", resolver.stripBracketedSuffixes("Is There an Empty Room? - Uncensored"))
+        val candidateUncensored = com.lx.tracklist.data.remote.JikanMediaDetails(
+            malId = 300L,
+            title = "Is There an Empty Room?",
+            alternateTitle = "빈방 있나요?"
+        )
+        assertTrue(resolver.isConfidentExactMatch("Is There an Empty Room? (Uncensored)", candidateUncensored))
+        assertTrue(resolver.isConfidentExactMatch("Is There an Empty Room? [Uncensored]", candidateUncensored))
+
         // Confident match on alternate title
         val candidate2 = com.lx.tracklist.data.remote.JikanMediaDetails(
             malId = 200L,

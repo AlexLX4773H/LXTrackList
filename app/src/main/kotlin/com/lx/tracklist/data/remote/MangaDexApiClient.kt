@@ -57,7 +57,7 @@ object MangaDexApiClient {
 
         val endpoint = "$BASE_URL/manga?title=$encodedTitle&limit=$limitClamped" +
                 "&includes[]=cover_art&includes[]=author&includes[]=artist" +
-                "&contentRating[]=safe&contentRating[]=suggestive$languageFilter"
+                "&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica&contentRating[]=pornographic$languageFilter"
 
         return try {
             val request = Request.Builder()

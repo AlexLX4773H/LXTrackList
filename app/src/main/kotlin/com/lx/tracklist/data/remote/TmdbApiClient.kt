@@ -543,10 +543,13 @@ object TmdbApiClient {
 
     fun cleanSearchTitle(title: String): String {
         val withoutBrackets = title
-            .replace(Regex("\\[.*?\\]"), "")
-            .replace(Regex("\\(.*?\\)"), "")
+            .replace(Regex("[\\[\\(\\{（【［〔〈《].*?[\\]\\)\\}）】］〕〉》]"), "")
+            .replace(Regex("\\s+"), " ")
             .trim()
-        return withoutBrackets.ifBlank { title.trim() }
+        val withoutTrailingUncensored = withoutBrackets
+            .replace(Regex("(?i)\\s*[-–—:]?\\s*uncensored\\s*$"), "")
+            .trim()
+        return withoutTrailingUncensored.ifBlank { withoutBrackets.ifBlank { title.trim() } }
     }
 
     fun searchMediaDetailsByTitle(

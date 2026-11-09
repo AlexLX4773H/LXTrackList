@@ -31,10 +31,16 @@ android {
     versionName = "0.2.1"
 
     val tmdbReadToken = envProperties.getProperty("TMDB_READ_ACCESS_TOKEN")
+      ?: System.getenv("TMDB_READ_ACCESS_TOKEN")
       ?: envProperties.getProperty("TMDB_API_KEY")
+      ?: System.getenv("TMDB_API_KEY")
       ?: ""
-    val tmdbApiKey = envProperties.getProperty("TMDB_API_KEY") ?: ""
-    val malClientId = envProperties.getProperty("MAL_CLIENT_ID") ?: ""
+    val tmdbApiKey = envProperties.getProperty("TMDB_API_KEY")
+      ?: System.getenv("TMDB_API_KEY")
+      ?: ""
+    val malClientId = envProperties.getProperty("MAL_CLIENT_ID")
+      ?: System.getenv("MAL_CLIENT_ID")
+      ?: ""
     buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"$tmdbReadToken\"")
     buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
     buildConfigField("String", "MAL_CLIENT_ID", "\"$malClientId\"")
