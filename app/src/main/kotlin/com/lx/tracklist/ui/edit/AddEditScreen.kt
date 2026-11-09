@@ -8,6 +8,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -300,76 +302,88 @@ fun AddEditScreen(
                             .background(LXSurfaceElevated)
                             .border(1.dp, LXBorder, RoundedCornerShape(8.dp))
                     ) {
-                        DropdownMenuItem(
-                            text = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text("🎌", fontSize = 16.sp)
-                                    Column {
-                                        Text("MyAnimeList (MAL)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
-                                        Text("Anime, Manga, Manhwa, Light Novels", fontSize = 11.sp, color = LXTextSecondary)
+                        val showMal = true
+                        val showMangaDex = state.mediaType.isReadType || (!state.mediaType.isWatchType)
+                        val showTmdb = state.mediaType.isWatchType || (!state.mediaType.isReadType)
+
+                        if (showMal) {
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text("🎌", fontSize = 16.sp)
+                                        Column {
+                                            Text("MyAnimeList (MAL)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                            Text("Anime, Manga, Manhwa, Light Novels", fontSize = 11.sp, color = LXTextSecondary)
+                                        }
                                     }
+                                },
+                                onClick = {
+                                    showSyncDropdown = false
+                                    selectedExternalSource = ExternalDbSource.MAL
+                                    viewModel.searchExternalDb(state.title, ExternalDbSource.MAL, context)
+                                    showExternalSyncDialog = true
                                 }
-                            },
-                            onClick = {
-                                showSyncDropdown = false
-                                selectedExternalSource = ExternalDbSource.MAL
-                                viewModel.searchExternalDb(state.title, ExternalDbSource.MAL, context)
-                                showExternalSyncDialog = true
+                            )
+                        }
+
+                        if (showMangaDex) {
+                            if (showMal) {
+                                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
                             }
-                        )
-
-                        HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
-
-                        DropdownMenuItem(
-                            text = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text("📖", fontSize = 16.sp)
-                                    Column {
-                                        Text("MangaDex", fontWeight = FontWeight.Bold, color = LXTextPrimary)
-                                        Text("Manga, Manhwa, Manhua", fontSize = 11.sp, color = LXTextSecondary)
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text("📖", fontSize = 16.sp)
+                                        Column {
+                                            Text("MangaDex", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                            Text("Manga, Manhwa, Manhua", fontSize = 11.sp, color = LXTextSecondary)
+                                        }
                                     }
+                                },
+                                onClick = {
+                                    showSyncDropdown = false
+                                    selectedExternalSource = ExternalDbSource.MANGADEX
+                                    viewModel.searchExternalDb(state.title, ExternalDbSource.MANGADEX, context)
+                                    showExternalSyncDialog = true
                                 }
-                            },
-                            onClick = {
-                                showSyncDropdown = false
-                                selectedExternalSource = ExternalDbSource.MANGADEX
-                                viewModel.searchExternalDb(state.title, ExternalDbSource.MANGADEX, context)
-                                showExternalSyncDialog = true
+                            )
+                        }
+
+                        if (showTmdb) {
+                            if (showMal || showMangaDex) {
+                                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
                             }
-                        )
-
-                        HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
-
-                        DropdownMenuItem(
-                            text = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Image(
-                                        painter = painterResource(R.drawable.ic_tmdb_logo),
-                                        contentDescription = "TMDB",
-                                        modifier = Modifier.height(14.dp).width(20.dp)
-                                    )
-                                    Column {
-                                        Text("The Movie Database (TMDB)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
-                                        Text("Movies & TV Shows", fontSize = 11.sp, color = LXTextSecondary)
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Image(
+                                            painter = painterResource(R.drawable.ic_tmdb_logo),
+                                            contentDescription = "TMDB",
+                                            modifier = Modifier.height(14.dp).width(20.dp)
+                                        )
+                                        Column {
+                                            Text("The Movie Database (TMDB)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                            Text("Movies & TV Shows", fontSize = 11.sp, color = LXTextSecondary)
+                                        }
                                     }
+                                },
+                                onClick = {
+                                    showSyncDropdown = false
+                                    selectedExternalSource = ExternalDbSource.TMDB
+                                    viewModel.searchExternalDb(state.title, ExternalDbSource.TMDB, context)
+                                    showExternalSyncDialog = true
                                 }
-                            },
-                            onClick = {
-                                showSyncDropdown = false
-                                selectedExternalSource = ExternalDbSource.TMDB
-                                viewModel.searchExternalDb(state.title, ExternalDbSource.TMDB, context)
-                                showExternalSyncDialog = true
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -1235,6 +1249,7 @@ fun AddEditScreen(
                     onDismiss = { showExternalSyncDialog = false },
                     syncState = syncState,
                     initialQuery = state.title,
+                    mediaType = state.mediaType,
                     onSearch = { query, source -> viewModel.searchExternalDb(query, source, context) },
                     onSelectMal = { item ->
                         viewModel.applySelectedMalResult(item)
@@ -1881,6 +1896,7 @@ private fun ExternalDbSyncDialog(
     onDismiss: () -> Unit,
     syncState: ExternalSyncUiState,
     initialQuery: String,
+    mediaType: MediaType = MediaType.ANIME,
     onSearch: (String, ExternalDbSource) -> Unit,
     onSelectMal: (JikanMediaDetails) -> Unit,
     onSelectTmdb: (TmdbSearchResult) -> Unit
@@ -1898,6 +1914,20 @@ private fun ExternalDbSyncDialog(
             uriHandler.openUri(url)
         } catch (e: Exception) {
             Toast.makeText(context, "Could not open browser", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val availableSources = remember(mediaType, syncState.selectedSource) {
+        val base = when {
+            mediaType.isReadType -> listOf(ExternalDbSource.MAL, ExternalDbSource.MANGADEX)
+            mediaType == MediaType.MOVIE || mediaType == MediaType.SHOW -> listOf(ExternalDbSource.TMDB, ExternalDbSource.MAL)
+            mediaType == MediaType.ANIME -> listOf(ExternalDbSource.MAL, ExternalDbSource.TMDB)
+            else -> listOf(ExternalDbSource.MAL, ExternalDbSource.MANGADEX, ExternalDbSource.TMDB)
+        }
+        if (syncState.selectedSource !in base) {
+            base + syncState.selectedSource
+        } else {
+            base
         }
     }
 
@@ -1961,73 +1991,84 @@ private fun ExternalDbSyncDialog(
                     )
                 )
 
-                // Source Choice Chips: MAL vs MangaDex vs TMDB
+                // Source Choice Chips: Filtered by mediaType, horizontally scrollable
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    FilterChip(
-                        selected = syncState.selectedSource == ExternalDbSource.MAL,
-                        onClick = {
-                            if (syncState.selectedSource != ExternalDbSource.MAL) {
-                                expandedItemKey = null
-                                onSearch(searchInput, ExternalDbSource.MAL)
-                            }
-                        },
-                        label = { Text("🎌 MAL", fontSize = 12.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
-
-                    FilterChip(
-                        selected = syncState.selectedSource == ExternalDbSource.MANGADEX,
-                        onClick = {
-                            if (syncState.selectedSource != ExternalDbSource.MANGADEX) {
-                                expandedItemKey = null
-                                onSearch(searchInput, ExternalDbSource.MANGADEX)
-                            }
-                        },
-                        label = { Text("📖 MangaDex", fontSize = 12.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
-
-                    FilterChip(
-                        selected = syncState.selectedSource == ExternalDbSource.TMDB,
-                        onClick = {
-                            if (syncState.selectedSource != ExternalDbSource.TMDB) {
-                                expandedItemKey = null
-                                onSearch(searchInput, ExternalDbSource.TMDB)
-                            }
-                        },
-                        label = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Image(
-                                    painter = painterResource(R.drawable.ic_tmdb_logo),
-                                    contentDescription = "TMDB",
-                                    modifier = Modifier.height(12.dp).width(18.dp)
+                    availableSources.forEach { source ->
+                        when (source) {
+                            ExternalDbSource.MAL -> {
+                                FilterChip(
+                                    selected = syncState.selectedSource == ExternalDbSource.MAL,
+                                    onClick = {
+                                        if (syncState.selectedSource != ExternalDbSource.MAL) {
+                                            expandedItemKey = null
+                                            onSearch(searchInput, ExternalDbSource.MAL)
+                                        }
+                                    },
+                                    label = { Text("🎌 MAL", fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
                                 )
-                                Text("TMDB", fontSize = 12.sp)
                             }
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
+                            ExternalDbSource.MANGADEX -> {
+                                FilterChip(
+                                    selected = syncState.selectedSource == ExternalDbSource.MANGADEX,
+                                    onClick = {
+                                        if (syncState.selectedSource != ExternalDbSource.MANGADEX) {
+                                            expandedItemKey = null
+                                            onSearch(searchInput, ExternalDbSource.MANGADEX)
+                                        }
+                                    },
+                                    label = { Text("📖 MangaDex", fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
+                                )
+                            }
+                            ExternalDbSource.TMDB -> {
+                                FilterChip(
+                                    selected = syncState.selectedSource == ExternalDbSource.TMDB,
+                                    onClick = {
+                                        if (syncState.selectedSource != ExternalDbSource.TMDB) {
+                                            expandedItemKey = null
+                                            onSearch(searchInput, ExternalDbSource.TMDB)
+                                        }
+                                    },
+                                    label = {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Image(
+                                                painter = painterResource(R.drawable.ic_tmdb_logo),
+                                                contentDescription = "TMDB",
+                                                modifier = Modifier.height(12.dp).width(18.dp)
+                                            )
+                                            Text("TMDB", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                        }
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
+                                )
+                            }
+                        }
+                    }
                 }
 
                 // Results Container
@@ -2158,7 +2199,7 @@ private fun ExternalDbSyncDialog(
                                                             Text(item.type, color = LXPrimaryGreen, fontSize = 11.sp)
                                                         }
                                                         val provLabel = item.sourceProvider
-                                                        Text("($provLabel)", color = LXTextSecondary.copy(alpha = 0.6f), fontSize = 10.sp)
+                                                        Text("($provLabel)", color = LXTextSecondary.copy(alpha = 0.6f), fontSize = 10.sp, maxLines = 1, softWrap = false)
                                                     }
                                                 }
 
@@ -2302,41 +2343,49 @@ private fun ExternalDbSyncDialog(
                                                     // Bottom expanded actions
                                                     Row(
                                                         modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
                                                     ) {
                                                         if (webUrl != null) {
                                                             OutlinedButton(
                                                                 onClick = { openExternalUrl(webUrl) },
                                                                 modifier = Modifier
-                                                                    .weight(1f)
-                                                                    .height(34.dp),
+                                                                    .weight(1.35f)
+                                                                    .heightIn(min = 34.dp),
                                                                 shape = RoundedCornerShape(6.dp),
                                                                 border = BorderStroke(1.dp, LXBorder),
                                                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
                                                             ) {
                                                                 Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                                Spacer(modifier = Modifier.width(6.dp))
-                                                                val openLabel = if (item.sourceProvider == "MangaDex") "Open on MangaDex" else if (item.sourceProvider.startsWith("AniList")) "Open on AniList" else if (item.sourceProvider == "Kitsu") "Open on Kitsu" else "Open on MAL"
-                                                                Text(openLabel, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                                                Spacer(modifier = Modifier.width(4.dp))
+                                                                val openLabel = if (item.sourceProvider == "MangaDex") "Open MangaDex" else if (item.sourceProvider.startsWith("AniList")) "Open AniList" else if (item.sourceProvider == "Kitsu") "Open Kitsu" else "Open MAL"
+                                                                Text(
+                                                                    text = openLabel,
+                                                                    fontSize = 11.sp,
+                                                                    fontWeight = FontWeight.Medium,
+                                                                    maxLines = 1,
+                                                                    softWrap = false,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
                                                             }
                                                         }
 
                                                         Button(
                                                             onClick = { onSelectMal(item) },
                                                             modifier = Modifier
-                                                                .weight(1f)
-                                                                .height(34.dp),
+                                                                .weight(if (webUrl != null) 0.9f else 1f)
+                                                                .heightIn(min = 34.dp),
                                                             shape = RoundedCornerShape(6.dp),
                                                             colors = ButtonDefaults.buttonColors(
                                                                 containerColor = LXPrimaryGreen,
                                                                 contentColor = LXBackgroundBlack
                                                             ),
-                                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
                                                         ) {
                                                             Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                            Spacer(modifier = Modifier.width(6.dp))
-                                                            Text("Apply", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                            Spacer(modifier = Modifier.width(4.dp))
+                                                            Text("Apply", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                                                         }
                                                     }
                                                 }
@@ -2542,38 +2591,46 @@ private fun ExternalDbSyncDialog(
                                                     // Bottom expanded actions
                                                     Row(
                                                         modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
                                                     ) {
                                                         OutlinedButton(
                                                             onClick = { openExternalUrl(webUrl) },
                                                             modifier = Modifier
-                                                                .weight(1f)
-                                                                .height(34.dp),
+                                                                .weight(1.35f)
+                                                                .heightIn(min = 34.dp),
                                                             shape = RoundedCornerShape(6.dp),
                                                             border = BorderStroke(1.dp, LXBorder),
                                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
                                                         ) {
                                                             Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                            Spacer(modifier = Modifier.width(6.dp))
-                                                            Text("Open on TMDB", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                                            Spacer(modifier = Modifier.width(4.dp))
+                                                            Text(
+                                                                text = "Open TMDB",
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Medium,
+                                                                maxLines = 1,
+                                                                softWrap = false,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
                                                         }
 
                                                         Button(
                                                             onClick = { onSelectTmdb(item) },
                                                             modifier = Modifier
-                                                                .weight(1f)
-                                                                .height(34.dp),
+                                                                .weight(0.9f)
+                                                                .heightIn(min = 34.dp),
                                                             shape = RoundedCornerShape(6.dp),
                                                             colors = ButtonDefaults.buttonColors(
                                                                 containerColor = LXPrimaryGreen,
                                                                 contentColor = LXBackgroundBlack
                                                             ),
-                                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
                                                         ) {
                                                             Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                            Spacer(modifier = Modifier.width(6.dp))
-                                                            Text("Apply", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                            Spacer(modifier = Modifier.width(4.dp))
+                                                            Text("Apply", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                                                         }
                                                     }
                                                 }
