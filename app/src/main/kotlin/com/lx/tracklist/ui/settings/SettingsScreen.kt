@@ -163,6 +163,7 @@ import com.lx.tracklist.ui.theme.LXTextSecondary
 
 enum class SettingsSubMenu(val title: String) {
     CATEGORIES("Custom Categories"),
+    EXTERNAL_TRACKING("External Tracking"),
     SYNC_JOBS("External Sync Jobs"),
     STORAGE("Backup & Storage"),
     CONFLICTS("Conflict Resolution"),
@@ -1229,9 +1230,7 @@ fun SettingsScreen(
                             onAddCategoryClick = { showAddCategoryDialog = true },
                             onDeleteCategoryClick = { categoryToDelete = it }
                         )
-                        SettingsSubMenu.SYNC_JOBS -> SyncJobsContent(
-                            jikanSyncState = jikanSyncState,
-                            tmdbSyncState = tmdbSyncState,
+                        SettingsSubMenu.EXTERNAL_TRACKING -> ExternalTrackingContent(
                             malSyncState = malSyncState,
                             isMalConnected = state.isMalConnected,
                             malUsername = state.malUsername,
@@ -1243,7 +1242,11 @@ fun SettingsScreen(
                             onDisconnectMal = { viewModel.disconnectMal(context) },
                             onSetMalAutoSync = { enabled -> viewModel.setMalAutoSync(enabled, context) },
                             onStartMalPull = { viewModel.startMalPull(context) },
-                            onCancelMalPull = { viewModel.cancelMalPull() },
+                            onCancelMalPull = { viewModel.cancelMalPull() }
+                        )
+                        SettingsSubMenu.SYNC_JOBS -> SyncJobsContent(
+                            jikanSyncState = jikanSyncState,
+                            tmdbSyncState = tmdbSyncState,
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
                                 viewModel.startJikanSync(context, force)
@@ -1338,10 +1341,8 @@ fun SettingsScreen(
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
-                    SettingsSubMenu.SYNC_JOBS -> {
-                        SyncJobsContent(
-                            jikanSyncState = jikanSyncState,
-                            tmdbSyncState = tmdbSyncState,
+                    SettingsSubMenu.EXTERNAL_TRACKING -> {
+                        ExternalTrackingContent(
                             malSyncState = malSyncState,
                             isMalConnected = state.isMalConnected,
                             malUsername = state.malUsername,
@@ -1354,6 +1355,13 @@ fun SettingsScreen(
                             onSetMalAutoSync = { enabled -> viewModel.setMalAutoSync(enabled, context) },
                             onStartMalPull = { viewModel.startMalPull(context) },
                             onCancelMalPull = { viewModel.cancelMalPull() },
+                            modifier = Modifier.widthIn(max = 840.dp)
+                        )
+                    }
+                    SettingsSubMenu.SYNC_JOBS -> {
+                        SyncJobsContent(
+                            jikanSyncState = jikanSyncState,
+                            tmdbSyncState = tmdbSyncState,
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
                                 viewModel.startJikanSync(context, force)
@@ -1474,17 +1482,32 @@ private fun SettingsMainMenu(
         // Section: Sync & External Services
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SettingsSectionHeader("Sync & External Services")
-            val isSyncing = jikanSyncState.isRunning || tmdbSyncState.isRunning
-            val badge = if (isSyncing) "SYNCING" else if (state.isMalConnected) "MAL ACTIVE" else "ONLINE"
-            val malSub = if (state.isMalConnected) "MyAnimeList sync active (@${state.malUsername ?: "user"}) • Jikan • TMDB" else "Live MyAnimeList sync, Jikan anime/manga metadata, & TMDB"
+
+            // 1. External Tracking (MyAnimeList live sync)
+            val malBadge = if (state.isMalConnected) "CONNECTED" else "NOT LINKED"
+            val malSub = if (state.isMalConnected) "MyAnimeList connected (@${state.malUsername ?: "user"}) • Auto-push active" else "Connect MyAnimeList to push watched episodes & read chapters"
             SettingsMenuItem(
-                icon = Icons.Default.Sync,
+                icon = Icons.AutoMirrored.Filled.OpenInNew,
                 iconBackgroundColor = LXPrimaryGreen.copy(alpha = 0.15f),
                 iconTintColor = LXPrimaryGreen,
-                title = "External Sync & Tracking Services",
+                title = "External Tracking",
                 subtitle = malSub,
-                badgeText = badge,
-                badgeColor = LXPrimaryGreen,
+                badgeText = malBadge,
+                badgeColor = if (state.isMalConnected) LXPrimaryGreen else LXTextSecondary,
+                isSelected = selectedSubMenu == SettingsSubMenu.EXTERNAL_TRACKING,
+                onClick = { onSelectSubMenu(SettingsSubMenu.EXTERNAL_TRACKING) }
+            )
+
+            // 2. External Sync Jobs (Jikan & TMDB metadata)
+            val isSyncing = jikanSyncState.isRunning || tmdbSyncState.isRunning
+            SettingsMenuItem(
+                icon = Icons.Default.Sync,
+                iconBackgroundColor = Color(0xFF4DA8DA).copy(alpha = 0.15f),
+                iconTintColor = Color(0xFF4DA8DA),
+                title = "External Sync Jobs",
+                subtitle = "Automated metadata, poster & episode sync with online databases",
+                badgeText = if (isSyncing) "SYNCING" else "ONLINE",
+                badgeColor = if (isSyncing) LXPrimaryGreen else Color(0xFF4DA8DA),
                 isSelected = selectedSubMenu == SettingsSubMenu.SYNC_JOBS,
                 onClick = { onSelectSubMenu(SettingsSubMenu.SYNC_JOBS) }
             )
@@ -2770,9 +2793,7 @@ private fun BackupStorageContent(
 }
 
 @Composable
-private fun SyncJobsContent(
-    jikanSyncState: JikanSyncProgress,
-    tmdbSyncState: TmdbSyncProgress,
+private fun ExternalTrackingContent(
     malSyncState: com.lx.tracklist.data.remote.mal.MalSyncProgress,
     isMalConnected: Boolean,
     malUsername: String?,
@@ -2785,10 +2806,6 @@ private fun SyncJobsContent(
     onSetMalAutoSync: (Boolean) -> Unit,
     onStartMalPull: () -> Unit,
     onCancelMalPull: () -> Unit,
-    onStartJikanSync: (Boolean) -> Unit,
-    onCancelJikanSync: () -> Unit,
-    onStartTmdbSync: (Boolean) -> Unit,
-    onCancelTmdbSync: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -2797,7 +2814,40 @@ private fun SyncJobsContent(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // ── 1. MyAnimeList Live Account Sync Card ──
+        // Overview Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                        contentDescription = null,
+                        tint = LXPrimaryGreen,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "External Tracking Services",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextPrimary
+                    )
+                }
+                Text(
+                    text = "Connect third-party tracking services to automatically synchronize your viewing & reading progression across online platforms in real-time.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+            }
+        }
+
+        // MyAnimeList Live Account Sync Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
@@ -3065,6 +3115,26 @@ private fun SyncJobsContent(
             }
         }
 
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun SyncJobsContent(
+    jikanSyncState: JikanSyncProgress,
+    tmdbSyncState: TmdbSyncProgress,
+    onStartJikanSync: (Boolean) -> Unit,
+    onCancelJikanSync: () -> Unit,
+    onStartTmdbSync: (Boolean) -> Unit,
+    onCancelTmdbSync: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
         // Overview Card
         Card(
             modifier = Modifier.fillMaxWidth(),
