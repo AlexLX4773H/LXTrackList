@@ -123,6 +123,7 @@ import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanSyncManager
+import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.mal.MalSyncManager
 import com.lx.tracklist.data.remote.mal.MalTokenStore
@@ -221,12 +222,16 @@ fun DetailScreen(
     if (showRefreshConfirmDialog && entry != null) {
         val current = entry!!
         val isTachiyomi = JikanSyncManager.isTachiyomiSource(current)
+        val isMovieOrShow = current.mediaType == MediaType.MOVIE || current.mediaType == MediaType.SHOW
+        val hasValidId = JikanSyncManager.hasValidExternalId(current)
         val isMal = JikanSyncManager.isMalSource(current) || current.mediaType == MediaType.ANIME || current.mediaType == MediaType.MANGA || current.mediaType == MediaType.MANHWA
-        val sourceName = if (isTachiyomi) {
-            "Jikan / MangaDex / AniList / Kitsu"
-        } else {
-            current.externalSource?.takeIf { it.isNotBlank() } ?: (if (isMal) "MyAnimeList (MAL)" else "The Movie Database (TMDB)")
+        val sourceName = when {
+            isMovieOrShow -> "The Movie Database (TMDB)"
+            isTachiyomi -> "Jikan / MangaDex / AniList / Kitsu"
+            isMal -> "MyAnimeList (MAL)"
+            else -> current.externalSource?.takeIf { it.isNotBlank() } ?: "External Database"
         }
+        val isFindingAndLinking = isTachiyomi || !hasValidId || TachiyomiResolverManager.isEligibleForResolution(current)
         val extId = current.externalId
 
         AlertDialog(
@@ -237,12 +242,14 @@ fun DetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(
-                        imageVector = if (isTachiyomi) Icons.Default.Search else Icons.Default.Refresh,
+                        imageVector = if (isFindingAndLinking) Icons.Default.Search else Icons.Default.Refresh,
                         contentDescription = null,
                         tint = LXPrimaryGreen
                     )
                     Text(
-                        text = if (isTachiyomi) "Find & Link External ID?" else "Refresh Metadata?",
+                        text = if (isFindingAndLinking) {
+                            if (isMovieOrShow) "Find & Link TMDB ID?" else "Find & Link External ID?"
+                        } else "Refresh Metadata?",
                         color = LXTextPrimary,
                         fontWeight = FontWeight.Bold
                     )
@@ -251,8 +258,8 @@ fun DetailScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = if (isTachiyomi) {
-                            "Search official databases ($sourceName) for \"${current.title}\" to resolve and link a valid external ID?"
+                        text = if (isFindingAndLinking) {
+                            "Search $sourceName for \"${current.title}\" to resolve and link a valid external ID?"
                         } else {
                             "Refresh official metadata for \"${current.title}\" from $sourceName${if (!extId.isNullOrBlank()) " using ID (#$extId)" else " by searching title"}?"
                         },
@@ -260,8 +267,12 @@ fun DetailScreen(
                         fontSize = 14.sp
                     )
                     Text(
-                        text = if (isTachiyomi) {
-                            "This will search databases to link a valid external ID (MAL, MangaDex, AniList, Kitsu) and update cover, chapters, and synopsis. Once linked, external tracking can be enabled."
+                        text = if (isFindingAndLinking) {
+                            if (isMovieOrShow) {
+                                "This will search TMDB to link a valid ID and update poster, release dates, runtime, genres, scores, and synopsis."
+                            } else {
+                                "This will search databases to link a valid external ID (MAL, MangaDex, AniList, Kitsu) and update cover, chapters/episodes, and synopsis. Once linked, external tracking can be enabled."
+                            }
                         } else {
                             "This will update posters, episode/chapter counts, runtime, broadcast/air dates, scores, and synopsis to the latest information from the external database."
                         },
@@ -278,7 +289,7 @@ fun DetailScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack)
                 ) {
-                    Text(if (isTachiyomi) "Find & Link" else "Refresh", fontWeight = FontWeight.Bold)
+                    Text(if (isFindingAndLinking) "Find & Link" else "Refresh", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -1773,43 +1784,106 @@ private fun DetailExternalTrackingCard(
                 }
             } else {
                 val isTachiyomi = JikanSyncManager.isTachiyomiSource(entry)
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .then(
-                            if (isTachiyomi) Modifier.clickable { onRequestLinkExternalId() }
-                            else Modifier
-                        ),
-                    color = LXSurfaceElevated,
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, if (isTachiyomi) LXPrimaryGreen.copy(alpha = 0.35f) else LXBorder)
-                ) {
-                    Row(
+                val hasValidId = JikanSyncManager.hasValidExternalId(entry)
+                val isMovieOrShow = entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.SHOW
+
+                if (hasValidId) {
+                    val sourceLabel = when {
+                        isMovieOrShow || entry.externalSource.equals("TMDB", ignoreCase = true) -> "TMDB"
+                        !entry.externalSource.isNullOrBlank() -> entry.externalSource
+                        else -> "External"
+                    }
+                    Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onRequestLinkExternalId() },
+                        color = LXSurfaceElevated,
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.35f))
                     ) {
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isTachiyomi) LXScoreGold else LXTextSecondary)
-                            )
-                            Text(
-                                text = if (isTachiyomi) "Tachiyomi ID (Not Linked)" else "No External ID Linked",
-                                color = if (isTachiyomi) LXTextPrimary else LXTextSecondary,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(LXPrimaryGreen)
+                                )
+                                Text(
+                                    text = "$sourceLabel ID Linked (#${entry.externalId})",
+                                    color = LXTextPrimary,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "Refresh",
+                                    color = LXPrimaryGreen,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
-                        if (isTachiyomi) {
+                    }
+                } else {
+                    val unlinkedLabel = when {
+                        isTachiyomi -> "Tachiyomi ID (Not Linked)"
+                        isMovieOrShow -> "TMDB ID (Not Linked)"
+                        else -> "No External ID Linked"
+                    }
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onRequestLinkExternalId() },
+                        color = LXSurfaceElevated,
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.35f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(LXScoreGold)
+                                )
+                                Text(
+                                    text = unlinkedLabel,
+                                    color = LXTextPrimary,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)

@@ -524,7 +524,9 @@ class DetailViewModel(
             _isRefreshingMetadata.value = true
             try {
                 val isTachiyomi = JikanSyncManager.isTachiyomiSource(cur)
-                if (isTachiyomi) {
+                val hasValidId = JikanSyncManager.hasValidExternalId(cur)
+                val needsResolution = isTachiyomi || !hasValidId || cur.externalId.isNullOrBlank() || TachiyomiResolverManager.isEligibleForResolution(cur)
+                if (needsResolution) {
                     val outcome = TachiyomiResolverManager.matchAndResolveEntry(cur, repository, context)
                     when (outcome) {
                         is TachiyomiResolverManager.ResolutionOutcome.Success -> {
@@ -542,9 +544,9 @@ class DetailViewModel(
                 }
 
                 val isMal = JikanSyncManager.isMalSource(cur) || isAnimeOrManga(cur)
-                val extIdStr = cur.externalId?.trim()
+                val extIdStr = cur.externalId.trim()
                 val isManga = JikanSyncManager.isMangaType(cur.mediaType)
-                val extId = extIdStr?.toLongOrNull()
+                val extId = extIdStr.toLongOrNull()
                 val isMangaDex = cur.externalSource?.equals("MangaDex", ignoreCase = true) == true
                 val mangaDexIdToUse = if (isMangaDex) extIdStr else null
 
@@ -634,7 +636,7 @@ class DetailViewModel(
                                 updatedAt = now
                             )
                             repository.update(updated)
-                            _metadataRefreshMessage.value = "Metadata refreshed from $resolvedSource" + (newExtId?.let { " (#$it)" } ?: "")
+                            _metadataRefreshMessage.value = "Metadata refreshed from $resolvedSource (#$newExtId)"
                         } else {
                             _metadataRefreshMessage.value = "No metadata returned from external source"
                         }

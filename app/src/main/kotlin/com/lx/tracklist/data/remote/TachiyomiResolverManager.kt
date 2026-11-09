@@ -921,6 +921,27 @@ object TachiyomiResolverManager {
             }
         }
 
+        // 4. Try raw title if cleaned title differed and no match was found
+        if (matchDetails == null && cleanTitle != queryTitle && queryTitle.isNotBlank()) {
+            val rawResults = if (isTv) {
+                TmdbApiClient.searchTvMultiple(queryTitle, context).getOrDefault(emptyList())
+            } else {
+                TmdbApiClient.searchMoviesMultiple(queryTitle, context).getOrDefault(emptyList())
+            }
+            for (cand in rawResults.take(6)) {
+                evaluatedCandidateNames.add("TMDB(raw ${if (cand.isMovie) "Movie" else "TV"}): ${cand.title}")
+                if (isConfidentExactMatch(queryTitle, cand, entry.alternateTitle) ||
+                    isConfidentExactMatch(cleanTitle, cand, entry.alternateTitle)
+                ) {
+                    val fullRes = TmdbApiClient.fetchMediaDetails(cand.tmdbId, isTv = !cand.isMovie, context = context)
+                    if (fullRes.isSuccess) {
+                        matchDetails = fullRes.getOrNull()
+                        if (matchDetails != null) break
+                    }
+                }
+            }
+        }
+
         if (matchDetails == null) {
             return ResolutionOutcome.Skipped(
                 SkippedItemReport(
@@ -1124,13 +1145,6 @@ object TachiyomiResolverManager {
                         matchSource = srcAndId.first
                         matchExternalId = srcAndId.second
                         break
-                    }
-                }
-            }
-        }
-                            matchExternalId = srcAndId.second
-                            break
-                        }
                     }
                 }
             }

@@ -1884,4 +1884,39 @@ class FeaturesTest {
         assertEquals(1, profile2SubCats.size)
         assertEquals("Manhwa H 3", profile2SubCats[0].name)
     }
+
+    @Test
+    fun testMovieAndShowExternalIdEligibilityAndLinking() {
+        val movieUnlinked = MediaEntry(
+            id = 50L,
+            userId = 1L,
+            title = "Speed",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.COMPLETED,
+            externalSource = null,
+            externalId = null
+        )
+        val showUnlinked = MediaEntry(
+            id = 51L,
+            userId = 1L,
+            title = "Breaking Bad",
+            mediaType = MediaType.SHOW,
+            status = MediaStatus.WATCHING,
+            externalSource = null,
+            externalId = null
+        )
+        val movieLinkedTmdb = movieUnlinked.copy(
+            externalSource = "TMDB",
+            externalId = "19995"
+        )
+
+        // Unlinked Movies & Shows should not have valid external ID and should be eligible for resolution / linking
+        assertFalse(com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(movieUnlinked))
+        assertFalse(com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(showUnlinked))
+        assertTrue(com.lx.tracklist.data.remote.TachiyomiResolverManager.isEligibleForResolution(movieUnlinked))
+        assertTrue(com.lx.tracklist.data.remote.TachiyomiResolverManager.isEligibleForResolution(showUnlinked))
+
+        // Once linked to TMDB, hasValidExternalId becomes true
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(movieLinkedTmdb))
+    }
 }
