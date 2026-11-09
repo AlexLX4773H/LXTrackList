@@ -140,6 +140,10 @@ dependencies {
   implementation("com.squareup.okhttp3:okhttp:4.12.0")
   implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
 
+  // Custom Tabs & Security for OAuth
+  implementation("androidx.browser:browser:1.8.0")
+  implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
   // Tooling
   debugImplementation(libs.androidx.compose.ui.tooling)
   // Instrumented tests

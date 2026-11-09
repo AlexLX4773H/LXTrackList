@@ -330,7 +330,11 @@ class MediaRepository(
         } else {
             entry
         }
-        return dao.insert(entryWithUser)
+        val id = dao.insert(entryWithUser)
+        context?.let { ctx ->
+            com.lx.tracklist.data.remote.mal.MalSyncManager.pushUpdateInBackground(ctx, entryWithUser.copy(id = id))
+        }
+        return id
     }
 
     suspend fun update(entry: MediaEntry) {
@@ -341,6 +345,9 @@ class MediaRepository(
             entry
         }
         dao.update(effectiveEntry)
+        context?.let { ctx ->
+            com.lx.tracklist.data.remote.mal.MalSyncManager.pushUpdateInBackground(ctx, effectiveEntry)
+        }
     }
 
     suspend fun delete(entry: MediaEntry) {
@@ -382,6 +389,9 @@ class MediaRepository(
     suspend fun incrementProgress(entry: MediaEntry): MediaEntry {
         val updated = entry.incrementProgress()
         dao.update(updated)
+        context?.let { ctx ->
+            com.lx.tracklist.data.remote.mal.MalSyncManager.pushUpdateInBackground(ctx, updated)
+        }
         return updated
     }
 

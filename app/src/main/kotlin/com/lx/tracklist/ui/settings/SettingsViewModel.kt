@@ -250,13 +250,20 @@ data class SettingsUiState(
     val isReindexingCovers: Boolean = false,
     val reindexProgress: Float = 0f,
     val reindexStatusText: String? = null,
-    val updateStatus: AppUpdateStatus = AppUpdateStatus.Idle
+    val updateStatus: AppUpdateStatus = AppUpdateStatus.Idle,
+    val isMalConnected: Boolean = false,
+    val malUsername: String? = null,
+    val malPictureUrl: String? = null,
+    val isMalAutoSyncEnabled: Boolean = true,
+    val malLastSyncFormatted: String? = null,
+    val isMalConfigured: Boolean = false
 )
 
 class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     val jikanSyncState = JikanSyncManager.syncState
     val tmdbSyncState = TmdbSyncManager.syncState
+    val malSyncState = com.lx.tracklist.data.remote.mal.MalSyncManager.syncState
 
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -280,6 +287,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                         selectedProfileIdForDefaults = user.id
                     )
                 }
+                refreshMalStatus()
             }
         }
         viewModelScope.launch {
@@ -336,6 +344,77 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun cancelTmdbSync(context: Context? = null) {
         TmdbSyncManager.cancelSync(context)
+    }
+
+    fun refreshMalStatus(context: Context = LXApplication.instance.applicationContext) {
+        val user = _uiState.value.activeUser
+        val store = com.lx.tracklist.data.remote.mal.MalTokenStore(context)
+        val isConn = store.isLoggedIn(user.id)
+        val username = store.getMalUsername(user.id)
+        val pic = store.getMalPictureUrl(user.id)
+        val autoSync = store.isAutoSyncEnabled(user.id)
+        val lastSync = store.getLastSyncTimestamp(user.id)
+        val lastSyncStr = if (lastSync > 0) {
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+            sdf.format(java.util.Date(lastSync))
+        } else null
+        val configured = com.lx.tracklist.data.remote.mal.MalAuthManager.isConfigured()
+
+        _uiState.update {
+            it.copy(
+                isMalConnected = isConn,
+                malUsername = username,
+                malPictureUrl = pic,
+                isMalAutoSyncEnabled = autoSync,
+                malLastSyncFormatted = lastSyncStr,
+                isMalConfigured = configured
+            )
+        }
+    }
+
+    fun startMalAuth(context: Context) {
+        val user = _uiState.value.activeUser
+        val result = com.lx.tracklist.data.remote.mal.MalAuthManager.startOAuth(context, user.id)
+        result.onFailure { err ->
+            _uiState.update {
+                it.copy(
+                    statusMessage = err.message ?: "Failed to start MAL authorization",
+                    isErrorMessage = true
+                )
+            }
+        }
+    }
+
+    fun disconnectMal(context: Context = LXApplication.instance.applicationContext) {
+        val user = _uiState.value.activeUser
+        com.lx.tracklist.data.remote.mal.MalTokenStore(context).clear(user.id)
+        refreshMalStatus(context)
+        _uiState.update {
+            it.copy(
+                statusMessage = "Disconnected from MyAnimeList",
+                isErrorMessage = false
+            )
+        }
+    }
+
+    fun setMalAutoSync(enabled: Boolean, context: Context = LXApplication.instance.applicationContext) {
+        val user = _uiState.value.activeUser
+        com.lx.tracklist.data.remote.mal.MalTokenStore(context).setAutoSyncEnabled(user.id, enabled)
+        refreshMalStatus(context)
+    }
+
+    fun startMalPull(context: Context) {
+        val user = _uiState.value.activeUser
+        com.lx.tracklist.data.remote.mal.MalSyncManager.startFullPull(
+            context = context,
+            userId = user.id,
+            repository = repository,
+            strategy = _uiState.value.selectedConflictStrategy
+        )
+    }
+
+    fun cancelMalPull() {
+        com.lx.tracklist.data.remote.mal.MalSyncManager.cancelSync()
     }
 
     fun updateStartupDefaults(

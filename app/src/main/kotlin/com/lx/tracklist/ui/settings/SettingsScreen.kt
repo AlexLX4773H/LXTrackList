@@ -66,6 +66,7 @@ import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.NewReleases
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
@@ -182,6 +183,7 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val jikanSyncState by viewModel.jikanSyncState.collectAsState()
     val tmdbSyncState by viewModel.tmdbSyncState.collectAsState()
+    val malSyncState by viewModel.malSyncState.collectAsState()
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val isTablet = configuration.screenWidthDp >= 600
@@ -199,6 +201,7 @@ fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         viewModel.checkStorageStatus(context)
+        viewModel.refreshMalStatus(context)
     }
 
     // Auto-dismiss status notification after 6 seconds
@@ -1229,6 +1232,18 @@ fun SettingsScreen(
                         SettingsSubMenu.SYNC_JOBS -> SyncJobsContent(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
+                            malSyncState = malSyncState,
+                            isMalConnected = state.isMalConnected,
+                            malUsername = state.malUsername,
+                            malPictureUrl = state.malPictureUrl,
+                            isMalAutoSyncEnabled = state.isMalAutoSyncEnabled,
+                            malLastSyncFormatted = state.malLastSyncFormatted,
+                            isMalConfigured = state.isMalConfigured,
+                            onStartMalAuth = { viewModel.startMalAuth(context) },
+                            onDisconnectMal = { viewModel.disconnectMal(context) },
+                            onSetMalAutoSync = { enabled -> viewModel.setMalAutoSync(enabled, context) },
+                            onStartMalPull = { viewModel.startMalPull(context) },
+                            onCancelMalPull = { viewModel.cancelMalPull() },
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
                                 viewModel.startJikanSync(context, force)
@@ -1327,6 +1342,18 @@ fun SettingsScreen(
                         SyncJobsContent(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
+                            malSyncState = malSyncState,
+                            isMalConnected = state.isMalConnected,
+                            malUsername = state.malUsername,
+                            malPictureUrl = state.malPictureUrl,
+                            isMalAutoSyncEnabled = state.isMalAutoSyncEnabled,
+                            malLastSyncFormatted = state.malLastSyncFormatted,
+                            isMalConfigured = state.isMalConfigured,
+                            onStartMalAuth = { viewModel.startMalAuth(context) },
+                            onDisconnectMal = { viewModel.disconnectMal(context) },
+                            onSetMalAutoSync = { enabled -> viewModel.setMalAutoSync(enabled, context) },
+                            onStartMalPull = { viewModel.startMalPull(context) },
+                            onCancelMalPull = { viewModel.cancelMalPull() },
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
                                 viewModel.startJikanSync(context, force)
@@ -1448,13 +1475,15 @@ private fun SettingsMainMenu(
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SettingsSectionHeader("Sync & External Services")
             val isSyncing = jikanSyncState.isRunning || tmdbSyncState.isRunning
+            val badge = if (isSyncing) "SYNCING" else if (state.isMalConnected) "MAL ACTIVE" else "ONLINE"
+            val malSub = if (state.isMalConnected) "MyAnimeList sync active (@${state.malUsername ?: "user"}) • Jikan • TMDB" else "Live MyAnimeList sync, Jikan anime/manga metadata, & TMDB"
             SettingsMenuItem(
                 icon = Icons.Default.Sync,
                 iconBackgroundColor = LXPrimaryGreen.copy(alpha = 0.15f),
                 iconTintColor = LXPrimaryGreen,
-                title = "External Sync Jobs",
-                subtitle = "Automated metadata, poster & episode sync with online databases",
-                badgeText = if (isSyncing) "SYNCING" else "ONLINE",
+                title = "External Sync & Tracking Services",
+                subtitle = malSub,
+                badgeText = badge,
                 badgeColor = LXPrimaryGreen,
                 isSelected = selectedSubMenu == SettingsSubMenu.SYNC_JOBS,
                 onClick = { onSelectSubMenu(SettingsSubMenu.SYNC_JOBS) }
@@ -2744,6 +2773,18 @@ private fun BackupStorageContent(
 private fun SyncJobsContent(
     jikanSyncState: JikanSyncProgress,
     tmdbSyncState: TmdbSyncProgress,
+    malSyncState: com.lx.tracklist.data.remote.mal.MalSyncProgress,
+    isMalConnected: Boolean,
+    malUsername: String?,
+    malPictureUrl: String?,
+    isMalAutoSyncEnabled: Boolean,
+    malLastSyncFormatted: String?,
+    isMalConfigured: Boolean,
+    onStartMalAuth: () -> Unit,
+    onDisconnectMal: () -> Unit,
+    onSetMalAutoSync: (Boolean) -> Unit,
+    onStartMalPull: () -> Unit,
+    onCancelMalPull: () -> Unit,
     onStartJikanSync: (Boolean) -> Unit,
     onCancelJikanSync: () -> Unit,
     onStartTmdbSync: (Boolean) -> Unit,
@@ -2756,6 +2797,274 @@ private fun SyncJobsContent(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // ── 1. MyAnimeList Live Account Sync Card ──
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = null,
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "MyAnimeList Live Sync",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                if (malSyncState.isRunning) LXPrimaryGreen.copy(alpha = 0.15f)
+                                else if (isMalConnected) LXPrimaryGreen.copy(alpha = 0.15f)
+                                else LXBorder.copy(alpha = 0.5f)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = if (malSyncState.isRunning) "SYNCING" else if (isMalConnected) "CONNECTED" else "NOT LINKED",
+                            color = if (malSyncState.isRunning || isMalConnected) LXPrimaryGreen else LXTextSecondary,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Live 2-way sync with your personal MyAnimeList account. Episode and chapter progress is automatically pushed to your MAL profile in real-time as you track them.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                if (!isMalConfigured) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXErrorRed.copy(alpha = 0.1f))
+                            .border(1.dp, LXErrorRed.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = "MAL_CLIENT_ID is not configured in .env. Please configure your Client ID to enable live sync.",
+                            color = LXErrorRed,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                } else if (!isMalConnected) {
+                    Button(
+                        onClick = onStartMalAuth,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LXPrimaryGreen,
+                            contentColor = LXBackgroundBlack
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Connect MyAnimeList Account",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
+                } else {
+                    // Connected User Info Box
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (!malPictureUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = malPictureUrl,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(LXPrimaryGreen.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = malUsername?.let { "@$it" } ?: "Connected Account",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = LXTextPrimary
+                            )
+                            Text(
+                                text = if (malLastSyncFormatted != null) "Last synced: $malLastSyncFormatted" else "Live auto-sync active",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary
+                            )
+                        }
+                    }
+
+                    // Auto-sync Toggle Row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = "Auto-push progress updates",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = LXTextPrimary
+                            )
+                            Text(
+                                text = "Pushes +1 episode/chapter and status changes to MAL automatically",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary
+                            )
+                        }
+                        Switch(
+                            checked = isMalAutoSyncEnabled,
+                            onCheckedChange = onSetMalAutoSync,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = LXBackgroundBlack,
+                                checkedTrackColor = LXPrimaryGreen,
+                                uncheckedThumbColor = LXTextSecondary,
+                                uncheckedTrackColor = LXBorder
+                            )
+                        )
+                    }
+
+                    // Sync In-Progress Box
+                    if (malSyncState.isRunning) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(LXSurfaceElevated)
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = malSyncState.statusMessage ?: "Syncing with MyAnimeList...",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = LXTextPrimary
+                            )
+
+                            if (malSyncState.totalCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(LXBorder)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .fillMaxWidth(malSyncState.progressFraction)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(LXPrimaryGreen)
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                OutlinedButton(
+                                    onClick = onCancelMalPull,
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LXErrorRed),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, LXErrorRed.copy(alpha = 0.5f)),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Cancel Sync", fontSize = 12.sp, color = LXErrorRed)
+                                }
+                            }
+                        }
+                    } else {
+                        // Action buttons row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onStartMalPull,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = LXPrimaryGreen,
+                                    contentColor = LXBackgroundBlack
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Pull from MAL",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = onDisconnectMal,
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXErrorRed),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, LXErrorRed.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Disconnect", fontSize = 12.sp, color = LXErrorRed)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Overview Card
         Card(
             modifier = Modifier.fillMaxWidth(),
