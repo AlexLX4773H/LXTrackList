@@ -28,7 +28,7 @@ android {
     minSdk = 26
     targetSdk = 36
     versionCode = 103
-    versionName = "0.1.3"
+    versionName = "0.1.4"
 
     val tmdbReadToken = envProperties.getProperty("TMDB_READ_ACCESS_TOKEN")
       ?: envProperties.getProperty("TMDB_API_KEY")
