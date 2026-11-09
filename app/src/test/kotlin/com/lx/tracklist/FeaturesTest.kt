@@ -1721,4 +1721,74 @@ class FeaturesTest {
             assertTrue("Duplicate detector must identify the two entries as duplicates", isDup)
         }
     }
+
+    @Test
+    fun testMovieAndShowIdResolutionMatching() {
+        val resolver = com.lx.tracklist.data.remote.TachiyomiResolverManager
+
+        val movieWithoutId = MediaEntry(
+            id = 201L,
+            userId = 1L,
+            title = "Inception",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.COMPLETED,
+            externalSource = null,
+            externalId = null
+        )
+        val movieWithTmdbId = MediaEntry(
+            id = 202L,
+            userId = 1L,
+            title = "Inception",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.COMPLETED,
+            externalSource = "TMDB",
+            externalId = "27205"
+        )
+        val tvWithoutId = MediaEntry(
+            id = 203L,
+            userId = 1L,
+            title = "Breaking Bad",
+            mediaType = MediaType.SHOW,
+            status = MediaStatus.WATCHING,
+            externalSource = "CUSTOM",
+            externalId = null
+        )
+
+        // Eligibility checks
+        assertTrue("Movie without ID must be eligible for resolution", resolver.isEligibleForResolution(movieWithoutId))
+        assertFalse("Movie with TMDB ID should not need resolution", resolver.isEligibleForResolution(movieWithTmdbId))
+        assertTrue("TV show without TMDB ID must be eligible for resolution", resolver.isEligibleForResolution(tvWithoutId))
+
+        // TMDB candidate matching
+        val tmdbMovieCandidate = com.lx.tracklist.data.remote.TmdbSearchResult(
+            tmdbId = 27205L,
+            title = "Inception",
+            originalTitle = "Inception",
+            isMovie = true
+        )
+        assertTrue("Exact movie title match must succeed", resolver.isConfidentExactMatch("Inception", tmdbMovieCandidate))
+        assertTrue("Movie title with bracketed year must match", resolver.isConfidentExactMatch("Inception (2010)", tmdbMovieCandidate))
+        assertTrue("Movie title with quality tag must match", resolver.isConfidentExactMatch("Inception [1080p]", tmdbMovieCandidate))
+        assertFalse("Different movie must not match", resolver.isConfidentExactMatch("Interstellar", tmdbMovieCandidate))
+
+        val tmdbTvCandidate = com.lx.tracklist.data.remote.TmdbSearchResult(
+            tmdbId = 1396L,
+            title = "Breaking Bad",
+            originalTitle = "Breaking Bad",
+            isMovie = false
+        )
+        assertTrue("Exact TV show title match must succeed", resolver.isConfidentExactMatch("Breaking Bad", tmdbTvCandidate))
+        assertTrue("TV show with tags must match", resolver.isConfidentExactMatch("[4K] Breaking Bad [HDR]", tmdbTvCandidate))
+        assertFalse("TV show with specific season should not match base show", resolver.isConfidentExactMatch("Breaking Bad Season 2", tmdbTvCandidate))
+
+        // Original title matching (foreign language / romaji titles)
+        val foreignMovieCandidate = com.lx.tracklist.data.remote.TmdbSearchResult(
+            tmdbId = 372058L,
+            title = "Your Name.",
+            originalTitle = "君の名は。",
+            isMovie = true
+        )
+        assertTrue("English title match must succeed", resolver.isConfidentExactMatch("Your Name", foreignMovieCandidate))
+        assertTrue("Original Japanese title match must succeed", resolver.isConfidentExactMatch("君の名は。", foreignMovieCandidate))
+    }
 }

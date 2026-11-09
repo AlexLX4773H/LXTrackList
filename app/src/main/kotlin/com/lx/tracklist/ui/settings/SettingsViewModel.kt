@@ -359,9 +359,13 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         )
     }
 
+    fun startIdResolution(context: Context) = startTachiyomiResolution(context)
+
     fun cancelTachiyomiResolution(context: Context) {
         TachiyomiResolverManager.cancelResolution(context)
     }
+
+    fun cancelIdResolution(context: Context) = cancelTachiyomiResolution(context)
 
     fun refreshMalStatus(context: Context = LXApplication.instance.applicationContext) {
         val user = _uiState.value.activeUser

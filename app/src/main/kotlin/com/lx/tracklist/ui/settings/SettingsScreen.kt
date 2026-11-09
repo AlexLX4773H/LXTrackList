@@ -3631,7 +3631,7 @@ private fun SyncJobsContent(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Tachiyomi ID Resolution",
+                            text = "Resolve IDs",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = LXTextPrimary,
                             maxLines = 1,
@@ -3658,7 +3658,7 @@ private fun SyncJobsContent(
                 }
 
                 Text(
-                    text = "Find and link official external IDs (MyAnimeList, MangaDex, AniList, Kitsu) for Manga and Manhwa entries imported from Tachiyomi. Only links when title match is exact and confident. Generates a full audit report in /LXTrackList/data.",
+                    text = "Find and link official external IDs (MyAnimeList, MangaDex, AniList, Kitsu, TMDB) for Manga, Manhwa, Movie, and TV Show entries. Only links when title match is exact and confident. Generates a full audit report in /LXTrackList/data.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
@@ -3756,7 +3756,7 @@ private fun SyncJobsContent(
                         Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Resolve Tachiyomi IDs",
+                            text = "Resolve IDs",
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
                         )

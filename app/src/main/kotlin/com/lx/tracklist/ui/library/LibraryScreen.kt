@@ -647,7 +647,7 @@ fun LibraryScreen(
                         fontSize = 12.sp
                     )
                     Text(
-                        text = "Tap 'Resolve Tachiyomi' to find and link official IDs (MAL, MangaDex, AniList, Kitsu) for Tachiyomi manga/manhwa with confident exact title matching and audit reports.",
+                        text = "Tap 'Resolve IDs' to find and link official IDs (MAL, MangaDex, AniList, Kitsu, TMDB) with confident exact title matching and audit reports.",
                         color = LXScoreGold.copy(alpha = 0.9f),
                         fontSize = 11.sp
                     )
@@ -702,7 +702,7 @@ fun LibraryScreen(
                     Button(
                         onClick = {
                             ensureNotificationPermission()
-                            viewModel.resolveTachiyomiSelected(context)
+                            viewModel.resolveIdsSelected(context)
                             showExternalDbBatchDialog = false
                         },
                         colors = ButtonDefaults.buttonColors(
@@ -718,7 +718,7 @@ fun LibraryScreen(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Resolve Tachiyomi IDs", fontWeight = FontWeight.Bold)
+                        Text("Resolve IDs", fontWeight = FontWeight.Bold)
                     }
 
                     TextButton(

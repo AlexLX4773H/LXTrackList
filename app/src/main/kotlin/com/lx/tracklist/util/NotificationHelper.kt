@@ -367,7 +367,7 @@ object NotificationHelper {
 
             val builder = NotificationCompat.Builder(context, CHANNEL_TACHIYOMI_RESOLVE)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("${prefix}Resolving Tachiyomi IDs ($completed/$total)")
+                .setContentTitle("${prefix}Resolving IDs ($completed/$total)")
                 .setContentText(text)
                 .setProgress(total, completed, false)
                 .setOngoing(true)
@@ -402,15 +402,15 @@ object NotificationHelper {
             val expanded: String
 
             if (isCancelled) {
-                title = "${prefix}Tachiyomi Resolution Cancelled"
+                title = "${prefix}ID Resolution Cancelled"
                 content = "$completed / $total processed ($resolved linked)"
-                expanded = "Resolution was cancelled by user.\n• Processed: $completed / $total\n• Linked: $resolved\n• Skipped: $skipped"
+                expanded = "ID resolution was cancelled by user.\n• Processed: $completed / $total\n• Linked: $resolved\n• Skipped: $skipped"
             } else if (total == 0) {
-                title = "${prefix}Tachiyomi Resolution"
-                content = "No Tachiyomi entries needed resolution"
-                expanded = "All manga/manhwa entries already have official external IDs linked."
+                title = "${prefix}ID Resolution"
+                content = "No entries needed ID resolution"
+                expanded = "All selected or library entries already have official external IDs linked."
             } else {
-                title = "${prefix}Tachiyomi Resolution Finished"
+                title = "${prefix}ID Resolution Finished"
                 content = "$resolved linked, $skipped skipped${if (failed > 0) ", $failed failed" else ""}"
                 val reportLine = if (!reportPath.isNullOrBlank()) "\n• Report saved: $reportPath" else ""
                 expanded = "Resolution summary for ${profileName ?: "profile"}:\n• Processed: $completed / $total\n• Successfully Linked: $resolved\n• Skipped (No Exact Match): $skipped${if (failed > 0) "\n• Errors: $failed" else ""}$reportLine"

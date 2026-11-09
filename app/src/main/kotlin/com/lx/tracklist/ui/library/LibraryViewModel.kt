@@ -682,7 +682,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         )
     }
 
-    fun resolveTachiyomiSelected(context: Context) {
+    fun resolveIdsSelected(context: Context) {
         val selected = _filterState.value.selectedIds.toSet()
         if (selected.isEmpty()) return
         clearSelection()
@@ -695,6 +695,8 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             targetProfileName = user.name
         )
     }
+
+    fun resolveTachiyomiSelected(context: Context) = resolveIdsSelected(context)
 
     fun incrementProgress(entry: MediaEntry, andChangeStatusTo: MediaStatus? = null) {
         viewModelScope.launch {
