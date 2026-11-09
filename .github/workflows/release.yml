@@ -76,8 +76,20 @@ jobs:
           TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
           EOF
 
+      - name: Prepare Signing Keystore
+        if: steps.version_check.outputs.should_release == 'true' && env.HAS_KEYSTORE == 'true'
+        env:
+          HAS_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
+
       - name: Build Release APK
         if: steps.version_check.outputs.should_release == 'true'
+        env:
+          KEYSTORE_PATH: release.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Prepare APK Asset

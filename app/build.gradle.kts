@@ -27,7 +27,7 @@ android {
     applicationId = "com.lx.tracklist"
     minSdk = 26
     targetSdk = 36
-    versionCode = 1
+    versionCode = 103
     versionName = "0.1.3"
 
     val tmdbReadToken = envProperties.getProperty("TMDB_READ_ACCESS_TOKEN")
@@ -41,11 +41,30 @@ android {
   signingConfigs {
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH") ?: project.findProperty("KEYSTORE_PATH") as? String
-      if (keystorePath != null && file(keystorePath).exists()) {
-        storeFile = file(keystorePath)
-        storePassword = System.getenv("KEYSTORE_PASSWORD") ?: project.findProperty("KEYSTORE_PASSWORD") as? String
-        keyAlias = System.getenv("KEY_ALIAS") ?: project.findProperty("KEY_ALIAS") as? String
-        keyPassword = System.getenv("KEY_PASSWORD") ?: project.findProperty("KEY_PASSWORD") as? String
+      val keystoreFile = if (keystorePath != null) {
+        val f = file(keystorePath)
+        if (f.exists()) f else rootProject.file(keystorePath)
+      } else {
+        val localApp = file("release.jks")
+        val localRoot = rootProject.file("release.jks")
+        if (localApp.exists()) localApp else if (localRoot.exists()) localRoot else null
+      }
+
+      if (keystoreFile != null && keystoreFile.exists()) {
+        storeFile = keystoreFile
+        storePassword = System.getenv("KEYSTORE_PASSWORD")
+          ?: project.findProperty("KEYSTORE_PASSWORD") as? String
+          ?: "lxtracklist123"
+        keyAlias = System.getenv("KEY_ALIAS")
+          ?: project.findProperty("KEY_ALIAS") as? String
+          ?: "lxtracklist"
+        keyPassword = System.getenv("KEY_PASSWORD")
+          ?: System.getenv("KEYSTORE_PASSWORD")
+          ?: project.findProperty("KEY_PASSWORD") as? String
+          ?: project.findProperty("KEYSTORE_PASSWORD") as? String
+          ?: "lxtracklist123"
+        enableV1Signing = true
+        enableV2Signing = true
       }
     }
   }
