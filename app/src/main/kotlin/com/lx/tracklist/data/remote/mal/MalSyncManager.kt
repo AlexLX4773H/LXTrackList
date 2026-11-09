@@ -44,9 +44,9 @@ object MalSyncManager {
     val syncState: StateFlow<MalSyncProgress> = _syncState.asStateFlow()
 
     /**
-     * Checks if a media entry is eligible to be pushed to MyAnimeList.
+     * Checks if a media entry is structurally eligible to be linked with MyAnimeList.
      */
-    fun isEligibleForMalSync(entry: MediaEntry): Boolean {
+    fun canBeExternallyTracked(entry: MediaEntry): Boolean {
         val src = entry.externalSource?.trim()?.uppercase(Locale.US)
         val hasMalSource = src == "MAL" || src == "MYANIMELIST"
         val hasValidId = !entry.externalId.isNullOrBlank() && entry.externalId.toLongOrNull() != null
@@ -55,6 +55,14 @@ object MalSyncManager {
                               entry.mediaType == MediaType.MANHWA ||
                               (entry.mediaType == MediaType.BOOK && hasMalSource)
         return hasMalSource && hasValidId && isSupportedType
+    }
+
+    /**
+     * Checks if a media entry is enabled and eligible to be pushed to MyAnimeList.
+     * By default entries are not synced; they must be explicitly added to External Tracking.
+     */
+    fun isEligibleForMalSync(entry: MediaEntry): Boolean {
+        return entry.isExternallyTracked && canBeExternallyTracked(entry)
     }
 
     /**
@@ -212,6 +220,7 @@ object MalSyncManager {
                             externalScoreSource = "MAL",
                             externalId = node.id.toString(),
                             externalSource = "MAL",
+                            isExternallyTracked = true,
                             coverImageUri = node.mainPicture?.large ?: node.mainPicture?.medium,
                             currentEpisodes = listStatus?.numEpisodesWatched ?: 0,
                             totalEpisodes = node.numEpisodes,
@@ -260,6 +269,7 @@ object MalSyncManager {
                             externalScoreSource = "MAL",
                             externalId = node.id.toString(),
                             externalSource = "MAL",
+                            isExternallyTracked = true,
                             coverImageUri = node.mainPicture?.large ?: node.mainPicture?.medium,
                             currentVolumes = listStatus?.numVolumesRead ?: 0,
                             totalVolumes = node.numVolumes,

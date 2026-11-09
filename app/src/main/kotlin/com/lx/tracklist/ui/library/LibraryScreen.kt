@@ -155,6 +155,7 @@ fun LibraryScreen(
     var showSubCategoryBatchDialog by remember { mutableStateOf(false) }
     var showStatusBatchDialog by remember { mutableStateOf(false) }
     var showFavoriteBatchDialog by remember { mutableStateOf(false) }
+    var showExternalTrackingBatchDialog by remember { mutableStateOf(false) }
     var showExternalDbBatchDialog by remember { mutableStateOf(false) }
     var showSelectionOverflowMenu by remember { mutableStateOf(false) }
     var relatedItemToAdd by remember { mutableStateOf<RelatedMediaItem?>(null) }
@@ -480,6 +481,72 @@ fun LibraryScreen(
         )
     }
 
+    // External Tracking Selected Entries Dialog
+    if (showExternalTrackingBatchDialog) {
+        AlertDialog(
+            onDismissRequest = { showExternalTrackingBatchDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Sync, contentDescription = null, tint = LXPrimaryGreen)
+                    Text(
+                        text = "External Tracking (${state.selectedIds.size} selected)",
+                        color = LXTextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Enable or disable syncing to external trackers (e.g. MyAnimeList) for the selected ${state.selectedIds.size} ${if (state.selectedIds.size == 1) "entry" else "entries"}. Only entries with a valid MAL ID will push updates.",
+                        color = LXTextSecondary,
+                        fontSize = 13.sp
+                    )
+                    Button(
+                        onClick = {
+                            viewModel.batchUpdateExternalTracking(true)
+                            showExternalTrackingBatchDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Add to External Tracking", fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            viewModel.batchUpdateExternalTracking(false)
+                            showExternalTrackingBatchDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = LXSurfaceVariant, contentColor = LXTextPrimary),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Remove from External Tracking", fontWeight = FontWeight.Medium)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showExternalTrackingBatchDialog = false }) {
+                    Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
+    }
+
     // External DB Sync Selected Entries Dialog
     if (showExternalDbBatchDialog) {
         AlertDialog(
@@ -664,6 +731,13 @@ fun LibraryScreen(
                                             showSelectionOverflowMenu = false
                                         }
                                     )
+                                    DropdownMenuItem(
+                                        text = { Text("External Tracking", color = LXTextPrimary) },
+                                        onClick = {
+                                            showExternalTrackingBatchDialog = true
+                                            showSelectionOverflowMenu = false
+                                        }
+                                    )
                                 }
                             }
                         }
@@ -805,7 +879,12 @@ fun LibraryScreen(
                         )
                         BatchActionButton(
                             icon = Icons.Default.Sync,
-                            label = "External DB Sync",
+                            label = "Tracking",
+                            onClick = { showExternalTrackingBatchDialog = true }
+                        )
+                        BatchActionButton(
+                            icon = Icons.Default.Tune,
+                            label = "DB Sync",
                             onClick = { showExternalDbBatchDialog = true }
                         )
                     }
@@ -969,6 +1048,7 @@ fun LibraryScreen(
                     state.excludedTags.isNotEmpty() ||
                     state.favoritesFilter != InclusionFilterOption.ALL ||
                     state.airingFilter != InclusionFilterOption.ALL ||
+                    state.externalTrackingFilter != InclusionFilterOption.ALL ||
                     state.coverImageFilter != CoverImageFilterOption.ALL
 
             if (hasActiveFilters) {
@@ -1084,6 +1164,22 @@ fun LibraryScreen(
                             RemovableFilterBadge(
                                 label = "-Airing",
                                 onRemove = { viewModel.setAiringFilter(InclusionFilterOption.ALL) }
+                            )
+                        }
+                    }
+
+                    if (state.externalTrackingFilter == InclusionFilterOption.INCLUDE_ONLY) {
+                        item {
+                            RemovableFilterBadge(
+                                label = "+Tracked Only",
+                                onRemove = { viewModel.setExternalTrackingFilter(InclusionFilterOption.ALL) }
+                            )
+                        }
+                    } else if (state.externalTrackingFilter == InclusionFilterOption.EXCLUDE) {
+                        item {
+                            RemovableFilterBadge(
+                                label = "-Not Tracked",
+                                onRemove = { viewModel.setExternalTrackingFilter(InclusionFilterOption.ALL) }
                             )
                         }
                     }
@@ -2289,6 +2385,19 @@ private fun AdvancedFilterSheet(
                         icon = Icons.Default.Favorite,
                         state = state.favoritesFilter,
                         onClick = { viewModel.cycleFavoritesFilter() }
+                    )
+
+                    // External Tracking Filter
+                    TriStateFilterRow(
+                        title = "External Tracking",
+                        subtitle = when (state.externalTrackingFilter) {
+                            InclusionFilterOption.ALL -> "Tap: Tracked Only → Not Tracked → Off"
+                            InclusionFilterOption.INCLUDE_ONLY -> "Showing Only Externally Tracked"
+                            InclusionFilterOption.EXCLUDE -> "Excluding / Hiding Tracked (Not Tracked only)"
+                        },
+                        icon = Icons.Default.Sync,
+                        state = state.externalTrackingFilter,
+                        onClick = { viewModel.cycleExternalTrackingFilter() }
                     )
 
                     // Cover Image Filter (All / Has Cover / Broken URL / No Cover)

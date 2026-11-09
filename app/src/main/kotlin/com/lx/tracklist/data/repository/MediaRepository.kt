@@ -392,6 +392,57 @@ class MediaRepository(
         dao.update(entry.copy(isFavorite = !entry.isFavorite, updatedAt = System.currentTimeMillis()))
     }
 
+    suspend fun batchUpdateExternalTracking(ids: List<Long>, isExternallyTracked: Boolean) {
+        if (ids.isEmpty()) return
+        val userId = _activeUser.value.id
+        dao.updateExternalTrackingForIdsAndUser(userId, ids, isExternallyTracked, System.currentTimeMillis())
+        if (isExternallyTracked) {
+            context?.let { ctx ->
+                ids.forEach { id ->
+                    val entry = dao.getEntryByIdSync(id)
+                    if (entry != null && entry.isExternallyTracked) {
+                        com.lx.tracklist.data.remote.mal.MalSyncManager.pushUpdateInBackground(ctx, entry)
+                    }
+                }
+            }
+        }
+    }
+
+    suspend fun toggleExternalTracking(entry: MediaEntry): MediaEntry {
+        val effectiveEntry = if (entry.userId <= 0L) {
+            val existing = dao.getEntryByIdSync(entry.id)
+            entry.copy(userId = existing?.userId ?: _activeUser.value.id)
+        } else {
+            entry
+        }
+        val newTracked = !effectiveEntry.isExternallyTracked
+        val updated = effectiveEntry.copy(isExternallyTracked = newTracked, updatedAt = System.currentTimeMillis())
+        dao.update(updated)
+        if (newTracked) {
+            context?.let { ctx ->
+                com.lx.tracklist.data.remote.mal.MalSyncManager.pushUpdateInBackground(ctx, updated)
+            }
+        }
+        return updated
+    }
+
+    suspend fun setExternalTracking(entry: MediaEntry, isExternallyTracked: Boolean): MediaEntry {
+        val effectiveEntry = if (entry.userId <= 0L) {
+            val existing = dao.getEntryByIdSync(entry.id)
+            entry.copy(userId = existing?.userId ?: _activeUser.value.id)
+        } else {
+            entry
+        }
+        val updated = effectiveEntry.copy(isExternallyTracked = isExternallyTracked, updatedAt = System.currentTimeMillis())
+        dao.update(updated)
+        if (isExternallyTracked) {
+            context?.let { ctx ->
+                com.lx.tracklist.data.remote.mal.MalSyncManager.pushUpdateInBackground(ctx, updated)
+            }
+        }
+        return updated
+    }
+
     suspend fun incrementProgress(entry: MediaEntry): MediaEntry {
         val effectiveEntry = if (entry.userId <= 0L) {
             val existing = dao.getEntryByIdSync(entry.id)
@@ -563,6 +614,7 @@ class MediaRepository(
             coverImageUri = imported.coverImageUri ?: existing.coverImageUri,
             customCategory = imported.customCategory ?: existing.customCategory,
             subCategory = imported.subCategory ?: existing.subCategory,
+            isExternallyTracked = existing.isExternallyTracked || imported.isExternallyTracked,
             updatedAt = System.currentTimeMillis()
         )
     }

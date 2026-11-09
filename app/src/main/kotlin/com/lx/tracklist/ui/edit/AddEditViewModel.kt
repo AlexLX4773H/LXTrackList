@@ -66,6 +66,7 @@ data class AddEditUiState(
     val priority: Priority = Priority.MEDIUM,
     val coverImageUri: String = "",
     val isFavorite: Boolean = false,
+    val isExternallyTracked: Boolean = false,
     val rewatchCount: Int = 0,
     val isRewatching: Boolean = false,
     val externalId: String = "",
@@ -182,6 +183,7 @@ class AddEditViewModel(
                             priority = entry.priority,
                             coverImageUri = entry.coverImageUri ?: "",
                             isFavorite = entry.isFavorite,
+                            isExternallyTracked = entry.isExternallyTracked,
                             rewatchCount = entry.rewatchCount,
                             isRewatching = entry.isRewatching,
                             externalId = entry.externalId ?: "",
@@ -318,6 +320,7 @@ class AddEditViewModel(
     fun updatePriority(value: Priority) = _uiState.update { it.copy(priority = value) }
     fun updateCoverUri(value: String) = _uiState.update { it.copy(coverImageUri = value) }
     fun updateIsFavorite(value: Boolean) = _uiState.update { it.copy(isFavorite = value) }
+    fun updateIsExternallyTracked(value: Boolean) = _uiState.update { it.copy(isExternallyTracked = value) }
     fun updateRewatchCount(value: Int) = _uiState.update { it.copy(rewatchCount = value.coerceAtLeast(0)) }
     fun updateIsRewatching(value: Boolean) = _uiState.update { it.copy(isRewatching = value) }
     fun updateExternalId(value: String) = _uiState.update { it.copy(externalId = value) }
@@ -384,6 +387,7 @@ class AddEditViewModel(
                 priority = s.priority,
                 coverImageUri = s.coverImageUri.trim().ifBlank { null },
                 isFavorite = s.isFavorite,
+                isExternallyTracked = s.isExternallyTracked,
                 rewatchCount = s.rewatchCount,
                 isRewatching = s.isRewatching,
                 externalId = s.externalId.trim().ifBlank { null },

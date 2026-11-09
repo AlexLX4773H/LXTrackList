@@ -160,6 +160,12 @@ interface MediaEntryDao {
     @Query("UPDATE media_entries SET isFavorite = :isFavorite, updatedAt = :updatedAt WHERE id IN (:ids) AND userId = :userId")
     suspend fun updateFavoriteForIdsAndUser(userId: Long, ids: List<Long>, isFavorite: Boolean, updatedAt: Long)
 
+    @Query("UPDATE media_entries SET isExternallyTracked = :isExternallyTracked, updatedAt = :updatedAt WHERE id IN (:ids)")
+    suspend fun updateExternalTrackingForIds(ids: List<Long>, isExternallyTracked: Boolean, updatedAt: Long)
+
+    @Query("UPDATE media_entries SET isExternallyTracked = :isExternallyTracked, updatedAt = :updatedAt WHERE id IN (:ids) AND userId = :userId")
+    suspend fun updateExternalTrackingForIdsAndUser(userId: Long, ids: List<Long>, isExternallyTracked: Boolean, updatedAt: Long)
+
     @Query("DELETE FROM media_entries WHERE id = :id")
     suspend fun deleteById(id: Long)
 

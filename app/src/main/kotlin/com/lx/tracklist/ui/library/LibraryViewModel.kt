@@ -83,6 +83,7 @@ data class LibraryUiState(
     val tagCounts: Map<String, Int> = emptyMap(),
     val favoritesFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val airingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
+    val externalTrackingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val coverImageFilter: CoverImageFilterOption = CoverImageFilterOption.ALL,
     val selectedSort: LibrarySortOption = LibrarySortOption.RECENTLY_UPDATED,
     val totalCount: Int = 0,
@@ -96,6 +97,8 @@ data class LibraryUiState(
     val isSelectionMode: Boolean get() = selectedIds.isNotEmpty()
     val onlyFavorites: Boolean get() = favoritesFilter == InclusionFilterOption.INCLUDE_ONLY
     val onlyAiring: Boolean get() = airingFilter == InclusionFilterOption.INCLUDE_ONLY
+    val onlyExternallyTracked: Boolean get() = externalTrackingFilter == InclusionFilterOption.INCLUDE_ONLY
+    val onlyNotExternallyTracked: Boolean get() = externalTrackingFilter == InclusionFilterOption.EXCLUDE
 
     fun getTagState(tag: String): TagSelectionState {
         val clean = tag.trim()
@@ -119,6 +122,7 @@ private data class LibraryFilterState(
     val excludedTags: Set<String> = emptySet(),
     val favoritesFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val airingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
+    val externalTrackingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val coverImageFilter: CoverImageFilterOption = CoverImageFilterOption.ALL,
     val sortOption: LibrarySortOption = LibrarySortOption.RECENTLY_UPDATED,
     val selectedIds: Set<Long> = emptySet(),
@@ -136,6 +140,7 @@ private data class LibraryFilterState(
             if (includedTags.isNotEmpty() || excludedTags.isNotEmpty()) count++
             if (favoritesFilter != InclusionFilterOption.ALL) count++
             if (airingFilter != InclusionFilterOption.ALL) count++
+            if (externalTrackingFilter != InclusionFilterOption.ALL) count++
             if (coverImageFilter != CoverImageFilterOption.ALL) count++
             return count
         }
@@ -206,7 +211,18 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             }
         }
 
-        // 5. Cover Image Filter (All / Has Cover / Broken Cover / No Cover)
+        // 5. External Tracking Filter (Tri-State: All / Include Only Tracked / Exclude Tracked)
+        when (filter.externalTrackingFilter) {
+            InclusionFilterOption.ALL -> { /* no-op */ }
+            InclusionFilterOption.INCLUDE_ONLY -> {
+                list = list.filter { it.isExternallyTracked }
+            }
+            InclusionFilterOption.EXCLUDE -> {
+                list = list.filter { !it.isExternallyTracked }
+            }
+        }
+
+        // 6. Cover Image Filter (All / Has Cover / Broken Cover / No Cover)
         when (filter.coverImageFilter) {
             CoverImageFilterOption.ALL -> { /* no-op */ }
             CoverImageFilterOption.HAS_COVER -> {
@@ -292,6 +308,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             tagCounts = tagCounts,
             favoritesFilter = filter.favoritesFilter,
             airingFilter = filter.airingFilter,
+            externalTrackingFilter = filter.externalTrackingFilter,
             coverImageFilter = filter.coverImageFilter,
             selectedSort = filter.sortOption,
             totalCount = sortedList.size,
@@ -416,12 +433,20 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         _filterState.update { it.copy(airingFilter = it.airingFilter.next()) }
     }
 
+    fun cycleExternalTrackingFilter() {
+        _filterState.update { it.copy(externalTrackingFilter = it.externalTrackingFilter.next()) }
+    }
+
     fun setFavoritesFilter(option: InclusionFilterOption) {
         _filterState.update { it.copy(favoritesFilter = option) }
     }
 
     fun setAiringFilter(option: InclusionFilterOption) {
         _filterState.update { it.copy(airingFilter = option) }
+    }
+
+    fun setExternalTrackingFilter(option: InclusionFilterOption) {
+        _filterState.update { it.copy(externalTrackingFilter = option) }
     }
 
     fun cycleCoverImageFilter() {
@@ -435,6 +460,8 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
     fun toggleFavoritesFilter() = cycleFavoritesFilter()
 
     fun toggleAiringFilter() = cycleAiringFilter()
+
+    fun toggleExternalTrackingFilter() = cycleExternalTrackingFilter()
 
     fun toggleCoverImageFilter() = cycleCoverImageFilter()
 
@@ -474,6 +501,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                 excludedTags = emptySet(),
                 favoritesFilter = InclusionFilterOption.ALL,
                 airingFilter = InclusionFilterOption.ALL,
+                externalTrackingFilter = InclusionFilterOption.ALL,
                 coverImageFilter = CoverImageFilterOption.ALL
             )
         }
@@ -560,6 +588,15 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         if (selected.isEmpty()) return
         viewModelScope.launch {
             repository.batchUpdateFavorite(selected, isFavorite)
+            clearSelection()
+        }
+    }
+
+    fun batchUpdateExternalTracking(isExternallyTracked: Boolean) {
+        val selected = _filterState.value.selectedIds.toList()
+        if (selected.isEmpty()) return
+        viewModelScope.launch {
+            repository.batchUpdateExternalTracking(selected, isExternallyTracked)
             clearSelection()
         }
     }

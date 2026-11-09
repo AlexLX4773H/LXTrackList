@@ -9,6 +9,7 @@ import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.MangaDexApiClient
@@ -39,6 +40,8 @@ class DetailViewModel(
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = null
         )
+
+    val activeUser: StateFlow<UserProfile> = repository.activeUser
 
     private val _rawRelatedEntries = MutableStateFlow<List<RelatedMediaItem>>(emptyList())
     private val _isLoadingRelated = MutableStateFlow(false)
@@ -339,6 +342,20 @@ class DetailViewModel(
         val cur = entry.value ?: return
         viewModelScope.launch {
             repository.toggleFavorite(cur)
+        }
+    }
+
+    fun toggleExternalTracking() {
+        val cur = entry.value ?: return
+        viewModelScope.launch {
+            repository.toggleExternalTracking(cur)
+        }
+    }
+
+    fun setExternalTracking(isExternallyTracked: Boolean) {
+        val cur = entry.value ?: return
+        viewModelScope.launch {
+            repository.setExternalTracking(cur, isExternallyTracked)
         }
     }
 

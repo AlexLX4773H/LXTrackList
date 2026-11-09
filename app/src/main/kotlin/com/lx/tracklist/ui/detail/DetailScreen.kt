@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -69,6 +70,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -117,6 +120,8 @@ import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.TmdbApiClient
+import com.lx.tracklist.data.remote.mal.MalSyncManager
+import com.lx.tracklist.data.remote.mal.MalTokenStore
 import com.lx.tracklist.ui.components.AddRelatedToLibraryDialog
 import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.theme.LXAiringBlue
@@ -157,6 +162,8 @@ fun DetailScreen(
     val relatedErrorMessage by viewModel.relatedErrorMessage.collectAsState()
     val isRefreshingMetadata by viewModel.isRefreshingMetadata.collectAsState()
     val metadataRefreshMessage by viewModel.metadataRefreshMessage.collectAsState()
+    val vmActiveUser by viewModel.activeUser.collectAsState()
+    val effectiveUser = activeUser ?: vmActiveUser
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -474,6 +481,11 @@ fun DetailScreen(
                             onCancelRewatch = { viewModel.cancelRewatch() }
                         )
                         DetailDatesCard(currentEntry)
+                        DetailExternalTrackingCard(
+                            entry = currentEntry,
+                            activeUser = effectiveUser,
+                            onToggleTracking = { viewModel.setExternalTracking(it) }
+                        )
                         DetailRelatedCard(
                             relatedEntries = relatedEntries,
                             isLoading = isLoadingRelated,
@@ -628,6 +640,11 @@ fun DetailScreen(
                             onCancelRewatch = { viewModel.cancelRewatch() }
                         )
                         DetailDatesCard(currentEntry)
+                        DetailExternalTrackingCard(
+                            entry = currentEntry,
+                            activeUser = effectiveUser,
+                            onToggleTracking = { viewModel.setExternalTracking(it) }
+                        )
                         DetailRelatedCard(
                             relatedEntries = relatedEntries,
                             isLoading = isLoadingRelated,
@@ -1361,6 +1378,167 @@ private fun DetailDatesCard(entry: MediaEntry) {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailExternalTrackingCard(
+    entry: MediaEntry,
+    activeUser: UserProfile,
+    onToggleTracking: (Boolean) -> Unit
+) {
+    val context = LocalContext.current
+    val canTrack = MalSyncManager.canBeExternallyTracked(entry)
+    val malTokenStore = remember(context, activeUser.id) { MalTokenStore(context) }
+    val isMalLoggedIn = remember(context, activeUser.id) { malTokenStore.isLoggedIn(activeUser.id) }
+    val malUsername: String? = remember(context, activeUser.id) { malTokenStore.getMalUsername(activeUser.id) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+        border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Sync,
+                        contentDescription = "External Tracking",
+                        tint = if (entry.isExternallyTracked) LXPrimaryGreen else LXTextSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "External Tracking",
+                        color = LXTextPrimary,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Switch(
+                    checked = entry.isExternallyTracked,
+                    onCheckedChange = { onToggleTracking(it) },
+                    enabled = canTrack,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = LXBackgroundBlack,
+                        checkedTrackColor = LXPrimaryGreen,
+                        uncheckedThumbColor = LXTextSecondary,
+                        uncheckedTrackColor = LXSurfaceElevated
+                    )
+                )
+            }
+
+            if (entry.isExternallyTracked) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(LXPrimaryGreen)
+                    )
+                    Text(
+                        text = "Sync Active for ${activeUser.name}",
+                        color = LXPrimaryGreen,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "Service: MyAnimeList (ID #${entry.externalId})",
+                        color = LXTextPrimary,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (isMalLoggedIn) {
+                        Text(
+                            text = "Linked Account: @$malUsername",
+                            color = LXTextSecondary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    } else {
+                        Text(
+                            text = "No MyAnimeList account connected for ${activeUser.name}. Connect under Settings > External Tracking to enable live sync.",
+                            color = LXErrorRed.copy(alpha = 0.85f),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Text(
+                        text = "Episode / chapter progress, score, and status will update automatically in your MAL catalog.",
+                        color = LXTextSecondary.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
+                    )
+                }
+            } else if (canTrack) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(LXTextSecondary)
+                    )
+                    Text(
+                        text = "Not Tracked (Local Only)",
+                        color = LXTextSecondary,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+                Text(
+                    text = "This item has a MyAnimeList ID (#${entry.externalId}), but external sync is off for this entry. Enable tracking above to sync changes with your MyAnimeList account for profile \"${activeUser.name}\".",
+                    color = LXTextSecondary.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(LXTextSecondary)
+                    )
+                    Text(
+                        text = "No External ID Linked",
+                        color = LXTextSecondary,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+                Text(
+                    text = "A valid MyAnimeList ID is required to enable external tracking. Edit this entry or use External DB Sync to link it with MyAnimeList.",
+                    color = LXTextSecondary.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }

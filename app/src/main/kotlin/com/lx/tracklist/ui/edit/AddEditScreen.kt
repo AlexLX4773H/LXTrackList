@@ -1285,6 +1285,30 @@ fun AddEditScreen(
                 Text("Mark as Favorite", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
             }
 
+            // External Tracking Toggle
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { viewModel.updateIsExternallyTracked(!state.isExternallyTracked) }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Sync,
+                    contentDescription = null,
+                    tint = if (state.isExternallyTracked) LXPrimaryGreen else LXTextSecondary
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text("External Tracking", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = if (state.isExternallyTracked) "Live sync enabled for linked MyAnimeList ID" else "Sync disabled (local only)",
+                        color = LXTextSecondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+
             // Confirmation Dialog for Main Category
             if (pendingMainCategory != null) {
                 val target = pendingMainCategory!!
