@@ -1079,7 +1079,8 @@ fun SettingsScreen(
                         )
                         SettingsSubMenu.CONFLICTS -> ConflictResolutionContent(
                             selectedStrategy = state.selectedConflictStrategy,
-                            onSelectStrategy = { viewModel.setConflictStrategy(it) }
+                            onSelectStrategy = { viewModel.setConflictStrategy(it) },
+                            onMergeDuplicates = { viewModel.mergeDuplicates() }
                         )
                         SettingsSubMenu.EXPORT_GUIDES -> ExportGuidesContent(
                             onNavigateToStorage = { activeSubMenu = SettingsSubMenu.STORAGE }
@@ -1209,6 +1210,7 @@ fun SettingsScreen(
                         ConflictResolutionContent(
                             selectedStrategy = state.selectedConflictStrategy,
                             onSelectStrategy = { viewModel.setConflictStrategy(it) },
+                            onMergeDuplicates = { viewModel.mergeDuplicates() },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -3771,6 +3773,7 @@ private fun SyncJobsContent(
 private fun ConflictResolutionContent(
     selectedStrategy: ConflictStrategy,
     onSelectStrategy: (ConflictStrategy) -> Unit,
+    onMergeDuplicates: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -3868,6 +3871,53 @@ private fun ConflictResolutionContent(
                             )
                         }
                     }
+                }
+            }
+        }
+
+        // Merge Existing Duplicates Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, tint = LXScoreGold)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Merge Duplicate Entries",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextPrimary
+                    )
+                }
+
+                Text(
+                    text = "If re-importing a backup file or resolving titles created duplicate entries (e.g. original title vs translated title), scan and merge them into single entries while preserving all progress, chapters, and external database IDs.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                Button(
+                    onClick = { onMergeDuplicates?.invoke() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXScoreGold,
+                        contentColor = LXBackgroundBlack
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Scan & Merge Duplicates",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
                 }
             }
         }

@@ -629,14 +629,31 @@ object TachiyomiResolverManager {
         }
 
         // High confidence match confirmed!
-        val resolvedTitle = matchDetails.title?.takeIf { it.isNotBlank() } ?: entry.title
-        val titleChanged = !resolvedTitle.equals(entry.title, ignoreCase = false)
+        // Preserve user's original title (only strip trailing/bracketed source tags like [Official], (Webtoon)),
+        // and store canonical API title & candidate synonyms in alternateTitle so the entity keeps its recognizable name.
+        val cleanedOriginalTitle = stripBracketedSuffixes(entry.title).takeIf { it.isNotBlank() } ?: entry.title
+        val candidateTitle = matchDetails.title?.takeIf { it.isNotBlank() }
 
         val candidateAlts = matchDetails.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
         val currentAlts = entry.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
-        val allAlts = (candidateAlts + currentAlts + if (titleChanged) listOf(entry.title) else emptyList())
+
+        val extraAlts = if (candidateTitle != null && !candidateTitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
+            listOf(candidateTitle)
+        } else emptyList()
+
+        val allAlts = (extraAlts + candidateAlts + currentAlts)
             .distinct()
-            .filter { !it.equals(resolvedTitle, ignoreCase = true) }
+            .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
+
+        // Preserve original Tachiyomi ID in notes so future backup reimports match seamlessly
+        val originalTachiId = entry.externalId?.takeIf {
+            !it.isNullOrBlank() && (entry.externalSource?.contains("TACHIYOMI", ignoreCase = true) == true || it.startsWith("/"))
+        }
+        val tachiNoteMarker = if (originalTachiId != null) "[Tachiyomi ID: $originalTachiId]" else null
+        val baseNotes = if (entry.notes.isNullOrBlank() && !matchDetails.synopsis.isNullOrBlank()) matchDetails.synopsis else entry.notes
+        val finalNotes = if (tachiNoteMarker != null && baseNotes?.contains(tachiNoteMarker) != true) {
+            if (baseNotes.isNullOrBlank()) tachiNoteMarker else "$baseNotes\n\n$tachiNoteMarker"
+        } else baseNotes
 
         val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(entry)
         val needsPoster = entry.coverImageUri.isNullOrBlank() ||
@@ -661,7 +678,7 @@ object TachiyomiResolverManager {
         }
 
         val updatedEntry = entry.copy(
-            title = resolvedTitle,
+            title = cleanedOriginalTitle,
             alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
             externalSource = matchSource,
             externalId = matchExternalId,
@@ -673,18 +690,20 @@ object TachiyomiResolverManager {
             externalScore = matchDetails.externalScore ?: entry.externalScore,
             externalScoreSource = matchDetails.externalScoreSource ?: matchSource,
             tags = if (entry.tags.isNullOrBlank() && !matchDetails.tags.isNullOrBlank()) matchDetails.tags else entry.tags,
-            notes = if (entry.notes.isNullOrBlank() && !matchDetails.synopsis.isNullOrBlank()) matchDetails.synopsis else entry.notes,
+            notes = finalNotes,
             isAiring = matchDetails.isAiring ?: entry.isAiring,
             updatedAt = System.currentTimeMillis()
         )
 
         repository.update(updatedEntry)
 
+        val titleChanged = !cleanedOriginalTitle.equals(entry.title, ignoreCase = false)
+
         return ResolutionOutcome.Success(
             ResolvedItemReport(
                 entryId = entry.id,
                 originalTitle = entry.title,
-                resolvedTitle = resolvedTitle,
+                resolvedTitle = cleanedOriginalTitle,
                 isTitleChanged = titleChanged,
                 alternateTitles = allAlts,
                 originalSource = entry.externalSource,

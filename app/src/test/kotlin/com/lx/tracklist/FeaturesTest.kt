@@ -1651,4 +1651,74 @@ class FeaturesTest {
         assertEquals("MAL", malSourceAndId?.first)
         assertEquals("121496", malSourceAndId?.second)
     }
+
+    @Test
+    fun testBackupReimportDeduplicationAndMergeWifeIsSchoolGoddess() {
+        val existingResolvedEntry = MediaEntry(
+            id = 101L,
+            userId = 1L,
+            title = "Picking up a School Beauty to Be My Wife",
+            alternateTitle = "Wife is School Goddess\n捡个校花做老婆\nJian Ge Xiaohua Zuo Laopo",
+            mediaType = MediaType.MANHWA,
+            status = MediaStatus.WATCHING,
+            currentChapters = 4,
+            totalChapters = 456,
+            externalSource = "MangaDex",
+            externalId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+            notes = "Author: Yue Xiao\n\n[Tachiyomi ID: /manga/wife-is-school-goddess]"
+        )
+
+        val reimportedBackupEntry = MediaEntry(
+            id = 0L,
+            userId = 1L,
+            title = "Wife is School Goddess",
+            mediaType = MediaType.MANHWA,
+            status = MediaStatus.WATCHING,
+            currentChapters = 4,
+            totalChapters = 455,
+            externalSource = "TACHIYOMI",
+            externalId = "/manga/wife-is-school-goddess",
+            notes = "Author: Yue Xiao"
+        )
+
+        // Mock DAO-free helper validation via MediaRepository instance or direct logic
+        // 1. Verify duplicates detector
+        // We can create a mock or test instance of MediaRepository if needed, or instantiate one with mocks
+        // Let's test the deduplication logic methods directly
+        val daoMock = java.lang.reflect.Proxy.newProxyInstance(
+            com.lx.tracklist.data.local.MediaEntryDao::class.java.classLoader,
+            arrayOf(com.lx.tracklist.data.local.MediaEntryDao::class.java)
+        ) { _, method, _ ->
+            when (method.returnType) {
+                Boolean::class.javaPrimitiveType -> false
+                Int::class.javaPrimitiveType -> 0
+                Long::class.javaPrimitiveType -> 0L
+                List::class.java -> emptyList<Any>()
+                kotlinx.coroutines.flow.Flow::class.java -> kotlinx.coroutines.flow.emptyFlow<Any>()
+                else -> null
+            }
+        } as com.lx.tracklist.data.local.MediaEntryDao
+
+        val repo = com.lx.tracklist.data.repository.MediaRepository(dao = daoMock, userProfileDao = null)
+
+        kotlinx.coroutines.runBlocking {
+            // Test findExistingEntry correctly identifies the existing entry via alternate title and Tachiyomi ID
+            val foundExisting = repo.findExistingEntry(1L, reimportedBackupEntry, listOf(existingResolvedEntry))
+            assertNotNull("Re-imported entry must find existing resolved entry via alternate title or Tachiyomi note", foundExisting)
+            assertEquals(101L, foundExisting?.id)
+            assertEquals("Picking up a School Beauty to Be My Wife", foundExisting?.title)
+
+            // Test mergeEntries preserves MangaDex source/ID while keeping progress and notes
+            val merged = repo.mergeEntries(existingResolvedEntry, reimportedBackupEntry)
+            assertEquals("MangaDex", merged.externalSource)
+            assertEquals("a1b2c3d4-e5f6-7890-abcd-ef1234567890", merged.externalId)
+            assertEquals(456, merged.totalChapters)
+            assertTrue(merged.alternateTitle?.contains("Wife is School Goddess") == true)
+            assertTrue(merged.notes?.contains("[Tachiyomi ID: /manga/wife-is-school-goddess]") == true)
+
+            // Test areEntriesDuplicates identifies duplicate entries
+            val isDup = repo.areEntriesDuplicates(existingResolvedEntry, reimportedBackupEntry)
+            assertTrue("Duplicate detector must identify the two entries as duplicates", isDup)
+        }
+    }
 }

@@ -1254,6 +1254,31 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         }
     }
 
+    fun mergeDuplicates(onComplete: ((Int) -> Unit)? = null) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(statusMessage = "Scanning and merging duplicates in your library...", isErrorMessage = false) }
+            try {
+                val mergedCount = withContext(Dispatchers.IO) {
+                    repository.deduplicateLibrary(_uiState.value.activeUser.id)
+                }
+                _uiState.update {
+                    it.copy(
+                        statusMessage = if (mergedCount > 0) "Successfully merged $mergedCount duplicate entries!" else "No duplicate entries found in your library.",
+                        isErrorMessage = false
+                    )
+                }
+                onComplete?.invoke(mergedCount)
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        statusMessage = "Merge failed: ${e.localizedMessage ?: "Unknown error"}",
+                        isErrorMessage = true
+                    )
+                }
+            }
+        }
+    }
+
     private fun parseFromStream(stream: InputStream, name: String): List<MediaEntry> {
         val fileName = name.lowercase()
         return stream.use { s ->

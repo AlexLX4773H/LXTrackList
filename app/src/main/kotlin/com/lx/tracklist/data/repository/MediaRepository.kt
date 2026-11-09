@@ -535,18 +535,16 @@ class MediaRepository(
             }
         }
 
+        val userEntries = dao.getAllEntriesByUserSync(targetUserId).toMutableList()
+
         for (rawEntry in entries) {
             val entry = rawEntry.copy(userId = targetUserId)
-            val existing = if (entry.externalId != null && entry.externalSource != null) {
-                dao.findByExternalId(targetUserId, entry.externalId, entry.externalSource)
-            } else if (entry.externalId != null) {
-                dao.findByAnyExternalId(targetUserId, entry.externalId)
-            } else {
-                dao.findByTitleAndType(targetUserId, entry.title, entry.mediaType)
-            }
+            val existing = findExistingEntry(targetUserId, entry, userEntries)
 
             if (existing == null) {
-                dao.insert(entry.copy(id = 0L, userId = targetUserId))
+                val newId = dao.insert(entry.copy(id = 0L, userId = targetUserId))
+                val insertedEntry = entry.copy(id = newId, userId = targetUserId)
+                userEntries.add(insertedEntry)
                 inserted++
             } else {
                 when (strategy) {
@@ -554,12 +552,17 @@ class MediaRepository(
                         // Do nothing
                     }
                     ConflictStrategy.OVERWRITE -> {
-                        dao.update(entry.copy(id = existing.id, userId = targetUserId, updatedAt = System.currentTimeMillis()))
+                        val overwritten = entry.copy(id = existing.id, userId = targetUserId, updatedAt = System.currentTimeMillis())
+                        dao.update(overwritten)
+                        userEntries.removeAll { it.id == existing.id }
+                        userEntries.add(overwritten)
                         updated++
                     }
                     ConflictStrategy.MERGE -> {
                         val merged = mergeEntries(existing, entry).copy(id = existing.id, userId = targetUserId)
                         dao.update(merged)
+                        userEntries.removeAll { it.id == existing.id }
+                        userEntries.add(merged)
                         updated++
                     }
                 }
@@ -567,6 +570,91 @@ class MediaRepository(
         }
 
         return Pair(inserted, updated)
+    }
+
+    suspend fun findExistingEntry(
+        targetUserId: Long,
+        imported: MediaEntry,
+        cachedEntries: List<MediaEntry>? = null
+    ): MediaEntry? {
+        val impExtId = imported.externalId?.trim()?.takeIf { it.isNotBlank() }
+        val impExtSrc = imported.externalSource?.trim()?.takeIf { it.isNotBlank() }
+        val impTitle = imported.title.trim()
+        val impType = imported.mediaType
+
+        // 1. Authoritative externalId and externalSource
+        if (impExtId != null && impExtSrc != null) {
+            val direct = dao.findByExternalId(targetUserId, impExtId, impExtSrc)
+            if (direct != null) return direct
+        }
+
+        // 2. Exact externalId across any source
+        if (impExtId != null) {
+            val byAnyId = dao.findByAnyExternalId(targetUserId, impExtId)
+            if (byAnyId != null && isMediaTypeCompatible(byAnyId.mediaType, impType)) {
+                return byAnyId
+            }
+        }
+
+        // 3. Exact Title and Media Type
+        val byTitle = dao.findByTitleAndType(targetUserId, impTitle, impType)
+        if (byTitle != null) return byTitle
+
+        // 4. Cross-reading type match (e.g. Manga vs Manhwa for the same title)
+        if (impType.isReadType) {
+            val altReadType = if (impType == MediaType.MANHWA) MediaType.MANGA else MediaType.MANHWA
+            val byAltType = dao.findByTitleAndType(targetUserId, impTitle, altReadType)
+            if (byAltType != null) return byAltType
+        }
+
+        // 5. Check against all existing user entries for Alternate Titles, Preserved Tachiyomi IDs, or Normalized Match
+        val userEntries = cachedEntries ?: dao.getAllEntriesByUserSync(targetUserId)
+        if (userEntries.isEmpty()) return null
+
+        val normImpTitle = com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(impTitle)
+
+        for (existing in userEntries) {
+            if (!isMediaTypeCompatible(existing.mediaType, impType)) continue
+
+            // 5a. Preserved Tachiyomi ID match in notes
+            if (impExtId != null && existing.notes?.contains(impExtId) == true) {
+                return existing
+            }
+
+            // 5b. Alternate Title match (either existing has imported title in its alternates, or imported has existing title)
+            val existingAlts = existing.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+            if (existingAlts.any { it.equals(impTitle, ignoreCase = true) }) {
+                return existing
+            }
+            if (existing.title.equals(impTitle, ignoreCase = true)) {
+                return existing
+            }
+            val importedAlts = imported.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+            if (importedAlts.any { it.equals(existing.title, ignoreCase = true) }) {
+                return existing
+            }
+
+            // 5c. Normalized Title match (space & punctuation agnostic)
+            val normExistingTitle = com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(existing.title)
+            if (normImpTitle.isNotBlank() && normExistingTitle == normImpTitle) {
+                return existing
+            }
+            if (normImpTitle.isNotBlank() && existingAlts.any { com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(it) == normImpTitle }) {
+                return existing
+            }
+            if (normExistingTitle.isNotBlank() && importedAlts.any { com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(it) == normExistingTitle }) {
+                return existing
+            }
+        }
+
+        return null
+    }
+
+    fun isMediaTypeCompatible(typeA: MediaType, typeB: MediaType): Boolean {
+        if (typeA == typeB) return true
+        if (typeA.isReadType && typeB.isReadType) return true
+        if (typeA.isWatchType && typeB.isWatchType) return true
+        return false
     }
 
     suspend fun getAllEntriesSync(): List<MediaEntry> {
@@ -589,7 +677,7 @@ class MediaRepository(
         return dao.getAllEntriesSync()
     }
 
-    private fun mergeEntries(existing: MediaEntry, imported: MediaEntry): MediaEntry {
+    fun mergeEntries(existing: MediaEntry, imported: MediaEntry): MediaEntry {
         val maxEpisodes = max(existing.currentEpisodes, imported.currentEpisodes)
         val maxTotalEp = if (existing.totalEpisodes > 0) existing.totalEpisodes else imported.totalEpisodes
         val maxVol = max(existing.currentVolumes, imported.currentVolumes)
@@ -604,6 +692,46 @@ class MediaRepository(
         val importedTags = imported.tags?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
         val mergedTags = (existingTags + importedTags).distinct().joinToString(", ")
 
+        // Preserve external source & ID: If existing is already linked to external database (MangaDex, MAL, AniList, TMDB), keep it!
+        val isExistingLinked = !existing.externalSource.isNullOrBlank() && !com.lx.tracklist.data.remote.JikanSyncManager.isTachiyomiSource(existing)
+        val isImportedLinked = !imported.externalSource.isNullOrBlank() && !com.lx.tracklist.data.remote.JikanSyncManager.isTachiyomiSource(imported)
+        val finalExternalSource = when {
+            isExistingLinked -> existing.externalSource
+            isImportedLinked -> imported.externalSource
+            else -> imported.externalSource ?: existing.externalSource
+        }
+        val finalExternalId = when {
+            isExistingLinked -> existing.externalId
+            isImportedLinked -> imported.externalId
+            else -> imported.externalId ?: existing.externalId
+        }
+
+        // Merge alternate titles (keep all known names)
+        val existingAlts = existing.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+        val importedAlts = imported.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+        val otherTitles = listOfNotNull(
+            imported.title.takeIf { !it.equals(existing.title, ignoreCase = true) }
+        )
+        val mergedAlts = (existingAlts + importedAlts + otherTitles).distinct().filter { !it.equals(existing.title, ignoreCase = true) }
+        val finalAlternateTitle = mergedAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: existing.alternateTitle
+
+        // Preserve Tachiyomi ID in notes if imported was from Tachiyomi
+        val impTachiId = imported.externalId?.takeIf {
+            !it.isNullOrBlank() && (imported.externalSource?.contains("TACHIYOMI", ignoreCase = true) == true || it.startsWith("/"))
+        }
+        val tachiMarker = if (impTachiId != null) "[Tachiyomi ID: $impTachiId]" else null
+        val baseNotes = if (!imported.notes.isNullOrBlank()) imported.notes else existing.notes
+        val finalNotes = if (tachiMarker != null && baseNotes?.contains(tachiMarker) != true) {
+            if (baseNotes.isNullOrBlank()) tachiMarker else "$baseNotes\n\n$tachiMarker"
+        } else baseNotes
+
+        // Cover: prefer web cover over local file: covers
+        val finalCover = when {
+            existing.coverImageUri != null && !existing.coverImageUri.startsWith("file:") -> existing.coverImageUri
+            imported.coverImageUri != null && !imported.coverImageUri.startsWith("file:") -> imported.coverImageUri
+            else -> imported.coverImageUri ?: existing.coverImageUri
+        }
+
         return existing.copy(
             score = imported.score ?: existing.score,
             externalScore = imported.externalScore ?: existing.externalScore,
@@ -613,8 +741,9 @@ class MediaRepository(
             finishDate = imported.finishDate ?: existing.finishDate,
             airedStartDate = imported.airedStartDate ?: existing.airedStartDate,
             airedEndDate = imported.airedEndDate ?: existing.airedEndDate,
-            externalId = imported.externalId ?: existing.externalId,
-            externalSource = imported.externalSource ?: existing.externalSource,
+            externalId = finalExternalId,
+            externalSource = finalExternalSource,
+            alternateTitle = finalAlternateTitle,
             rewatchCount = if (imported.rewatchCount > 0) imported.rewatchCount else existing.rewatchCount,
             isRewatching = imported.isRewatching || existing.isRewatching,
             episodeLengthMinutes = imported.episodeLengthMinutes ?: existing.episodeLengthMinutes,
@@ -628,13 +757,103 @@ class MediaRepository(
             currentPages = maxPages,
             totalPages = maxTotalPages,
             tags = mergedTags.ifBlank { null },
-            notes = if (!imported.notes.isNullOrBlank()) imported.notes else existing.notes,
-            coverImageUri = imported.coverImageUri ?: existing.coverImageUri,
+            notes = finalNotes,
+            coverImageUri = finalCover,
             customCategory = imported.customCategory ?: existing.customCategory,
             subCategory = imported.subCategory ?: existing.subCategory,
             isExternallyTracked = existing.isExternallyTracked || imported.isExternallyTracked,
             updatedAt = System.currentTimeMillis()
         )
+    }
+
+    suspend fun deduplicateLibrary(targetUserId: Long = _activeUser.value.id): Int {
+        val allEntries = dao.getAllEntriesByUserSync(targetUserId)
+        if (allEntries.size < 2) return 0
+
+        var mergedCount = 0
+        val deletedIds = mutableSetOf<Long>()
+
+        for (i in 0 until allEntries.size) {
+            val entryA = allEntries[i]
+            if (deletedIds.contains(entryA.id)) continue
+
+            for (j in i + 1 until allEntries.size) {
+                val entryB = allEntries[j]
+                if (deletedIds.contains(entryB.id)) continue
+
+                if (areEntriesDuplicates(entryA, entryB)) {
+                    val (primary, duplicate) = pickPrimaryAndDuplicate(entryA, entryB)
+                    val merged = mergeEntries(primary, duplicate).copy(id = primary.id, userId = targetUserId)
+                    dao.update(merged)
+                    dao.delete(duplicate)
+                    deletedIds.add(duplicate.id)
+                    mergedCount++
+                    break
+                }
+            }
+        }
+        return mergedCount
+    }
+
+    fun areEntriesDuplicates(entryA: MediaEntry, entryB: MediaEntry): Boolean {
+        if (!isMediaTypeCompatible(entryA.mediaType, entryB.mediaType)) return false
+
+        // 1. Same non-empty externalId and externalSource
+        if (!entryA.externalId.isNullOrBlank() && !entryB.externalId.isNullOrBlank()) {
+            if (entryA.externalId == entryB.externalId && entryA.externalSource == entryB.externalSource) {
+                return true
+            }
+        }
+
+        // 2. Exact title match
+        if (entryA.title.equals(entryB.title, ignoreCase = true)) {
+            return true
+        }
+
+        // 3. One entry's title is in the other entry's alternateTitle
+        val altsA = entryA.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+        val altsB = entryB.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+
+        if (altsA.any { it.equals(entryB.title, ignoreCase = true) } || altsB.any { it.equals(entryA.title, ignoreCase = true) }) {
+            return true
+        }
+
+        // 4. Tachiyomi ID cross-match in notes
+        val extIdA = entryA.externalId
+        val extIdB = entryB.externalId
+        if (extIdA != null && extIdA.startsWith("/") && entryB.notes?.contains(extIdA) == true) {
+            return true
+        }
+        if (extIdB != null && extIdB.startsWith("/") && entryA.notes?.contains(extIdB) == true) {
+            return true
+        }
+
+        // 5. Normalized space-agnostic title match
+        val normA = com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(entryA.title)
+        val normB = com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(entryB.title)
+        if (normA.isNotBlank() && normA == normB) {
+            return true
+        }
+        if (normA.isNotBlank() && altsB.any { com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(it) == normA }) {
+            return true
+        }
+        if (normB.isNotBlank() && altsA.any { com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(it) == normB }) {
+            return true
+        }
+
+        return false
+    }
+
+    fun pickPrimaryAndDuplicate(entryA: MediaEntry, entryB: MediaEntry): Pair<MediaEntry, MediaEntry> {
+        val aLinked = !entryA.externalSource.isNullOrBlank() && !com.lx.tracklist.data.remote.JikanSyncManager.isTachiyomiSource(entryA)
+        val bLinked = !entryB.externalSource.isNullOrBlank() && !com.lx.tracklist.data.remote.JikanSyncManager.isTachiyomiSource(entryB)
+
+        return when {
+            aLinked && !bLinked -> Pair(entryA, entryB)
+            bLinked && !aLinked -> Pair(entryB, entryA)
+            entryA.currentChapters >= entryB.currentChapters -> Pair(entryA, entryB)
+            else -> Pair(entryB, entryA)
+        }
     }
 
     suspend fun addRelatedItem(
