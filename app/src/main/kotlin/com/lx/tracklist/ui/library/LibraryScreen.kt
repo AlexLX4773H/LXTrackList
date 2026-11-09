@@ -116,6 +116,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
@@ -160,6 +161,7 @@ fun LibraryScreen(
     var showSelectionOverflowMenu by remember { mutableStateOf(false) }
     var relatedItemToAdd by remember { mutableStateOf<RelatedMediaItem?>(null) }
     var isAddingRelated by remember { mutableStateOf(false) }
+    var entryToChangeStatusOnIncrement by remember { mutableStateOf<MediaEntry?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -544,6 +546,75 @@ fun LibraryScreen(
                 }
             },
             containerColor = LXSurfaceElevated
+        )
+    }
+
+    val targetIncrementEntry = entryToChangeStatusOnIncrement
+    if (targetIncrementEntry != null) {
+        val statusLabel = if (targetIncrementEntry.mediaType.isReadType) "Reading" else "Watching"
+        val planLabel = if (targetIncrementEntry.mediaType.isReadType) "Plan to Read" else "Plan to Watch"
+
+        AlertDialog(
+            onDismissRequest = { entryToChangeStatusOnIncrement = null },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null, tint = LXPrimaryGreen)
+                    Text(
+                        text = "Change Status to $statusLabel?",
+                        color = LXTextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "\"${targetIncrementEntry.title}\" is currently in $planLabel. Would you like to change its status to $statusLabel?",
+                        color = LXTextPrimary,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = "Adding progress indicates you have started this title.",
+                        color = LXTextSecondary,
+                        fontSize = 12.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val toUpdate = targetIncrementEntry
+                        entryToChangeStatusOnIncrement = null
+                        viewModel.incrementProgress(toUpdate, andChangeStatusTo = MediaStatus.WATCHING)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXPrimaryGreen,
+                        contentColor = LXBackgroundBlack
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Change to $statusLabel", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { entryToChangeStatusOnIncrement = null }) {
+                        Text("Cancel", color = LXTextSecondary)
+                    }
+                    TextButton(onClick = {
+                        val toUpdate = targetIncrementEntry
+                        entryToChangeStatusOnIncrement = null
+                        viewModel.incrementProgress(toUpdate)
+                    }) {
+                        Text("Keep as $planLabel", color = LXTextPrimary)
+                    }
+                }
+            },
+            containerColor = LXSurfaceElevated,
+            shape = RoundedCornerShape(12.dp)
         )
     }
 
@@ -1267,7 +1338,13 @@ fun LibraryScreen(
                         MediaCard(
                             entry = entry,
                             onClick = { onEntryClick(entry.id) },
-                            onIncrement = { viewModel.incrementProgress(entry) },
+                            onIncrement = {
+                                if (entry.status == MediaStatus.PLAN_TO_WATCH) {
+                                    entryToChangeStatusOnIncrement = entry
+                                } else {
+                                    viewModel.incrementProgress(entry)
+                                }
+                            },
                             onToggleFavorite = { viewModel.toggleFavorite(entry) },
                             onDelete = { viewModel.deleteEntry(entry) },
                             onEdit = { onEditEntry(entry.id) },

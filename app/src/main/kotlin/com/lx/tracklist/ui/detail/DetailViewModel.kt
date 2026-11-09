@@ -14,6 +14,7 @@ import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.MangaDexApiClient
 import com.lx.tracklist.data.remote.TmdbApiClient
+import com.lx.tracklist.data.remote.mal.MalSyncManager
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -58,6 +59,46 @@ class DetailViewModel(
 
     fun clearRefreshMessage() {
         _metadataRefreshMessage.value = null
+    }
+
+    private val _isPushingToExternalTracker = MutableStateFlow(false)
+    val isPushingToExternalTracker: StateFlow<Boolean> = _isPushingToExternalTracker.asStateFlow()
+
+    private val _externalSyncMessage = MutableStateFlow<String?>(null)
+    val externalSyncMessage: StateFlow<String?> = _externalSyncMessage.asStateFlow()
+
+    fun clearExternalSyncMessage() {
+        _externalSyncMessage.value = null
+    }
+
+    fun pushToExternalTracker(context: Context) {
+        val cur = entry.value ?: return
+        if (_isPushingToExternalTracker.value) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isPushingToExternalTracker.value = true
+            try {
+                if (!cur.isExternallyTracked) {
+                    _externalSyncMessage.value = "External tracking is off for this entry. Enable it first."
+                    return@launch
+                }
+                if (!MalSyncManager.canBeExternallyTracked(cur)) {
+                    _externalSyncMessage.value = "Missing valid MyAnimeList ID."
+                    return@launch
+                }
+                val result = MalSyncManager.pushUpdateSync(context, cur, force = true)
+                if (result.isSuccess) {
+                    _externalSyncMessage.value = "Successfully pushed to MyAnimeList!"
+                } else {
+                    val ex = result.exceptionOrNull()
+                    _externalSyncMessage.value = "MAL sync failed: ${ex?.message ?: "Unknown error"}"
+                }
+            } catch (e: Exception) {
+                _externalSyncMessage.value = "MAL sync error: ${e.message}"
+            } finally {
+                _isPushingToExternalTracker.value = false
+            }
+        }
     }
 
     val relatedEntries: StateFlow<List<RelatedMediaItem>> = combine(
@@ -247,10 +288,26 @@ class DetailViewModel(
         _isDeleted.value = false
     }
 
-    fun increment() {
+    fun increment(andChangeStatusTo: MediaStatus? = null) {
         val cur = entry.value ?: return
         viewModelScope.launch {
-            repository.incrementProgress(cur)
+            if (andChangeStatusTo != null) {
+                val now = System.currentTimeMillis()
+                val todayStart = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+                val withStatus = cur.copy(
+                    status = andChangeStatusTo,
+                    startDate = if (andChangeStatusTo == MediaStatus.WATCHING && cur.startDate == null) todayStart else cur.startDate,
+                    updatedAt = now
+                )
+                repository.incrementProgress(withStatus)
+            } else {
+                repository.incrementProgress(cur)
+            }
         }
     }
 

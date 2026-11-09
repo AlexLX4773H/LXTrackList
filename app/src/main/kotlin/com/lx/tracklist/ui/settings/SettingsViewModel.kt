@@ -265,7 +265,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
     val tmdbSyncState = TmdbSyncManager.syncState
     val malSyncState = com.lx.tracklist.data.remote.mal.MalSyncManager.syncState
 
-    private val _uiState = MutableStateFlow(SettingsUiState())
+    private val _uiState = MutableStateFlow(SettingsUiState(selectedConflictStrategy = repository.getConflictStrategy()))
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     init {
@@ -284,7 +284,8 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 _uiState.update { state ->
                     state.copy(
                         activeUser = user,
-                        selectedProfileIdForDefaults = user.id
+                        selectedProfileIdForDefaults = user.id,
+                        selectedConflictStrategy = repository.getConflictStrategy(user.id)
                     )
                 }
                 refreshMalStatus()
@@ -405,11 +406,12 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun startMalPull(context: Context) {
         val user = _uiState.value.activeUser
+        val strategy = repository.getConflictStrategy(user.id)
         com.lx.tracklist.data.remote.mal.MalSyncManager.startFullPull(
             context = context,
             userId = user.id,
             repository = repository,
-            strategy = _uiState.value.selectedConflictStrategy
+            strategy = strategy
         )
     }
 
@@ -666,6 +668,8 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
     }
 
     fun setConflictStrategy(strategy: ConflictStrategy) {
+        val userId = _uiState.value.activeUser.id
+        repository.setConflictStrategy(strategy, userId)
         _uiState.update { it.copy(selectedConflictStrategy = strategy) }
     }
 

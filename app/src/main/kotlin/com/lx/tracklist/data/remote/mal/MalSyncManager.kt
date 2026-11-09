@@ -82,20 +82,35 @@ object MalSyncManager {
 
     /**
      * Suspended push of a single entry to MyAnimeList.
+     * When [force] is true, pushes even if automatic background sync is turned off in settings.
      */
-    suspend fun pushUpdateSync(context: Context, entry: MediaEntry): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun pushUpdateSync(
+        context: Context,
+        entry: MediaEntry,
+        force: Boolean = false
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         val tokenStore = MalTokenStore(context)
         val userId = if (entry.userId > 0L) entry.userId else null
         if (userId == null) {
-            Log.w(TAG, "Cannot push to MAL: entry '${entry.title}' has no valid profile userId assigned")
-            return@withContext Result.success(Unit)
+            val msg = "Cannot push to MAL: entry '${entry.title}' has no valid profile userId assigned"
+            Log.w(TAG, msg)
+            return@withContext if (force) Result.failure(Exception(msg)) else Result.success(Unit)
         }
 
-        if (!tokenStore.isLoggedIn(userId) || !tokenStore.isAutoSyncEnabled(userId)) {
-            return@withContext Result.success(Unit) // Sync disabled or this profile is not connected
+        if (!tokenStore.isLoggedIn(userId)) {
+            val msg = "MyAnimeList account is not connected for this profile."
+            return@withContext if (force) Result.failure(Exception(msg)) else Result.success(Unit)
         }
 
-        val malId = entry.externalId?.toLongOrNull() ?: return@withContext Result.success(Unit)
+        if (!force && !tokenStore.isAutoSyncEnabled(userId)) {
+            return@withContext Result.success(Unit) // Auto-sync disabled for background triggers
+        }
+
+        val malId = entry.externalId?.toLongOrNull()
+        if (malId == null) {
+            val msg = "Entry has no valid numeric MyAnimeList ID."
+            return@withContext if (force) Result.failure(Exception(msg)) else Result.success(Unit)
+        }
 
         when (entry.mediaType) {
             MediaType.ANIME -> {
@@ -177,7 +192,7 @@ object MalSyncManager {
         context: Context,
         userId: Long,
         repository: MediaRepository,
-        strategy: ConflictStrategy = ConflictStrategy.MERGE
+        strategy: ConflictStrategy = repository.getConflictStrategy(userId)
     ) {
         if (_syncState.value.isRunning) return
 

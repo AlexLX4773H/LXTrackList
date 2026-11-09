@@ -3,6 +3,7 @@ package com.lx.tracklist.ui.detail
 import android.content.Context
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
@@ -88,6 +90,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -133,6 +136,7 @@ import com.lx.tracklist.ui.theme.LXProgressTrack
 import com.lx.tracklist.ui.theme.LXScoreGold
 import com.lx.tracklist.ui.theme.LXSurfaceBlack
 import com.lx.tracklist.ui.theme.LXSurfaceElevated
+import com.lx.tracklist.ui.theme.LXSurfaceVariant
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
 import kotlinx.coroutines.Dispatchers
@@ -162,6 +166,8 @@ fun DetailScreen(
     val relatedErrorMessage by viewModel.relatedErrorMessage.collectAsState()
     val isRefreshingMetadata by viewModel.isRefreshingMetadata.collectAsState()
     val metadataRefreshMessage by viewModel.metadataRefreshMessage.collectAsState()
+    val isPushingToExternalTracker by viewModel.isPushingToExternalTracker.collectAsState()
+    val externalSyncMessage by viewModel.externalSyncMessage.collectAsState()
     val vmActiveUser by viewModel.activeUser.collectAsState()
     val effectiveUser = activeUser ?: vmActiveUser
     val context = LocalContext.current
@@ -170,6 +176,7 @@ fun DetailScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showStartRewatchDialog by remember { mutableStateOf(false) }
     var showRefreshConfirmDialog by remember { mutableStateOf(false) }
+    var showChangeStatusOnIncrementDialog by remember { mutableStateOf(false) }
     var relatedItemToAdd by remember { mutableStateOf<RelatedMediaItem?>(null) }
     var previewRelatedItem by remember { mutableStateOf<RelatedMediaItem?>(null) }
     var isAddingRelated by remember { mutableStateOf(false) }
@@ -185,6 +192,13 @@ fun DetailScreen(
         metadataRefreshMessage?.let { msg ->
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
             viewModel.clearRefreshMessage()
+        }
+    }
+
+    LaunchedEffect(externalSyncMessage) {
+        externalSyncMessage?.let { msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            viewModel.clearExternalSyncMessage()
         }
     }
 
@@ -248,6 +262,77 @@ fun DetailScreen(
             dismissButton = {
                 TextButton(onClick = { showRefreshConfirmDialog = false }) {
                     Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceElevated,
+            shape = RoundedCornerShape(12.dp)
+        )
+    }
+
+    if (showChangeStatusOnIncrementDialog && entry != null) {
+        val current = entry!!
+        val statusLabel = if (current.mediaType.isReadType) "Reading" else "Watching"
+        val planLabel = if (current.mediaType.isReadType) "Plan to Read" else "Plan to Watch"
+
+        AlertDialog(
+            onDismissRequest = { showChangeStatusOnIncrementDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = LXPrimaryGreen
+                    )
+                    Text(
+                        text = "Change Status to $statusLabel?",
+                        color = LXTextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "\"${current.title}\" is currently in $planLabel. Would you like to change its status to $statusLabel?",
+                        color = LXTextPrimary,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = "Adding progress indicates you have started this title.",
+                        color = LXTextSecondary,
+                        fontSize = 12.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showChangeStatusOnIncrementDialog = false
+                        viewModel.increment(andChangeStatusTo = MediaStatus.WATCHING)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXPrimaryGreen,
+                        contentColor = LXBackgroundBlack
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Change to $statusLabel", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { showChangeStatusOnIncrementDialog = false }) {
+                        Text("Cancel", color = LXTextSecondary)
+                    }
+                    TextButton(onClick = {
+                        showChangeStatusOnIncrementDialog = false
+                        viewModel.increment()
+                    }) {
+                        Text("Keep as $planLabel", color = LXTextPrimary)
+                    }
                 }
             },
             containerColor = LXSurfaceElevated,
@@ -473,7 +558,13 @@ fun DetailScreen(
                     ) {
                         DetailProgressCard(
                             entry = currentEntry,
-                            onIncrement = { viewModel.increment() },
+                            onIncrement = {
+                                if (currentEntry.status == MediaStatus.PLAN_TO_WATCH) {
+                                    showChangeStatusOnIncrementDialog = true
+                                } else {
+                                    viewModel.increment()
+                                }
+                            },
                             onDecrement = { viewModel.decrement() },
                             onSetProgress = { viewModel.setProgress(it) },
                             onStartRewatch = { showStartRewatchDialog = true },
@@ -484,7 +575,9 @@ fun DetailScreen(
                         DetailExternalTrackingCard(
                             entry = currentEntry,
                             activeUser = effectiveUser,
-                            onToggleTracking = { viewModel.setExternalTracking(it) }
+                            isPushing = isPushingToExternalTracker,
+                            onToggleTracking = { viewModel.setExternalTracking(it) },
+                            onPushToExternalTracker = { viewModel.pushToExternalTracker(context) }
                         )
                         DetailRelatedCard(
                             relatedEntries = relatedEntries,
@@ -632,7 +725,13 @@ fun DetailScreen(
 
                         DetailProgressCard(
                             entry = currentEntry,
-                            onIncrement = { viewModel.increment() },
+                            onIncrement = {
+                                if (currentEntry.status == MediaStatus.PLAN_TO_WATCH) {
+                                    showChangeStatusOnIncrementDialog = true
+                                } else {
+                                    viewModel.increment()
+                                }
+                            },
                             onDecrement = { viewModel.decrement() },
                             onSetProgress = { viewModel.setProgress(it) },
                             onStartRewatch = { showStartRewatchDialog = true },
@@ -643,7 +742,9 @@ fun DetailScreen(
                         DetailExternalTrackingCard(
                             entry = currentEntry,
                             activeUser = effectiveUser,
-                            onToggleTracking = { viewModel.setExternalTracking(it) }
+                            isPushing = isPushingToExternalTracker,
+                            onToggleTracking = { viewModel.setExternalTracking(it) },
+                            onPushToExternalTracker = { viewModel.pushToExternalTracker(context) }
                         )
                         DetailRelatedCard(
                             relatedEntries = relatedEntries,
@@ -1387,13 +1488,17 @@ private fun DetailDatesCard(entry: MediaEntry) {
 private fun DetailExternalTrackingCard(
     entry: MediaEntry,
     activeUser: UserProfile,
-    onToggleTracking: (Boolean) -> Unit
+    isPushing: Boolean,
+    onToggleTracking: (Boolean) -> Unit,
+    onPushToExternalTracker: () -> Unit
 ) {
     val context = LocalContext.current
     val canTrack = MalSyncManager.canBeExternallyTracked(entry)
     val malTokenStore = remember(context, activeUser.id) { MalTokenStore(context) }
     val isMalLoggedIn = remember(context, activeUser.id) { malTokenStore.isLoggedIn(activeUser.id) }
     val malUsername: String? = remember(context, activeUser.id) { malTokenStore.getMalUsername(activeUser.id) }
+    var isExpanded by remember { mutableStateOf(false) }
+    var pendingTrackingChange by remember { mutableStateOf<Boolean?>(null) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1432,7 +1537,7 @@ private fun DetailExternalTrackingCard(
 
                 Switch(
                     checked = entry.isExternallyTracked,
-                    onCheckedChange = { onToggleTracking(it) },
+                    onCheckedChange = { pendingTrackingChange = it },
                     enabled = canTrack,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = LXBackgroundBlack,
@@ -1444,103 +1549,315 @@ private fun DetailExternalTrackingCard(
             }
 
             if (entry.isExternallyTracked) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(LXPrimaryGreen)
-                    )
-                    Text(
-                        text = "Sync Active for ${activeUser.name}",
-                        color = LXPrimaryGreen,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
-                Column(
+                // Clickable Status Pill that expands downwards on click
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
-                        .background(LXSurfaceElevated)
-                        .padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                        .clickable { isExpanded = !isExpanded },
+                    color = LXPrimaryGreen.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.35f))
                 ) {
-                    Text(
-                        text = "Service: MyAnimeList (ID #${entry.externalId})",
-                        color = LXTextPrimary,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium
-                    )
-                    if (isMalLoggedIn) {
-                        Text(
-                            text = "Linked Account: @$malUsername",
-                            color = LXTextSecondary,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    } else {
-                        Text(
-                            text = "No MyAnimeList account connected for ${activeUser.name}. Connect under Settings > External Tracking to enable live sync.",
-                            color = LXErrorRed.copy(alpha = 0.85f),
-                            style = MaterialTheme.typography.bodySmall
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(LXPrimaryGreen)
+                            )
+                            Text(
+                                text = "Sync Active for ${activeUser.name}",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = if (isExpanded) "Collapse details" else "Expand details",
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .rotate(if (isExpanded) 180f else 0f)
                         )
                     }
-                    Text(
-                        text = "Episode / chapter progress, score, and status will update automatically in your MAL catalog.",
-                        color = LXTextSecondary.copy(alpha = 0.7f),
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp)
-                    )
+                }
+
+                // Downward expansion showing account, ID, and manual send button
+                AnimatedVisibility(visible = isExpanded) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Service",
+                                color = LXTextSecondary,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                text = "MyAnimeList",
+                                color = LXTextPrimary,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "MyAnimeList ID",
+                                color = LXTextSecondary,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                text = "#${entry.externalId}",
+                                color = LXTextPrimary,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Syncing To Account",
+                                color = LXTextSecondary,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                text = if (isMalLoggedIn) "@$malUsername" else "Not Connected",
+                                color = if (isMalLoggedIn) LXPrimaryGreen else LXErrorRed,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        // Manual Send Button
+                        Button(
+                            onClick = onPushToExternalTracker,
+                            enabled = !isPushing && canTrack,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(40.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack,
+                                disabledContainerColor = LXSurfaceVariant,
+                                disabledContentColor = LXTextSecondary
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            if (isPushing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = LXBackgroundBlack
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Sending to MyAnimeList...",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Sync,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Send Data to External Tracker",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
             } else if (canTrack) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { pendingTrackingChange = true },
+                    color = LXSurfaceElevated,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, LXBorder)
                 ) {
-                    Box(
+                    Row(
                         modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(LXTextSecondary)
-                    )
-                    Text(
-                        text = "Not Tracked (Local Only)",
-                        color = LXTextSecondary,
-                        style = MaterialTheme.typography.labelMedium
-                    )
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(LXTextSecondary)
+                            )
+                            Text(
+                                text = "Not Tracked (Local Only)",
+                                color = LXTextSecondary,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        Text(
+                            text = "Tap to Enable",
+                            color = LXPrimaryGreen,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
-                Text(
-                    text = "This item has a MyAnimeList ID (#${entry.externalId}), but external sync is off for this entry. Enable tracking above to sync changes with your MyAnimeList account for profile \"${activeUser.name}\".",
-                    color = LXTextSecondary.copy(alpha = 0.8f),
-                    style = MaterialTheme.typography.bodySmall
-                )
             } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp)),
+                    color = LXSurfaceElevated,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, LXBorder)
                 ) {
-                    Box(
+                    Row(
                         modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(LXTextSecondary)
-                    )
-                    Text(
-                        text = "No External ID Linked",
-                        color = LXTextSecondary,
-                        style = MaterialTheme.typography.labelMedium
-                    )
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(LXTextSecondary)
+                        )
+                        Text(
+                            text = "No External ID Linked",
+                            color = LXTextSecondary,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
-                Text(
-                    text = "A valid MyAnimeList ID is required to enable external tracking. Edit this entry or use External DB Sync to link it with MyAnimeList.",
-                    color = LXTextSecondary.copy(alpha = 0.8f),
-                    style = MaterialTheme.typography.bodySmall
-                )
             }
         }
+    }
+
+    if (pendingTrackingChange != null) {
+        val enabling = pendingTrackingChange == true
+        AlertDialog(
+            onDismissRequest = { pendingTrackingChange = null },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Sync,
+                        contentDescription = null,
+                        tint = if (enabling) LXPrimaryGreen else LXErrorRed
+                    )
+                    Text(
+                        text = if (enabling) "Add to External Tracking" else "Remove from External Tracking",
+                        color = LXTextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = if (enabling) {
+                            "Enable external tracking for \"${entry.title}\"?"
+                        } else {
+                            "Remove \"${entry.title}\" from external tracking?"
+                        },
+                        color = LXTextPrimary,
+                        fontSize = 14.sp
+                    )
+                    Text(
+                        text = if (enabling) {
+                            "This entry will sync with MyAnimeList for profile \"${activeUser.name}\". Future progress, score, and status changes will be updated automatically."
+                        } else {
+                            "Changes will no longer sync to MyAnimeList for profile \"${activeUser.name}\". Your local tracking progress and data will remain intact."
+                        },
+                        color = LXTextSecondary,
+                        fontSize = 12.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val target = pendingTrackingChange!!
+                        pendingTrackingChange = null
+                        onToggleTracking(target)
+                        if (!target) {
+                            isExpanded = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (enabling) LXPrimaryGreen else LXErrorRed,
+                        contentColor = if (enabling) LXBackgroundBlack else Color.White
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(
+                        imageVector = if (enabling) Icons.Default.Check else Icons.Default.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (enabling) "Add to External Tracking" else "Remove from External Tracking",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingTrackingChange = null }) {
+                    Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
     }
 }
 

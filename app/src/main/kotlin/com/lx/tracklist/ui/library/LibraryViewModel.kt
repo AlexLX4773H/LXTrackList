@@ -681,9 +681,25 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         )
     }
 
-    fun incrementProgress(entry: MediaEntry) {
+    fun incrementProgress(entry: MediaEntry, andChangeStatusTo: MediaStatus? = null) {
         viewModelScope.launch {
-            repository.incrementProgress(entry)
+            if (andChangeStatusTo != null) {
+                val now = System.currentTimeMillis()
+                val todayStart = java.util.Calendar.getInstance().apply {
+                    set(java.util.Calendar.HOUR_OF_DAY, 0)
+                    set(java.util.Calendar.MINUTE, 0)
+                    set(java.util.Calendar.SECOND, 0)
+                    set(java.util.Calendar.MILLISECOND, 0)
+                }.timeInMillis
+                val withStatus = entry.copy(
+                    status = andChangeStatusTo,
+                    startDate = if (andChangeStatusTo == MediaStatus.WATCHING && entry.startDate == null) todayStart else entry.startDate,
+                    updatedAt = now
+                )
+                repository.incrementProgress(withStatus)
+            } else {
+                repository.incrementProgress(entry)
+            }
         }
     }
 

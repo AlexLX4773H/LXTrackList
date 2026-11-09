@@ -74,6 +74,23 @@ class MediaRepository(
         prefs?.edit()?.putBoolean("tachiyomi_import_as_favorites_$userId", enabled)?.apply()
     }
 
+    fun getConflictStrategy(userId: Long? = null): ConflictStrategy {
+        val targetUserId = userId ?: _activeUser.value.id
+        val savedName = prefs?.getString("conflict_strategy_$targetUserId", null)
+            ?: prefs?.getString("conflict_strategy", ConflictStrategy.MERGE.name)
+            ?: ConflictStrategy.MERGE.name
+        return try {
+            ConflictStrategy.valueOf(savedName)
+        } catch (_: Exception) {
+            ConflictStrategy.MERGE
+        }
+    }
+
+    fun setConflictStrategy(strategy: ConflictStrategy, userId: Long? = null) {
+        val targetUserId = userId ?: _activeUser.value.id
+        prefs?.edit()?.putString("conflict_strategy_$targetUserId", strategy.name)?.apply()
+    }
+
     init {
         initUserProfile()
     }
@@ -159,6 +176,7 @@ class MediaRepository(
 
         // Delete user's media entries and external tracking credentials
         dao.deleteAllByUser(profile.id)
+        prefs?.edit()?.remove("conflict_strategy_${profile.id}")?.apply()
         try {
             context?.let { ctx ->
                 com.lx.tracklist.data.remote.mal.MalTokenStore(ctx).clear(profile.id)
