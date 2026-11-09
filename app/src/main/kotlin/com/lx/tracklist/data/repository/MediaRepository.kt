@@ -114,6 +114,7 @@ class MediaRepository(
         try {
             com.lx.tracklist.data.remote.JikanSyncManager.cancelSync(context)
             com.lx.tracklist.data.remote.TmdbSyncManager.cancelSync(context)
+            com.lx.tracklist.data.remote.mal.MalSyncManager.cancelSync()
         } catch (_: Exception) {}
 
         _activeUser.value = profile
@@ -156,8 +157,13 @@ class MediaRepository(
         val all = userProfileDao.getAllProfilesSync()
         if (all.size <= 1) return // Do not delete only user
 
-        // Delete user's media entries
+        // Delete user's media entries and external tracking credentials
         dao.deleteAllByUser(profile.id)
+        try {
+            context?.let { ctx ->
+                com.lx.tracklist.data.remote.mal.MalTokenStore(ctx).clear(profile.id)
+            }
+        } catch (_: Exception) {}
         userProfileDao.delete(profile)
 
         val remaining = userProfileDao.getAllProfilesSync()
@@ -387,7 +393,13 @@ class MediaRepository(
     }
 
     suspend fun incrementProgress(entry: MediaEntry): MediaEntry {
-        val updated = entry.incrementProgress()
+        val effectiveEntry = if (entry.userId <= 0L) {
+            val existing = dao.getEntryByIdSync(entry.id)
+            entry.copy(userId = existing?.userId ?: _activeUser.value.id)
+        } else {
+            entry
+        }
+        val updated = effectiveEntry.incrementProgress()
         dao.update(updated)
         context?.let { ctx ->
             com.lx.tracklist.data.remote.mal.MalSyncManager.pushUpdateInBackground(ctx, updated)
@@ -397,11 +409,11 @@ class MediaRepository(
 
     suspend fun importEntries(
         entries: List<MediaEntry>,
-        strategy: ConflictStrategy
+        strategy: ConflictStrategy,
+        targetUserId: Long = _activeUser.value.id
     ): Pair<Int, Int> { // Returns Pair(insertedCount, updatedCount)
         var inserted = 0
         var updated = 0
-        val targetUserId = _activeUser.value.id
 
         // Auto-create any missing custom categories
         if (customCategoryDao != null) {

@@ -64,10 +64,15 @@ class MainActivity : ComponentActivity() {
             if (!code.isNullOrBlank()) {
                 lifecycleScope.launch {
                     val result = MalAuthManager.handleAuthCallback(this@MainActivity, code)
-                    result.onSuccess { username ->
+                    result.onSuccess { (username, profileId) ->
+                        val profileName = try {
+                            LXApplication.instance.repository.getAllUsersSync().firstOrNull { it.id == profileId }?.name ?: "Profile"
+                        } catch (_: Exception) {
+                            "Profile"
+                        }
                         Toast.makeText(
                             this@MainActivity,
-                            "Connected to MyAnimeList as $username!",
+                            "Connected to MyAnimeList as @$username for profile \"$profileName\"!",
                             Toast.LENGTH_LONG
                         ).show()
                     }.onFailure { err ->

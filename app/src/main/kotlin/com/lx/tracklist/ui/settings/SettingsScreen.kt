@@ -1231,6 +1231,8 @@ fun SettingsScreen(
                             onDeleteCategoryClick = { categoryToDelete = it }
                         )
                         SettingsSubMenu.EXTERNAL_TRACKING -> ExternalTrackingContent(
+                            activeProfileName = state.activeUser.name,
+                            activeProfileAvatarColorHex = state.activeUser.avatarColorHex,
                             malSyncState = malSyncState,
                             isMalConnected = state.isMalConnected,
                             malUsername = state.malUsername,
@@ -1343,6 +1345,8 @@ fun SettingsScreen(
                     }
                     SettingsSubMenu.EXTERNAL_TRACKING -> {
                         ExternalTrackingContent(
+                            activeProfileName = state.activeUser.name,
+                            activeProfileAvatarColorHex = state.activeUser.avatarColorHex,
                             malSyncState = malSyncState,
                             isMalConnected = state.isMalConnected,
                             malUsername = state.malUsername,
@@ -2794,6 +2798,8 @@ private fun BackupStorageContent(
 
 @Composable
 private fun ExternalTrackingContent(
+    activeProfileName: String,
+    activeProfileAvatarColorHex: String,
     malSyncState: com.lx.tracklist.data.remote.mal.MalSyncProgress,
     isMalConnected: Boolean,
     malUsername: String?,
@@ -2814,6 +2820,72 @@ private fun ExternalTrackingContent(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Active Profile Isolation Scope Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(
+                            try {
+                                Color(android.graphics.Color.parseColor(activeProfileAvatarColorHex))
+                            } catch (_: Exception) {
+                                LXPrimaryGreen
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = activeProfileName.take(1).uppercase(java.util.Locale.getDefault()),
+                        color = LXBackgroundBlack,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = activeProfileName,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "ACTIVE PROFILE",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            )
+                        }
+                    }
+                    Text(
+                        text = "External tracking is strictly isolated to this profile. Each profile can connect a different MAL account.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = LXTextSecondary
+                    )
+                }
+            }
+        }
+
         // Overview Card
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -2937,11 +3009,17 @@ private fun ExternalTrackingContent(
                         Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Connect MyAnimeList Account",
+                            text = "Connect MAL for $activeProfileName",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )
                     }
+
+                    Text(
+                        text = "💡 Tip: To link a different MAL account, make sure you sign in to that account on myanimelist.net in your browser (or log out first).",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = LXTextSecondary.copy(alpha = 0.8f)
+                    )
                 } else {
                     // Connected User Info Box
                     Row(
@@ -2986,7 +3064,7 @@ private fun ExternalTrackingContent(
                                 color = LXTextPrimary
                             )
                             Text(
-                                text = if (malLastSyncFormatted != null) "Last synced: $malLastSyncFormatted" else "Live auto-sync active",
+                                text = "Linked to profile \"$activeProfileName\"" + if (malLastSyncFormatted != null) " • Last synced: $malLastSyncFormatted" else " • Live auto-sync active",
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                 color = LXTextSecondary
                             )

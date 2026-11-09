@@ -77,10 +77,14 @@ object MalSyncManager {
      */
     suspend fun pushUpdateSync(context: Context, entry: MediaEntry): Result<Unit> = withContext(Dispatchers.IO) {
         val tokenStore = MalTokenStore(context)
-        val userId = if (entry.userId > 0L) entry.userId else 1L
+        val userId = if (entry.userId > 0L) entry.userId else null
+        if (userId == null) {
+            Log.w(TAG, "Cannot push to MAL: entry '${entry.title}' has no valid profile userId assigned")
+            return@withContext Result.success(Unit)
+        }
 
         if (!tokenStore.isLoggedIn(userId) || !tokenStore.isAutoSyncEnabled(userId)) {
-            return@withContext Result.success(Unit) // Sync disabled or user not connected
+            return@withContext Result.success(Unit) // Sync disabled or this profile is not connected
         }
 
         val malId = entry.externalId?.toLongOrNull() ?: return@withContext Result.success(Unit)
@@ -287,7 +291,7 @@ object MalSyncManager {
                     )
                 }
 
-                val (inserted, updated) = repository.importEntries(pulledEntries, strategy)
+                val (inserted, updated) = repository.importEntries(pulledEntries, strategy, targetUserId = userId)
 
                 MalTokenStore(context).setLastSyncTimestamp(userId, System.currentTimeMillis())
 

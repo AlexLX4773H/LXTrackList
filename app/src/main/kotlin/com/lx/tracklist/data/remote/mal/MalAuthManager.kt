@@ -88,8 +88,9 @@ object MalAuthManager {
 
     /**
      * Exchanges the authorization code received from redirect for access & refresh tokens.
+     * Returns Pair(username, userId)
      */
-    suspend fun handleAuthCallback(context: Context, authorizationCode: String): Result<String> =
+    suspend fun handleAuthCallback(context: Context, authorizationCode: String): Result<Pair<String, Long>> =
         withContext(Dispatchers.IO) {
             val clientId = getClientId()
             val tokenStore = MalTokenStore(context)
@@ -136,7 +137,7 @@ object MalAuthManager {
                 fetchAndStoreUserInfo(context, userId, tokenResponse.accessToken)
 
                 val username = tokenStore.getMalUsername(userId) ?: "MAL User"
-                Result.success(username)
+                Result.success(Pair(username, userId))
             } catch (e: Exception) {
                 Log.e(TAG, "Exception during token exchange", e)
                 Result.failure(e)
