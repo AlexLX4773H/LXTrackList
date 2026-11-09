@@ -630,120 +630,12 @@ fun SettingsScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         preview.categoryGroups.forEach { group ->
                             val isChecked = preview.selectedCategoryKeys.contains(group.key)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isChecked) LXPrimaryGreen.copy(alpha = 0.12f) else LXSurfaceElevated)
-                                    .border(
-                                        width = 1.dp,
-                                        color = if (isChecked) LXPrimaryGreen.copy(alpha = 0.6f) else LXBorder,
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                                    .clickable(enabled = !preview.isImporting) {
-                                        viewModel.toggleCategorySelection(group.key)
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Checkbox(
-                                        checked = isChecked,
-                                        onCheckedChange = { viewModel.toggleCategorySelection(group.key) },
-                                        enabled = !preview.isImporting,
-                                        colors = CheckboxDefaults.colors(
-                                            checkedColor = LXPrimaryGreen,
-                                            checkmarkColor = LXBackgroundBlack,
-                                            uncheckedColor = LXTextSecondary
-                                        )
-                                    )
-
-                                    Spacer(modifier = Modifier.width(6.dp))
-
-                                    Icon(
-                                        imageVector = when {
-                                            group.isCustomCategory -> Icons.Default.Bookmark
-                                            group.mediaType == MediaType.ANIME -> Icons.Default.LiveTv
-                                            group.mediaType == MediaType.MANGA -> Icons.AutoMirrored.Filled.MenuBook
-                                            group.mediaType == MediaType.MANHWA -> Icons.Default.PhoneAndroid
-                                            group.mediaType == MediaType.MOVIE -> Icons.Default.Movie
-                                            group.mediaType == MediaType.SHOW -> Icons.Default.Tv
-                                            group.mediaType == MediaType.BOOK -> Icons.Default.Book
-                                            else -> Icons.Default.Bookmark
-                                        },
-                                        contentDescription = null,
-                                        tint = if (isChecked) LXPrimaryGreen else LXTextSecondary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-
-                                    Spacer(modifier = Modifier.width(8.dp))
-
-                                    Column {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = group.displayName,
-                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                                color = LXTextPrimary
-                                            )
-
-                                            if (group.isSubCategory) {
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Box(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .background(LXPrimaryGreen.copy(alpha = 0.2f))
-                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                ) {
-                                                    Text(
-                                                        text = "Sub Category",
-                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                                        color = LXPrimaryGreen
-                                                    )
-                                                }
-                                            } else if (group.isCustomCategory) {
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Box(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .background(LXPrimaryGreen.copy(alpha = 0.2f))
-                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                ) {
-                                                    Text(
-                                                        text = "Custom Category",
-                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                                        color = LXPrimaryGreen
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        if (!group.parentCategoryName.isNullOrBlank()) {
-                                            Text(
-                                                text = "in ${group.parentCategoryName}",
-                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                                color = LXTextSecondary
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(LXSurfaceBlack)
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = "${group.count} ${if (group.count == 1) "item" else "items"}",
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium),
-                                        color = LXTextSecondary
-                                    )
-                                }
-                            }
+                            CategoryGroupCard(
+                                group = group,
+                                isSelected = isChecked,
+                                isEnabled = !preview.isImporting,
+                                onToggle = { viewModel.toggleCategorySelection(group.key) }
+                            )
                         }
                     }
                 }
@@ -964,120 +856,12 @@ fun SettingsScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         exportPreview.categoryGroups.forEach { group ->
                             val isChecked = exportPreview.selectedCategoryKeys.contains(group.key)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isChecked) LXPrimaryGreen.copy(alpha = 0.12f) else LXSurfaceElevated)
-                                    .border(
-                                        width = 1.dp,
-                                        color = if (isChecked) LXPrimaryGreen.copy(alpha = 0.6f) else LXBorder,
-                                        shape = RoundedCornerShape(8.dp)
-                                    )
-                                    .clickable(enabled = !exportPreview.isExporting) {
-                                        viewModel.toggleExportCategorySelection(group.key)
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Checkbox(
-                                        checked = isChecked,
-                                        onCheckedChange = { viewModel.toggleExportCategorySelection(group.key) },
-                                        enabled = !exportPreview.isExporting,
-                                        colors = CheckboxDefaults.colors(
-                                            checkedColor = LXPrimaryGreen,
-                                            checkmarkColor = LXBackgroundBlack,
-                                            uncheckedColor = LXTextSecondary
-                                        )
-                                    )
-
-                                    Spacer(modifier = Modifier.width(6.dp))
-
-                                    Icon(
-                                        imageVector = when {
-                                            group.isCustomCategory -> Icons.Default.Bookmark
-                                            group.mediaType == MediaType.ANIME -> Icons.Default.LiveTv
-                                            group.mediaType == MediaType.MANGA -> Icons.AutoMirrored.Filled.MenuBook
-                                            group.mediaType == MediaType.MANHWA -> Icons.Default.PhoneAndroid
-                                            group.mediaType == MediaType.MOVIE -> Icons.Default.Movie
-                                            group.mediaType == MediaType.SHOW -> Icons.Default.Tv
-                                            group.mediaType == MediaType.BOOK -> Icons.Default.Book
-                                            else -> Icons.Default.Bookmark
-                                        },
-                                        contentDescription = null,
-                                        tint = if (isChecked) LXPrimaryGreen else LXTextSecondary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-
-                                    Spacer(modifier = Modifier.width(8.dp))
-
-                                    Column {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                text = group.displayName,
-                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                                color = LXTextPrimary
-                                            )
-
-                                            if (group.isSubCategory) {
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Box(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .background(LXPrimaryGreen.copy(alpha = 0.2f))
-                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                ) {
-                                                    Text(
-                                                        text = "Sub Category",
-                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                                        color = LXPrimaryGreen
-                                                    )
-                                                }
-                                            } else if (group.isCustomCategory) {
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Box(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .background(LXPrimaryGreen.copy(alpha = 0.2f))
-                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                ) {
-                                                    Text(
-                                                        text = "Custom Category",
-                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                                        color = LXPrimaryGreen
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        if (!group.parentCategoryName.isNullOrBlank()) {
-                                            Text(
-                                                text = "in ${group.parentCategoryName}",
-                                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                                color = LXTextSecondary
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(LXSurfaceBlack)
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = "${group.count} ${if (group.count == 1) "item" else "items"}",
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium),
-                                        color = LXTextSecondary
-                                    )
-                                }
-                            }
+                            CategoryGroupCard(
+                                group = group,
+                                isSelected = isChecked,
+                                isEnabled = !exportPreview.isExporting,
+                                onToggle = { viewModel.toggleExportCategorySelection(group.key) }
+                            )
                         }
                     }
                 }
@@ -1454,6 +1238,149 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CategoryGroupCard(
+    group: ImportCategoryGroup,
+    isSelected: Boolean,
+    isEnabled: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f) else LXSurfaceElevated)
+            .border(
+                width = 1.dp,
+                color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.6f) else LXBorder,
+                shape = RoundedCornerShape(8.dp)
+            )
+            .clickable(enabled = isEnabled, onClick = onToggle)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = { onToggle() },
+                enabled = isEnabled,
+                colors = CheckboxDefaults.colors(
+                    checkedColor = LXPrimaryGreen,
+                    checkmarkColor = LXBackgroundBlack,
+                    uncheckedColor = LXTextSecondary
+                )
+            )
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            Icon(
+                imageVector = when {
+                    group.isCustomCategory -> Icons.Default.Bookmark
+                    group.mediaType == MediaType.ANIME -> Icons.Default.LiveTv
+                    group.mediaType == MediaType.MANGA -> Icons.AutoMirrored.Filled.MenuBook
+                    group.mediaType == MediaType.MANHWA -> Icons.Default.PhoneAndroid
+                    group.mediaType == MediaType.MOVIE -> Icons.Default.Movie
+                    group.mediaType == MediaType.SHOW -> Icons.Default.Tv
+                    group.mediaType == MediaType.BOOK -> Icons.Default.Book
+                    else -> Icons.Default.Bookmark
+                },
+                contentDescription = null,
+                tint = if (isSelected) LXPrimaryGreen else LXTextSecondary,
+                modifier = Modifier.size(18.dp)
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = group.displayName,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = LXTextPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                val hasMetadata = group.isSubCategory || group.isCustomCategory || !group.parentCategoryName.isNullOrBlank()
+                if (hasMetadata) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (group.isSubCategory) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(LXPrimaryGreen.copy(alpha = 0.2f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "Sub Category",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                    color = LXPrimaryGreen,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                        } else if (group.isCustomCategory) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(LXPrimaryGreen.copy(alpha = 0.2f))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "Custom Category",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                    color = LXPrimaryGreen,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                        }
+
+                        if (!group.parentCategoryName.isNullOrBlank()) {
+                            Text(
+                                text = "in ${group.parentCategoryName}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(LXSurfaceBlack)
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = "${group.count} ${if (group.count == 1) "item" else "items"}",
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium),
+                color = LXTextSecondary,
+                maxLines = 1,
+                softWrap = false
+            )
         }
     }
 }
@@ -4519,12 +4446,12 @@ private fun AboutContent(
                         color = LXPrimaryGreen
                     )
                     Text(
-                        text = "Version ${com.lx.tracklist.BuildConfig.VERSION_NAME} (Optimized for Phone & Tablet)",
+                        text = "Version ${com.lx.tracklist.BuildConfig.VERSION_NAME}",
                         style = MaterialTheme.typography.bodySmall,
                         color = LXTextSecondary
                     )
                     Text(
-                        text = "Xiaomi 11T Pro, OnePlus 12R & OnePlus Pad Ready",
+                        text = "Optimized for Phone & Tablet",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                         color = LXTextSecondary.copy(alpha = 0.8f)
                     )
