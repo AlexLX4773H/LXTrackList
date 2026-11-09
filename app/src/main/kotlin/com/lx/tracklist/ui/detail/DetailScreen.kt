@@ -50,6 +50,7 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tv
@@ -219,8 +220,13 @@ fun DetailScreen(
 
     if (showRefreshConfirmDialog && entry != null) {
         val current = entry!!
+        val isTachiyomi = JikanSyncManager.isTachiyomiSource(current)
         val isMal = JikanSyncManager.isMalSource(current) || current.mediaType == MediaType.ANIME || current.mediaType == MediaType.MANGA || current.mediaType == MediaType.MANHWA
-        val sourceName = current.externalSource?.takeIf { it.isNotBlank() } ?: (if (isMal) "MyAnimeList (MAL)" else "The Movie Database (TMDB)")
+        val sourceName = if (isTachiyomi) {
+            "Jikan / MangaDex / AniList / Kitsu"
+        } else {
+            current.externalSource?.takeIf { it.isNotBlank() } ?: (if (isMal) "MyAnimeList (MAL)" else "The Movie Database (TMDB)")
+        }
         val extId = current.externalId
 
         AlertDialog(
@@ -230,19 +236,35 @@ fun DetailScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, tint = LXPrimaryGreen)
-                    Text("Refresh Metadata?", color = LXTextPrimary, fontWeight = FontWeight.Bold)
+                    Icon(
+                        imageVector = if (isTachiyomi) Icons.Default.Search else Icons.Default.Refresh,
+                        contentDescription = null,
+                        tint = LXPrimaryGreen
+                    )
+                    Text(
+                        text = if (isTachiyomi) "Find & Link External ID?" else "Refresh Metadata?",
+                        color = LXTextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Refresh official metadata for \"${current.title}\" from $sourceName${if (!extId.isNullOrBlank()) " using ID (#$extId)" else " by searching title"}?",
+                        text = if (isTachiyomi) {
+                            "Search official databases ($sourceName) for \"${current.title}\" to resolve and link a valid external ID?"
+                        } else {
+                            "Refresh official metadata for \"${current.title}\" from $sourceName${if (!extId.isNullOrBlank()) " using ID (#$extId)" else " by searching title"}?"
+                        },
                         color = LXTextPrimary,
                         fontSize = 14.sp
                     )
                     Text(
-                        text = "This will update posters, episode/chapter counts, runtime, broadcast/air dates, scores, and synopsis to the latest information from the external database.",
+                        text = if (isTachiyomi) {
+                            "This will search databases to link a valid external ID (MAL, MangaDex, AniList, Kitsu) and update cover, chapters, and synopsis. Once linked, external tracking can be enabled."
+                        } else {
+                            "This will update posters, episode/chapter counts, runtime, broadcast/air dates, scores, and synopsis to the latest information from the external database."
+                        },
                         color = LXTextSecondary,
                         fontSize = 12.sp
                     )
@@ -256,7 +278,7 @@ fun DetailScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack)
                 ) {
-                    Text("Refresh", fontWeight = FontWeight.Bold)
+                    Text(if (isTachiyomi) "Find & Link" else "Refresh", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -587,7 +609,8 @@ fun DetailScreen(
                             activeUser = effectiveUser,
                             isPushing = isPushingToExternalTracker,
                             onToggleTracking = { viewModel.setExternalTracking(it) },
-                            onPushToExternalTracker = { viewModel.pushToExternalTracker(context) }
+                            onPushToExternalTracker = { viewModel.pushToExternalTracker(context) },
+                            onRequestLinkExternalId = { showRefreshConfirmDialog = true }
                         )
                         DetailTagsCard(currentEntry)
                         DetailSourceText(currentEntry)
@@ -754,7 +777,8 @@ fun DetailScreen(
                             activeUser = effectiveUser,
                             isPushing = isPushingToExternalTracker,
                             onToggleTracking = { viewModel.setExternalTracking(it) },
-                            onPushToExternalTracker = { viewModel.pushToExternalTracker(context) }
+                            onPushToExternalTracker = { viewModel.pushToExternalTracker(context) },
+                            onRequestLinkExternalId = { showRefreshConfirmDialog = true }
                         )
                         DetailTagsCard(currentEntry)
                         DetailSourceText(currentEntry)
@@ -1490,7 +1514,8 @@ private fun DetailExternalTrackingCard(
     activeUser: UserProfile,
     isPushing: Boolean,
     onToggleTracking: (Boolean) -> Unit,
-    onPushToExternalTracker: () -> Unit
+    onPushToExternalTracker: () -> Unit,
+    onRequestLinkExternalId: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val canTrack = MalSyncManager.canBeExternallyTracked(entry)
@@ -1747,33 +1772,62 @@ private fun DetailExternalTrackingCard(
                     }
                 }
             } else {
+                val isTachiyomi = JikanSyncManager.isTachiyomiSource(entry)
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp)),
+                        .clip(RoundedCornerShape(8.dp))
+                        .then(
+                            if (isTachiyomi) Modifier.clickable { onRequestLinkExternalId() }
+                            else Modifier
+                        ),
                     color = LXSurfaceElevated,
                     shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, LXBorder)
+                    border = BorderStroke(1.dp, if (isTachiyomi) LXPrimaryGreen.copy(alpha = 0.35f) else LXBorder)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(LXTextSecondary)
-                        )
-                        Text(
-                            text = "No External ID Linked",
-                            color = LXTextSecondary,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isTachiyomi) LXScoreGold else LXTextSecondary)
+                            )
+                            Text(
+                                text = if (isTachiyomi) "Tachiyomi ID (Not Linked)" else "No External ID Linked",
+                                color = if (isTachiyomi) LXTextPrimary else LXTextSecondary,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        if (isTachiyomi) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "Find & Link ID",
+                                    color = LXPrimaryGreen,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1910,7 +1964,8 @@ private fun DetailSourceText(entry: MediaEntry) {
     val srcParts = mutableListOf<String>()
     val isTmdb = entry.externalSource?.equals("TMDB", ignoreCase = true) == true || entry.externalScoreSource?.equals("TMDB", ignoreCase = true) == true
     if (!entry.externalSource.isNullOrBlank()) {
-        srcParts.add("Imported from ${entry.externalSource}" + if (entry.externalId != null) " (ID: ${entry.externalId})" else "")
+        val srcName = if (entry.externalSource.equals("TACHIYOMI", ignoreCase = true)) "Tachiyomi" else entry.externalSource
+        srcParts.add("Imported from $srcName" + if (entry.externalId != null) " (ID: ${entry.externalId})" else "")
     }
     if (isTmdb) {
         srcParts.add("Data from TMDB")

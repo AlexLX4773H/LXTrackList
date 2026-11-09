@@ -7,6 +7,7 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.google.gson.Gson
 import com.lx.tracklist.LXApplication
+import com.lx.tracklist.data.local.FailedCoverTracker
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.repository.MediaRepository
@@ -59,6 +60,44 @@ object JikanSyncManager {
                mediaType == MediaType.BOOK
     }
 
+    fun isTachiyomiSource(entry: MediaEntry): Boolean {
+        val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim() ?: ""
+        val extId = (entry.externalId ?: entry.foreignDatabaseId)?.trim() ?: ""
+        return src.equals("TACHIYOMI", ignoreCase = true) ||
+               src.contains("tachiyomi", ignoreCase = true) ||
+               extId.startsWith("/manga/", ignoreCase = true) ||
+               extId.startsWith("manga/", ignoreCase = true)
+    }
+
+    fun hasValidExternalId(entry: MediaEntry): Boolean {
+        if (isTachiyomiSource(entry)) return false
+        val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim() ?: ""
+        val id = (entry.externalId ?: entry.foreignDatabaseId)?.trim() ?: return false
+        if (id.isBlank() || id.startsWith("/")) return false
+        if (src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true) || src.equals("AniList", ignoreCase = true)) {
+            return id.toLongOrNull() != null
+        }
+        if (src.equals("MangaDex", ignoreCase = true)) {
+            return id.length >= 32
+        }
+        if (src.equals("Kitsu", ignoreCase = true)) {
+            return id.isNotBlank()
+        }
+        return id.toLongOrNull() != null
+    }
+
+    fun extractMangaDexUuid(urlOrId: String): String? {
+        val uuidRegex = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+        return uuidRegex.find(urlOrId)?.value
+    }
+
+    fun extractNumericMalId(urlOrId: String): Long? {
+        val trimmed = urlOrId.trim()
+        trimmed.toLongOrNull()?.let { return it }
+        val malPattern = Regex("(?:myanimelist\\.net/(?:manga|anime)/|/manga/|/anime/)(\\d+)")
+        return malPattern.find(trimmed)?.groupValues?.get(1)?.toLongOrNull()
+    }
+
     fun isMalSource(entry: MediaEntry): Boolean {
         val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim()
         val isSupportedSource = src.isNullOrBlank() ||
@@ -66,8 +105,10 @@ object JikanSyncManager {
                 src.equals("MyAnimeList", ignoreCase = true) ||
                 src.equals("MangaDex", ignoreCase = true) ||
                 src.equals("AniList", ignoreCase = true) ||
-                src.equals("Kitsu", ignoreCase = true)
-        val hasValidId = !entry.externalId.isNullOrBlank() || !entry.foreignDatabaseId.isNullOrBlank()
+                src.equals("Kitsu", ignoreCase = true) ||
+                src.equals("TACHIYOMI", ignoreCase = true) ||
+                src.contains("tachiyomi", ignoreCase = true)
+        val hasValidId = hasValidExternalId(entry)
         return isSupportedSource && (hasValidId || isEligibleMediaForMal(entry.mediaType))
     }
 
@@ -78,12 +119,17 @@ object JikanSyncManager {
     private fun needsSync(entry: MediaEntry, forceRefresh: Boolean): Boolean {
         if (forceRefresh) return true
 
+        // If it's a Tachiyomi source or lacks a valid external ID, it needs sync to find and link the ID!
+        if (isTachiyomiSource(entry) || !hasValidExternalId(entry)) return true
+
         val malId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull()
         // If it doesn't have a MAL ID yet, it needs sync to fetch the ID and details based on title!
         if (malId == null) return true
 
-        // Missing cover, or starts with leftover "file:" path
-        val missingCover = entry.coverImageUri.isNullOrBlank() || entry.coverImageUri.startsWith("file:")
+        // Missing cover, leftover "file:" path, or broken image URL
+        val missingCover = entry.coverImageUri.isNullOrBlank() ||
+                           entry.coverImageUri.startsWith("file:") ||
+                           FailedCoverTracker.isEntryCoverBroken(entry)
 
         val isVideo = entry.mediaType == MediaType.ANIME || entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.SHOW
         val missingRuntime = if (isVideo) {
@@ -150,6 +196,19 @@ object JikanSyncManager {
             }
 
             val malEntries = entriesPool.filter { isMalSource(it) && it.title.isNotBlank() }
+
+            // Probe covers for broken image URLs so "Fetch Missing" picks them up
+            if (!forceRefresh) {
+                _syncState.update {
+                    it.copy(
+                        profileId = profileId,
+                        profileName = profileName,
+                        statusMessage = "Checking cover images..."
+                    )
+                }
+                FailedCoverTracker.probeBrokenCovers(malEntries)
+            }
+
             val eligible = malEntries.filter { needsSync(it, forceRefresh) }
 
             val total = eligible.size
@@ -164,7 +223,7 @@ object JikanSyncManager {
                     }
                 } else {
                     if (malEntries.isEmpty()) {
-                        "No eligible anime or manga entries found to sync."
+                        "No eligible anime, manga, or manhwa entries found to sync."
                     } else {
                         "All ${malEntries.size} entries already have MAL IDs, posters & details."
                     }
@@ -227,22 +286,32 @@ object JikanSyncManager {
             for (entry in eligible) {
                 if (syncJob?.isCancelled == true) break
 
+                val isTachiyomi = isTachiyomiSource(entry)
                 val extIdStr = (entry.externalId ?: entry.foreignDatabaseId)?.trim()
-                val malId = extIdStr?.toLongOrNull()
                 val isManga = isMangaType(entry.mediaType)
                 val isManhwa = entry.mediaType == MediaType.MANHWA
-                val isMangaDexSource = entry.externalSource?.equals("MangaDex", ignoreCase = true) == true
+
+                val extractedMangaDexUuid = if (isTachiyomi && !extIdStr.isNullOrBlank()) {
+                    extractMangaDexUuid(extIdStr)
+                } else null
+                val extractedMalId = if (isTachiyomi && !extIdStr.isNullOrBlank()) {
+                    extractNumericMalId(extIdStr)
+                } else null
+
+                val malId = if (isTachiyomi) extractedMalId else extIdStr?.toLongOrNull()
+                val isMangaDexSource = (!isTachiyomi && entry.externalSource?.equals("MangaDex", ignoreCase = true) == true) || extractedMangaDexUuid != null
+                val mangaDexIdToUse = extractedMangaDexUuid ?: (if (isMangaDexSource) extIdStr else null)
 
                 _syncState.update {
                     it.copy(
                         profileId = profileId,
                         profileName = profileName,
                         currentTitle = entry.title,
-                        statusMessage = if (isMangaDexSource && !extIdStr.isNullOrBlank()) {
+                        statusMessage = if (isTachiyomi) {
+                            "Searching ID for ${entry.title}..."
+                        } else if (isMangaDexSource && !mangaDexIdToUse.isNullOrBlank()) {
                             "Fetching ${entry.title} from MangaDex..."
-                        } else if (isManhwa) {
-                            "Searching MangaDex / AniList for ${entry.title}..."
-                        } else if (malId != null) {
+                        } else if (malId != null && malId > 0) {
                             "Fetching ${entry.title} (#$malId)..."
                         } else {
                             "Searching MAL for ${entry.title}..."
@@ -256,19 +325,24 @@ object JikanSyncManager {
                 delay(RATE_LIMIT_DELAY_MS)
 
                 // Attempt fetch by ID if present, otherwise search by title with fallback chain
-                var detailsResult: Result<JikanMediaDetails> = if (isMangaDexSource && !extIdStr.isNullOrBlank()) {
-                    MangaDexApiClient.fetchMangaDetails(extIdStr)
-                } else if (malId != null) {
+                var detailsResult: Result<JikanMediaDetails> = if (isMangaDexSource && !mangaDexIdToUse.isNullOrBlank()) {
+                    MangaDexApiClient.fetchMangaDetails(mangaDexIdToUse)
+                } else if (malId != null && malId > 0) {
                     JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga, title = entry.title, isManhwa = isManhwa)
                 } else {
                     JikanApiClient.searchMediaDetailsByTitle(title = entry.title, isManga = isManga, isManhwa = isManhwa)
                 }
 
+                // If fetch by extracted ID failed on a Tachiyomi entry, search by title!
+                if (detailsResult.isFailure && isTachiyomi) {
+                    detailsResult = JikanApiClient.searchMediaDetailsByTitle(title = entry.title, isManga = isManga, isManhwa = isManhwa)
+                }
+
                 if (detailsResult.isFailure && detailsResult.exceptionOrNull() is RateLimitException) {
                     delay(3000L)
-                    detailsResult = if (isMangaDexSource && !extIdStr.isNullOrBlank()) {
-                        MangaDexApiClient.fetchMangaDetails(extIdStr)
-                    } else if (malId != null) {
+                    detailsResult = if (isMangaDexSource && !mangaDexIdToUse.isNullOrBlank()) {
+                        MangaDexApiClient.fetchMangaDetails(mangaDexIdToUse)
+                    } else if (malId != null && malId > 0) {
                         JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga, title = entry.title, isManhwa = isManhwa)
                     } else {
                         JikanApiClient.searchMediaDetailsByTitle(title = entry.title, isManga = isManga, isManhwa = isManhwa)
@@ -284,8 +358,9 @@ object JikanSyncManager {
                         var finalExternalId: String? = entry.externalId
                         var finalExternalSource: String? = entry.externalSource
 
-                        // If it had no external ID, populate it now from details!
-                        if (finalExternalId.isNullOrBlank()) {
+                        // If it had no valid external ID, or was a Tachiyomi entry, populate it now from details!
+                        val needsNewExternalId = finalExternalId.isNullOrBlank() || isTachiyomi || !hasValidExternalId(entry)
+                        if (needsNewExternalId) {
                             if (details.sourceProvider == "MangaDex") {
                                 val mdId = details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
                                 if (!mdId.isNullOrBlank()) {
@@ -294,9 +369,19 @@ object JikanSyncManager {
                                     hasChanges = true
                                 }
                             } else if (details.sourceProvider.contains("AniList")) {
-                                finalExternalId = details.malId?.toString() ?: details.url?.substringAfterLast('/')
-                                finalExternalSource = if (details.malId != null && details.malId > 0) "MAL" else "AniList"
-                                hasChanges = true
+                                val resolvedId = details.malId?.toString() ?: details.url?.substringAfterLast('/')
+                                if (!resolvedId.isNullOrBlank()) {
+                                    finalExternalId = resolvedId
+                                    finalExternalSource = if (details.malId != null && details.malId > 0) "MAL" else "AniList"
+                                    hasChanges = true
+                                }
+                            } else if (details.sourceProvider.equals("Kitsu", ignoreCase = true)) {
+                                val kitsuId = details.malId?.toString() ?: details.url?.substringAfterLast('/')
+                                if (!kitsuId.isNullOrBlank()) {
+                                    finalExternalId = kitsuId
+                                    finalExternalSource = "Kitsu"
+                                    hasChanges = true
+                                }
                             } else if (details.malId != null && details.malId > 0) {
                                 finalExternalId = details.malId.toString()
                                 finalExternalSource = "MAL"
@@ -304,11 +389,17 @@ object JikanSyncManager {
                             }
                         }
 
-                        // Set poster URL if missing, leftover file: URI, or force refreshed
-                        val needsPoster = entry.coverImageUri.isNullOrBlank() || entry.coverImageUri.startsWith("file:") || forceRefresh
+                        // Set poster URL if missing, leftover file: URI, broken image URL, or force refreshed
+                        val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(entry)
+                        val needsPoster = entry.coverImageUri.isNullOrBlank() ||
+                                          entry.coverImageUri.startsWith("file:") ||
+                                          isCoverBroken ||
+                                          forceRefresh
                         if (!details.posterUrl.isNullOrBlank() && needsPoster) {
                             finalCoverUri = details.posterUrl
                             hasChanges = true
+
+                            FailedCoverTracker.markSuccess(entry.id, details.posterUrl)
 
                             // Pre-warm Coil cache directly with the official CDN URL
                             try {

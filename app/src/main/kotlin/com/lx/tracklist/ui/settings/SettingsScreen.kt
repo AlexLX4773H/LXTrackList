@@ -3173,7 +3173,7 @@ private fun SyncJobsContent(
             }
         }
 
-        // Anime / Manga Sync Card
+        // Anime / manga / Manhwa Sync Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
@@ -3201,7 +3201,7 @@ private fun SyncJobsContent(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Anime / Manga Sync",
+                            text = "Anime / manga / Manhwa sync",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = LXTextPrimary,
                             maxLines = 1,

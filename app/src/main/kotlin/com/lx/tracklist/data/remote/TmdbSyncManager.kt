@@ -7,6 +7,7 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.google.gson.Gson
 import com.lx.tracklist.LXApplication
+import com.lx.tracklist.data.local.FailedCoverTracker
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.repository.MediaRepository
@@ -72,7 +73,9 @@ object TmdbSyncManager {
         val tmdbId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull()
         if (tmdbId == null) return true
 
-        val missingCover = entry.coverImageUri.isNullOrBlank() || entry.coverImageUri.startsWith("file:")
+        val missingCover = entry.coverImageUri.isNullOrBlank() ||
+                           entry.coverImageUri.startsWith("file:") ||
+                           FailedCoverTracker.isEntryCoverBroken(entry)
         val isMovie = entry.mediaType == MediaType.MOVIE
         val missingRuntime = if (isMovie) {
             entry.durationMinutes == null || entry.durationMinutes == 0
@@ -155,6 +158,19 @@ object TmdbSyncManager {
             }
 
             val tmdbEntries = entriesPool.filter { isTmdbSource(it) && it.title.isNotBlank() }
+
+            // Probe covers for broken image URLs so "Fetch Missing" picks them up
+            if (!forceRefresh) {
+                _syncState.update {
+                    it.copy(
+                        profileId = profileId,
+                        profileName = profileName,
+                        statusMessage = "Checking cover images..."
+                    )
+                }
+                FailedCoverTracker.probeBrokenCovers(tmdbEntries)
+            }
+
             val eligible = tmdbEntries.filter { needsSync(it, forceRefresh) }
 
             val total = eligible.size
@@ -283,10 +299,16 @@ object TmdbSyncManager {
                             hasChanges = true
                         }
 
-                        val needsPoster = entry.coverImageUri.isNullOrBlank() || entry.coverImageUri.startsWith("file:") || forceRefresh
+                        val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(entry)
+                        val needsPoster = entry.coverImageUri.isNullOrBlank() ||
+                                          entry.coverImageUri.startsWith("file:") ||
+                                          isCoverBroken ||
+                                          forceRefresh
                         if (!details.posterUrl.isNullOrBlank() && needsPoster) {
                             finalCoverUri = details.posterUrl
                             hasChanges = true
+
+                            FailedCoverTracker.markSuccess(entry.id, details.posterUrl)
 
                             // Pre-warm Coil cache directly
                             try {

@@ -1258,6 +1258,82 @@ class FeaturesTest {
         // 4. NO_COVER (Missing/empty cover image)
         val noCover = list.filter { it.coverImageUri.isNullOrBlank() }
         assertEquals(listOf(4L, 5L), noCover.map { it.id })
+
+        // 5. isEntryCoverBroken helper
+        assertFalse(com.lx.tracklist.data.local.FailedCoverTracker.isEntryCoverBroken(entryWithGoodCover))
+        assertTrue(com.lx.tracklist.data.local.FailedCoverTracker.isEntryCoverBroken(entryWithBrokenCover))
+        assertTrue(com.lx.tracklist.data.local.FailedCoverTracker.isEntryCoverBroken(entryWithMalformedCover))
+        assertTrue(com.lx.tracklist.data.local.FailedCoverTracker.isEntryCoverBroken(entryWithEmptyCover))
+        assertTrue(com.lx.tracklist.data.local.FailedCoverTracker.isEntryCoverBroken(entryWithNullCover))
+    }
+
+    @Test
+    fun testAnimeMangaManhwaSyncEligibility() {
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.isEligibleMediaForMal(MediaType.ANIME))
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.isEligibleMediaForMal(MediaType.MANGA))
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.isEligibleMediaForMal(MediaType.MANHWA))
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.isMangaType(MediaType.MANHWA))
+
+        val manhwaEntry = MediaEntry(
+            id = 10L,
+            title = "Solo Leveling",
+            mediaType = MediaType.MANHWA,
+            status = MediaStatus.WATCHING,
+            externalSource = "MAL"
+        )
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.isMalSource(manhwaEntry))
+    }
+
+    @Test
+    fun testTachiyomiEntityDetectionAndIdExtraction() {
+        val tachiEntry1 = MediaEntry(
+            id = 1L,
+            title = "King of Gold",
+            mediaType = MediaType.MANHWA,
+            status = MediaStatus.READING,
+            externalSource = "TACHIYOMI",
+            externalId = "/manga/king-of-gold"
+        )
+        val tachiEntry2 = MediaEntry(
+            id = 2L,
+            title = "Martial Peak",
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.READING,
+            externalSource = null,
+            externalId = "/manga/martial-peak"
+        )
+        val normalEntry = MediaEntry(
+            id = 3L,
+            title = "One Piece",
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.READING,
+            externalSource = "MAL",
+            externalId = "13"
+        )
+
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.isTachiyomiSource(tachiEntry1))
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.isTachiyomiSource(tachiEntry2))
+        assertFalse(com.lx.tracklist.data.remote.JikanSyncManager.isTachiyomiSource(normalEntry))
+
+        // ID validity check: Tachiyomi slug / path IDs are not valid external IDs
+        assertFalse(com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(tachiEntry1))
+        assertFalse(com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(tachiEntry2))
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(normalEntry))
+
+        // MangaDex UUID and numeric MAL extraction
+        val uuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        assertEquals(uuid, com.lx.tracklist.data.remote.JikanSyncManager.extractMangaDexUuid("/manga/$uuid"))
+        assertEquals(uuid, com.lx.tracklist.data.remote.JikanSyncManager.extractMangaDexUuid(uuid))
+        assertNull(com.lx.tracklist.data.remote.JikanSyncManager.extractMangaDexUuid("/manga/king-of-gold"))
+
+        assertEquals(12345L, com.lx.tracklist.data.remote.JikanSyncManager.extractNumericMalId("12345"))
+        assertEquals(54321L, com.lx.tracklist.data.remote.JikanSyncManager.extractNumericMalId("https://myanimelist.net/manga/54321"))
+        assertEquals(67890L, com.lx.tracklist.data.remote.JikanSyncManager.extractNumericMalId("/manga/67890"))
+        assertNull(com.lx.tracklist.data.remote.JikanSyncManager.extractNumericMalId("/manga/king-of-gold"))
+
+        // Tachiyomi entries for Anime/Manga/Manhwa are eligible for sync
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.isMalSource(tachiEntry1))
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.isMalSource(tachiEntry2))
     }
 
     @Test
