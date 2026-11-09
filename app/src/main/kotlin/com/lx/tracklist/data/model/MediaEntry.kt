@@ -6,8 +6,10 @@ import androidx.room.PrimaryKey
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 @Entity(
     tableName = "media_entries",
@@ -99,16 +101,69 @@ data class MediaEntry(
         }
     }
 
+    fun matchesExternal(
+        candidateExternalId: String?,
+        candidateExternalSource: String?,
+        candidateTitle: String,
+        candidateMediaType: MediaType,
+        candidateReleaseYear: String? = null,
+        candidateAlternateTitle: String? = null
+    ): Boolean {
+        val entrySrc = normalizeSource(externalSource)
+        val candidateSrc = normalizeSource(candidateExternalSource)
+        val compatibleSource = (entrySrc == null || candidateSrc == null || entrySrc == candidateSrc)
+
+        // 1. If both have external IDs and sources are compatible, ID equality is authoritative.
+        if (!externalId.isNullOrBlank() && !candidateExternalId.isNullOrBlank()) {
+            if (compatibleSource && mediaType == candidateMediaType) {
+                return externalId.equals(candidateExternalId, ignoreCase = true)
+            }
+        }
+
+        // 2. If both have external IDs from compatible sources and they didn't match,
+        // they are definitively different items in that catalog. Never fall back to title matching.
+        if (!externalId.isNullOrBlank() && !candidateExternalId.isNullOrBlank() && compatibleSource && mediaType == candidateMediaType) {
+            return false
+        }
+
+        // 3. Fallback matching: media type must match.
+        if (mediaType != candidateMediaType) {
+            return false
+        }
+
+        // 4. Title or alternate title must match.
+        val titleMatches = title.equals(candidateTitle, ignoreCase = true) ||
+                (!alternateTitle.isNullOrBlank() && alternateTitle.equals(candidateTitle, ignoreCase = true)) ||
+                (!candidateAlternateTitle.isNullOrBlank() && (title.equals(candidateAlternateTitle, ignoreCase = true) || (!alternateTitle.isNullOrBlank() && alternateTitle.equals(candidateAlternateTitle, ignoreCase = true))))
+
+        if (!titleMatches) {
+            return false
+        }
+
+        // 5. If titles match, check release year if available on both sides to prevent
+        // false-matching remakes / reboots with identical names.
+        val entryYear = airedStartDate?.let { extractYearFromMillis(it) }
+        val candidateYear = candidateReleaseYear?.trim()?.take(4)?.takeIf { it.length == 4 && it.all { c -> c.isDigit() } }
+
+        if (entryYear != null && candidateYear != null) {
+            return entryYear == candidateYear
+        }
+
+        return true
+    }
+
     fun getCorrelatedRelatedItems(allEntries: List<MediaEntry>): List<RelatedMediaItem> {
         val items = getRelatedMediaItems()
         if (items.isEmpty()) return emptyList()
         return items.map { item ->
             val match = allEntries.firstOrNull { entry ->
-                val sameExt = !entry.externalId.isNullOrBlank() &&
-                        entry.externalId.equals(item.externalId, ignoreCase = true) &&
-                        (entry.externalSource.isNullOrBlank() || item.externalSource.isBlank() || entry.externalSource.equals(item.externalSource, ignoreCase = true))
-                val sameTitle = entry.title.equals(item.title, ignoreCase = true) && entry.mediaType == item.mediaType
-                sameExt || sameTitle
+                entry.matchesExternal(
+                    candidateExternalId = item.externalId,
+                    candidateExternalSource = item.externalSource,
+                    candidateTitle = item.title,
+                    candidateMediaType = item.mediaType,
+                    candidateReleaseYear = item.releaseYear
+                )
             }
             item.copy(
                 inLibraryEntryId = match?.id,
@@ -352,6 +407,18 @@ data class MediaEntry(
         fun formatAlternateTitles(titles: List<String>): String? {
             val cleaned = titles.map { it.trim() }.filter { it.isNotBlank() }
             return if (cleaned.isEmpty()) null else cleaned.joinToString("\n")
+        }
+
+        fun extractYearFromMillis(timestamp: Long): String {
+            val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+            cal.timeInMillis = timestamp
+            return cal.get(Calendar.YEAR).toString()
+        }
+
+        fun normalizeSource(source: String?): String? {
+            if (source.isNullOrBlank()) return null
+            val upper = source.trim().uppercase(Locale.US)
+            return if (upper == "MYANIMELIST") "MAL" else upper
         }
     }
 }

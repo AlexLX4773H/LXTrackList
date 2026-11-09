@@ -62,11 +62,13 @@ class DetailViewModel(
     ) { related, allEntries ->
         related.map { item ->
             val match = allEntries.firstOrNull { entry ->
-                val sameExt = !entry.externalId.isNullOrBlank() &&
-                        entry.externalId.equals(item.externalId, ignoreCase = true) &&
-                        entry.externalSource?.equals(item.externalSource, ignoreCase = true) == true
-                val sameTitle = entry.title.equals(item.title, ignoreCase = true) && entry.mediaType == item.mediaType
-                sameExt || sameTitle
+                entry.matchesExternal(
+                    candidateExternalId = item.externalId,
+                    candidateExternalSource = item.externalSource,
+                    candidateTitle = item.title,
+                    candidateMediaType = item.mediaType,
+                    candidateReleaseYear = item.releaseYear
+                )
             }
             item.copy(
                 inLibraryEntryId = match?.id,
@@ -165,9 +167,14 @@ class DetailViewModel(
                 if (fetchResult.isSuccess) {
                     val results = fetchResult.getOrDefault(emptyList())
                     val filtered = results.filter { item ->
-                        val isSameExt = !cur.externalId.isNullOrBlank() && item.externalId.equals(cur.externalId, ignoreCase = true)
-                        val isSameTitle = item.title.equals(cur.title, ignoreCase = true) && item.mediaType == cur.mediaType
-                        !isSameExt && !isSameTitle
+                        val isSelf = cur.matchesExternal(
+                            candidateExternalId = item.externalId,
+                            candidateExternalSource = item.externalSource,
+                            candidateTitle = item.title,
+                            candidateMediaType = item.mediaType,
+                            candidateReleaseYear = item.releaseYear
+                        )
+                        !isSelf
                     }
                     _rawRelatedEntries.value = filtered
                     _relatedErrorMessage.value = null

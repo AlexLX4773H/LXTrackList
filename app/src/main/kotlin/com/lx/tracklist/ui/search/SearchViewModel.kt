@@ -83,11 +83,14 @@ class SearchViewModel(
     ) { state: SearchUiState, allEntries: List<MediaEntry>, customCats: List<CustomCategory>, subCats: List<SubCategory> ->
         val updatedResults = state.results.map { item ->
             val match = allEntries.firstOrNull { entry ->
-                val hasSameExt = !entry.externalId.isNullOrBlank() &&
-                        entry.externalId.equals(item.externalId, ignoreCase = true) &&
-                        entry.externalSource?.equals(item.externalSource, ignoreCase = true) == true
-                val hasSameTitle = entry.title.equals(item.title, ignoreCase = true) && entry.mediaType == item.mediaType
-                hasSameExt || hasSameTitle
+                entry.matchesExternal(
+                    candidateExternalId = item.externalId,
+                    candidateExternalSource = item.externalSource,
+                    candidateTitle = item.title,
+                    candidateMediaType = item.mediaType,
+                    candidateReleaseYear = item.releaseYear,
+                    candidateAlternateTitle = item.alternateTitle
+                )
             }
             if (match != null) {
                 item.copy(

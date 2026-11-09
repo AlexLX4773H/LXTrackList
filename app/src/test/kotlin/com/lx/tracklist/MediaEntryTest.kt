@@ -192,4 +192,155 @@ class MediaEntryTest {
         org.junit.Assert.assertNull(correlated[2].inLibraryEntryId)
         org.junit.Assert.assertNull(correlated[2].inLibraryStatus)
     }
+
+    @Test
+    fun testSameNameDifferentExternalIdDoesNotMatch() {
+        // Friday the 13th (1980) TMDB ID 9728
+        val friday1980Entry = MediaEntry(
+            id = 1L,
+            title = "Friday the 13th",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.PLAN_TO_WATCH,
+            externalId = "9728",
+            externalSource = "TMDB",
+            airedStartDate = 326764800000L // 1980-05-09 UTC
+        )
+
+        // Friday the 13th (2009) TMDB ID 13207
+        val friday2009CandidateId = "13207"
+        val friday2009CandidateSource = "TMDB"
+        val friday2009Title = "Friday the 13th"
+        val friday2009Year = "2009"
+
+        // 1980 entry should match 1980 candidate
+        org.junit.Assert.assertTrue(
+            friday1980Entry.matchesExternal(
+                candidateExternalId = "9728",
+                candidateExternalSource = "TMDB",
+                candidateTitle = "Friday the 13th",
+                candidateMediaType = MediaType.MOVIE,
+                candidateReleaseYear = "1980"
+            )
+        )
+
+        // 1980 entry MUST NOT match 2009 candidate even though titles are identical
+        org.junit.Assert.assertFalse(
+            friday1980Entry.matchesExternal(
+                candidateExternalId = friday2009CandidateId,
+                candidateExternalSource = friday2009CandidateSource,
+                candidateTitle = friday2009Title,
+                candidateMediaType = MediaType.MOVIE,
+                candidateReleaseYear = friday2009Year
+            )
+        )
+
+        // Friday the 13th (2009) entry should match 2009 candidate and NOT 1980 candidate
+        val friday2009Entry = MediaEntry(
+            id = 2L,
+            title = "Friday the 13th",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.PLAN_TO_WATCH,
+            externalId = "13207",
+            externalSource = "TMDB",
+            airedStartDate = 1234483200000L // 2009-02-13 UTC
+        )
+
+        org.junit.Assert.assertTrue(
+            friday2009Entry.matchesExternal(
+                candidateExternalId = "13207",
+                candidateExternalSource = "TMDB",
+                candidateTitle = "Friday the 13th",
+                candidateMediaType = MediaType.MOVIE,
+                candidateReleaseYear = "2009"
+            )
+        )
+
+        org.junit.Assert.assertFalse(
+            friday2009Entry.matchesExternal(
+                candidateExternalId = "9728",
+                candidateExternalSource = "TMDB",
+                candidateTitle = "Friday the 13th",
+                candidateMediaType = MediaType.MOVIE,
+                candidateReleaseYear = "1980"
+            )
+        )
+    }
+
+    @Test
+    fun testSameNameManualEntryDistinguishedByReleaseYear() {
+        // Manual entry without external ID, but has 1980 release date
+        val manual1980Entry = MediaEntry(
+            id = 1L,
+            title = "Friday the 13th",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.PLAN_TO_WATCH,
+            externalId = null,
+            externalSource = null,
+            airedStartDate = 326764800000L // 1980-05-09 UTC
+        )
+
+        // Candidate 1980 matches
+        org.junit.Assert.assertTrue(
+            manual1980Entry.matchesExternal(
+                candidateExternalId = "9728",
+                candidateExternalSource = "TMDB",
+                candidateTitle = "Friday the 13th",
+                candidateMediaType = MediaType.MOVIE,
+                candidateReleaseYear = "1980"
+            )
+        )
+
+        // Candidate 2009 with different release year must NOT match
+        org.junit.Assert.assertFalse(
+            manual1980Entry.matchesExternal(
+                candidateExternalId = "13207",
+                candidateExternalSource = "TMDB",
+                candidateTitle = "Friday the 13th",
+                candidateMediaType = MediaType.MOVIE,
+                candidateReleaseYear = "2009"
+            )
+        )
+    }
+
+    @Test
+    fun testSourceNormalizationAndMediaTypeMismatch() {
+        val malEntry = MediaEntry(
+            id = 1L,
+            title = "Dororo",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.COMPLETED,
+            externalId = "5760",
+            externalSource = "MyAnimeList"
+        )
+
+        // Same ID with normalized source "MAL" matches
+        org.junit.Assert.assertTrue(
+            malEntry.matchesExternal(
+                candidateExternalId = "5760",
+                candidateExternalSource = "MAL",
+                candidateTitle = "Dororo",
+                candidateMediaType = MediaType.ANIME
+            )
+        )
+
+        // Different ID from remake (2019 has MAL ID 37520) must NOT match
+        org.junit.Assert.assertFalse(
+            malEntry.matchesExternal(
+                candidateExternalId = "37520",
+                candidateExternalSource = "MAL",
+                candidateTitle = "Dororo",
+                candidateMediaType = MediaType.ANIME
+            )
+        )
+
+        // Different MediaType must NOT match
+        org.junit.Assert.assertFalse(
+            malEntry.matchesExternal(
+                candidateExternalId = "5760",
+                candidateExternalSource = "MAL",
+                candidateTitle = "Dororo",
+                candidateMediaType = MediaType.MOVIE
+            )
+        )
+    }
 }
