@@ -214,18 +214,24 @@ class MediaRepository(
         updateUser(updated)
     }
 
-    // Custom Categories
+    // Custom Categories - Reactive to activeUser
+    @OptIn(ExperimentalCoroutinesApi::class)
     val customCategories: Flow<List<CustomCategory>>
-        get() = customCategoryDao?.getAllCategories() ?: emptyFlow()
+        get() = if (customCategoryDao != null) {
+            _activeUser.flatMapLatest { user -> customCategoryDao.getAllCategories(user.id) }
+        } else emptyFlow()
 
     suspend fun addCustomCategory(
         name: String,
         mediaType: MediaType? = null,
         isWatchType: Boolean = false,
         trackingUnit: TrackingUnit = TrackingUnit.CHAPTERS,
-        colorHex: String = "#A7EF60"
+        colorHex: String = "#A7EF60",
+        userId: Long? = null
     ): Long {
+        val targetUserId = userId ?: _activeUser.value.id
         val cat = CustomCategory(
+            userId = targetUserId,
             name = name.trim(),
             mediaType = mediaType,
             isWatchType = isWatchType,
@@ -243,19 +249,27 @@ class MediaRepository(
         customCategoryDao?.delete(category)
     }
 
-    // Sub Categories (specific to a category)
+    // Sub Categories (specific to a category) - Reactive to activeUser
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun getSubCategories(categoryKey: String): Flow<List<SubCategory>> {
-        return subCategoryDao?.getSubCategoriesByCategory(categoryKey) ?: emptyFlow()
+        return if (subCategoryDao != null) {
+            _activeUser.flatMapLatest { user -> subCategoryDao.getSubCategoriesByCategory(user.id, categoryKey) }
+        } else emptyFlow()
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     val allSubCategories: Flow<List<SubCategory>>
-        get() = subCategoryDao?.getAllSubCategories() ?: emptyFlow()
+        get() = if (subCategoryDao != null) {
+            _activeUser.flatMapLatest { user -> subCategoryDao.getAllSubCategories(user.id) }
+        } else emptyFlow()
 
-    suspend fun addSubCategory(categoryKey: String, name: String, colorHex: String = "#A7EF60") {
+    suspend fun addSubCategory(categoryKey: String, name: String, colorHex: String = "#A7EF60", userId: Long? = null) {
         val trimmed = name.trim()
         if (trimmed.isBlank()) return
+        val targetUserId = userId ?: _activeUser.value.id
         subCategoryDao?.insert(
             SubCategory(
+                userId = targetUserId,
                 categoryKey = categoryKey,
                 name = trimmed,
                 colorHex = colorHex
@@ -267,8 +281,9 @@ class MediaRepository(
         subCategoryDao?.delete(subCategory)
     }
 
-    suspend fun deleteSubCategoryByName(categoryKey: String, name: String) {
-        subCategoryDao?.deleteByName(categoryKey, name)
+    suspend fun deleteSubCategoryByName(categoryKey: String, name: String, userId: Long? = null) {
+        val targetUserId = userId ?: _activeUser.value.id
+        subCategoryDao?.deleteByName(targetUserId, categoryKey, name)
     }
 
     // Media Entries Queries - Reactive to activeUser
@@ -492,7 +507,7 @@ class MediaRepository(
             for (catName in uniqueCustomCats) {
                 val sample = entries.firstOrNull { it.customCategory?.trim().equals(catName, ignoreCase = true) }
                 val targetType = sample?.mediaType ?: MediaType.MANGA
-                val existing = customCategoryDao.getCategoryByName(catName)
+                val existing = customCategoryDao.getCategoryByName(targetUserId, catName)
                 if (existing == null) {
                     val isWatch = sample?.let {
                         it.mediaType == MediaType.ANIME || it.mediaType == MediaType.SHOW || it.mediaType == MediaType.MOVIE
@@ -500,6 +515,7 @@ class MediaRepository(
                     val unit = sample?.trackingUnit ?: TrackingUnit.CHAPTERS
                     customCategoryDao.insert(
                         CustomCategory(
+                            userId = targetUserId,
                             name = catName,
                             mediaType = targetType,
                             isWatchType = isWatch,
@@ -522,10 +538,11 @@ class MediaRepository(
                     } else {
                         rawEntry.mediaType.name
                     }
-                    val existing = subCategoryDao.getSubCategory(catKey, subCat)
+                    val existing = subCategoryDao.getSubCategory(targetUserId, catKey, subCat)
                     if (existing == null) {
                         subCategoryDao.insert(
                             SubCategory(
+                                userId = targetUserId,
                                 categoryKey = catKey,
                                 name = subCat
                             )

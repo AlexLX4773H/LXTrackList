@@ -14,7 +14,7 @@ import com.lx.tracklist.data.model.UserProfile
 
 @Database(
     entities = [MediaEntry::class, UserProfile::class, CustomCategory::class, SubCategory::class],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -110,6 +110,51 @@ abstract class LXTrackListDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1. Add userId column to sub_categories and custom_categories
+                db.execSQL("ALTER TABLE sub_categories ADD COLUMN userId INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE custom_categories ADD COLUMN userId INTEGER NOT NULL DEFAULT 1")
+
+                // 2. Associate existing sub_categories with the userId that actually uses them in media_entries
+                db.execSQL(
+                    """
+                    UPDATE sub_categories 
+                    SET userId = COALESCE(
+                        (SELECT me.userId FROM media_entries me WHERE me.subCategory = sub_categories.name LIMIT 1),
+                        1
+                    )
+                    """.trimIndent()
+                )
+
+                // 3. Associate existing custom_categories with the userId that actually uses them in media_entries
+                db.execSQL(
+                    """
+                    UPDATE custom_categories 
+                    SET userId = COALESCE(
+                        (SELECT me.userId FROM media_entries me WHERE me.customCategory = custom_categories.name LIMIT 1),
+                        1
+                    )
+                    """.trimIndent()
+                )
+
+                // 4. Populate missing per-profile sub_categories from media_entries
+                db.execSQL(
+                    """
+                    INSERT OR IGNORE INTO sub_categories (userId, categoryKey, name, colorHex, createdAt)
+                    SELECT DISTINCT me.userId, COALESCE(me.customCategory, me.mediaType), me.subCategory, '#A7EF60', strftime('%s','now')*1000
+                    FROM media_entries me
+                    WHERE me.subCategory IS NOT NULL AND trim(me.subCategory) != ''
+                    """.trimIndent()
+                )
+
+                // 5. Recreate unique indices per userId
+                db.execSQL("DROP INDEX IF EXISTS index_sub_categories_categoryKey_name")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_sub_categories_userId_categoryKey_name ON sub_categories(userId, categoryKey, name)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_custom_categories_userId_name ON custom_categories(userId, name)")
+            }
+        }
+
         fun getDatabase(context: Context): LXTrackListDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -117,7 +162,7 @@ abstract class LXTrackListDatabase : RoomDatabase() {
                     LXTrackListDatabase::class.java,
                     "lx_track_list.db"
                 )
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

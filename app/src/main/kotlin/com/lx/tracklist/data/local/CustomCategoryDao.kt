@@ -13,26 +13,26 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface CustomCategoryDao {
 
-    @Query("SELECT * FROM custom_categories ORDER BY name ASC")
-    fun getAllCategories(): Flow<List<CustomCategory>>
+    @Query("SELECT * FROM custom_categories WHERE userId = :userId ORDER BY name ASC")
+    fun getAllCategories(userId: Long): Flow<List<CustomCategory>>
 
-    @Query("SELECT * FROM custom_categories ORDER BY name ASC")
-    suspend fun getAllCategoriesSync(): List<CustomCategory>
+    @Query("SELECT * FROM custom_categories WHERE userId = :userId ORDER BY name ASC")
+    suspend fun getAllCategoriesSync(userId: Long): List<CustomCategory>
 
-    @Query("SELECT * FROM custom_categories WHERE mediaType = :mediaType OR mediaType IS NULL ORDER BY name ASC")
-    fun getCategoriesByMediaType(mediaType: MediaType): Flow<List<CustomCategory>>
+    @Query("SELECT * FROM custom_categories WHERE userId = :userId AND (mediaType = :mediaType OR mediaType IS NULL) ORDER BY name ASC")
+    fun getCategoriesByMediaType(userId: Long, mediaType: MediaType): Flow<List<CustomCategory>>
 
-    @Query("SELECT * FROM custom_categories WHERE mediaType = :mediaType OR mediaType IS NULL ORDER BY name ASC")
-    suspend fun getCategoriesByMediaTypeSync(mediaType: MediaType): List<CustomCategory>
+    @Query("SELECT * FROM custom_categories WHERE userId = :userId AND (mediaType = :mediaType OR mediaType IS NULL) ORDER BY name ASC")
+    suspend fun getCategoriesByMediaTypeSync(userId: Long, mediaType: MediaType): List<CustomCategory>
 
     @Query("SELECT * FROM custom_categories WHERE id = :id")
     suspend fun getCategoryById(id: Long): CustomCategory?
 
-    @Query("SELECT * FROM custom_categories WHERE name = :name LIMIT 1")
-    suspend fun getCategoryByName(name: String): CustomCategory?
+    @Query("SELECT * FROM custom_categories WHERE userId = :userId AND name = :name LIMIT 1")
+    suspend fun getCategoryByName(userId: Long, name: String): CustomCategory?
 
-    @Query("SELECT * FROM custom_categories WHERE name = :name AND (mediaType = :mediaType OR mediaType IS NULL) LIMIT 1")
-    suspend fun getCategoryByNameAndType(name: String, mediaType: MediaType): CustomCategory?
+    @Query("SELECT * FROM custom_categories WHERE userId = :userId AND name = :name AND (mediaType = :mediaType OR mediaType IS NULL) LIMIT 1")
+    suspend fun getCategoryByNameAndType(userId: Long, name: String, mediaType: MediaType): CustomCategory?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(category: CustomCategory): Long
@@ -43,7 +43,7 @@ interface CustomCategoryDao {
     @Delete
     suspend fun delete(category: CustomCategory)
 
-    @Query("DELETE FROM custom_categories WHERE name = :name")
-    suspend fun deleteByName(name: String)
+    @Query("DELETE FROM custom_categories WHERE userId = :userId AND name = :name")
+    suspend fun deleteByName(userId: Long, name: String)
 }
 

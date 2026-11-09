@@ -46,10 +46,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -136,28 +138,32 @@ fun HomeScreen(
         }
     }
 
-    val pagerState = rememberPagerState(
-        initialPage = currentTabIndex.coerceIn(0, (homeTabs.size - 1).coerceAtLeast(0)),
-        pageCount = { homeTabs.size }
-    )
+    val pagerState = key(state.activeUser?.id ?: 0L) {
+        rememberPagerState(
+            initialPage = currentTabIndex.coerceIn(0, (homeTabs.size - 1).coerceAtLeast(0)),
+            pageCount = { homeTabs.size }
+        )
+    }
 
-    // Sync pager swipe to ViewModel
-    LaunchedEffect(pagerState.currentPage, homeTabs) {
-        val targetTab = homeTabs.getOrNull(pagerState.currentPage) ?: HomeTab.All
-        when (targetTab) {
-            is HomeTab.All -> {
-                if (state.selectedStatus != null || state.selectedSubCategory != null) {
-                    viewModel.selectStatus(null)
+    // Sync pager swipe to ViewModel ONLY when pager settles
+    LaunchedEffect(pagerState, homeTabs) {
+        snapshotFlow { pagerState.settledPage }.collect { settledIndex ->
+            val targetTab = homeTabs.getOrNull(settledIndex) ?: HomeTab.All
+            when (targetTab) {
+                is HomeTab.All -> {
+                    if (state.selectedStatus != null || state.selectedSubCategory != null) {
+                        viewModel.selectStatus(null)
+                    }
                 }
-            }
-            is HomeTab.Status -> {
-                if (state.selectedStatus != targetTab.status || state.selectedSubCategory != null) {
-                    viewModel.selectStatus(targetTab.status)
+                is HomeTab.Status -> {
+                    if (state.selectedStatus != targetTab.status || state.selectedSubCategory != null) {
+                        viewModel.selectStatus(targetTab.status)
+                    }
                 }
-            }
-            is HomeTab.SubCat -> {
-                if (!state.selectedSubCategory.equals(targetTab.subCategory.name, ignoreCase = true)) {
-                    viewModel.selectSubCategory(targetTab.subCategory.name)
+                is HomeTab.SubCat -> {
+                    if (!state.selectedSubCategory.equals(targetTab.subCategory.name, ignoreCase = true)) {
+                        viewModel.selectSubCategory(targetTab.subCategory.name)
+                    }
                 }
             }
         }
@@ -264,6 +270,7 @@ fun HomeScreen(
         ) {
             HorizontalPager(
                 state = pagerState,
+                key = { page -> homeTabs.getOrNull(page)?.hashCode() ?: page },
                 modifier = Modifier.fillMaxSize(),
                 userScrollEnabled = state.isSwipeToSwitchTabsEnabled
             ) { pageIndex ->

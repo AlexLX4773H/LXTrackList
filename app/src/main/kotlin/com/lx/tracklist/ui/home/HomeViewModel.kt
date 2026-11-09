@@ -153,6 +153,7 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
             .forEach { newName ->
                 subCatsForActive.add(
                     SubCategory(
+                        userId = ctx.activeUser.id,
                         categoryKey = activeKey,
                         name = newName
                     )
@@ -296,6 +297,21 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
     }
 
     fun switchUser(profile: UserProfile) {
+        val targetCat = profile.defaultMediaType ?: MediaType.ANIME
+        val targetCustomCat = profile.defaultCustomCategory?.trim()?.ifBlank { null }
+        val targetSubCat = profile.defaultSubCategory?.trim()?.ifBlank { null }
+        val targetStatus = profile.defaultStatus
+        _filterState.update {
+            it.copy(
+                category = targetCat,
+                customCategory = targetCustomCat,
+                subCategory = targetSubCat,
+                status = if (targetSubCat != null) null else targetStatus,
+                query = "",
+                isSearching = false,
+                isUserSwitcherOpen = false
+            )
+        }
         viewModelScope.launch {
             repository.switchUser(profile)
         }

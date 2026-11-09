@@ -11,14 +11,14 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface SubCategoryDao {
 
-    @Query("SELECT * FROM sub_categories WHERE categoryKey = :categoryKey ORDER BY name ASC")
-    fun getSubCategoriesByCategory(categoryKey: String): Flow<List<SubCategory>>
+    @Query("SELECT * FROM sub_categories WHERE userId = :userId AND categoryKey = :categoryKey ORDER BY name ASC")
+    fun getSubCategoriesByCategory(userId: Long, categoryKey: String): Flow<List<SubCategory>>
 
-    @Query("SELECT * FROM sub_categories ORDER BY name ASC")
-    fun getAllSubCategories(): Flow<List<SubCategory>>
+    @Query("SELECT * FROM sub_categories WHERE userId = :userId ORDER BY name ASC")
+    fun getAllSubCategories(userId: Long): Flow<List<SubCategory>>
 
-    @Query("SELECT * FROM sub_categories WHERE categoryKey = :categoryKey AND LOWER(name) = LOWER(:name) LIMIT 1")
-    suspend fun getSubCategory(categoryKey: String, name: String): SubCategory?
+    @Query("SELECT * FROM sub_categories WHERE userId = :userId AND categoryKey = :categoryKey AND LOWER(name) = LOWER(:name) LIMIT 1")
+    suspend fun getSubCategory(userId: Long, categoryKey: String, name: String): SubCategory?
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(subCategory: SubCategory): Long
@@ -26,7 +26,7 @@ interface SubCategoryDao {
     @Delete
     suspend fun delete(subCategory: SubCategory)
 
-    @Query("DELETE FROM sub_categories WHERE categoryKey = :categoryKey AND LOWER(name) = LOWER(:name)")
-    suspend fun deleteByName(categoryKey: String, name: String)
+    @Query("DELETE FROM sub_categories WHERE userId = :userId AND categoryKey = :categoryKey AND LOWER(name) = LOWER(:name)")
+    suspend fun deleteByName(userId: Long, categoryKey: String, name: String)
 }
 

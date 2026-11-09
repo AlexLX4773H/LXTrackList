@@ -1805,4 +1805,83 @@ class FeaturesTest {
         assertTrue("English title match must succeed", resolver.isConfidentExactMatch("Your Name", foreignMovieCandidate))
         assertTrue("Original Japanese title match must succeed", resolver.isConfidentExactMatch("君の名は。", foreignMovieCandidate))
     }
+
+    @Test
+    fun testValidExternalIdFilterOption() {
+        val entryWithMalId = MediaEntry(
+            id = 1L,
+            userId = 1L,
+            title = "Attack on Titan",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.COMPLETED,
+            externalSource = "MAL",
+            externalId = "16498"
+        )
+        val entryWithMangaDexUuid = MediaEntry(
+            id = 2L,
+            userId = 1L,
+            title = "Solo Leveling",
+            mediaType = MediaType.MANHWA,
+            status = MediaStatus.COMPLETED,
+            externalSource = "MangaDex",
+            externalId = "32d76d19-8a05-4db0-9fc2-e0b0648fe9d0"
+        )
+        val entryWithTachiyomiPath = MediaEntry(
+            id = 3L,
+            userId = 1L,
+            title = "Unresolved Manhwa",
+            mediaType = MediaType.MANHWA,
+            status = MediaStatus.WATCHING,
+            externalSource = "TACHIYOMI",
+            externalId = "/manga/12345"
+        )
+        val entryWithoutId = MediaEntry(
+            id = 4L,
+            userId = 1L,
+            title = "Custom Show",
+            mediaType = MediaType.SHOW,
+            status = MediaStatus.WATCHING,
+            externalSource = null,
+            externalId = null
+        )
+
+        val allEntries = listOf(entryWithMalId, entryWithMangaDexUuid, entryWithTachiyomiPath, entryWithoutId)
+
+        val validFilterAll = allEntries
+        assertEquals(4, validFilterAll.size)
+
+        val validFilterIncludeOnly = allEntries.filter { com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(it) }
+        assertEquals(2, validFilterIncludeOnly.size)
+        assertTrue(validFilterIncludeOnly.contains(entryWithMalId))
+        assertTrue(validFilterIncludeOnly.contains(entryWithMangaDexUuid))
+
+        val validFilterExclude = allEntries.filter { !com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(it) }
+        assertEquals(2, validFilterExclude.size)
+        assertTrue(validFilterExclude.contains(entryWithTachiyomiPath))
+        assertTrue(validFilterExclude.contains(entryWithoutId))
+    }
+
+    @Test
+    fun testPerProfileSubCategoryIsolation() {
+        val profile1SubCat = com.lx.tracklist.data.model.SubCategory(
+            userId = 1L,
+            categoryKey = "MANHWA",
+            name = "Leted Current3"
+        )
+        val profile2SubCat = com.lx.tracklist.data.model.SubCategory(
+            userId = 2L,
+            categoryKey = "MANHWA",
+            name = "Manhwa H 3"
+        )
+
+        val allSubCategories = listOf(profile1SubCat, profile2SubCat)
+
+        val profile1SubCats = allSubCategories.filter { it.userId == 1L }
+        assertEquals(1, profile1SubCats.size)
+        assertEquals("Leted Current3", profile1SubCats[0].name)
+
+        val profile2SubCats = allSubCategories.filter { it.userId == 2L }
+        assertEquals(1, profile2SubCats.size)
+        assertEquals("Manhwa H 3", profile2SubCats[0].name)
+    }
 }

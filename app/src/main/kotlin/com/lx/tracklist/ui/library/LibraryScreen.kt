@@ -2520,6 +2520,19 @@ private fun AdvancedFilterSheet(
                         onClick = { viewModel.cycleExternalTrackingFilter() }
                     )
 
+                    // Valid External ID Filter
+                    TriStateFilterRow(
+                        title = "Valid External ID",
+                        subtitle = when (state.validExternalIdFilter) {
+                            InclusionFilterOption.ALL -> "Tap: Valid ID Only → No Valid ID → Off"
+                            InclusionFilterOption.INCLUDE_ONLY -> "Showing Only With Valid External ID"
+                            InclusionFilterOption.EXCLUDE -> "Excluding / Hiding Valid IDs (Unresolved / Missing only)"
+                        },
+                        icon = Icons.Default.Bookmarks,
+                        state = state.validExternalIdFilter,
+                        onClick = { viewModel.cycleValidExternalIdFilter() }
+                    )
+
                     // Cover Image Filter (All / Has Cover / Broken URL / No Cover)
                     CoverImageFilterRow(
                         state = state.coverImageFilter,
