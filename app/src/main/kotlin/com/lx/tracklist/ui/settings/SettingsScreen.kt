@@ -70,6 +70,7 @@ import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
@@ -1534,13 +1535,13 @@ private fun SettingsMainMenu(
             val defaultTabName = targetUser.defaultSubCategory ?: (targetUser.defaultStatus?.getDisplayLabel(targetUser.defaultMediaType ?: MediaType.ANIME) ?: "All")
 
             SettingsMenuItem(
-                icon = Icons.Default.Bookmark,
-                iconBackgroundColor = LXPrimaryGreen.copy(alpha = 0.15f),
-                iconTintColor = LXPrimaryGreen,
+                icon = Icons.Default.RocketLaunch,
+                iconBackgroundColor = Color(0xFFFF8A65).copy(alpha = 0.15f),
+                iconTintColor = Color(0xFFFF8A65),
                 title = "Default Startup View",
                 subtitle = "${targetUser.name}: $defaultCatName • $defaultTabName",
                 badgeText = "PER PROFILE",
-                badgeColor = LXPrimaryGreen,
+                badgeColor = Color(0xFFFF8A65),
                 isSelected = selectedSubMenu == SettingsSubMenu.STARTUP_VIEW,
                 onClick = { onSelectSubMenu(SettingsSubMenu.STARTUP_VIEW) }
             )
@@ -3939,7 +3940,7 @@ private fun PreferencesContent(
                     .fillMaxWidth()
                     .clickable { onNavigateToStartupView() },
                 colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-                border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF8A65).copy(alpha = 0.5f)),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Row(
@@ -3955,13 +3956,13 @@ private fun PreferencesContent(
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f)),
+                                .background(Color(0xFFFF8A65).copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Bookmark,
+                                imageVector = Icons.Default.RocketLaunch,
                                 contentDescription = null,
-                                tint = LXPrimaryGreen,
+                                tint = Color(0xFFFF8A65),
                                 modifier = Modifier.size(22.dp)
                             )
                         }
@@ -4074,7 +4075,7 @@ private fun StartupViewContent(
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-            border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.6f)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF8A65).copy(alpha = 0.6f)),
             shape = RoundedCornerShape(12.dp)
         ) {
             Column(
@@ -4091,13 +4092,13 @@ private fun StartupViewContent(
                             modifier = Modifier
                                 .size(28.dp)
                                 .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.2f)),
+                                .background(Color(0xFFFF8A65).copy(alpha = 0.2f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Bookmark,
+                                imageVector = Icons.Default.RocketLaunch,
                                 contentDescription = null,
-                                tint = LXPrimaryGreen,
+                                tint = Color(0xFFFF8A65),
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -4105,7 +4106,7 @@ private fun StartupViewContent(
                         Text(
                             text = "Current Boot Target",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = LXPrimaryGreen
+                            color = Color(0xFFFF8A65)
                         )
                     }
 

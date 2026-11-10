@@ -515,7 +515,7 @@ private fun SearchResultCard(
                             )
                             Spacer(modifier = Modifier.width(2.dp))
                             Text(
-                                text = String.format(Locale.US, "%.1f", item.score),
+                                text = String.format(Locale.US, "%.2f", item.score).trimEnd('0').trimEnd('.'),
                                 color = LXScoreGold,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
@@ -951,7 +951,7 @@ private fun SearchResultDetailSheet(
                                     )
                                     Spacer(modifier = Modifier.width(2.dp))
                                     Text(
-                                        text = "${String.format(Locale.US, "%.1f", item.score)} (${item.externalSource})",
+                                        text = "${String.format(Locale.US, "%.2f", item.score).trimEnd('0').trimEnd('.')} (${item.externalSource})",
                                         color = LXScoreGold,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold

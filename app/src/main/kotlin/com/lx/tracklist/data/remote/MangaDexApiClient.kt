@@ -223,8 +223,10 @@ object MangaDexApiClient {
 
         // Chapters & Volumes
         val lastChapterStr = attributes.get("lastChapter")?.takeIf { !it.isJsonNull }?.asString
-        val totalChapters = lastChapterStr?.toIntOrNull()
+        val parsedLastChapter = lastChapterStr?.toIntOrNull()
             ?: lastChapterStr?.toDoubleOrNull()?.toInt()
+        val totalChapters = if (isAiring == true) null else parsedLastChapter
+        val airedChapters = if (isAiring == true) parsedLastChapter else null
 
         val lastVolumeStr = attributes.get("lastVolume")?.takeIf { !it.isJsonNull }?.asString
         val totalVolumes = lastVolumeStr?.toIntOrNull()
@@ -299,6 +301,7 @@ object MangaDexApiClient {
             totalEpisodes = null,
             totalChapters = totalChapters,
             totalVolumes = totalVolumes,
+            airedChapters = airedChapters,
             alternateTitle = alternateTitle,
             airedStartDate = airedStartDate,
             airedEndDate = null,

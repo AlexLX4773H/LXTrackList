@@ -753,7 +753,8 @@ fun DetailScreen(
                                 MetaChip(label = "Rewatched ${currentEntry.rewatchCount}x", color = LXScoreGold)
                             }
                             if (currentEntry.isAiring) {
-                                MetaChip(label = "AIRING", color = LXAiringBlue)
+                                val airingLabel = if (currentEntry.mediaType.isWatchType) "AIRING" else "PUBLISHING"
+                                MetaChip(label = airingLabel, color = LXAiringBlue)
                             }
                         }
 
@@ -1062,13 +1063,14 @@ private fun DetailProgressCard(
                         )
                     }
                 } else if (entry.isAiring) {
+                    val airingLabel = if (entry.mediaType.isWatchType) "Airing" else "Publishing"
                     Surface(
                         color = LXAiringBlue.copy(alpha = 0.15f),
                         shape = RoundedCornerShape(6.dp),
                         border = BorderStroke(1.dp, LXAiringBlue.copy(alpha = 0.4f))
                     ) {
                         Text(
-                            text = "Airing",
+                            text = airingLabel,
                             color = LXAiringBlue,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -2077,7 +2079,7 @@ private fun DetailSourceText(entry: MediaEntry) {
         val scoreStr = if (entry.externalScore % 1.0f == 0.0f) {
             entry.externalScore.toInt().toString()
         } else {
-            String.format(Locale.US, "%.1f", entry.externalScore)
+            String.format(Locale.US, "%.2f", entry.externalScore).trimEnd('0').trimEnd('.')
         }
         srcParts.add("$src Rating: ★ $scoreStr")
     }

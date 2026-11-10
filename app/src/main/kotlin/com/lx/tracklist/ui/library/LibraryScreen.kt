@@ -1266,17 +1266,18 @@ fun LibraryScreen(
                         }
                     }
 
+                    val airingFilterPrefix = if (state.selectedCategoryFilter?.isReadType == true) "Publishing" else "Airing"
                     if (state.airingFilter == InclusionFilterOption.INCLUDE_ONLY) {
                         item {
                             RemovableFilterBadge(
-                                label = "+Airing",
+                                label = "+$airingFilterPrefix",
                                 onRemove = { viewModel.setAiringFilter(InclusionFilterOption.ALL) }
                             )
                         }
                     } else if (state.airingFilter == InclusionFilterOption.EXCLUDE) {
                         item {
                             RemovableFilterBadge(
-                                label = "-Airing",
+                                label = "-$airingFilterPrefix",
                                 onRemove = { viewModel.setAiringFilter(InclusionFilterOption.ALL) }
                             )
                         }

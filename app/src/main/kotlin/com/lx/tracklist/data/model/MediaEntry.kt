@@ -429,7 +429,7 @@ data class MediaEntry(
         val formatted = if (sc % 1.0f == 0.0f) {
             sc.toInt().toString()
         } else {
-            String.format(Locale.US, "%.1f", sc)
+            String.format(Locale.US, "%.2f", sc).trimEnd('0').trimEnd('.')
         }
         return "$formatted ($src)"
     }

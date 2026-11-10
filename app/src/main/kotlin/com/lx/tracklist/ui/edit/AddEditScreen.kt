@@ -1099,9 +1099,7 @@ fun AddEditScreen(
                         }
 
                         OutlinedTextField(
-                            value = state.externalScore?.let {
-                                if (it % 1.0f == 0.0f) it.toInt().toString() else it.toString()
-                            } ?: "",
+                            value = state.externalScore?.let { formatScore(it) } ?: "",
                             onValueChange = { input ->
                                 if (isForeignDbUnlocked) {
                                     viewModel.updateExternalScore(input.toFloatOrNull())
@@ -2197,23 +2195,62 @@ private fun ExternalDbSyncDialog(
                                                         )
                                                     }
                                                     Spacer(modifier = Modifier.height(4.dp))
-                                                    Row(
-                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
+                                                    FlowRow(
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                        verticalArrangement = Arrangement.spacedBy(4.dp)
                                                     ) {
-                                                        if (item.externalScore != null && item.externalScore > 0f) {
-                                                            Text("★ ${item.externalScore}", color = LXScoreGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        val formattedScore = formatScore(item.externalScore)
+                                                        if (formattedScore != null) {
+                                                            Text(
+                                                                text = "★ $formattedScore",
+                                                                color = LXScoreGold,
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                maxLines = 1,
+                                                                softWrap = false
+                                                            )
                                                         }
                                                         if (item.totalEpisodes != null && item.totalEpisodes > 0) {
-                                                            Text("${item.totalEpisodes} eps", color = LXTextSecondary, fontSize = 11.sp)
+                                                            Text(
+                                                                text = "${item.totalEpisodes} eps",
+                                                                color = LXTextSecondary,
+                                                                fontSize = 11.sp,
+                                                                maxLines = 1,
+                                                                softWrap = false
+                                                            )
                                                         } else if (item.totalChapters != null && item.totalChapters > 0) {
-                                                            Text("${item.totalChapters} ch", color = LXTextSecondary, fontSize = 11.sp)
+                                                            Text(
+                                                                text = "${item.totalChapters} ch",
+                                                                color = LXTextSecondary,
+                                                                fontSize = 11.sp,
+                                                                maxLines = 1,
+                                                                softWrap = false
+                                                            )
                                                         }
-                                                        if (item.type != null) {
-                                                            Text(item.type, color = LXPrimaryGreen, fontSize = 11.sp)
+                                                        if (!item.type.isNullOrBlank()) {
+                                                            Surface(
+                                                                color = LXPrimaryGreen.copy(alpha = 0.15f),
+                                                                shape = RoundedCornerShape(4.dp)
+                                                            ) {
+                                                                Text(
+                                                                    text = item.type,
+                                                                    color = LXPrimaryGreen,
+                                                                    fontSize = 10.sp,
+                                                                    fontWeight = FontWeight.SemiBold,
+                                                                    maxLines = 1,
+                                                                    softWrap = false,
+                                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                                                                )
+                                                            }
                                                         }
                                                         val provLabel = item.sourceProvider
-                                                        Text("($provLabel)", color = LXTextSecondary.copy(alpha = 0.6f), fontSize = 10.sp, maxLines = 1, softWrap = false)
+                                                        Text(
+                                                            text = "($provLabel)",
+                                                            color = LXTextSecondary.copy(alpha = 0.6f),
+                                                            fontSize = 10.sp,
+                                                            maxLines = 1,
+                                                            softWrap = false
+                                                        )
                                                     }
                                                 }
 
@@ -2299,8 +2336,10 @@ private fun ExternalDbSyncDialog(
                                                     if (item.isAiring != null) {
                                                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                                             Text("Status:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = LXTextSecondary)
+                                                            val isWatch = mediaType.isWatchType
+                                                            val ongoingText = if (isWatch) "Currently Airing" else "Publishing"
                                                             Text(
-                                                                text = if (item.isAiring) "Publishing / Airing" else "Finished",
+                                                                text = if (item.isAiring) ongoingText else "Finished",
                                                                 fontSize = 11.sp,
                                                                 color = if (item.isAiring) LXPrimaryGreen else LXTextPrimary
                                                             )
@@ -2488,17 +2527,44 @@ private fun ExternalDbSyncDialog(
                                                         )
                                                     }
                                                     Spacer(modifier = Modifier.height(4.dp))
-                                                    Row(
-                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
+                                                    FlowRow(
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                        verticalArrangement = Arrangement.spacedBy(4.dp)
                                                     ) {
-                                                        if (item.voteAverage != null && item.voteAverage > 0f) {
-                                                            Text("★ ${String.format(Locale.US, "%.1f", item.voteAverage)}", color = LXScoreGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        val formattedScore = formatScore(item.voteAverage?.toFloat())
+                                                        if (formattedScore != null) {
+                                                            Text(
+                                                                text = "★ $formattedScore",
+                                                                color = LXScoreGold,
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                maxLines = 1,
+                                                                softWrap = false
+                                                            )
                                                         }
                                                         if (!item.releaseYear.isNullOrBlank()) {
-                                                            Text(item.releaseYear, color = LXTextSecondary, fontSize = 11.sp)
+                                                            Text(
+                                                                text = item.releaseYear,
+                                                                color = LXTextSecondary,
+                                                                fontSize = 11.sp,
+                                                                maxLines = 1,
+                                                                softWrap = false
+                                                            )
                                                         }
-                                                        Text(if (item.isMovie) "Movie" else "TV Show", color = LXPrimaryGreen, fontSize = 11.sp)
+                                                        Surface(
+                                                            color = LXPrimaryGreen.copy(alpha = 0.15f),
+                                                            shape = RoundedCornerShape(4.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = if (item.isMovie) "Movie" else "TV Show",
+                                                                color = LXPrimaryGreen,
+                                                                fontSize = 10.sp,
+                                                                fontWeight = FontWeight.SemiBold,
+                                                                maxLines = 1,
+                                                                softWrap = false,
+                                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                                                            )
+                                                        }
                                                     }
                                                 }
 
@@ -2677,6 +2743,15 @@ private fun formatDateRange(startDate: Long?, endDate: Long?): String? {
         startDate != null -> "Started ${sdf.format(Date(startDate))}"
         endDate != null -> "Ended ${sdf.format(Date(endDate))}"
         else -> null
+    }
+}
+
+private fun formatScore(score: Float?): String? {
+    if (score == null || score <= 0f) return null
+    return if (score % 1.0f == 0.0f) {
+        score.toInt().toString()
+    } else {
+        String.format(Locale.US, "%.2f", score).trimEnd('0').trimEnd('.')
     }
 }
 

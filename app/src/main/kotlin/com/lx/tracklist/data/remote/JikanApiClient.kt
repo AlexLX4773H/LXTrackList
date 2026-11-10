@@ -37,6 +37,7 @@ data class JikanMediaDetails(
     val totalEpisodes: Int? = null,
     val totalChapters: Int? = null,
     val totalVolumes: Int? = null,
+    val airedChapters: Int? = null,
     val alternateTitle: String? = null,
     val airedStartDate: Long? = null,
     val airedEndDate: Long? = null,

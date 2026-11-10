@@ -614,6 +614,7 @@ class AddEditViewModel(
                 episodeLengthMinutes = if (isVideo && item.durationMinutes != null && item.durationMinutes > 0 && (current.episodeLengthMinutes == null || current.episodeLengthMinutes == 0)) item.durationMinutes else current.episodeLengthMinutes,
                 durationMinutes = if (current.mediaType == MediaType.MOVIE && item.durationMinutes != null && item.durationMinutes > 0 && (current.durationMinutes == null || current.durationMinutes == 0)) item.durationMinutes else current.durationMinutes,
                 totalChapters = if (!isVideo && item.totalChapters != null && item.totalChapters > 0 && current.totalChapters == 0) item.totalChapters else current.totalChapters,
+                airedChapters = if (!isVideo && item.airedChapters != null && item.airedChapters > 0 && current.airedChapters == 0) item.airedChapters else current.airedChapters,
                 totalVolumes = if (!isVideo && item.totalVolumes != null && item.totalVolumes > 0 && current.totalVolumes == 0) item.totalVolumes else current.totalVolumes
             )
         }

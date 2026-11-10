@@ -307,8 +307,9 @@ fun MediaCard(
                         }
 
                         if (entry.isAiring) {
+                            val airingLabel = if (entry.mediaType.isWatchType) "AIRING" else "PUBLISHING"
                             Text(
-                                text = "AIRING",
+                                text = airingLabel,
                                 style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
                                 color = LXAiringBlue,
                                 modifier = Modifier
@@ -352,7 +353,7 @@ fun MediaCard(
                             val scoreStr = if (entry.externalScore % 1.0f == 0.0f) {
                                 entry.externalScore.toInt().toString()
                             } else {
-                                String.format(Locale.US, "%.1f", entry.externalScore)
+                                String.format(Locale.US, "%.2f", entry.externalScore).trimEnd('0').trimEnd('.')
                             }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
