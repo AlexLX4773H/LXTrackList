@@ -81,6 +81,7 @@ object CsvImporter {
                 v == "1" || v == "true" || v == "yes"
             } else false
             val parsedLength = if (episodeLengthIdx in cols.indices) cols[episodeLengthIdx].toIntOrNull() else null
+            val parsedCurrentTime = if (currentTimeIdx in cols.indices) cols[currentTimeIdx].toIntOrNull()?.takeIf { it > 0 } else null
 
             entries.add(
                 MediaEntry(
@@ -104,8 +105,6 @@ object CsvImporter {
                     externalSource = foreignSource ?: "CSV",
                     rewatchCount = rewatchCount,
                     isRewatching = isRewatching,
-                    val parsedCurrentTime = if (currentTimeIdx in cols.indices) cols[currentTimeIdx].toIntOrNull()?.takeIf { it > 0 } else null
-
                     episodeLengthMinutes = if (mediaType != MediaType.MOVIE) parsedLength else null,
                     currentTimeMinutes = parsedCurrentTime,
                     durationMinutes = if (mediaType == MediaType.MOVIE) parsedLength else null

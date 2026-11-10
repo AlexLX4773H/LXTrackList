@@ -567,9 +567,9 @@ class AddEditViewModel(
                 !it.isNullOrBlank() && (current.externalSource?.contains("TACHIYOMI", ignoreCase = true) == true || it.startsWith("/"))
             }
             val tachiNoteMarker = if (originalTachiId != null) "[Tachiyomi ID: $originalTachiId]" else null
-            val baseNotes = if (current.notes.isNullOrBlank() && !item.synopsis.isNullOrBlank()) item.synopsis else current.notes
-            val finalNotes = if (tachiNoteMarker != null && baseNotes?.contains(tachiNoteMarker) != true) {
-                if (baseNotes.isNullOrBlank()) tachiNoteMarker else "$baseNotes\n\n$tachiNoteMarker"
+            val baseNotes = if (current.notes.isBlank() && !item.synopsis.isNullOrBlank()) (item.synopsis ?: "") else current.notes
+            val finalNotes = if (tachiNoteMarker != null && !baseNotes.contains(tachiNoteMarker)) {
+                if (baseNotes.isBlank()) tachiNoteMarker else "$baseNotes\n\n$tachiNoteMarker"
             } else baseNotes
 
             // Align media type if current is generic or incompatible
@@ -606,7 +606,7 @@ class AddEditViewModel(
                 externalScore = item.externalScore ?: current.externalScore,
                 externalScoreSource = scoreSrc,
                 notes = finalNotes,
-                tags = if (current.tags.isNullOrBlank() && !item.tags.isNullOrBlank()) item.tags else current.tags,
+                tags = (if (current.tags.isBlank() && !item.tags.isNullOrBlank()) item.tags else current.tags) ?: "",
                 airedStartDate = item.airedStartDate ?: current.airedStartDate,
                 airedEndDate = item.airedEndDate ?: current.airedEndDate,
                 isAiring = item.isAiring ?: current.isAiring,
@@ -658,7 +658,9 @@ class AddEditViewModel(
                         .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
 
                     val targetMediaType = if (isMovie) MediaType.MOVIE else MediaType.SHOW
-                    val baseNotes = if (current.notes.isNullOrBlank() && !(fullDetails?.synopsis ?: item.overview).isNullOrBlank()) (fullDetails?.synopsis ?: item.overview) else current.notes
+                    val baseNotes = if (current.notes.isBlank() && !(fullDetails?.synopsis ?: item.overview).isNullOrBlank()) {
+                        (fullDetails?.synopsis ?: item.overview) ?: ""
+                    } else current.notes
 
                     val duration = if (isMovie) {
                         if (fullDetails?.durationMinutes != null && fullDetails.durationMinutes > 0) fullDetails.durationMinutes else current.durationMinutes
@@ -679,7 +681,7 @@ class AddEditViewModel(
                         externalScore = fullDetails?.externalScore ?: item.voteAverage ?: current.externalScore,
                         externalScoreSource = "TMDB",
                         notes = baseNotes,
-                        tags = if (current.tags.isNullOrBlank() && !fullDetails?.tags.isNullOrBlank()) fullDetails?.tags else current.tags,
+                        tags = (if (current.tags.isBlank() && !fullDetails?.tags.isNullOrBlank()) fullDetails?.tags else current.tags) ?: "",
                         airedStartDate = fullDetails?.airedStartDate ?: item.releaseDate ?: current.airedStartDate,
                         airedEndDate = fullDetails?.airedEndDate ?: current.airedEndDate,
                         isAiring = fullDetails?.isAiring ?: current.isAiring,

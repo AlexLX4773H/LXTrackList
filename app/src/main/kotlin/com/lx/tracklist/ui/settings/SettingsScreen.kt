@@ -1107,8 +1107,7 @@ fun SettingsScreen(
                         )
                         SettingsSubMenu.ABOUT -> AboutContent(
                             state = state,
-                            onCheckForUpdates = { viewModel.checkForUpdates() },
-                            onChangeStoragePath = { viewModel.setCustomStoragePath(context, it) }
+                            onCheckForUpdates = { viewModel.checkForUpdates() }
                         )
                     }
                 }
@@ -1255,7 +1254,6 @@ fun SettingsScreen(
                         AboutContent(
                             state = state,
                             onCheckForUpdates = { viewModel.checkForUpdates() },
-                            onChangeStoragePath = { viewModel.setCustomStoragePath(context, it) },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -4520,11 +4518,9 @@ private fun StartupViewContent(
 private fun AboutContent(
     state: SettingsUiState,
     onCheckForUpdates: () -> Unit,
-    onChangeStoragePath: ((String?) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var showChangeStorageDialog by remember { mutableStateOf(false) }
     val openUrl: (String) -> Unit = { url ->
         try {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
@@ -5002,8 +4998,7 @@ private fun AboutContent(
 
                 StorageLocationItem(
                     label = "Root Storage Folder",
-                    path = state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" },
-                    onEdit = if (onChangeStoragePath != null) { { showChangeStorageDialog = true } } else null
+                    path = state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }
                 )
 
                 HorizontalDivider(color = LXBorder, thickness = 1.dp)
@@ -5017,17 +5012,6 @@ private fun AboutContent(
                 InfoRow(label = "Custom Categories", value = "${state.customCategories.size} created")
                 InfoRow(label = "Import Strategy", value = state.selectedConflictStrategy.name)
             }
-        }
-
-        if (showChangeStorageDialog && onChangeStoragePath != null) {
-            ChangeStorageLocationDialog(
-                currentPath = state.homeFolderPath.ifBlank { StorageHelper.getDefaultBaseDir().absolutePath },
-                onDismiss = { showChangeStorageDialog = false },
-                onConfirm = { newPath ->
-                    onChangeStoragePath(newPath)
-                    showChangeStorageDialog = false
-                }
-            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
