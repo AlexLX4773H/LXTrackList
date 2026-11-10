@@ -565,6 +565,17 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         refreshCoverCacheStats(context)
     }
 
+    fun setCustomStoragePath(context: Context, path: String?) {
+        StorageHelper.setCustomStoragePath(context, path)
+        checkStorageStatus(context)
+        _uiState.update {
+            it.copy(
+                statusMessage = if (path.isNullOrBlank()) "Storage location reset to default." else "Storage location updated.",
+                isErrorMessage = false
+            )
+        }
+    }
+
     fun refreshCoverCacheStats(context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
             val sizeBytes = CoverCacheManager.getCacheSizeBytes(context)

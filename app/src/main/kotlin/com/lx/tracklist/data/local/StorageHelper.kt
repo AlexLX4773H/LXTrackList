@@ -36,6 +36,60 @@ object StorageHelper {
 
     private const val FOLDER_NAME_PRIMARY = "LXTrackList"
     private const val FOLDER_NAME_TYPO = "LXTractList"
+    private const val PREFS_NAME = "lx_storage_prefs"
+    private const val KEY_CUSTOM_STORAGE_PATH = "custom_storage_path"
+
+    @Volatile
+    private var cachedCustomPath: String? = null
+
+    fun init(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        cachedCustomPath = prefs.getString(KEY_CUSTOM_STORAGE_PATH, null)?.trim()?.takeIf { it.isNotBlank() }
+    }
+
+    fun getCustomStoragePath(context: Context? = null): String? {
+        if (cachedCustomPath != null) return cachedCustomPath
+        if (context != null) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            cachedCustomPath = prefs.getString(KEY_CUSTOM_STORAGE_PATH, null)?.trim()?.takeIf { it.isNotBlank() }
+        }
+        return cachedCustomPath
+    }
+
+    fun setCustomStoragePath(context: Context, path: String?) {
+        val cleanPath = path?.trim()?.takeIf { it.isNotBlank() }
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            if (cleanPath != null) {
+                putString(KEY_CUSTOM_STORAGE_PATH, cleanPath)
+            } else {
+                remove(KEY_CUSTOM_STORAGE_PATH)
+            }
+            apply()
+        }
+        cachedCustomPath = cleanPath
+    }
+
+    fun getDefaultBaseDir(): File {
+        val root = Environment.getExternalStorageDirectory()
+        val typoDir = File(root, FOLDER_NAME_TYPO)
+        val primaryDir = File(root, FOLDER_NAME_PRIMARY)
+        return if (typoDir.exists() && typoDir.isDirectory) typoDir else primaryDir
+    }
+
+    fun parseTreeUriToPath(uri: Uri): String? {
+        val uriStr = uri.toString()
+        if (uriStr.contains("primary%3A", ignoreCase = true)) {
+            val rel = Uri.decode(uriStr.substringAfter("primary%3A"))
+            return "${Environment.getExternalStorageDirectory().absolutePath}/$rel".trimEnd('/')
+        }
+        val path = uri.path ?: return null
+        if (path.contains("primary:")) {
+            val rel = path.substringAfter("primary:")
+            return "${Environment.getExternalStorageDirectory().absolutePath}/$rel".trimEnd('/')
+        }
+        return null
+    }
 
     fun hasStoragePermission(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -71,6 +125,15 @@ object StorageHelper {
     }
 
     fun getBaseDir(): File {
+        val custom = cachedCustomPath
+        if (!custom.isNullOrBlank()) {
+            val dir = File(custom)
+            if (!dir.exists()) {
+                dir.mkdirs()
+            }
+            return dir
+        }
+
         val root = Environment.getExternalStorageDirectory()
         val typoDir = File(root, FOLDER_NAME_TYPO)
         val primaryDir = File(root, FOLDER_NAME_PRIMARY)

@@ -7,6 +7,7 @@ import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.lx.tracklist.data.local.CoverCacheManager
 import com.lx.tracklist.data.local.LXTrackListDatabase
+import com.lx.tracklist.data.local.StorageHelper
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.TmdbDnsHelper
 import com.lx.tracklist.data.repository.MediaRepository
@@ -34,6 +35,7 @@ class LXApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        StorageHelper.init(this)
         NotificationHelper.initNotificationChannels(this)
         TmdbApiClient.initWithDoH(this)
     }

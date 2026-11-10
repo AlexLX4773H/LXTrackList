@@ -75,6 +75,7 @@ data class MediaEntry(
     val currentSeasons: Int = 1,
     val totalSeasons: Int = 1,
     val episodeLengthMinutes: Int? = null,
+    val currentTimeMinutes: Int? = null,
     val isAiring: Boolean = false,
 
     // Reading fields (Manga, Manhwa, Book)
@@ -100,6 +101,31 @@ data class MediaEntry(
             Gson().fromJson<List<RelatedMediaItem>>(relatedEntriesJson, type) ?: emptyList()
         } catch (_: Exception) {
             emptyList()
+        }
+    }
+
+    fun getEffectiveRuntimeMinutes(): Int? {
+        return if (mediaType == MediaType.MOVIE) {
+            durationMinutes?.takeIf { it > 0 } ?: episodeLengthMinutes?.takeIf { it > 0 }
+        } else {
+            episodeLengthMinutes?.takeIf { it > 0 } ?: durationMinutes?.takeIf { it > 0 }
+        }
+    }
+
+    fun getPlaybackProgressPercent(): Int? {
+        val current = currentTimeMinutes?.takeIf { it > 0 } ?: return null
+        val total = getEffectiveRuntimeMinutes() ?: return null
+        return ((current.toDouble() / total.toDouble()) * 100).toInt().coerceIn(0, 100)
+    }
+
+    fun formatPlaybackTime(): String? {
+        val current = currentTimeMinutes?.takeIf { it > 0 } ?: return null
+        val hours = current / 60
+        val mins = current % 60
+        return if (hours > 0) {
+            if (mins > 0) "${hours}h ${mins}m" else "${hours}h"
+        } else {
+            "${mins}m"
         }
     }
 
@@ -184,17 +210,18 @@ data class MediaEntry(
         get() = when (mediaType) {
             MediaType.ANIME, MediaType.SHOW -> {
                 val totalStr = if (totalEpisodes > 0) "$totalEpisodes" else "?"
+                val timeStr = if (currentTimeMinutes != null && currentTimeMinutes > 0) " (${formatPlaybackTime() ?: "${currentTimeMinutes}m"})" else ""
                 if (mediaType == MediaType.SHOW && (totalSeasons > 1 || currentSeasons > 1)) {
                     if (isAiring && airedEpisodes > 0) {
-                        "S$currentSeasons • Ep $currentEpisodes/$airedEpisodes ($totalStr)"
+                        "S$currentSeasons • Ep $currentEpisodes/$airedEpisodes ($totalStr)$timeStr"
                     } else {
-                        "S$currentSeasons • Ep $currentEpisodes/$totalStr"
+                        "S$currentSeasons • Ep $currentEpisodes/$totalStr$timeStr"
                     }
                 } else {
                     if (isAiring && airedEpisodes > 0) {
-                        "$currentEpisodes/$airedEpisodes ($totalStr) ep"
+                        "$currentEpisodes/$airedEpisodes ($totalStr) ep$timeStr"
                     } else {
-                        "$currentEpisodes/$totalStr ep"
+                        "$currentEpisodes/$totalStr ep$timeStr"
                     }
                 }
             }
@@ -252,7 +279,16 @@ data class MediaEntry(
                     val m = durationMinutes % 60
                     if (h > 0) "${h}h ${m}m" else "${m}m"
                 } else ""
-                listOf(seriesStr, durStr).filter { it.isNotBlank() }.joinToString(" • ")
+                val timeStr = if (currentTimeMinutes != null && currentTimeMinutes > 0) {
+                    formatPlaybackTime() ?: "${currentTimeMinutes}m"
+                } else ""
+                val progressText = if (timeStr.isNotBlank() && durStr.isNotBlank()) {
+                    "$timeStr / $durStr"
+                } else if (timeStr.isNotBlank()) {
+                    timeStr
+                } else durStr
+
+                listOf(seriesStr, progressText).filter { it.isNotBlank() }.joinToString(" • ")
                     .ifBlank { if (status == MediaStatus.COMPLETED) "Watched" else "Planned" }
             }
         }
@@ -260,8 +296,13 @@ data class MediaEntry(
     val progressFraction: Float
         get() = when (mediaType) {
             MediaType.ANIME, MediaType.SHOW -> {
-                if (totalEpisodes > 0) (currentEpisodes.toFloat() / totalEpisodes).coerceIn(0f, 1f)
-                else if (status == MediaStatus.COMPLETED) 1f else 0f
+                if (totalEpisodes > 0) {
+                    val epLen = episodeLengthMinutes ?: 24
+                    val intraEp = if (currentTimeMinutes != null && currentTimeMinutes > 0 && epLen > 0) {
+                        (currentTimeMinutes.toFloat() / epLen).coerceIn(0f, 0.99f)
+                    } else 0f
+                    ((currentEpisodes.toFloat() + intraEp) / totalEpisodes).coerceIn(0f, 1f)
+                } else if (status == MediaStatus.COMPLETED) 1f else 0f
             }
             MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> {
                 when (trackingUnit) {
@@ -275,7 +316,10 @@ data class MediaEntry(
                 }
             }
             MediaType.MOVIE -> {
-                if (status == MediaStatus.COMPLETED) 1f else 0f
+                if (status == MediaStatus.COMPLETED) 1f
+                else if (durationMinutes != null && durationMinutes > 0 && currentTimeMinutes != null && currentTimeMinutes > 0) {
+                    (currentTimeMinutes.toFloat() / durationMinutes.toFloat()).coerceIn(0f, 1f)
+                } else 0f
             }
         }
 
@@ -290,6 +334,7 @@ data class MediaEntry(
                 val newIsRewatching = if (isDone) false else isRewatching
                 copy(
                     currentEpisodes = nextEp,
+                    currentTimeMinutes = null,
                     status = newStatus,
                     rewatchCount = newRewatchCount,
                     isRewatching = newIsRewatching,

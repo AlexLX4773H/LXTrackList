@@ -764,6 +764,7 @@ class MediaRepository(
             rewatchCount = if (imported.rewatchCount > 0) imported.rewatchCount else existing.rewatchCount,
             isRewatching = imported.isRewatching || existing.isRewatching,
             episodeLengthMinutes = imported.episodeLengthMinutes ?: existing.episodeLengthMinutes,
+            currentTimeMinutes = imported.currentTimeMinutes ?: existing.currentTimeMinutes,
             durationMinutes = imported.durationMinutes ?: existing.durationMinutes,
             currentEpisodes = maxEpisodes,
             totalEpisodes = maxTotalEp,

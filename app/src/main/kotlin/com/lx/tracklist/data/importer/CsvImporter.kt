@@ -44,6 +44,9 @@ object CsvImporter {
         val rewatchCountIdx = header.indexOfFirst { it.contains("rewatch") || it.contains("times_watched") || it.contains("times_read") }
         val isRewatchingIdx = header.indexOfFirst { it.contains("is_rewatching") || it.contains("isrewatching") || it.contains("rewatching") }
         val episodeLengthIdx = header.indexOfFirst { it.contains("episode_length") || it.contains("episodelength") || it.contains("runtime") || it.contains("duration") }
+        val currentTimeIdx = header.indexOfFirst {
+            it.contains("current_time") || it.contains("currenttime") || it.contains("watch_time") || it.contains("watchtime")
+        }
 
         val entries = mutableListOf<MediaEntry>()
 
@@ -101,7 +104,10 @@ object CsvImporter {
                     externalSource = foreignSource ?: "CSV",
                     rewatchCount = rewatchCount,
                     isRewatching = isRewatching,
+                    val parsedCurrentTime = if (currentTimeIdx in cols.indices) cols[currentTimeIdx].toIntOrNull()?.takeIf { it > 0 } else null
+
                     episodeLengthMinutes = if (mediaType != MediaType.MOVIE) parsedLength else null,
+                    currentTimeMinutes = parsedCurrentTime,
                     durationMinutes = if (mediaType == MediaType.MOVIE) parsedLength else null
                 )
             )

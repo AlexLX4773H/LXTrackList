@@ -343,4 +343,45 @@ class MediaEntryTest {
             )
         )
     }
+
+    @Test
+    fun testCurrentTimePlaybackAndDisplayProgress() {
+        val animeEntry = MediaEntry(
+            title = "Frieren",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.WATCHING,
+            currentEpisodes = 10,
+            totalEpisodes = 28,
+            episodeLengthMinutes = 24,
+            currentTimeMinutes = 12
+        )
+
+        assertEquals(24, animeEntry.getEffectiveRuntimeMinutes())
+        assertEquals(50, animeEntry.getPlaybackProgressPercent())
+        assertEquals("12m", animeEntry.formatPlaybackTime())
+        assertEquals("10/28 ep (12m)", animeEntry.displayProgress)
+
+        // Incrementing progress advances episode and clears intra-episode current time
+        val next = animeEntry.incrementProgress()
+        assertEquals(11, next.currentEpisodes)
+        org.junit.Assert.assertNull(next.currentTimeMinutes)
+        assertEquals("11/28 ep", next.displayProgress)
+    }
+
+    @Test
+    fun testMovieCurrentTimeProgress() {
+        val movie = MediaEntry(
+            title = "Inception",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.WATCHING,
+            durationMinutes = 148,
+            currentTimeMinutes = 74
+        )
+
+        assertEquals(148, movie.getEffectiveRuntimeMinutes())
+        assertEquals(50, movie.getPlaybackProgressPercent())
+        assertEquals("1h 14m", movie.formatPlaybackTime())
+        assertEquals("1h 14m / 2h 28m", movie.displayProgress)
+        assertEquals(0.5f, movie.progressFraction, 0.01f)
+    }
 }

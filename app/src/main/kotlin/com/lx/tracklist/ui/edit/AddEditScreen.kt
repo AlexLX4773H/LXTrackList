@@ -2,6 +2,7 @@ package com.lx.tracklist.ui.edit
 
 import android.app.DatePickerDialog
 import android.widget.Toast
+import kotlin.math.roundToInt
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
@@ -595,6 +596,12 @@ fun AddEditScreen(
                                 colors = outlinedColors()
                             )
 
+                            CurrentPlaybackTimeSection(
+                                currentTimeMinutes = state.currentTimeMinutes,
+                                runtimeMinutes = state.episodeLengthMinutes,
+                                onUpdateTime = { viewModel.updateCurrentTimeMinutes(it) }
+                            )
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -759,6 +766,12 @@ fun AddEditScreen(
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = outlinedColors()
+                            )
+
+                            CurrentPlaybackTimeSection(
+                                currentTimeMinutes = state.currentTimeMinutes,
+                                runtimeMinutes = state.durationMinutes,
+                                onUpdateTime = { viewModel.updateCurrentTimeMinutes(it) }
                             )
                         }
                     }
@@ -2664,4 +2677,155 @@ private fun formatDateRange(startDate: Long?, endDate: Long?): String? {
         endDate != null -> "Ended ${sdf.format(Date(endDate))}"
         else -> null
     }
+}
+
+@Composable
+private fun CurrentPlaybackTimeSection(
+    currentTimeMinutes: Int?,
+    runtimeMinutes: Int?,
+    onUpdateTime: (Int?) -> Unit
+) {
+    var rawInput by remember(currentTimeMinutes) {
+        mutableStateOf(if (currentTimeMinutes != null && currentTimeMinutes > 0) currentTimeMinutes.toString() else "")
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(LXSurfaceElevated)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Current Watch Time (Optional)",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 13.sp),
+                color = LXTextPrimary
+            )
+            if (currentTimeMinutes != null && currentTimeMinutes > 0) {
+                val h = currentTimeMinutes / 60
+                val m = currentTimeMinutes % 60
+                val formatted = if (h > 0) "${h}h ${m}m" else "${m}m"
+                val pctStr = if (runtimeMinutes != null && runtimeMinutes > 0) {
+                    val pct = ((currentTimeMinutes.toDouble() / runtimeMinutes.toDouble()) * 100).toInt().coerceIn(0, 100)
+                    " • $pct%"
+                } else ""
+                Text(
+                    text = "$formatted$pctStr",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = LXPrimaryGreen
+                )
+            }
+        }
+
+        Text(
+            text = "Track how much of the current episode or movie you have seen (e.g. 1/4, 1/2, or specific minutes).",
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+            color = LXTextSecondary
+        )
+
+        OutlinedTextField(
+            value = rawInput,
+            onValueChange = { input ->
+                rawInput = input
+                val parsedMinutes = parseTimeToMinutes(input)
+                onUpdateTime(parsedMinutes)
+            },
+            label = { Text("Watch Progress (minutes or mm:ss)") },
+            placeholder = { Text("e.g. 12 or 12:30 or 1h 15m") },
+            modifier = Modifier.fillMaxWidth(),
+            colors = outlinedColors(),
+            singleLine = true
+        )
+
+        // Quick fractional presets if runtime is known
+        if (runtimeMinutes != null && runtimeMinutes > 0) {
+            val q1 = (runtimeMinutes * 0.25).roundToInt().coerceAtLeast(1)
+            val q2 = (runtimeMinutes * 0.50).roundToInt().coerceAtLeast(1)
+            val q3 = (runtimeMinutes * 0.75).roundToInt().coerceAtLeast(1)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf(
+                    "1/4 (${q1}m)" to q1,
+                    "1/2 (${q2}m)" to q2,
+                    "3/4 (${q3}m)" to q3
+                ).forEach { (label, minVal) ->
+                    val isSelected = currentTimeMinutes == minVal
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            if (isSelected) {
+                                rawInput = ""
+                                onUpdateTime(null)
+                            } else {
+                                rawInput = minVal.toString()
+                                onUpdateTime(minVal)
+                            }
+                        },
+                        label = { Text(label, fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LXPrimaryGreen,
+                            selectedLabelColor = LXBackgroundBlack,
+                            containerColor = LXSurfaceBlack,
+                            labelColor = LXTextSecondary
+                        )
+                    )
+                }
+
+                if (currentTimeMinutes != null && currentTimeMinutes > 0) {
+                    TextButton(
+                        onClick = {
+                            rawInput = ""
+                            onUpdateTime(null)
+                        },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                    ) {
+                        Text("Clear", color = LXErrorRed, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun parseTimeToMinutes(input: String): Int? {
+    val clean = input.trim().lowercase()
+    if (clean.isBlank()) return null
+
+    val hrMatch = Regex("(\\d+)\\s*(?:h|hr|hour)").find(clean)
+    val minMatch = Regex("(\\d+)\\s*(?:m|min|minute)").find(clean)
+    if (hrMatch != null || minMatch != null) {
+        val hrs = hrMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        val mins = minMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
+        val total = hrs * 60 + mins
+        return if (total > 0) total else null
+    }
+
+    if (clean.contains(":")) {
+        val parts = clean.split(":")
+        if (parts.size == 2) {
+            val m = parts[0].trim().toIntOrNull() ?: 0
+            val s = parts[1].trim().toIntOrNull() ?: 0
+            val total = m + if (s >= 30) 1 else 0
+            return if (total > 0) total else null
+        } else if (parts.size == 3) {
+            val h = parts[0].trim().toIntOrNull() ?: 0
+            val m = parts[1].trim().toIntOrNull() ?: 0
+            val s = parts[2].trim().toIntOrNull() ?: 0
+            val total = h * 60 + m + if (s >= 30) 1 else 0
+            return if (total > 0) total else null
+        }
+    }
+
+    val direct = clean.filter { it.isDigit() }.toIntOrNull()
+    return if (direct != null && direct > 0) direct else null
 }

@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -137,6 +138,7 @@ import androidx.compose.foundation.layout.FlowRow
 import coil.compose.AsyncImage
 import com.lx.tracklist.R
 import com.lx.tracklist.data.local.StorageFileInfo
+import com.lx.tracklist.data.local.StorageHelper
 import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
@@ -1075,6 +1077,7 @@ fun SettingsScreen(
                             onReindexCovers = { viewModel.reindexCoverImages(context) },
                             onClearCoverCache = { viewModel.clearCoverCache(context) },
                             onClearUnlinkedCoverCache = { viewModel.clearUnlinkedCoverCache(context) },
+                            onChangeStoragePath = { viewModel.setCustomStoragePath(context, it) },
                             onNavigateToExportGuides = { activeSubMenu = SettingsSubMenu.EXPORT_GUIDES }
                         )
                         SettingsSubMenu.CONFLICTS -> ConflictResolutionContent(
@@ -1104,7 +1107,8 @@ fun SettingsScreen(
                         )
                         SettingsSubMenu.ABOUT -> AboutContent(
                             state = state,
-                            onCheckForUpdates = { viewModel.checkForUpdates() }
+                            onCheckForUpdates = { viewModel.checkForUpdates() },
+                            onChangeStoragePath = { viewModel.setCustomStoragePath(context, it) }
                         )
                     }
                 }
@@ -1202,6 +1206,7 @@ fun SettingsScreen(
                             onReindexCovers = { viewModel.reindexCoverImages(context) },
                             onClearCoverCache = { viewModel.clearCoverCache(context) },
                             onClearUnlinkedCoverCache = { viewModel.clearUnlinkedCoverCache(context) },
+                            onChangeStoragePath = { viewModel.setCustomStoragePath(context, it) },
                             onNavigateToExportGuides = { activeSubMenu = SettingsSubMenu.EXPORT_GUIDES },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
@@ -1250,6 +1255,7 @@ fun SettingsScreen(
                         AboutContent(
                             state = state,
                             onCheckForUpdates = { viewModel.checkForUpdates() },
+                            onChangeStoragePath = { viewModel.setCustomStoragePath(context, it) },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -1954,11 +1960,13 @@ private fun BackupStorageContent(
     onReindexCovers: () -> Unit,
     onClearCoverCache: () -> Unit,
     onClearUnlinkedCoverCache: () -> Unit,
+    onChangeStoragePath: (String?) -> Unit,
     onNavigateToExportGuides: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showReindexConfirmDialog by remember { mutableStateOf(false) }
     var showClearCacheConfirmDialog by remember { mutableStateOf(false) }
+    var showChangeStorageDialog by remember { mutableStateOf(false) }
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
@@ -2021,61 +2029,39 @@ private fun BackupStorageContent(
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Root: ",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = LXPrimaryGreen
-                        )
-                        Text(
-                            text = state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" },
-                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
-                            color = LXTextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Input: ",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextSecondary
-                        )
-                        Text(
-                            text = "${state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }}/input",
-                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
-                            color = LXTextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Output: ",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextSecondary
-                        )
-                        Text(
-                            text = "${state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }}/output",
-                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
-                            color = LXTextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Data: ",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextSecondary
-                        )
-                        Text(
-                            text = "${state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }}/data",
-                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
-                            color = LXTextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f).padding(end = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Root: ",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = LXPrimaryGreen
+                            )
+                            Text(
+                                text = state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" },
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace, fontSize = 11.sp),
+                                color = LXTextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        IconButton(
+                            onClick = { showChangeStorageDialog = true },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Change Storage Location",
+                                tint = LXPrimaryGreen,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
 
@@ -2746,6 +2732,17 @@ private fun BackupStorageContent(
                 },
                 containerColor = LXSurfaceBlack,
                 shape = RoundedCornerShape(16.dp)
+            )
+        }
+
+        if (showChangeStorageDialog) {
+            ChangeStorageLocationDialog(
+                currentPath = state.homeFolderPath.ifBlank { StorageHelper.getDefaultBaseDir().absolutePath },
+                onDismiss = { showChangeStorageDialog = false },
+                onConfirm = { newPath ->
+                    onChangeStoragePath(newPath)
+                    showChangeStorageDialog = false
+                }
             )
         }
 
@@ -4523,9 +4520,11 @@ private fun StartupViewContent(
 private fun AboutContent(
     state: SettingsUiState,
     onCheckForUpdates: () -> Unit,
+    onChangeStoragePath: ((String?) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var showChangeStorageDialog by remember { mutableStateOf(false) }
     val openUrl: (String) -> Unit = { url ->
         try {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
@@ -4996,26 +4995,15 @@ private fun AboutContent(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Storage Locations",
+                    text = "Storage Location",
                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = LXTextPrimary
                 )
 
                 StorageLocationItem(
                     label = "Root Storage Folder",
-                    path = state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }
-                )
-                StorageLocationItem(
-                    label = "Input Folder",
-                    path = "${state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }}/input"
-                )
-                StorageLocationItem(
-                    label = "Output Folder",
-                    path = "${state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }}/output"
-                )
-                StorageLocationItem(
-                    label = "Data Folder",
-                    path = "${state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" }}/data"
+                    path = state.homeFolderPath.ifBlank { "/storage/emulated/0/LXTrackList" },
+                    onEdit = if (onChangeStoragePath != null) { { showChangeStorageDialog = true } } else null
                 )
 
                 HorizontalDivider(color = LXBorder, thickness = 1.dp)
@@ -5031,40 +5019,184 @@ private fun AboutContent(
             }
         }
 
+        if (showChangeStorageDialog && onChangeStoragePath != null) {
+            ChangeStorageLocationDialog(
+                currentPath = state.homeFolderPath.ifBlank { StorageHelper.getDefaultBaseDir().absolutePath },
+                onDismiss = { showChangeStorageDialog = false },
+                onConfirm = { newPath ->
+                    onChangeStoragePath(newPath)
+                    showChangeStorageDialog = false
+                }
+            )
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
 @Composable
-private fun StorageLocationItem(label: String, path: String) {
-    Column(
+private fun StorageLocationItem(
+    label: String,
+    path: String,
+    onEdit: (() -> Unit)? = null
+) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(LXSurfaceElevated)
             .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(3.dp)
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 11.sp
-            ),
-            color = LXTextSecondary
-        )
-        Text(
-            text = path,
-            style = MaterialTheme.typography.bodySmall.copy(
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium
-            ),
-            color = LXPrimaryGreen,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
+        Column(
+            modifier = Modifier.weight(1f).padding(end = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.sp
+                ),
+                color = LXTextSecondary
+            )
+            Text(
+                text = path,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                color = LXPrimaryGreen,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (onEdit != null) {
+            IconButton(
+                onClick = onEdit,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Change Storage Location",
+                    tint = LXPrimaryGreen,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
     }
+}
+
+@Composable
+private fun ChangeStorageLocationDialog(
+    currentPath: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String?) -> Unit
+) {
+    var pathInput by remember { mutableStateOf(currentPath) }
+    val defaultPath = remember { StorageHelper.getDefaultBaseDir().absolutePath }
+    val isDefault = pathInput.trim() == defaultPath || pathInput.isBlank()
+
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            val resolved = StorageHelper.parseTreeUriToPath(uri)
+            if (!resolved.isNullOrBlank()) {
+                pathInput = resolved
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Change Storage Location",
+                color = LXTextPrimary,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Specify the root folder where all backups, input files, output exports, and data reports are stored. Defaults to $defaultPath.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                OutlinedTextField(
+                    value = pathInput,
+                    onValueChange = { pathInput = it },
+                    label = { Text("Storage Folder Path", color = LXTextSecondary) },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = LXTextPrimary,
+                        unfocusedTextColor = LXTextPrimary,
+                        focusedBorderColor = LXPrimaryGreen,
+                        unfocusedBorderColor = LXBorder,
+                        focusedLabelColor = LXPrimaryGreen
+                    ),
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    singleLine = true
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { folderPickerLauncher.launch(null) },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Pick Folder", fontSize = 12.sp)
+                    }
+
+                    if (!isDefault) {
+                        OutlinedButton(
+                            onClick = { pathInput = defaultPath },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXScoreGold),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Reset Default", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val finalPath = if (pathInput.trim() == defaultPath || pathInput.isBlank()) null else pathInput.trim()
+                    onConfirm(finalPath)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Save", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = LXTextSecondary)
+            }
+        },
+        containerColor = LXSurfaceElevated,
+        shape = RoundedCornerShape(16.dp)
+    )
 }
 
 @Composable

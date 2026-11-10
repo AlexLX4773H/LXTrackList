@@ -13,6 +13,7 @@ import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanMediaDetails
 import com.lx.tracklist.data.remote.MangaDexApiClient
+import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.TmdbConfig
 import com.lx.tracklist.data.remote.TmdbMediaDetails
@@ -86,6 +87,7 @@ data class AddEditUiState(
     val currentSeasons: Int = 1,
     val totalSeasons: Int = 1,
     val episodeLengthMinutes: Int? = null,
+    val currentTimeMinutes: Int? = null,
     val isAiring: Boolean = false,
 
     // Read fields
@@ -201,6 +203,7 @@ class AddEditViewModel(
                             currentSeasons = entry.currentSeasons,
                             totalSeasons = entry.totalSeasons,
                             episodeLengthMinutes = entry.episodeLengthMinutes,
+                            currentTimeMinutes = entry.currentTimeMinutes,
                             isAiring = entry.isAiring,
                             trackingUnit = entry.trackingUnit,
                             currentVolumes = entry.currentVolumes,
@@ -338,6 +341,7 @@ class AddEditViewModel(
     fun updateCurrentSeasons(value: Int) = _uiState.update { it.copy(currentSeasons = value) }
     fun updateTotalSeasons(value: Int) = _uiState.update { it.copy(totalSeasons = value) }
     fun updateEpisodeLengthMinutes(value: Int?) = _uiState.update { it.copy(episodeLengthMinutes = value) }
+    fun updateCurrentTimeMinutes(value: Int?) = _uiState.update { it.copy(currentTimeMinutes = value) }
     fun updateIsAiring(value: Boolean) = _uiState.update { it.copy(isAiring = value) }
 
     fun updateTrackingUnit(value: TrackingUnit) = _uiState.update { it.copy(trackingUnit = value) }
@@ -405,6 +409,7 @@ class AddEditViewModel(
                 currentSeasons = s.currentSeasons,
                 totalSeasons = s.totalSeasons,
                 episodeLengthMinutes = s.episodeLengthMinutes,
+                currentTimeMinutes = if (s.mediaType == MediaType.ANIME || s.mediaType == MediaType.SHOW || s.mediaType == MediaType.MOVIE) s.currentTimeMinutes else null,
                 isAiring = s.isAiring,
                 trackingUnit = s.trackingUnit,
                 currentVolumes = s.currentVolumes,
@@ -542,13 +547,30 @@ class AddEditViewModel(
     fun applySelectedMalResult(item: JikanMediaDetails) {
         _uiState.update { current ->
             val isVideo = current.mediaType == MediaType.ANIME || current.mediaType == MediaType.MOVIE || current.mediaType == MediaType.SHOW
-            val altList = mutableListOf<String>()
-            item.alternateTitle?.split("\n")?.forEach { line ->
-                val clean = line.trim()
-                if (clean.isNotBlank() && !altList.contains(clean) && !clean.equals(item.title, ignoreCase = true)) {
-                    altList.add(clean)
-                }
+            val queryTitle = current.title.trim()
+            val cleanedOriginalTitle = TachiyomiResolverManager.stripBracketedSuffixes(queryTitle).takeIf { it.isNotBlank() } ?: queryTitle
+            val candidateTitle = item.title?.trim()?.takeIf { it.isNotBlank() }
+
+            val candidateAlts = item.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+            val currentAlts = (current.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() } + current.alternateTitles
+
+            val extraAlts = if (candidateTitle != null && !candidateTitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
+                listOf(candidateTitle)
+            } else emptyList()
+
+            val allAlts = (extraAlts + candidateAlts + currentAlts)
+                .distinct()
+                .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
+
+            // Preserve original Tachiyomi ID in notes so future backup reimports match seamlessly
+            val originalTachiId = current.externalId?.takeIf {
+                !it.isNullOrBlank() && (current.externalSource?.contains("TACHIYOMI", ignoreCase = true) == true || it.startsWith("/"))
             }
+            val tachiNoteMarker = if (originalTachiId != null) "[Tachiyomi ID: $originalTachiId]" else null
+            val baseNotes = if (current.notes.isNullOrBlank() && !item.synopsis.isNullOrBlank()) item.synopsis else current.notes
+            val finalNotes = if (tachiNoteMarker != null && baseNotes?.contains(tachiNoteMarker) != true) {
+                if (baseNotes.isNullOrBlank()) tachiNoteMarker else "$baseNotes\n\n$tachiNoteMarker"
+            } else baseNotes
 
             // Align media type if current is generic or incompatible
             val targetMediaType = if (!isVideo && (item.type.equals("TV", ignoreCase = true) || item.type.equals("Movie", ignoreCase = true))) {
@@ -574,25 +596,25 @@ class AddEditViewModel(
             }
 
             current.copy(
-                title = item.title ?: current.title,
-                alternateTitle = item.alternateTitle ?: current.alternateTitle,
-                alternateTitles = if (altList.isNotEmpty()) altList else current.alternateTitles,
+                title = cleanedOriginalTitle,
+                alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
+                alternateTitles = allAlts,
                 mediaType = targetMediaType,
                 coverImageUri = item.posterUrl ?: current.coverImageUri,
                 externalId = resolvedExtId,
                 externalSource = externalSrc,
                 externalScore = item.externalScore ?: current.externalScore,
                 externalScoreSource = scoreSrc,
-                notes = item.synopsis ?: current.notes,
-                tags = item.tags ?: current.tags,
+                notes = finalNotes,
+                tags = if (current.tags.isNullOrBlank() && !item.tags.isNullOrBlank()) item.tags else current.tags,
                 airedStartDate = item.airedStartDate ?: current.airedStartDate,
                 airedEndDate = item.airedEndDate ?: current.airedEndDate,
                 isAiring = item.isAiring ?: current.isAiring,
-                totalEpisodes = if (isVideo && item.totalEpisodes != null && item.totalEpisodes > 0) item.totalEpisodes else current.totalEpisodes,
-                episodeLengthMinutes = if (isVideo && item.durationMinutes != null && item.durationMinutes > 0) item.durationMinutes else current.episodeLengthMinutes,
-                durationMinutes = if (current.mediaType == MediaType.MOVIE && item.durationMinutes != null && item.durationMinutes > 0) item.durationMinutes else current.durationMinutes,
-                totalChapters = if (!isVideo && item.totalChapters != null && item.totalChapters > 0) item.totalChapters else current.totalChapters,
-                totalVolumes = if (!isVideo && item.totalVolumes != null && item.totalVolumes > 0) item.totalVolumes else current.totalVolumes
+                totalEpisodes = if (isVideo && item.totalEpisodes != null && item.totalEpisodes > 0 && current.totalEpisodes == 0) item.totalEpisodes else current.totalEpisodes,
+                episodeLengthMinutes = if (isVideo && item.durationMinutes != null && item.durationMinutes > 0 && (current.episodeLengthMinutes == null || current.episodeLengthMinutes == 0)) item.durationMinutes else current.episodeLengthMinutes,
+                durationMinutes = if (current.mediaType == MediaType.MOVIE && item.durationMinutes != null && item.durationMinutes > 0 && (current.durationMinutes == null || current.durationMinutes == 0)) item.durationMinutes else current.durationMinutes,
+                totalChapters = if (!isVideo && item.totalChapters != null && item.totalChapters > 0 && current.totalChapters == 0) item.totalChapters else current.totalChapters,
+                totalVolumes = if (!isVideo && item.totalVolumes != null && item.totalVolumes > 0 && current.totalVolumes == 0) item.totalVolumes else current.totalVolumes
             )
         }
         val sourceLabel = item.sourceProvider
@@ -611,37 +633,60 @@ class AddEditViewModel(
             withContext(Dispatchers.Main) {
                 _uiState.update { current ->
                     val isMovie = item.isMovie
-                    val targetMediaType = if (isMovie) MediaType.MOVIE else MediaType.SHOW
-                    val altList = mutableListOf<String>()
+                    val queryTitle = current.title.trim()
+                    val cleanedOriginalTitle = TachiyomiResolverManager.stripBracketedSuffixes(queryTitle).takeIf { it.isNotBlank() } ?: queryTitle
+                    val candidateTitle = (fullDetails?.title ?: item.title).trim().takeIf { it.isNotBlank() }
+
+                    val candidateAlts = mutableListOf<String>()
                     fullDetails?.alternateTitle?.split("\n")?.forEach { line ->
                         val clean = line.trim()
-                        if (clean.isNotBlank() && !altList.contains(clean) && !clean.equals(item.title, ignoreCase = true)) {
-                            altList.add(clean)
+                        if (clean.isNotBlank() && !clean.equals(cleanedOriginalTitle, ignoreCase = true)) {
+                            candidateAlts.add(clean)
                         }
                     }
-                    if (altList.isEmpty() && !item.originalTitle.isNullOrBlank() && item.originalTitle != item.title) {
-                        altList.add(item.originalTitle)
+                    if (!item.originalTitle.isNullOrBlank() && !item.originalTitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
+                        candidateAlts.add(item.originalTitle.trim())
                     }
 
+                    val currentAlts = (current.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() } + current.alternateTitles
+                    val extraAlts = if (candidateTitle != null && !candidateTitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
+                        listOf(candidateTitle)
+                    } else emptyList()
+
+                    val allAlts = (extraAlts + candidateAlts + currentAlts)
+                        .distinct()
+                        .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
+
+                    val targetMediaType = if (isMovie) MediaType.MOVIE else MediaType.SHOW
+                    val baseNotes = if (current.notes.isNullOrBlank() && !(fullDetails?.synopsis ?: item.overview).isNullOrBlank()) (fullDetails?.synopsis ?: item.overview) else current.notes
+
+                    val duration = if (isMovie) {
+                        if (fullDetails?.durationMinutes != null && fullDetails.durationMinutes > 0) fullDetails.durationMinutes else current.durationMinutes
+                    } else current.durationMinutes
+
+                    val epLength = if (!isMovie) {
+                        if (fullDetails?.durationMinutes != null && fullDetails.durationMinutes > 0) fullDetails.durationMinutes else current.episodeLengthMinutes
+                    } else current.episodeLengthMinutes
+
                     current.copy(
-                        title = fullDetails?.title ?: item.title,
-                        alternateTitle = fullDetails?.alternateTitle ?: item.originalTitle ?: current.alternateTitle,
-                        alternateTitles = if (altList.isNotEmpty()) altList else current.alternateTitles,
+                        title = cleanedOriginalTitle,
+                        alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
+                        alternateTitles = allAlts,
                         mediaType = targetMediaType,
                         coverImageUri = fullDetails?.posterUrl ?: item.posterUrl ?: item.backdropUrl ?: current.coverImageUri,
                         externalId = item.tmdbId.toString(),
                         externalSource = "TMDB",
                         externalScore = fullDetails?.externalScore ?: item.voteAverage ?: current.externalScore,
                         externalScoreSource = "TMDB",
-                        notes = fullDetails?.synopsis ?: item.overview ?: current.notes,
-                        tags = fullDetails?.tags ?: current.tags,
+                        notes = baseNotes,
+                        tags = if (current.tags.isNullOrBlank() && !fullDetails?.tags.isNullOrBlank()) fullDetails?.tags else current.tags,
                         airedStartDate = fullDetails?.airedStartDate ?: item.releaseDate ?: current.airedStartDate,
                         airedEndDate = fullDetails?.airedEndDate ?: current.airedEndDate,
                         isAiring = fullDetails?.isAiring ?: current.isAiring,
-                        durationMinutes = if (isMovie) (fullDetails?.durationMinutes ?: current.durationMinutes) else current.durationMinutes,
-                        episodeLengthMinutes = if (!isMovie) (fullDetails?.durationMinutes ?: current.episodeLengthMinutes) else current.episodeLengthMinutes,
-                        totalEpisodes = if (!isMovie && fullDetails?.totalEpisodes != null && fullDetails.totalEpisodes > 0) fullDetails.totalEpisodes else current.totalEpisodes,
-                        totalSeasons = if (!isMovie && fullDetails?.totalSeasons != null && fullDetails.totalSeasons > 0) fullDetails.totalSeasons else current.totalSeasons
+                        durationMinutes = duration,
+                        episodeLengthMinutes = epLength,
+                        totalEpisodes = if (!isMovie && fullDetails?.totalEpisodes != null && fullDetails.totalEpisodes > 0 && current.totalEpisodes == 0) fullDetails.totalEpisodes else current.totalEpisodes,
+                        totalSeasons = if (!isMovie && fullDetails?.totalSeasons != null && fullDetails.totalSeasons > 0 && current.totalSeasons == 0) fullDetails.totalSeasons else current.totalSeasons
                     )
                 }
                 _syncState.update { it.copy(successMessage = "Applied '${item.title}' from TMDB!") }

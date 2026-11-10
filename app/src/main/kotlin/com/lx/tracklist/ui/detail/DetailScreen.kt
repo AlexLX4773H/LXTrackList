@@ -1172,6 +1172,20 @@ private fun DetailProgressCard(
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                         color = LXTextSecondary.copy(alpha = 0.7f)
                     )
+                    if ((isVideo || isMovie) && entry.currentTimeMinutes != null && entry.currentTimeMinutes > 0) {
+                        Spacer(modifier = Modifier.height(3.dp))
+                        val totalRuntime = entry.getEffectiveRuntimeMinutes()
+                        val timeStr = if (totalRuntime != null && totalRuntime > 0) {
+                            "${entry.formatPlaybackTime() ?: "${entry.currentTimeMinutes}m"} / ${totalRuntime}m (${entry.getPlaybackProgressPercent()}%)"
+                        } else {
+                            entry.formatPlaybackTime() ?: "${entry.currentTimeMinutes}m"
+                        }
+                        Text(
+                            text = "⏱️ Watched $timeStr",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                            color = LXPrimaryGreen
+                        )
+                    }
                 }
 
                 if (!isMovie) {
@@ -1810,6 +1824,9 @@ private fun DetailExternalTrackingCard(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(end = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
@@ -1823,7 +1840,9 @@ private fun DetailExternalTrackingCard(
                                     text = "$sourceLabel ID Linked (#${entry.externalId})",
                                     color = LXTextPrimary,
                                     style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Medium
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                             Row(
@@ -1840,7 +1859,9 @@ private fun DetailExternalTrackingCard(
                                     text = "Refresh",
                                     color = LXPrimaryGreen,
                                     style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         }
@@ -1868,6 +1889,9 @@ private fun DetailExternalTrackingCard(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(end = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
@@ -1881,7 +1905,9 @@ private fun DetailExternalTrackingCard(
                                     text = unlinkedLabel,
                                     color = LXTextPrimary,
                                     style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Medium
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                             Row(
@@ -1898,7 +1924,9 @@ private fun DetailExternalTrackingCard(
                                     text = "Find & Link ID",
                                     color = LXPrimaryGreen,
                                     style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         }

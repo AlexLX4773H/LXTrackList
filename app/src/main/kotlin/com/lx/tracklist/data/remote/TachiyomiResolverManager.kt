@@ -991,7 +991,15 @@ object TachiyomiResolverManager {
             }
         }
 
-        val duration = if (matchDetails.durationMinutes != null && matchDetails.durationMinutes > 0 && entry.durationMinutes == 0) matchDetails.durationMinutes else entry.durationMinutes
+        val isMovie = entry.mediaType == MediaType.MOVIE || matchDetails.type.equals("Movie", ignoreCase = true)
+        val duration = if (isMovie && matchDetails.durationMinutes != null && matchDetails.durationMinutes > 0 && (entry.durationMinutes == null || entry.durationMinutes == 0)) {
+            matchDetails.durationMinutes
+        } else entry.durationMinutes
+
+        val episodeLength = if (!isMovie && matchDetails.durationMinutes != null && matchDetails.durationMinutes > 0 && (entry.episodeLengthMinutes == null || entry.episodeLengthMinutes == 0)) {
+            matchDetails.durationMinutes
+        } else entry.episodeLengthMinutes
+
         val episodes = if (matchDetails.totalEpisodes != null && matchDetails.totalEpisodes > 0 && entry.totalEpisodes == 0) matchDetails.totalEpisodes else entry.totalEpisodes
 
         val updatedEntry = entry.copy(
@@ -1001,6 +1009,7 @@ object TachiyomiResolverManager {
             externalId = matchDetails.tmdbId.toString(),
             coverImageUri = finalCover,
             durationMinutes = duration,
+            episodeLengthMinutes = episodeLength,
             totalEpisodes = episodes,
             airedStartDate = matchDetails.airedStartDate ?: entry.airedStartDate,
             airedEndDate = matchDetails.airedEndDate ?: entry.airedEndDate,
@@ -1205,7 +1214,8 @@ object TachiyomiResolverManager {
             externalId = matchExternalId,
             coverImageUri = finalCover,
             totalEpisodes = if (matchDetails.totalEpisodes != null && matchDetails.totalEpisodes > 0 && entry.totalEpisodes == 0) matchDetails.totalEpisodes else entry.totalEpisodes,
-            durationMinutes = if (matchDetails.durationMinutes != null && matchDetails.durationMinutes > 0 && entry.durationMinutes == 0) matchDetails.durationMinutes else entry.durationMinutes,
+            durationMinutes = if (matchDetails.durationMinutes != null && matchDetails.durationMinutes > 0 && (entry.durationMinutes == null || entry.durationMinutes == 0)) matchDetails.durationMinutes else entry.durationMinutes,
+            episodeLengthMinutes = if (matchDetails.durationMinutes != null && matchDetails.durationMinutes > 0 && (entry.episodeLengthMinutes == null || entry.episodeLengthMinutes == 0)) matchDetails.durationMinutes else entry.episodeLengthMinutes,
             airedStartDate = matchDetails.airedStartDate ?: entry.airedStartDate,
             airedEndDate = matchDetails.airedEndDate ?: entry.airedEndDate,
             externalScore = matchDetails.externalScore ?: entry.externalScore,

@@ -697,13 +697,31 @@ object TmdbApiClient {
         val posterUrl = buildImageUrl(posterPath) ?: buildImageUrl(backdropPath)
         val backdropUrl = buildImageUrl(backdropPath, BACKDROP_SIZE)
 
-        // Episode runtime (array of ints, take first or average)
+        // Episode runtime (array of ints, take first or average, fallback to episode objects)
         var durationMinutes: Int? = null
         val runtimes = obj.getAsJsonArray("episode_run_time")
         if (runtimes != null && runtimes.size() > 0) {
             val first = runtimes.get(0)?.takeIf { !it.isJsonNull }?.asInt
             if (first != null && first > 0) {
                 durationMinutes = first
+            }
+        }
+        if (durationMinutes == null) {
+            val lastEpRuntime = obj.getAsJsonObject("last_episode_to_air")?.get("runtime")?.takeIf { !it.isJsonNull }?.asInt
+            if (lastEpRuntime != null && lastEpRuntime > 0) {
+                durationMinutes = lastEpRuntime
+            }
+        }
+        if (durationMinutes == null) {
+            val nextEpRuntime = obj.getAsJsonObject("next_episode_to_air")?.get("runtime")?.takeIf { !it.isJsonNull }?.asInt
+            if (nextEpRuntime != null && nextEpRuntime > 0) {
+                durationMinutes = nextEpRuntime
+            }
+        }
+        if (durationMinutes == null) {
+            val directRuntime = obj.get("runtime")?.takeIf { !it.isJsonNull }?.asInt
+            if (directRuntime != null && directRuntime > 0) {
+                durationMinutes = directRuntime
             }
         }
 
