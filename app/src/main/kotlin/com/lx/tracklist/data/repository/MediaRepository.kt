@@ -749,6 +749,12 @@ class MediaRepository(
             else -> imported.coverImageUri ?: existing.coverImageUri
         }
 
+        val finalSeasonEpisodesJson = if (imported.getSeasonEpisodes().size > existing.getSeasonEpisodes().size) {
+            imported.seasonEpisodesJson
+        } else {
+            existing.seasonEpisodesJson ?: imported.seasonEpisodesJson
+        }
+
         return existing.copy(
             score = imported.score ?: existing.score,
             externalScore = imported.externalScore ?: existing.externalScore,
@@ -766,6 +772,9 @@ class MediaRepository(
             episodeLengthMinutes = imported.episodeLengthMinutes ?: existing.episodeLengthMinutes,
             currentTimeMinutes = imported.currentTimeMinutes ?: existing.currentTimeMinutes,
             durationMinutes = imported.durationMinutes ?: existing.durationMinutes,
+            currentSeasons = maxOf(existing.currentSeasons, imported.currentSeasons),
+            totalSeasons = maxOf(existing.totalSeasons, imported.totalSeasons),
+            seasonEpisodesJson = finalSeasonEpisodesJson,
             currentEpisodes = maxEpisodes,
             totalEpisodes = maxTotalEp,
             currentVolumes = maxVol,
@@ -917,6 +926,7 @@ class MediaRepository(
                         coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
                         totalEpisodes = fullDetails?.totalEpisodes ?: 0,
                         totalSeasons = fullDetails?.totalSeasons ?: 1,
+                        seasonEpisodesJson = fullDetails?.seasonEpisodes?.let { MediaEntry.formatSeasonEpisodes(it) },
                         episodeLengthMinutes = fullDetails?.durationMinutes,
                         tags = fullDetails?.tags,
                         notes = fullDetails?.synopsis,

@@ -1919,4 +1919,75 @@ class FeaturesTest {
         // Once linked to TMDB, hasValidExternalId becomes true
         assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(movieLinkedTmdb))
     }
+
+    @Test
+    fun testExtractAniListIdAndAlternateTitlesFromNotes() {
+        val sampleNotes = """
+            Author: 冬漫社
+
+            After rebirth, how can this sexy smoking girl told me to be her toy-boy?
+
+            (Source: Webnovel)
+
+            [AniList](https://anilist.co/manga/116027)
+
+            Alternative Titles:
+            - This Sword Deity Refuses to Be a Freeloader
+            - Immortal Swordsman in The Reverse World
+            - Espadachín Inmortal en el Mundo Inverso
+            - Ben Jian Xian Jue Bu Chi Ruan Fan
+            - Sword King In A Women's World
+            - 차원을 잘못 찾아왔습니다
+            - 本剑仙绝不吃软饭
+            - 女权世界的男剑仙
+        """.trimIndent()
+
+        // Extracts AniList ID matching media type from Markdown URL
+        val mangaIds = com.lx.tracklist.data.remote.TachiyomiResolverManager.extractAniListIdsFromNotes(
+            sampleNotes,
+            preferManga = true
+        )
+        assertEquals(listOf(116027L), mangaIds)
+
+        // Does not falsely grab /manga/ URL for anime preference
+        val animeIdsFromMangaNote = com.lx.tracklist.data.remote.TachiyomiResolverManager.extractAniListIdsFromNotes(
+            sampleNotes,
+            preferManga = false
+        )
+        assertTrue(animeIdsFromMangaNote.isEmpty())
+
+        // Extracts all bulleted Alternate Titles from Notes
+        val noteAltTitles = com.lx.tracklist.data.remote.TachiyomiResolverManager.extractAlternateTitlesFromNotes(sampleNotes)
+        assertEquals(8, noteAltTitles.size)
+        assertEquals("This Sword Deity Refuses to Be a Freeloader", noteAltTitles[0])
+        assertEquals("Immortal Swordsman in The Reverse World", noteAltTitles[1])
+        assertEquals("女权世界的男剑仙", noteAltTitles[7])
+
+        // Supports AniList ID text format too
+        assertEquals(
+            listOf(98765L),
+            com.lx.tracklist.data.remote.TachiyomiResolverManager.extractAniListIdsFromNotes("AniList ID: 98765")
+        )
+
+        // Combined alternate titles enable confident match even when primary title differs
+        val entry = MediaEntry(
+            title = "Different Scraper Title",
+            mediaType = MediaType.MANHWA,
+            status = MediaStatus.PLAN_TO_WATCH,
+            notes = sampleNotes
+        )
+        val combinedAltsStr = com.lx.tracklist.data.remote.TachiyomiResolverManager.getCombinedAlternateTitlesString(entry)
+        assertTrue(
+            com.lx.tracklist.data.remote.TachiyomiResolverManager.isConfidentExactMatch(
+                queryTitle = "Immortal Swordsman in The Reverse World",
+                candidateTitle = "Immortal Swordsman in The Reverse World",
+                candidateAltTitles = null,
+                entryAltTitles = combinedAltsStr
+            )
+        )
+
+        // AniList external source is recognized as valid external ID when numeric
+        val aniEntry = entry.copy(externalSource = "AniList", externalId = "116027")
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(aniEntry))
+    }
 }

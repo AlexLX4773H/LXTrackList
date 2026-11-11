@@ -384,4 +384,80 @@ class MediaEntryTest {
         assertEquals("1h 14m / 2h 28m", movie.displayProgress)
         assertEquals(0.5f, movie.progressFraction, 0.01f)
     }
+
+    @Test
+    fun testShowSeasonEpisodeTrackingAndRollover() {
+        val seasonJson = MediaEntry.formatSeasonEpisodes(listOf(8, 10, 6))
+        var show = MediaEntry(
+            title = "Top Gear Sample",
+            mediaType = MediaType.SHOW,
+            status = MediaStatus.WATCHING,
+            currentSeasons = 1,
+            totalSeasons = 3,
+            currentEpisodes = 7,
+            totalEpisodes = 24,
+            seasonEpisodesJson = seasonJson
+        )
+
+        org.junit.Assert.assertTrue(show.hasSeasonEpisodeTracking())
+        assertEquals(listOf(8, 10, 6), show.getSeasonEpisodes())
+        assertEquals(8, show.getTotalEpisodesForSeason(1))
+        assertEquals(10, show.getTotalEpisodesForSeason(2))
+        assertEquals(24, show.getEffectiveTotalEpisodes())
+        assertEquals("S1 • Ep 7/8", show.displayProgress)
+        assertEquals(7, show.getTotalWatchedEpisodes())
+
+        // Ep 7 -> Ep 8 (still Season 1, still Watching)
+        show = show.incrementProgress()
+        assertEquals(1, show.currentSeasons)
+        assertEquals(8, show.currentEpisodes)
+        assertEquals(MediaStatus.WATCHING, show.status)
+        assertEquals("S1 • Ep 8/8", show.displayProgress)
+
+        // Clicking +1 after the 8th episode of Season 1 increments Season to 2 and restarts Episode at 1
+        show = show.incrementProgress()
+        assertEquals(2, show.currentSeasons)
+        assertEquals(1, show.currentEpisodes)
+        assertEquals(MediaStatus.WATCHING, show.status)
+        assertEquals("S2 • Ep 1/10", show.displayProgress)
+        assertEquals(9, show.getTotalWatchedEpisodes())
+        assertEquals(9f / 24f, show.progressFraction, 0.001f)
+
+        // Decrementing from S2 Ep 1 steps back to last episode of Season 1 (S1 Ep 8)
+        val steppedBack = show.decrementProgress()
+        assertEquals(1, steppedBack.currentSeasons)
+        assertEquals(8, steppedBack.currentEpisodes)
+
+        // Completing the final episode of the final season marks COMPLETED
+        val nearEnd = show.copy(currentSeasons = 3, currentEpisodes = 5)
+        val finished = nearEnd.incrementProgress()
+        assertEquals(3, finished.currentSeasons)
+        assertEquals(6, finished.currentEpisodes)
+        assertEquals(MediaStatus.COMPLETED, finished.status)
+        assertEquals(24, finished.getTotalWatchedEpisodes())
+        assertEquals(1.0f, finished.progressFraction, 0.001f)
+    }
+
+    @Test
+    fun testSeasonTrackingAppliesOnlyToShows() {
+        val seasonJson = MediaEntry.formatSeasonEpisodes(listOf(8, 10))
+        val anime = MediaEntry(
+            title = "Sample Anime",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.WATCHING,
+            currentSeasons = 1,
+            totalSeasons = 2,
+            currentEpisodes = 8,
+            totalEpisodes = 18,
+            seasonEpisodesJson = seasonJson
+        )
+
+        org.junit.Assert.assertFalse(anime.hasSeasonEpisodeTracking())
+        assertEquals(emptyList<Int>(), anime.getSeasonEpisodes())
+
+        val nextAnime = anime.incrementProgress()
+        assertEquals(1, nextAnime.currentSeasons)
+        assertEquals(9, nextAnime.currentEpisodes)
+        assertEquals("9/18 ep", nextAnime.displayProgress)
+    }
 }

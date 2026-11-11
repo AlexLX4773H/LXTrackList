@@ -86,6 +86,7 @@ data class AddEditUiState(
     val seasonNumber: Int = 1,
     val currentSeasons: Int = 1,
     val totalSeasons: Int = 1,
+    val seasonEpisodes: List<Int> = emptyList(),
     val episodeLengthMinutes: Int? = null,
     val currentTimeMinutes: Int? = null,
     val isAiring: Boolean = false,
@@ -202,6 +203,7 @@ class AddEditViewModel(
                             seasonNumber = entry.seasonNumber,
                             currentSeasons = entry.currentSeasons,
                             totalSeasons = entry.totalSeasons,
+                            seasonEpisodes = if (entry.mediaType == MediaType.SHOW) entry.getSeasonEpisodes() else emptyList(),
                             episodeLengthMinutes = entry.episodeLengthMinutes,
                             currentTimeMinutes = entry.currentTimeMinutes,
                             isAiring = entry.isAiring,
@@ -338,8 +340,19 @@ class AddEditViewModel(
     fun updateCurrentEpisodes(value: Int) = _uiState.update { it.copy(currentEpisodes = value) }
     fun updateTotalEpisodes(value: Int) = _uiState.update { it.copy(totalEpisodes = value) }
     fun updateAiredEpisodes(value: Int) = _uiState.update { it.copy(airedEpisodes = value) }
-    fun updateCurrentSeasons(value: Int) = _uiState.update { it.copy(currentSeasons = value) }
-    fun updateTotalSeasons(value: Int) = _uiState.update { it.copy(totalSeasons = value) }
+    fun updateCurrentSeasons(value: Int) = _uiState.update { it.copy(currentSeasons = value.coerceAtLeast(1)) }
+    fun updateTotalSeasons(value: Int) = _uiState.update { it.copy(totalSeasons = value.coerceAtLeast(1)) }
+    fun updateSeasonEpisodeCount(seasonIndex: Int, episodes: Int) = _uiState.update { state ->
+        if (seasonIndex < 0) return@update state
+        val targetSize = maxOf(state.totalSeasons.coerceAtLeast(1), state.seasonEpisodes.size, seasonIndex + 1)
+        val updated = MutableList(targetSize) { idx -> state.seasonEpisodes.getOrElse(idx) { 0 } }
+        updated[seasonIndex] = episodes.coerceAtLeast(0)
+        val newSum = updated.sum()
+        state.copy(
+            seasonEpisodes = updated,
+            totalEpisodes = if (newSum > 0) newSum else state.totalEpisodes
+        )
+    }
     fun updateEpisodeLengthMinutes(value: Int?) = _uiState.update { it.copy(episodeLengthMinutes = value) }
     fun updateCurrentTimeMinutes(value: Int?) = _uiState.update { it.copy(currentTimeMinutes = value) }
     fun updateIsAiring(value: Boolean) = _uiState.update { it.copy(isAiring = value) }
@@ -376,6 +389,10 @@ class AddEditViewModel(
                 s.startDate
             }
             val effectiveUserId = if (s.userId > 0L) s.userId else repository.activeUser.value.id
+            val effectiveSeasonEpisodesJson = if (s.mediaType == MediaType.SHOW) {
+                val sliced = s.seasonEpisodes.take(s.totalSeasons.coerceAtLeast(1))
+                MediaEntry.formatSeasonEpisodes(sliced)
+            } else null
             val entry = MediaEntry(
                 id = s.id,
                 userId = effectiveUserId,
@@ -408,6 +425,7 @@ class AddEditViewModel(
                 seasonNumber = s.seasonNumber,
                 currentSeasons = s.currentSeasons,
                 totalSeasons = s.totalSeasons,
+                seasonEpisodesJson = effectiveSeasonEpisodesJson,
                 episodeLengthMinutes = s.episodeLengthMinutes,
                 currentTimeMinutes = if (s.mediaType == MediaType.ANIME || s.mediaType == MediaType.SHOW || s.mediaType == MediaType.MOVIE) s.currentTimeMinutes else null,
                 isAiring = s.isAiring,
@@ -688,8 +706,11 @@ class AddEditViewModel(
                         isAiring = fullDetails?.isAiring ?: current.isAiring,
                         durationMinutes = duration,
                         episodeLengthMinutes = epLength,
-                        totalEpisodes = if (!isMovie && fullDetails?.totalEpisodes != null && fullDetails.totalEpisodes > 0 && current.totalEpisodes == 0) fullDetails.totalEpisodes else current.totalEpisodes,
-                        totalSeasons = if (!isMovie && fullDetails?.totalSeasons != null && fullDetails.totalSeasons > 0 && current.totalSeasons == 0) fullDetails.totalSeasons else current.totalSeasons
+                        totalEpisodes = if (!isMovie && fullDetails?.totalEpisodes != null && fullDetails.totalEpisodes > 0 && (current.totalEpisodes == 0 || ((fullDetails.totalSeasons ?: 0) > 1 && current.totalEpisodes <= 1))) fullDetails.totalEpisodes else current.totalEpisodes,
+                        totalSeasons = if (!isMovie && fullDetails?.totalSeasons != null && fullDetails.totalSeasons > 0 && current.totalSeasons <= 1) fullDetails.totalSeasons else current.totalSeasons,
+                        seasonEpisodes = if (!isMovie && !fullDetails?.seasonEpisodes.isNullOrEmpty() && current.seasonEpisodes.all { it <= 0 }) {
+                            fullDetails.seasonEpisodes.orEmpty()
+                        } else current.seasonEpisodes
                     )
                 }
                 _syncState.update { it.copy(successMessage = "Applied '${item.title}' from TMDB!") }

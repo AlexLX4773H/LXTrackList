@@ -83,8 +83,9 @@ object TmdbSyncManager {
             entry.episodeLengthMinutes == null || entry.episodeLengthMinutes == 0
         }
 
-        val missingEpisodes = !isMovie && entry.totalEpisodes == 0
+        val missingEpisodes = !isMovie && (entry.totalEpisodes == 0 || (entry.mediaType == MediaType.SHOW && entry.totalSeasons > 1 && entry.totalEpisodes <= 1))
         val missingSeasons = !isMovie && entry.totalSeasons <= 1
+        val missingSeasonEpisodes = entry.mediaType == MediaType.SHOW && !entry.hasSeasonEpisodeTracking()
         val missingAiredDates = entry.airedStartDate == null
         val missingAltTitles = entry.alternateTitle.isNullOrBlank()
         val missingTags = entry.tags.isNullOrBlank()
@@ -96,6 +97,7 @@ object TmdbSyncManager {
                 missingRuntime ||
                 missingEpisodes ||
                 missingSeasons ||
+                missingSeasonEpisodes ||
                 missingAiredDates ||
                 missingAltTitles ||
                 missingTags ||
@@ -354,7 +356,7 @@ object TmdbSyncManager {
                         // Total episodes for show
                         val newTotalEpisodes = if (entry.mediaType == MediaType.SHOW) {
                             if (details.totalEpisodes != null && details.totalEpisodes > 0 &&
-                                (entry.totalEpisodes == 0 || forceRefresh) &&
+                                (entry.totalEpisodes == 0 || (entry.totalSeasons > 1 && entry.totalEpisodes <= 1) || forceRefresh) &&
                                 details.totalEpisodes != entry.totalEpisodes
                             ) {
                                 hasChanges = true
@@ -379,6 +381,19 @@ object TmdbSyncManager {
                             }
                         } else {
                             entry.totalSeasons
+                        }
+
+                        // Season-by-season episodes for show
+                        val newSeasonEpisodesJson = if (entry.mediaType == MediaType.SHOW && details.seasonEpisodes != null) {
+                            val formatted = MediaEntry.formatSeasonEpisodes(details.seasonEpisodes)
+                            if (formatted != null && (!entry.hasSeasonEpisodeTracking() || forceRefresh) && formatted != entry.seasonEpisodesJson) {
+                                hasChanges = true
+                                formatted
+                            } else {
+                                entry.seasonEpisodesJson
+                            }
+                        } else {
+                            entry.seasonEpisodesJson
                         }
 
                         // Release / Broadcast dates
@@ -495,6 +510,7 @@ object TmdbSyncManager {
                                 episodeLengthMinutes = newEpisodeLength,
                                 totalEpisodes = newTotalEpisodes,
                                 totalSeasons = newTotalSeasons,
+                                seasonEpisodesJson = newSeasonEpisodesJson,
                                 airedStartDate = newAiredStartDate,
                                 airedEndDate = newAiredEndDate,
                                 alternateTitle = newAlternateTitle,

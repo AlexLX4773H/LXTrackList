@@ -287,21 +287,26 @@ object JikanSyncManager {
                 val isManga = isMangaType(entry.mediaType)
                 val isManhwa = entry.mediaType == MediaType.MANHWA
 
-                val malId = extIdStr?.toLongOrNull()
                 val isMangaDexSource = entry.externalSource?.equals("MangaDex", ignoreCase = true) == true
+                val isAniListSource = entry.externalSource?.equals("AniList", ignoreCase = true) == true
                 val mangaDexIdToUse = if (isMangaDexSource) extIdStr else null
+                val aniListId = if (isAniListSource) extIdStr?.toLongOrNull()?.takeIf { it > 0 } else null
+                val malId = if (!isMangaDexSource && !isAniListSource) extIdStr?.toLongOrNull() else null
 
                 _syncState.update {
                     it.copy(
                         profileId = profileId,
                         profileName = profileName,
                         currentTitle = entry.title,
-                        statusMessage = if (isMangaDexSource && !mangaDexIdToUse.isNullOrBlank()) {
-                            "Fetching ${entry.title} from MangaDex..."
-                        } else if (malId != null && malId > 0) {
-                            "Fetching ${entry.title} (#$malId)..."
-                        } else {
-                            "Searching MAL for ${entry.title}..."
+                        statusMessage = when {
+                            isMangaDexSource && !mangaDexIdToUse.isNullOrBlank() ->
+                                "Fetching ${entry.title} from MangaDex..."
+                            aniListId != null ->
+                                "Fetching ${entry.title} (AniList #$aniListId)..."
+                            malId != null && malId > 0 ->
+                                "Fetching ${entry.title} (#$malId)..."
+                            else ->
+                                "Searching MAL for ${entry.title}..."
                         }
                     )
                 }
@@ -311,23 +316,68 @@ object JikanSyncManager {
                 // Rate limiting delay
                 delay(RATE_LIMIT_DELAY_MS)
 
-                // Attempt fetch by ID if present, otherwise search by title with fallback chain
-                var detailsResult: Result<JikanMediaDetails> = if (isMangaDexSource && !mangaDexIdToUse.isNullOrBlank()) {
-                    MangaDexApiClient.fetchMangaDetails(mangaDexIdToUse)
-                } else if (malId != null && malId > 0) {
-                    JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga, title = entry.title, isManhwa = isManhwa)
-                } else {
-                    JikanApiClient.searchMediaDetailsByTitle(title = entry.title, isManga = isManga, isManhwa = isManhwa)
+                suspend fun fetchPrimary(): Result<JikanMediaDetails> = when {
+                    isMangaDexSource && !mangaDexIdToUse.isNullOrBlank() ->
+                        MangaDexApiClient.fetchMangaDetails(mangaDexIdToUse)
+                    aniListId != null ->
+                        JikanApiClient.queryAniListById(aniListId = aniListId, isManga = isManga)
+                    malId != null && malId > 0 ->
+                        JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga, title = entry.title, isManhwa = isManhwa)
+                    else ->
+                        JikanApiClient.searchMediaDetailsByTitle(title = entry.title, isManga = isManga, isManhwa = isManhwa)
                 }
+
+                // Attempt fetch by ID if present, otherwise search by title with fallback chain
+                var usedFallbackResolution = false
+                var detailsResult: Result<JikanMediaDetails> = fetchPrimary()
 
                 if (detailsResult.isFailure && detailsResult.exceptionOrNull() is RateLimitException) {
                     delay(3000L)
-                    detailsResult = if (isMangaDexSource && !mangaDexIdToUse.isNullOrBlank()) {
-                        MangaDexApiClient.fetchMangaDetails(mangaDexIdToUse)
-                    } else if (malId != null && malId > 0) {
-                        JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga, title = entry.title, isManhwa = isManhwa)
-                    } else {
-                        JikanApiClient.searchMediaDetailsByTitle(title = entry.title, isManga = isManga, isManhwa = isManhwa)
+                    detailsResult = fetchPrimary()
+                }
+
+                // If direct ID or primary title lookup failed, try Notes AniList ID and Alternate Names
+                if (detailsResult.isFailure) {
+                    if (malId != null || aniListId != null || !mangaDexIdToUse.isNullOrBlank()) {
+                        val titleRes = JikanApiClient.searchMediaDetailsByTitle(
+                            title = entry.title,
+                            isManga = isManga,
+                            isManhwa = isManhwa
+                        )
+                        if (titleRes.isSuccess) {
+                            detailsResult = titleRes
+                            usedFallbackResolution = true
+                        }
+                    }
+
+                    if (detailsResult.isFailure) {
+                        val notesAniIds = TachiyomiResolverManager.extractAniListIdsFromNotes(entry.notes, preferManga = isManga)
+                            .filter { it != aniListId }
+                        for (notesId in notesAniIds) {
+                            val res = JikanApiClient.queryAniListById(aniListId = notesId, isManga = isManga)
+                            if (res.isSuccess) {
+                                detailsResult = res
+                                usedFallbackResolution = true
+                                break
+                            }
+                        }
+                    }
+
+                    if (detailsResult.isFailure) {
+                        val altTitles = TachiyomiResolverManager.getCombinedAlternateTitles(entry)
+                        for (alt in altTitles.take(5)) {
+                            delay(250L)
+                            val res = JikanApiClient.searchMediaDetailsByTitle(
+                                title = alt,
+                                isManga = isManga,
+                                isManhwa = isManhwa
+                            )
+                            if (res.isSuccess) {
+                                detailsResult = res
+                                usedFallbackResolution = true
+                                break
+                            }
+                        }
                     }
                 }
 
@@ -340,8 +390,8 @@ object JikanSyncManager {
                         var finalExternalId: String? = entry.externalId
                         var finalExternalSource: String? = entry.externalSource
 
-                        // If it had no valid external ID, populate it now from details
-                        val needsNewExternalId = finalExternalId.isNullOrBlank() || !hasValidExternalId(entry)
+                        // Populate external ID if missing/invalid, or if fallback resolution replaced a dead ID
+                        val needsNewExternalId = finalExternalId.isNullOrBlank() || !hasValidExternalId(entry) || usedFallbackResolution
                         if (needsNewExternalId) {
                             if (details.sourceProvider == "MangaDex") {
                                 val mdId = details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }

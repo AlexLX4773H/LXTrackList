@@ -62,7 +62,7 @@ fun calculateCategoryStatSummary(
     val mean = if (scored.isNotEmpty()) scored.map { it.score!! }.average() else 0.0
 
     val rewatch = filteredEntries.sumOf { it.rewatchCount }
-    val episodes = filteredEntries.sumOf { it.currentEpisodes }
+    val episodes = filteredEntries.sumOf { it.getTotalWatchedEpisodes() }
     val chapters = filteredEntries.sumOf { it.currentChapters }
     val volumes = filteredEntries.sumOf { it.currentVolumes }
     val favs = filteredEntries.count { it.isFavorite }
@@ -82,7 +82,9 @@ fun calculateCategoryStatSummary(
         when (entry.mediaType) {
             MediaType.ANIME, MediaType.SHOW -> {
                 val epLen = (entry.episodeLengthMinutes ?: 24).toDouble()
-                val totalEpConsumed = entry.currentEpisodes + (entry.rewatchCount * (if (entry.totalEpisodes > 0) entry.totalEpisodes else entry.currentEpisodes))
+                val watchedEp = entry.getTotalWatchedEpisodes()
+                val effectiveTotalEp = entry.getEffectiveTotalEpisodes()
+                val totalEpConsumed = watchedEp + (entry.rewatchCount * (if (effectiveTotalEp > 0) effectiveTotalEp else watchedEp))
                 totalMinutes += totalEpConsumed * epLen
             }
             MediaType.MOVIE -> {
@@ -241,7 +243,7 @@ class StatsViewModel(private val repository: MediaRepository) : ViewModel() {
             entries.count { it.status == st }
         }
 
-        val totalEp = entries.sumOf { it.currentEpisodes }
+        val totalEp = entries.sumOf { it.getTotalWatchedEpisodes() }
         val totalCh = entries.sumOf { it.currentChapters }
         val totalVol = entries.sumOf { it.currentVolumes }
 

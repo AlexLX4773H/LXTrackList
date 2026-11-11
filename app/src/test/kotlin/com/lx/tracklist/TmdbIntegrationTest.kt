@@ -270,5 +270,36 @@ class TmdbIntegrationTest {
         TmdbApiClient.resetPreferredBaseUrl()
         assertEquals(TmdbApiClient.DEFAULT_BASE_URL, TmdbApiClient.getPreferredBaseUrl())
     }
+
+    @Test
+    fun testParseTvDetailsExtractsPerSeasonEpisodesAndFixesSingleEpFallback() {
+        val sampleJson = """
+            {
+              "id": 45,
+              "name": "Top Gear",
+              "original_name": "Top Gear",
+              "number_of_seasons": 3,
+              "number_of_episodes": 1,
+              "seasons": [
+                { "season_number": 0, "episode_count": 40, "name": "Specials" },
+                { "season_number": 1, "episode_count": 8, "name": "Series 1" },
+                { "season_number": 2, "episode_count": 10, "name": "Series 2" },
+                { "season_number": 3, "episode_count": 6, "name": "Series 3" }
+              ],
+              "genres": [{ "id": 99, "name": "Documentary" }],
+              "status": "Returning Series",
+              "vote_average": 7.5
+            }
+        """.trimIndent()
+
+        val obj = com.google.gson.JsonParser.parseString(sampleJson).asJsonObject
+        val details = TmdbApiClient.parseTvDetails(obj, 45L)
+
+        assertEquals(45L, details.tmdbId)
+        assertEquals("Top Gear", details.title)
+        assertEquals(3, details.totalSeasons)
+        assertEquals(listOf(8, 10, 6), details.seasonEpisodes)
+        assertEquals(24, details.totalEpisodes)
+    }
 }
 

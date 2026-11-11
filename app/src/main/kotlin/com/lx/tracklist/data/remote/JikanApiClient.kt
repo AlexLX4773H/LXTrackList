@@ -234,11 +234,42 @@ object JikanApiClient {
 
     fun queryAniList(malId: Long, isManga: Boolean): Result<JikanMediaDetails> {
         val type = if (isManga) "MANGA" else "ANIME"
+        return executeAniListMediaQuery(idMal = malId, type = type, label = "MAL ID #$malId")
+    }
+
+    fun queryAniListById(aniListId: Long, isManga: Boolean? = null): Result<JikanMediaDetails> {
+        val type = when (isManga) {
+            true -> "MANGA"
+            false -> "ANIME"
+            null -> null
+        }
+        return executeAniListMediaQuery(aniListId = aniListId, type = type, label = "AniList ID #$aniListId")
+    }
+
+    private fun executeAniListMediaQuery(
+        idMal: Long? = null,
+        aniListId: Long? = null,
+        type: String? = null,
+        label: String
+    ): Result<JikanMediaDetails> {
+        val varDefs = buildList {
+            if (idMal != null) add("${'$'}idMal: Int")
+            if (aniListId != null) add("${'$'}id: Int")
+            if (type != null) add("${'$'}type: MediaType")
+        }.joinToString(", ")
+
+        val mediaArgs = buildList {
+            if (idMal != null) add("idMal: ${'$'}idMal")
+            if (aniListId != null) add("id: ${'$'}id")
+            if (type != null) add("type: ${'$'}type")
+        }.joinToString(", ")
+
         val query = """
-            query (${'$'}idMal: Int, ${'$'}type: MediaType) {
-              Media(idMal: ${'$'}idMal, type: ${'$'}type) {
+            query ($varDefs) {
+              Media($mediaArgs) {
                 id
                 idMal
+                siteUrl
                 title { romaji english native }
                 synonyms
                 coverImage { extraLarge large }
@@ -263,8 +294,9 @@ object JikanApiClient {
         val jsonBody = JsonObject().apply {
             addProperty("query", query)
             val vars = JsonObject().apply {
-                addProperty("idMal", malId)
-                addProperty("type", type)
+                if (idMal != null) addProperty("idMal", idMal)
+                if (aniListId != null) addProperty("id", aniListId)
+                if (type != null) addProperty("type", type)
             }
             add("variables", vars)
         }
@@ -284,7 +316,7 @@ object JikanApiClient {
             val code = response.code
             val bodyString = response.body?.string() ?: ""
 
-            Log.d(TAG, "AniList HTTP $code for MAL ID $malId ($type)")
+            Log.d(TAG, "AniList HTTP $code for $label ($type)")
 
             if (!response.isSuccessful) {
                 return Result.failure(Exception("AniList HTTP $code: ${bodyString.take(200)}"))
@@ -293,11 +325,11 @@ object JikanApiClient {
             val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
             val dataObj = rootObj?.getAsJsonObject("data")
             val mediaObj = dataObj?.getAsJsonObject("Media")
-                ?: return Result.failure(NotFoundException("MAL ID #$malId not found on AniList"))
+                ?: return Result.failure(NotFoundException("$label not found on AniList"))
 
-            Result.success(parseAniListMedia(mediaObj, fallbackMalId = malId))
+            Result.success(parseAniListMedia(mediaObj, fallbackMalId = idMal))
         } catch (e: Exception) {
-            Log.e(TAG, "Exception querying AniList for MAL ID $malId", e)
+            Log.e(TAG, "Exception querying AniList for $label", e)
             Result.failure(e)
         }
     }

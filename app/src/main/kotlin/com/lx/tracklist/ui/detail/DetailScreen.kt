@@ -6,10 +6,12 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -44,6 +46,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Movie
@@ -98,10 +102,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
@@ -521,11 +527,7 @@ fun DetailScreen(
                             }
                         }
 
-                        Text(
-                            text = currentEntry.title,
-                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
-                            color = LXTextPrimary
-                        )
+                        CopyableEntityTitle(title = currentEntry.title)
 
                         val altTitles = currentEntry.getAlternateTitles()
                         if (altTitles.isNotEmpty()) {
@@ -600,6 +602,7 @@ fun DetailScreen(
                             },
                             onDecrement = { viewModel.decrement() },
                             onSetProgress = { viewModel.setProgress(it) },
+                            onSetShowProgress = { season, ep -> viewModel.setShowProgress(season, ep) },
                             onStartRewatch = { showStartRewatchDialog = true },
                             onFinishRewatch = { viewModel.finishRewatch() },
                             onCancelRewatch = { viewModel.cancelRewatch() }
@@ -695,11 +698,7 @@ fun DetailScreen(
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Text(
-                            text = currentEntry.title,
-                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
-                            color = LXTextPrimary
-                        )
+                        CopyableEntityTitle(title = currentEntry.title)
 
                         val altTitles = currentEntry.getAlternateTitles()
                         if (altTitles.isNotEmpty()) {
@@ -769,6 +768,7 @@ fun DetailScreen(
                             },
                             onDecrement = { viewModel.decrement() },
                             onSetProgress = { viewModel.setProgress(it) },
+                            onSetShowProgress = { season, ep -> viewModel.setShowProgress(season, ep) },
                             onStartRewatch = { showStartRewatchDialog = true },
                             onFinishRewatch = { viewModel.finishRewatch() },
                             onCancelRewatch = { viewModel.cancelRewatch() }
@@ -933,21 +933,50 @@ private data class ProgressInfo(
     val description: String
 )
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CopyableEntityTitle(title: String) {
+    val clipboardManager = LocalClipboardManager.current
+    val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
+        color = LXTextPrimary,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .combinedClickable(
+                onClick = {},
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    clipboardManager.setText(AnnotatedString(title))
+                    Toast.makeText(context, "Copied title to clipboard", Toast.LENGTH_SHORT).show()
+                }
+            )
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DetailProgressCard(
     entry: MediaEntry,
     onIncrement: () -> Unit,
     onDecrement: () -> Unit,
     onSetProgress: (Int) -> Unit = {},
+    onSetShowProgress: (Int, Int) -> Unit = { _, _ -> },
     onStartRewatch: () -> Unit,
     onFinishRewatch: () -> Unit,
     onCancelRewatch: () -> Unit
 ) {
     var showEditDialog by remember { mutableStateOf(false) }
+    var editSeasonInput by remember { mutableStateOf("${entry.currentSeasons}") }
+    var editInput by remember { mutableStateOf("") }
 
     val isVideo = entry.mediaType == MediaType.ANIME || entry.mediaType == MediaType.SHOW
     val isMangaOrBook = entry.mediaType == MediaType.MANGA || entry.mediaType == MediaType.MANHWA || entry.mediaType == MediaType.BOOK
     val isMovie = entry.mediaType == MediaType.MOVIE
+    val hasSeasonTracking = entry.hasSeasonEpisodeTracking()
+    val seasonCounts = if (hasSeasonTracking) entry.getSeasonEpisodes() else emptyList()
 
     val info = when (entry.mediaType) {
         MediaType.ANIME -> {
@@ -956,10 +985,25 @@ private fun DetailProgressCard(
             ProgressInfo(entry.currentEpisodes, total, totalStr, "Eps", "Episodes watched")
         }
         MediaType.SHOW -> {
-            val total = entry.totalEpisodes
-            val totalStr = if (total > 0) "$total" else "?"
-            val seasonStr = if (entry.currentSeasons > 0) "S${entry.currentSeasons} • " else ""
-            ProgressInfo(entry.currentEpisodes, total, totalStr, "Eps", "${seasonStr}Episodes watched")
+            if (hasSeasonTracking) {
+                val seasonTotal = entry.getTotalEpisodesForSeason(entry.currentSeasons)
+                val seasonTotalStr = if (seasonTotal > 0) "$seasonTotal" else "?"
+                val overallTotal = entry.getEffectiveTotalEpisodes()
+                val overallTotalStr = if (overallTotal > 0) "$overallTotal" else "?"
+                val watchedTotal = entry.getTotalWatchedEpisodes()
+                ProgressInfo(
+                    current = entry.currentEpisodes,
+                    total = seasonTotal,
+                    totalStr = seasonTotalStr,
+                    unit = "Eps",
+                    description = "S${entry.currentSeasons}/${entry.getEffectiveTotalSeasons()} • Total $watchedTotal/$overallTotalStr eps"
+                )
+            } else {
+                val total = entry.totalEpisodes
+                val totalStr = if (total > 0) "$total" else "?"
+                val seasonStr = if (entry.currentSeasons > 0) "S${entry.currentSeasons} • " else ""
+                ProgressInfo(entry.currentEpisodes, total, totalStr, "Eps", "${seasonStr}Episodes watched")
+            }
         }
         MediaType.MANGA, MediaType.MANHWA -> {
             when (entry.trackingUnit) {
@@ -1047,7 +1091,7 @@ private fun DetailProgressCard(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
-                } else if (info.total > 0) {
+                } else if (info.total > 0 || (hasSeasonTracking && entry.getEffectiveTotalEpisodes() > 0)) {
                     val pct = (entry.progressFraction * 100).toInt()
                     Surface(
                         color = LXSurfaceElevated,
@@ -1136,7 +1180,11 @@ private fun DetailProgressCard(
                 Column(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable { showEditDialog = true }
+                        .clickable {
+                            editSeasonInput = "${entry.currentSeasons}"
+                            editInput = "${info.current}"
+                            showEditDialog = true
+                        }
                         .padding(vertical = 2.dp)
                 ) {
                     Row(
@@ -1191,23 +1239,24 @@ private fun DetailProgressCard(
                 }
 
                 if (!isMovie) {
+                    val canDecrement = info.current > 0 || (hasSeasonTracking && entry.currentSeasons > 1)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         IconButton(
                             onClick = onDecrement,
-                            enabled = info.current > 0,
+                            enabled = canDecrement,
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
-                                .background(if (info.current > 0) LXSurfaceElevated else LXSurfaceElevated.copy(alpha = 0.4f))
+                                .background(if (canDecrement) LXSurfaceElevated else LXSurfaceElevated.copy(alpha = 0.4f))
                                 .border(1.dp, LXBorder, CircleShape)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Remove,
                                 contentDescription = "Decrement",
-                                tint = if (info.current > 0) LXTextPrimary else LXTextSecondary.copy(alpha = 0.4f),
+                                tint = if (canDecrement) LXTextPrimary else LXTextSecondary.copy(alpha = 0.4f),
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -1239,7 +1288,7 @@ private fun DetailProgressCard(
             }
 
             // Animated Progress Bar (only rendered when total is known)
-            if (info.total > 0) {
+            if (info.total > 0 || (hasSeasonTracking && entry.getEffectiveTotalEpisodes() > 0)) {
                 val progressAnimated by animateFloatAsState(
                     targetValue = entry.progressFraction,
                     label = "progress_bar_anim"
@@ -1261,10 +1310,95 @@ private fun DetailProgressCard(
                 }
             }
 
+            // Season-by-season breakdown (SHOW only)
+            if (entry.mediaType == MediaType.SHOW && hasSeasonTracking) {
+                var showSeasonsList by remember(entry.id) { mutableStateOf(seasonCounts.size <= 6) }
+                val totalSeasonsCount = entry.getEffectiveTotalSeasons()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(LXSurfaceElevated)
+                        .border(1.dp, LXBorder.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showSeasonsList = !showSeasonsList },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Seasons (${seasonCounts.size}) • S${entry.currentSeasons}: ${entry.currentEpisodes}/${if (info.total > 0) info.total else "?"}",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = LXTextPrimary
+                        )
+                        Icon(
+                            imageVector = if (showSeasonsList) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (showSeasonsList) "Hide seasons" else "Show seasons",
+                            tint = LXTextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    AnimatedVisibility(visible = showSeasonsList) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            (1..totalSeasonsCount).forEach { sNum ->
+                                val sTotal = entry.getTotalEpisodesForSeason(sNum)
+                                val isCurrent = sNum == entry.currentSeasons
+                                val isCompletedSeason = sNum < entry.currentSeasons ||
+                                    (isCurrent && sTotal > 0 && entry.currentEpisodes >= sTotal)
+                                val pillBg = when {
+                                    isCurrent -> LXPrimaryGreen.copy(alpha = 0.18f)
+                                    isCompletedSeason -> LXPrimaryGreen.copy(alpha = 0.08f)
+                                    else -> LXSurfaceBlack
+                                }
+                                val pillBorder = when {
+                                    isCurrent -> LXPrimaryGreen
+                                    isCompletedSeason -> LXPrimaryGreen.copy(alpha = 0.4f)
+                                    else -> LXBorder.copy(alpha = 0.6f)
+                                }
+                                val labelText = buildString {
+                                    append("S$sNum")
+                                    if (isCurrent) {
+                                        append(" ${entry.currentEpisodes}/${if (sTotal > 0) sTotal else "?"}")
+                                    } else if (sTotal > 0) {
+                                        append(" • ${sTotal}ep")
+                                    }
+                                }
+                                Surface(
+                                    color = pillBg,
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = BorderStroke(1.dp, pillBorder),
+                                    modifier = Modifier.clickable {
+                                        editSeasonInput = "$sNum"
+                                        editInput = if (isCurrent) "${entry.currentEpisodes}" else "0"
+                                        showEditDialog = true
+                                    }
+                                ) {
+                                    Text(
+                                        text = labelText,
+                                        color = if (isCurrent) LXPrimaryGreen else if (isCompletedSeason) LXPrimaryGreen.copy(alpha = 0.85f) else LXTextSecondary,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Airing / Release Status Panel
             if (entry.isAiring && (isVideo || isMangaOrBook)) {
                 val (readWatched, airedReleased, total) = if (isVideo) {
-                    Triple(entry.currentEpisodes, entry.airedEpisodes, entry.totalEpisodes)
+                    Triple(entry.getTotalWatchedEpisodes(), entry.airedEpisodes, entry.getEffectiveTotalEpisodes())
                 } else {
                     Triple(entry.currentChapters, entry.airedChapters, entry.totalChapters)
                 }
@@ -1381,12 +1515,14 @@ private fun DetailProgressCard(
 
     // Quick Edit Progress Dialog
     if (showEditDialog) {
-        var editInput by remember { mutableStateOf("${info.current}") }
+        val isShowWithSeasons = entry.mediaType == MediaType.SHOW && (hasSeasonTracking || entry.totalSeasons > 1)
+        val previewSeason = editSeasonInput.toIntOrNull()?.coerceIn(1, entry.getEffectiveTotalSeasons()) ?: entry.currentSeasons
+        val previewSeasonTotal = entry.getTotalEpisodesForSeason(previewSeason)
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
             title = {
                 Text(
-                    text = "Set Progress",
+                    text = if (isShowWithSeasons) "Set Season & Episode" else "Set Progress",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = LXTextPrimary
                 )
@@ -1394,34 +1530,84 @@ private fun DetailProgressCard(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Enter current ${info.description.lowercase()}:",
+                        text = if (isShowWithSeasons) {
+                            val totalSuffix = if (previewSeasonTotal > 0) " (S$previewSeason has $previewSeasonTotal eps)" else ""
+                            "Enter current season and episode$totalSuffix:"
+                        } else {
+                            "Enter current ${info.description.lowercase()}:"
+                        },
                         color = LXTextSecondary,
                         fontSize = 13.sp
                     )
-                    OutlinedTextField(
-                        value = editInput,
-                        onValueChange = { if (it.all { c -> c.isDigit() }) editInput = it },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        label = { Text(info.unit) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = LXPrimaryGreen,
-                            unfocusedBorderColor = LXBorder,
-                            focusedLabelColor = LXPrimaryGreen,
-                            focusedTextColor = LXTextPrimary,
-                            unfocusedTextColor = LXTextPrimary,
-                            cursorColor = LXPrimaryGreen
+                    if (isShowWithSeasons) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = editSeasonInput,
+                                onValueChange = { if (it.all { c -> c.isDigit() }) editSeasonInput = it },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                label = { Text("Season") },
+                                modifier = Modifier.weight(1f),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = LXPrimaryGreen,
+                                    unfocusedBorderColor = LXBorder,
+                                    focusedLabelColor = LXPrimaryGreen,
+                                    focusedTextColor = LXTextPrimary,
+                                    unfocusedTextColor = LXTextPrimary,
+                                    cursorColor = LXPrimaryGreen
+                                )
+                            )
+                            OutlinedTextField(
+                                value = editInput,
+                                onValueChange = { if (it.all { c -> c.isDigit() }) editInput = it },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                label = { Text(if (previewSeasonTotal > 0) "Ep / $previewSeasonTotal" else "Ep") },
+                                modifier = Modifier.weight(1f),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = LXPrimaryGreen,
+                                    unfocusedBorderColor = LXBorder,
+                                    focusedLabelColor = LXPrimaryGreen,
+                                    focusedTextColor = LXTextPrimary,
+                                    unfocusedTextColor = LXTextPrimary,
+                                    cursorColor = LXPrimaryGreen
+                                )
+                            )
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = editInput,
+                            onValueChange = { if (it.all { c -> c.isDigit() }) editInput = it },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            label = { Text(info.unit) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = LXPrimaryGreen,
+                                unfocusedBorderColor = LXBorder,
+                                focusedLabelColor = LXPrimaryGreen,
+                                focusedTextColor = LXTextPrimary,
+                                unfocusedTextColor = LXTextPrimary,
+                                cursorColor = LXPrimaryGreen
+                            )
                         )
-                    )
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        val parsed = editInput.toIntOrNull()
-                        if (parsed != null) {
-                            onSetProgress(parsed)
+                        val parsedEp = editInput.toIntOrNull()
+                        if (isShowWithSeasons) {
+                            val parsedSeason = editSeasonInput.toIntOrNull() ?: entry.currentSeasons
+                            if (parsedEp != null) {
+                                onSetShowProgress(parsedSeason, parsedEp)
+                            }
+                        } else if (parsedEp != null) {
+                            onSetProgress(parsedEp)
                         }
                         showEditDialog = false
                     },

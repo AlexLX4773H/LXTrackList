@@ -80,6 +80,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -98,6 +99,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -114,6 +116,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lx.tracklist.data.model.MediaEntry
@@ -2207,77 +2210,21 @@ private fun AdvancedFilterSheet(
                 HorizontalDivider(color = LXBorder, thickness = 1.dp)
 
                 // Status Filter Section
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Status",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = LXTextPrimary
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = state.selectedStatusFilter == null,
-                            onClick = { viewModel.setStatusFilter(null) },
-                            label = { Text("All Statuses") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = LXPrimaryGreen,
-                                selectedLabelColor = LXBackgroundBlack,
-                                containerColor = LXSurfaceElevated,
-                                labelColor = LXTextSecondary
-                            )
-                        )
-
-                        MediaStatus.entries.forEach { st ->
-                            val isSelected = state.selectedStatusFilter == st
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { viewModel.setStatusFilter(if (isSelected) null else st) },
-                                label = { Text(st.defaultLabel) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = LXPrimaryGreen,
-                                    selectedLabelColor = LXBackgroundBlack,
-                                    containerColor = LXSurfaceElevated,
-                                    labelColor = LXTextSecondary
-                                )
-                            )
-                        }
-                    }
-                }
-
-                // Sub Category Filter Section (Advanced Filter)
-                val catFilter = state.selectedCategoryFilter
-                val customCatFilter = state.selectedCustomCategoryFilter
-                val relevantSubCats = remember(state.subCategories, catFilter, customCatFilter) {
-                    if (catFilter != null) {
-                        state.subCategories.filter { it.categoryKey.equals(catFilter.name, ignoreCase = true) }
-                    } else if (customCatFilter != null) {
-                        state.subCategories.filter { it.categoryKey.equals(customCatFilter, ignoreCase = true) }
-                    } else {
-                        state.subCategories.distinctBy { it.name.lowercase() }
-                    }
-                }
-
-                if (relevantSubCats.isNotEmpty()) {
+                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Style, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Sub Category",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = LXTextPrimary
-                            )
-                        }
+                        Text(
+                            text = "Status",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             FilterChip(
-                                selected = state.selectedSubCategoryFilter == null,
-                                onClick = { viewModel.setSubCategoryFilter(null) },
-                                label = { Text("All Sub Categories") },
+                                selected = state.selectedStatusFilter == null,
+                                onClick = { viewModel.setStatusFilter(null) },
+                                label = { Text("All Statuses") },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = LXPrimaryGreen,
                                     selectedLabelColor = LXBackgroundBlack,
@@ -2286,14 +2233,14 @@ private fun AdvancedFilterSheet(
                                 )
                             )
 
-                            relevantSubCats.forEach { subCat ->
-                                val isSelected = state.selectedSubCategoryFilter.equals(subCat.name, ignoreCase = true)
+                            MediaStatus.entries.forEach { st ->
+                                val isSelected = state.selectedStatusFilter == st
                                 FilterChip(
                                     selected = isSelected,
-                                    onClick = { viewModel.setSubCategoryFilter(if (isSelected) null else subCat.name) },
-                                    label = { Text(subCat.name) },
+                                    onClick = { viewModel.setStatusFilter(if (isSelected) null else st) },
+                                    label = { Text(st.defaultLabel) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = LXScoreGold,
+                                        selectedContainerColor = LXPrimaryGreen,
                                         selectedLabelColor = LXBackgroundBlack,
                                         containerColor = LXSurfaceElevated,
                                         labelColor = LXTextSecondary
@@ -2302,65 +2249,123 @@ private fun AdvancedFilterSheet(
                             }
                         }
                     }
-                }
 
-                // Score / Rating Section
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Star, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Score / Rating",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextPrimary
-                        )
+                    // Sub Category Filter Section (Advanced Filter)
+                    val catFilter = state.selectedCategoryFilter
+                    val customCatFilter = state.selectedCustomCategoryFilter
+                    val relevantSubCats = remember(state.subCategories, catFilter, customCatFilter) {
+                        if (catFilter != null) {
+                            state.subCategories.filter { it.categoryKey.equals(catFilter.name, ignoreCase = true) }
+                        } else if (customCatFilter != null) {
+                            state.subCategories.filter { it.categoryKey.equals(customCatFilter, ignoreCase = true) }
+                        } else {
+                            state.subCategories.distinctBy { it.name.lowercase() }
+                        }
                     }
 
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = state.minScore == null && !state.onlyUnrated,
-                            onClick = {
-                                viewModel.setMinScore(null)
-                                viewModel.setOnlyUnrated(false)
-                            },
-                            label = { Text("Any Score") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = LXPrimaryGreen,
-                                selectedLabelColor = LXBackgroundBlack,
-                                containerColor = LXSurfaceElevated,
-                                labelColor = LXTextSecondary
-                            )
-                        )
+                    if (relevantSubCats.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Style, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Sub Category",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXTextPrimary
+                                )
+                            }
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                FilterChip(
+                                    selected = state.selectedSubCategoryFilter == null,
+                                    onClick = { viewModel.setSubCategoryFilter(null) },
+                                    label = { Text("All Sub Categories") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
+                                )
 
-                        listOf(9, 8, 7, 6, 5).forEach { threshold ->
-                            val isSelected = state.minScore == threshold && !state.onlyUnrated
+                                relevantSubCats.forEach { subCat ->
+                                    val isSelected = state.selectedSubCategoryFilter.equals(subCat.name, ignoreCase = true)
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { viewModel.setSubCategoryFilter(if (isSelected) null else subCat.name) },
+                                        label = { Text(subCat.name) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = LXScoreGold,
+                                            selectedLabelColor = LXBackgroundBlack,
+                                            containerColor = LXSurfaceElevated,
+                                            labelColor = LXTextSecondary
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Score / Rating Section
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Star, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Score / Rating",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = LXTextPrimary
+                            )
+                        }
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             FilterChip(
-                                selected = isSelected,
-                                onClick = { viewModel.setMinScore(if (isSelected) null else threshold) },
-                                label = { Text("★ $threshold+") },
+                                selected = state.minScore == null && !state.onlyUnrated,
+                                onClick = {
+                                    viewModel.setMinScore(null)
+                                    viewModel.setOnlyUnrated(false)
+                                },
+                                label = { Text("Any Score") },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = LXScoreGold,
+                                    selectedContainerColor = LXPrimaryGreen,
+                                    selectedLabelColor = LXBackgroundBlack,
+                                    containerColor = LXSurfaceElevated,
+                                    labelColor = LXTextSecondary
+                                )
+                            )
+
+                            listOf(9, 8, 7, 6, 5).forEach { threshold ->
+                                val isSelected = state.minScore == threshold && !state.onlyUnrated
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { viewModel.setMinScore(if (isSelected) null else threshold) },
+                                    label = { Text("★ $threshold+") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXScoreGold,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
+                                )
+                            }
+
+                            FilterChip(
+                                selected = state.onlyUnrated,
+                                onClick = { viewModel.setOnlyUnrated(!state.onlyUnrated) },
+                                label = { Text("Unrated") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = LXPrimaryGreen,
                                     selectedLabelColor = LXBackgroundBlack,
                                     containerColor = LXSurfaceElevated,
                                     labelColor = LXTextSecondary
                                 )
                             )
                         }
-
-                        FilterChip(
-                            selected = state.onlyUnrated,
-                            onClick = { viewModel.setOnlyUnrated(!state.onlyUnrated) },
-                            label = { Text("Unrated") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = LXPrimaryGreen,
-                                selectedLabelColor = LXBackgroundBlack,
-                                containerColor = LXSurfaceElevated,
-                                labelColor = LXTextSecondary
-                            )
-                        )
                     }
                 }
 
@@ -2482,12 +2487,12 @@ private fun AdvancedFilterSheet(
                         color = LXTextPrimary
                     )
 
-                    // Ongoing / Airing Filter
+                    // Ongoing Filter
                     TriStateFilterRow(
-                        title = "Ongoing / Airing",
+                        title = "Ongoing",
                         subtitle = when (state.airingFilter) {
                             InclusionFilterOption.ALL -> "Tap: Only Ongoing → Exclude Ongoing → Off"
-                            InclusionFilterOption.INCLUDE_ONLY -> "Showing Only Ongoing / Airing"
+                            InclusionFilterOption.INCLUDE_ONLY -> "Showing Only Ongoing"
                             InclusionFilterOption.EXCLUDE -> "Excluding / Hiding Ongoing (Finished only)"
                         },
                         icon = Icons.Default.Tv,

@@ -356,6 +356,7 @@ class SearchViewModel(
                         coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
                         totalEpisodes = fullDetails?.totalEpisodes ?: 0,
                         totalSeasons = fullDetails?.totalSeasons ?: 1,
+                        seasonEpisodesJson = fullDetails?.seasonEpisodes?.let { MediaEntry.formatSeasonEpisodes(it) },
                         episodeLengthMinutes = fullDetails?.durationMinutes,
                         tags = fullDetails?.tags,
                         notes = fullDetails?.synopsis ?: item.synopsis,

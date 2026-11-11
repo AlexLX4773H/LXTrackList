@@ -30,6 +30,7 @@ data class TmdbMediaDetails(
     val durationMinutes: Int? = null,
     val totalEpisodes: Int? = null,
     val totalSeasons: Int? = null,
+    val seasonEpisodes: List<Int>? = null,
     val alternateTitle: String? = null,
     val airedStartDate: Long? = null,
     val airedEndDate: Long? = null,
@@ -725,8 +726,41 @@ object TmdbApiClient {
             }
         }
 
-        val totalEpisodes = obj.get("number_of_episodes")?.takeIf { !it.isJsonNull }?.asInt
-        val totalSeasons = obj.get("number_of_seasons")?.takeIf { !it.isJsonNull }?.asInt
+        val seasonPairs = mutableListOf<Pair<Int, Int>>()
+        obj.getAsJsonArray("seasons")?.forEach { elem ->
+            if (elem.isJsonObject) {
+                val sObj = elem.asJsonObject
+                val sNum = sObj.get("season_number")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+                val epCount = sObj.get("episode_count")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+                if (sNum > 0) {
+                    seasonPairs.add(sNum to epCount.coerceAtLeast(0))
+                }
+            }
+        }
+        val rawTotalSeasons = obj.get("number_of_seasons")?.takeIf { !it.isJsonNull }?.asInt
+        val maxSeasonNum = maxOf(
+            rawTotalSeasons ?: 0,
+            seasonPairs.maxOfOrNull { it.first } ?: 0
+        )
+        val seasonEpisodes = if (seasonPairs.isNotEmpty() && maxSeasonNum > 0) {
+            val map = seasonPairs.toMap()
+            (1..maxSeasonNum).map { s -> map[s] ?: 0 }.takeIf { list -> list.any { it > 0 } }
+        } else null
+
+        val rawTotalEpisodes = obj.get("number_of_episodes")?.takeIf { !it.isJsonNull }?.asInt
+        val sumSeasonEpisodes = seasonEpisodes?.sum()?.takeIf { it > 0 }
+        val totalEpisodes = when {
+            rawTotalEpisodes != null && rawTotalEpisodes > 0 -> {
+                if (sumSeasonEpisodes != null && rawTotalEpisodes <= 1 && sumSeasonEpisodes > rawTotalEpisodes) {
+                    sumSeasonEpisodes
+                } else {
+                    rawTotalEpisodes
+                }
+            }
+            sumSeasonEpisodes != null -> sumSeasonEpisodes
+            else -> rawTotalEpisodes
+        }
+        val totalSeasons = maxSeasonNum.takeIf { it > 0 } ?: rawTotalSeasons
 
         val firstAirDateStr = obj.get("first_air_date")?.takeIf { !it.isJsonNull }?.asString
         val lastAirDateStr = obj.get("last_air_date")?.takeIf { !it.isJsonNull }?.asString
@@ -779,6 +813,7 @@ object TmdbApiClient {
             durationMinutes = durationMinutes,
             totalEpisodes = totalEpisodes,
             totalSeasons = totalSeasons,
+            seasonEpisodes = seasonEpisodes,
             alternateTitle = alternateTitle,
             airedStartDate = airedStartDate,
             airedEndDate = airedEndDate,

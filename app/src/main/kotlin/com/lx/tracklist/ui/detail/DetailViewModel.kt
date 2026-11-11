@@ -315,26 +315,17 @@ class DetailViewModel(
     fun decrement() {
         val cur = entry.value ?: return
         viewModelScope.launch {
-            val updated = when (cur.mediaType) {
-                com.lx.tracklist.data.model.MediaType.ANIME, com.lx.tracklist.data.model.MediaType.SHOW -> {
-                    cur.copy(currentEpisodes = max(0, cur.currentEpisodes - 1), updatedAt = System.currentTimeMillis())
-                }
-                com.lx.tracklist.data.model.MediaType.MANGA, com.lx.tracklist.data.model.MediaType.MANHWA, com.lx.tracklist.data.model.MediaType.BOOK -> {
-                    when (cur.trackingUnit) {
-                        TrackingUnit.VOLUMES -> cur.copy(currentVolumes = max(0, cur.currentVolumes - 1), updatedAt = System.currentTimeMillis())
-                        TrackingUnit.PAGES -> cur.copy(currentPages = max(0, cur.currentPages - 10), updatedAt = System.currentTimeMillis())
-                        TrackingUnit.CHAPTERS, TrackingUnit.COMBINED -> cur.copy(currentChapters = max(0, cur.currentChapters - 1), updatedAt = System.currentTimeMillis())
-                    }
-                }
-                com.lx.tracklist.data.model.MediaType.MOVIE -> cur
-            }
-            repository.update(updated)
+            repository.update(cur.decrementProgress())
         }
     }
 
     fun setProgress(newProgress: Int) {
         val cur = entry.value ?: return
         val clamped = max(0, newProgress)
+        if (cur.hasSeasonEpisodeTracking()) {
+            setShowProgress(cur.currentSeasons, clamped)
+            return
+        }
         val now = System.currentTimeMillis()
         viewModelScope.launch {
             val updated = when (cur.mediaType) {
@@ -343,6 +334,7 @@ class DetailViewModel(
                     val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
                     cur.copy(
                         currentEpisodes = clamped,
+                        currentTimeMinutes = null,
                         status = newStatus,
                         finishDate = if (newStatus == com.lx.tracklist.data.model.MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
                         updatedAt = now
@@ -392,6 +384,36 @@ class DetailViewModel(
                     )
                 }
             }
+            repository.update(updated)
+        }
+    }
+
+    fun setShowProgress(season: Int, episode: Int) {
+        val cur = entry.value ?: return
+        if (cur.mediaType != MediaType.SHOW) {
+            setProgress(episode)
+            return
+        }
+        val effectiveSeasons = cur.getEffectiveTotalSeasons()
+        val targetSeason = season.coerceIn(1, effectiveSeasons)
+        val targetEp = max(0, episode)
+        val now = System.currentTimeMillis()
+        viewModelScope.launch {
+            val isDone = if (cur.hasSeasonEpisodeTracking()) {
+                val seasonTotal = cur.getTotalEpisodesForSeason(targetSeason)
+                targetSeason >= effectiveSeasons && seasonTotal > 0 && targetEp >= seasonTotal
+            } else {
+                cur.totalEpisodes > 0 && targetEp >= cur.totalEpisodes && targetSeason >= cur.totalSeasons
+            }
+            val newStatus = if (isDone) MediaStatus.COMPLETED else cur.status
+            val updated = cur.copy(
+                currentSeasons = targetSeason,
+                currentEpisodes = targetEp,
+                currentTimeMinutes = null,
+                status = newStatus,
+                finishDate = if (newStatus == MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
+                updatedAt = now
+            )
             repository.update(updated)
         }
     }
@@ -466,6 +488,7 @@ class DetailViewModel(
             val updated = cur.copy(
                 isRewatching = true,
                 status = MediaStatus.WATCHING,
+                currentSeasons = 1,
                 currentEpisodes = 0,
                 currentChapters = 0,
                 currentVolumes = 0,
@@ -482,11 +505,19 @@ class DetailViewModel(
         val cur = entry.value ?: return
         val now = System.currentTimeMillis()
         viewModelScope.launch {
+            val targetSeason = if (cur.mediaType == MediaType.SHOW) cur.getEffectiveTotalSeasons() else cur.currentSeasons
+            val targetEpisodes = if (cur.hasSeasonEpisodeTracking()) {
+                val lastSeasonEps = cur.getTotalEpisodesForSeason(targetSeason)
+                if (lastSeasonEps > 0) lastSeasonEps else cur.currentEpisodes
+            } else {
+                if (cur.totalEpisodes > 0) cur.totalEpisodes else cur.currentEpisodes
+            }
             val updated = cur.copy(
                 isRewatching = false,
                 rewatchCount = cur.rewatchCount + 1,
                 status = MediaStatus.COMPLETED,
-                currentEpisodes = if (cur.totalEpisodes > 0) cur.totalEpisodes else cur.currentEpisodes,
+                currentSeasons = targetSeason,
+                currentEpisodes = targetEpisodes,
                 currentChapters = if (cur.totalChapters > 0) cur.totalChapters else cur.currentChapters,
                 currentVolumes = if (cur.totalVolumes > 0) cur.totalVolumes else cur.currentVolumes,
                 finishDate = now,
@@ -543,11 +574,33 @@ class DetailViewModel(
                     return@launch
                 }
 
+                suspend fun attemptFallbackResolution(failurePrefix: String) {
+                    val fallbackOutcome = TachiyomiResolverManager.matchAndResolveEntry(
+                        entry = cur,
+                        repository = repository,
+                        context = context,
+                        skipExistingIdCheck = true
+                    )
+                    when (fallbackOutcome) {
+                        is TachiyomiResolverManager.ResolutionOutcome.Success -> {
+                            val r = fallbackOutcome.report
+                            _metadataRefreshMessage.value = "Resolved via fallback to ${r.resolvedSource} (#${r.resolvedExternalId}): ${r.resolvedTitle}"
+                        }
+                        is TachiyomiResolverManager.ResolutionOutcome.Skipped -> {
+                            _metadataRefreshMessage.value = failurePrefix
+                        }
+                        is TachiyomiResolverManager.ResolutionOutcome.Failed -> {
+                            _metadataRefreshMessage.value = "$failurePrefix (${fallbackOutcome.report.errorMessage})"
+                        }
+                    }
+                }
+
                 val isMal = JikanSyncManager.isMalSource(cur) || isAnimeOrManga(cur)
                 val extIdStr = cur.externalId.trim()
                 val isManga = JikanSyncManager.isMangaType(cur.mediaType)
                 val extId = extIdStr.toLongOrNull()
                 val isMangaDex = cur.externalSource?.equals("MangaDex", ignoreCase = true) == true
+                val isAniList = cur.externalSource?.equals("AniList", ignoreCase = true) == true
                 val mangaDexIdToUse = if (isMangaDex) extIdStr else null
 
                 if (isMangaDex && !mangaDexIdToUse.isNullOrBlank()) {
@@ -576,17 +629,20 @@ class DetailViewModel(
                             repository.update(updated)
                             _metadataRefreshMessage.value = "Metadata refreshed from MangaDex (${details.title})"
                         } else {
-                            _metadataRefreshMessage.value = "No metadata returned from MangaDex"
+                            attemptFallbackResolution("No metadata returned from MangaDex")
                         }
                     } else {
                         val err = result.exceptionOrNull()
-                        _metadataRefreshMessage.value = "Failed to refresh from MangaDex: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}"
+                        attemptFallbackResolution("Failed to refresh from MangaDex: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}")
                     }
                 } else if (isMal) {
-                    val result = if (extId != null && extId > 0) {
-                        JikanApiClient.fetchMediaDetails(malId = extId, isManga = isManga, title = cur.title)
-                    } else {
-                        JikanApiClient.searchMediaDetailsByTitle(title = cur.title, isManga = isManga)
+                    val result = when {
+                        isAniList && extId != null && extId > 0 ->
+                            JikanApiClient.queryAniListById(aniListId = extId, isManga = isManga)
+                        extId != null && extId > 0 ->
+                            JikanApiClient.fetchMediaDetails(malId = extId, isManga = isManga, title = cur.title)
+                        else ->
+                            JikanApiClient.searchMediaDetailsByTitle(title = cur.title, isManga = isManga)
                     }
 
                     if (result.isSuccess) {
@@ -638,11 +694,11 @@ class DetailViewModel(
                             repository.update(updated)
                             _metadataRefreshMessage.value = "Metadata refreshed from $resolvedSource (#$newExtId)"
                         } else {
-                            _metadataRefreshMessage.value = "No metadata returned from external source"
+                            attemptFallbackResolution("No metadata returned from external source")
                         }
                     } else {
                         val err = result.exceptionOrNull()
-                        _metadataRefreshMessage.value = "Failed to refresh: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}"
+                        attemptFallbackResolution("Failed to refresh: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}")
                     }
                 } else {
                     // TMDB for Movie / Show
@@ -663,6 +719,12 @@ class DetailViewModel(
                                 coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else cur.coverImageUri,
                                 alternateTitle = if (!details.alternateTitle.isNullOrBlank()) details.alternateTitle else cur.alternateTitle,
                                 totalEpisodes = if (details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else cur.totalEpisodes,
+                                totalSeasons = if (isTv && details.totalSeasons != null && details.totalSeasons > 0) details.totalSeasons else cur.totalSeasons,
+                                seasonEpisodesJson = if (cur.mediaType == MediaType.SHOW && details.seasonEpisodes != null) {
+                                    MediaEntry.formatSeasonEpisodes(details.seasonEpisodes) ?: cur.seasonEpisodesJson
+                                } else {
+                                    cur.seasonEpisodesJson
+                                },
                                 durationMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.durationMinutes,
                                 episodeLengthMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.episodeLengthMinutes,
                                 airedStartDate = details.airedStartDate ?: cur.airedStartDate,
@@ -677,11 +739,11 @@ class DetailViewModel(
                             repository.update(updated)
                             _metadataRefreshMessage.value = "Metadata refreshed from TMDB (TMDB #${details.tmdbId})"
                         } else {
-                            _metadataRefreshMessage.value = "No metadata returned from The Movie Database"
+                            attemptFallbackResolution("No metadata returned from The Movie Database")
                         }
                     } else {
                         val err = result.exceptionOrNull()
-                        _metadataRefreshMessage.value = "Failed to refresh from TMDB: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}"
+                        attemptFallbackResolution("Failed to refresh from TMDB: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}")
                     }
                 }
             } catch (e: Exception) {

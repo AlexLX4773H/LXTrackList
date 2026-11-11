@@ -531,6 +531,10 @@ fun AddEditScreen(
 
                     when (state.mediaType) {
                         MediaType.ANIME, MediaType.SHOW -> {
+                            val hasSeasonTracking = state.mediaType == MediaType.SHOW && state.seasonEpisodes.any { it > 0 }
+                            val curSeasonEps = if (hasSeasonTracking) {
+                                state.seasonEpisodes.getOrElse(state.currentSeasons - 1) { 0 }
+                            } else 0
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -538,7 +542,7 @@ fun AddEditScreen(
                                 OutlinedTextField(
                                     value = if (state.currentEpisodes > 0) state.currentEpisodes.toString() else "",
                                     onValueChange = { viewModel.updateCurrentEpisodes(it.toIntOrNull() ?: 0) },
-                                    label = { Text("Watched Ep") },
+                                    label = { Text(if (hasSeasonTracking) "Season Ep" else "Watched Ep") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     modifier = Modifier.weight(1f),
                                     colors = outlinedColors()
@@ -584,6 +588,105 @@ fun AddEditScreen(
                                         modifier = Modifier.weight(1f),
                                         colors = outlinedColors()
                                     )
+                                }
+
+                                var showSeasonEditor by remember { mutableStateOf(false) }
+                                val displaySeasonCount = state.totalSeasons.coerceIn(1, 200)
+                                val trackedSeasonEpsSum = (0 until displaySeasonCount).sumOf { state.seasonEpisodes.getOrElse(it) { 0 } }
+                                val seasonSummaryText = if (hasSeasonTracking) {
+                                    val curStr = if (curSeasonEps > 0) "S${state.currentSeasons}: $curSeasonEps eps • " else ""
+                                    "${curStr}${displaySeasonCount} seasons ($trackedSeasonEpsSum eps total)"
+                                } else {
+                                    "Tap to set episodes per season (auto-advances season)"
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = LXSurfaceElevated,
+                                    border = BorderStroke(1.dp, LXBorder.copy(alpha = 0.7f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .animateContentSize()
+                                            .padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { showSeasonEditor = !showSeasonEditor },
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "Season-by-Season Episodes",
+                                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                                    color = if (hasSeasonTracking) LXPrimaryGreen else LXTextPrimary
+                                                )
+                                                Text(
+                                                    text = seasonSummaryText,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = LXTextSecondary
+                                                )
+                                            }
+                                            Icon(
+                                                imageVector = if (showSeasonEditor) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                                contentDescription = if (showSeasonEditor) "Collapse seasons" else "Expand seasons",
+                                                tint = LXTextSecondary
+                                            )
+                                        }
+
+                                        if (showSeasonEditor) {
+                                            HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
+                                            Text(
+                                                text = "When you finish a season's last episode and tap +1, it advances to the next season at Ep 1.",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = LXTextSecondary
+                                            )
+                                            val seasonIndices = (0 until displaySeasonCount).toList()
+                                            seasonIndices.chunked(3).forEach { rowIndices ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    rowIndices.forEach { sIdx ->
+                                                        val epVal = state.seasonEpisodes.getOrElse(sIdx) { 0 }
+                                                        val isCurSeason = (sIdx + 1) == state.currentSeasons
+                                                        OutlinedTextField(
+                                                            value = if (epVal > 0) epVal.toString() else "",
+                                                            onValueChange = { txt ->
+                                                                viewModel.updateSeasonEpisodeCount(sIdx, txt.toIntOrNull() ?: 0)
+                                                            },
+                                                            label = {
+                                                                Text(
+                                                                    text = "S${sIdx + 1} Eps",
+                                                                    color = if (isCurSeason) LXPrimaryGreen else LXTextSecondary
+                                                                )
+                                                            },
+                                                            placeholder = { Text("?") },
+                                                            singleLine = true,
+                                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                            modifier = Modifier.weight(1f),
+                                                            colors = outlinedColors()
+                                                        )
+                                                    }
+                                                    repeat(3 - rowIndices.size) {
+                                                        Spacer(modifier = Modifier.weight(1f))
+                                                    }
+                                                }
+                                            }
+                                            if (state.totalSeasons > 200) {
+                                                Text(
+                                                    text = "Showing first 200 seasons.",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = LXTextSecondary
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
 

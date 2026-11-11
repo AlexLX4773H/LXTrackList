@@ -539,6 +539,365 @@ object TachiyomiResolverManager {
         )
     }
 
+    private data class ResolvedJikanMatch(
+        val details: JikanMediaDetails,
+        val source: String,
+        val externalId: String
+    )
+
+    fun extractAniListIdsFromNotes(notes: String?, preferManga: Boolean? = null): List<Long> {
+        if (notes.isNullOrBlank()) return emptyList()
+        val ids = mutableListOf<Long>()
+
+        val urlRegex = Regex("""anilist\.co/(manga|anime)/(\d+)""", RegexOption.IGNORE_CASE)
+        urlRegex.findAll(notes).forEach { match ->
+            val kind = match.groupValues[1].lowercase(Locale.US)
+            val id = match.groupValues[2].toLongOrNull() ?: return@forEach
+            if (id <= 0) return@forEach
+            val typeMatches = when (preferManga) {
+                true -> kind == "manga"
+                false -> kind == "anime"
+                null -> true
+            }
+            if (typeMatches && !ids.contains(id)) {
+                ids.add(id)
+            }
+        }
+
+        val labelRegex = Regex("""(?:\[?\s*AniList(?:\s+ID)?\s*[:=]\s*(\d+)\s*\]?)""", RegexOption.IGNORE_CASE)
+        labelRegex.findAll(notes).forEach { match ->
+            val id = match.groupValues[1].toLongOrNull()
+            if (id != null && id > 0 && !ids.contains(id)) {
+                ids.add(id)
+            }
+        }
+
+        return ids
+    }
+
+    fun extractAlternateTitlesFromNotes(notes: String?): List<String> {
+        if (notes.isNullOrBlank()) return emptyList()
+        val results = mutableListOf<String>()
+        val headerRegex = Regex(
+            """^(?:[-*•]\s*)?(?:(?:alternative|alternate|alt)\s*(?:titles?|names?)|synonyms|other\s*names?|also\s*known\s*as|aka)$""",
+            RegexOption.IGNORE_CASE
+        )
+        val headerPrefixRegex = Regex(
+            """^\s*(?:[-*•]\s*)?(?:(?:alternative|alternate|alt)\s*(?:titles?|names?)|synonyms|other\s*names?|also\s*known\s*as|aka)\s*:\s*(.*)$""",
+            RegexOption.IGNORE_CASE
+        )
+        val otherMetadataHeaderRegex = Regex(
+            """^\s*(?:author|artist|status|genres?|tags?|category|rating|score|source|description|synopsis|publisher|type|links?)\s*:""",
+            RegexOption.IGNORE_CASE
+        )
+        val bulletPrefixRegex = Regex("""^\s*[-*•◦▪]\s+""")
+
+        val lines = notes.lines()
+        var inAltSection = false
+        var sawBlankAfterHeader = false
+
+        fun addIfUnique(candidate: String) {
+            val cleaned = candidate.trim()
+            if (cleaned.isNotBlank() &&
+                !cleaned.startsWith("http://", ignoreCase = true) &&
+                !cleaned.startsWith("https://", ignoreCase = true) &&
+                results.none { it.equals(cleaned, ignoreCase = true) }
+            ) {
+                results.add(cleaned)
+            }
+        }
+
+        for (rawLine in lines) {
+            val trimmed = rawLine.trim()
+            val headerMatch = headerPrefixRegex.matchEntire(trimmed)
+            if (headerMatch != null) {
+                inAltSection = true
+                sawBlankAfterHeader = false
+                val inlineRemainder = headerMatch.groupValues[1].trim()
+                if (inlineRemainder.isNotBlank()) {
+                    val splitParts = when {
+                        inlineRemainder.contains(";") || inlineRemainder.contains("|") || inlineRemainder.contains(" / ") ->
+                            inlineRemainder.split(Regex("[;|]|\\s+/\\s+"))
+                        inlineRemainder.contains(",") ->
+                            listOf(inlineRemainder) + inlineRemainder.split(",")
+                        else -> listOf(inlineRemainder)
+                    }
+                    splitParts.forEach(::addIfUnique)
+                }
+                continue
+            }
+
+            if (inAltSection) {
+                if (trimmed.isBlank()) {
+                    if (results.isNotEmpty() || sawBlankAfterHeader) {
+                        inAltSection = false
+                    } else {
+                        sawBlankAfterHeader = true
+                    }
+                    continue
+                }
+
+                val isBullet = bulletPrefixRegex.containsMatchIn(rawLine)
+                val cleanItem = rawLine.replace(bulletPrefixRegex, "").trim()
+
+                if (!isBullet && (
+                        otherMetadataHeaderRegex.containsMatchIn(trimmed) ||
+                            trimmed.startsWith("[") ||
+                            trimmed.startsWith("(Source:", ignoreCase = true) ||
+                            trimmed.startsWith("http://", ignoreCase = true) ||
+                            trimmed.startsWith("https://", ignoreCase = true) ||
+                            headerRegex.matches(trimmed.removeSuffix(":"))
+                        )
+                ) {
+                    inAltSection = false
+                    continue
+                }
+
+                addIfUnique(cleanItem)
+            }
+        }
+
+        return results
+    }
+
+    fun getCombinedAlternateTitles(entry: MediaEntry): List<String> {
+        val seenNorm = mutableSetOf<String>()
+        val mainNorm = normalizeTitle(entry.title)
+        val cleanMainNorm = normalizeTitle(stripBracketedSuffixes(entry.title))
+        if (mainNorm.isNotBlank()) seenNorm.add(mainNorm)
+        if (cleanMainNorm.isNotBlank()) seenNorm.add(cleanMainNorm)
+
+        val combined = mutableListOf<String>()
+        (entry.getAlternateTitles() + extractAlternateTitlesFromNotes(entry.notes)).forEach { raw ->
+            val clean = raw.trim()
+            val norm = normalizeTitle(clean)
+            if (clean.isNotBlank() && norm.isNotBlank() && seenNorm.add(norm)) {
+                combined.add(clean)
+            }
+        }
+        return combined
+    }
+
+    fun getCombinedAlternateTitlesString(entry: MediaEntry): String? {
+        return getCombinedAlternateTitles(entry).joinToString("\n").takeIf { it.isNotBlank() }
+    }
+
+    private fun tryResolveFromAniListIds(
+        aniListIds: List<Long>,
+        isManga: Boolean,
+        evaluatedCandidateNames: MutableList<String>
+    ): ResolvedJikanMatch? {
+        for (aniId in aniListIds) {
+            val res = JikanApiClient.queryAniListById(aniListId = aniId, isManga = isManga)
+            if (res.isSuccess) {
+                val cand = res.getOrNull()
+                if (cand != null && !cand.title.isNullOrBlank()) {
+                    evaluatedCandidateNames.add("AniList(Notes ID #$aniId): ${cand.title}")
+                    val srcAndId = extractCandidateSourceAndId(cand)
+                    if (srcAndId != null) {
+                        return ResolvedJikanMatch(cand, srcAndId.first, srcAndId.second)
+                    }
+                }
+            } else {
+                evaluatedCandidateNames.add("AniList(Notes ID #$aniId): invalid/not found")
+            }
+        }
+        return null
+    }
+
+    private fun matchAndPickCandidate(
+        candidates: List<JikanMediaDetails>,
+        providerLabel: String?,
+        searchTitle: String,
+        matchTargetTitle: String,
+        cleanMatchTitle: String,
+        entryAltTitles: String?,
+        evaluatedCandidateNames: MutableList<String>
+    ): ResolvedJikanMatch? {
+        for (cand in candidates) {
+            val prefix = providerLabel ?: cand.sourceProvider
+            evaluatedCandidateNames.add("$prefix: ${cand.title}")
+            if (isConfidentExactMatch(searchTitle, cand, entryAltTitles) ||
+                isConfidentExactMatch(matchTargetTitle, cand, entryAltTitles) ||
+                isConfidentExactMatch(cleanMatchTitle, cand, entryAltTitles)
+            ) {
+                val srcAndId = extractCandidateSourceAndId(cand)
+                if (srcAndId != null) {
+                    return ResolvedJikanMatch(cand, srcAndId.first, srcAndId.second)
+                }
+            }
+        }
+        return null
+    }
+
+    private fun searchReadingByTitle(
+        searchTitle: String,
+        matchTargetTitle: String,
+        cleanMatchTitle: String,
+        entryAltTitles: String?,
+        isManhwa: Boolean,
+        evaluatedCandidateNames: MutableList<String>
+    ): ResolvedJikanMatch? {
+        val cleanSearch = stripBracketedSuffixes(searchTitle).takeIf { it.isNotBlank() } ?: searchTitle.trim()
+        val rawSearch = searchTitle.trim()
+
+        // Jikan
+        val jikanPrimary = JikanApiClient.searchJikanMultiple(
+            queryTitle = cleanSearch,
+            isManga = true,
+            subType = if (isManhwa) "manhwa" else null,
+            limit = 5
+        ).getOrDefault(emptyList())
+        val jikanCandidates = if (jikanPrimary.isNotEmpty() || cleanSearch.equals(rawSearch, ignoreCase = true)) {
+            jikanPrimary
+        } else {
+            JikanApiClient.searchJikanMultiple(
+                queryTitle = rawSearch,
+                isManga = true,
+                subType = if (isManhwa) "manhwa" else null,
+                limit = 5
+            ).getOrDefault(emptyList())
+        }
+        matchAndPickCandidate(
+            jikanCandidates, null, rawSearch, matchTargetTitle, cleanMatchTitle, entryAltTitles, evaluatedCandidateNames
+        )?.let { return it }
+
+        // MangaDex
+        val mdPrimary = MangaDexApiClient.searchMangaMultiple(cleanSearch, isManhwa = isManhwa, limit = 5).getOrDefault(emptyList())
+        val mdCandidates = if (mdPrimary.isNotEmpty() || cleanSearch.equals(rawSearch, ignoreCase = true)) {
+            mdPrimary
+        } else {
+            MangaDexApiClient.searchMangaMultiple(rawSearch, isManhwa = isManhwa, limit = 5).getOrDefault(emptyList())
+        }
+        matchAndPickCandidate(
+            mdCandidates, "MangaDex", rawSearch, matchTargetTitle, cleanMatchTitle, entryAltTitles, evaluatedCandidateNames
+        )?.let { return it }
+
+        // AniList
+        val aniPrimary = JikanApiClient.queryAniListMultiple(
+            searchTitle = cleanSearch,
+            isManga = true,
+            subType = if (isManhwa) "MANHWA" else null,
+            limit = 5
+        ).getOrDefault(emptyList())
+        val aniCandidates = if (aniPrimary.isNotEmpty() || cleanSearch.equals(rawSearch, ignoreCase = true)) {
+            aniPrimary
+        } else {
+            JikanApiClient.queryAniListMultiple(
+                searchTitle = rawSearch,
+                isManga = true,
+                subType = if (isManhwa) "MANHWA" else null,
+                limit = 5
+            ).getOrDefault(emptyList())
+        }
+        matchAndPickCandidate(
+            aniCandidates, "AniList", rawSearch, matchTargetTitle, cleanMatchTitle, entryAltTitles, evaluatedCandidateNames
+        )?.let { return it }
+
+        // Kitsu
+        val kitsuPrimary = KitsuApiClient.searchMangaMultiple(cleanSearch, limit = 5).getOrDefault(emptyList())
+        val kitsuCandidates = if (kitsuPrimary.isNotEmpty() || cleanSearch.equals(rawSearch, ignoreCase = true)) {
+            kitsuPrimary
+        } else {
+            KitsuApiClient.searchMangaMultiple(rawSearch, limit = 5).getOrDefault(emptyList())
+        }
+        return matchAndPickCandidate(
+            kitsuCandidates, "Kitsu", rawSearch, matchTargetTitle, cleanMatchTitle, entryAltTitles, evaluatedCandidateNames
+        )
+    }
+
+    private fun searchAnimeByTitle(
+        searchTitle: String,
+        matchTargetTitle: String,
+        cleanMatchTitle: String,
+        entryAltTitles: String?,
+        evaluatedCandidateNames: MutableList<String>
+    ): ResolvedJikanMatch? {
+        val cleanSearch = stripBracketedSuffixes(searchTitle).takeIf { it.isNotBlank() } ?: searchTitle.trim()
+        val rawSearch = searchTitle.trim()
+
+        // Jikan
+        val jikanPrimary = JikanApiClient.searchJikanMultiple(
+            queryTitle = cleanSearch,
+            isManga = false,
+            limit = 5
+        ).getOrDefault(emptyList())
+        val jikanCandidates = if (jikanPrimary.isNotEmpty() || cleanSearch.equals(rawSearch, ignoreCase = true)) {
+            jikanPrimary
+        } else {
+            JikanApiClient.searchJikanMultiple(
+                queryTitle = rawSearch,
+                isManga = false,
+                limit = 5
+            ).getOrDefault(emptyList())
+        }
+        matchAndPickCandidate(
+            jikanCandidates, null, rawSearch, matchTargetTitle, cleanMatchTitle, entryAltTitles, evaluatedCandidateNames
+        )?.let { return it }
+
+        // AniList
+        val aniPrimary = JikanApiClient.queryAniListMultiple(
+            searchTitle = cleanSearch,
+            isManga = false,
+            limit = 5
+        ).getOrDefault(emptyList())
+        val aniCandidates = if (aniPrimary.isNotEmpty() || cleanSearch.equals(rawSearch, ignoreCase = true)) {
+            aniPrimary
+        } else {
+            JikanApiClient.queryAniListMultiple(
+                searchTitle = rawSearch,
+                isManga = false,
+                limit = 5
+            ).getOrDefault(emptyList())
+        }
+        return matchAndPickCandidate(
+            aniCandidates, "AniList", rawSearch, matchTargetTitle, cleanMatchTitle, entryAltTitles, evaluatedCandidateNames
+        )
+    }
+
+    private fun searchTmdbByTitle(
+        searchTitle: String,
+        matchTargetTitle: String,
+        cleanMatchTitle: String,
+        entryAltTitles: String?,
+        isTv: Boolean,
+        context: Context?,
+        evaluatedCandidateNames: MutableList<String>
+    ): TmdbMediaDetails? {
+        val cleanSearch = TmdbApiClient.cleanSearchTitle(searchTitle).takeIf { it.isNotBlank() } ?: searchTitle.trim()
+        val rawSearch = searchTitle.trim()
+
+        fun pickFrom(results: List<TmdbSearchResult>, tag: String? = null): TmdbMediaDetails? {
+            for (cand in results.take(6)) {
+                val typeLabel = "${tag ?: ""}${if (cand.isMovie) "Movie" else "TV"}"
+                evaluatedCandidateNames.add("TMDB($typeLabel): ${cand.title}")
+                if (isConfidentExactMatch(rawSearch, cand, entryAltTitles) ||
+                    isConfidentExactMatch(matchTargetTitle, cand, entryAltTitles) ||
+                    isConfidentExactMatch(cleanMatchTitle, cand, entryAltTitles)
+                ) {
+                    val fullRes = TmdbApiClient.fetchMediaDetails(cand.tmdbId, isTv = !cand.isMovie, context = context)
+                    if (fullRes.isSuccess) {
+                        val details = fullRes.getOrNull()
+                        if (details != null) return details
+                    }
+                }
+            }
+            return null
+        }
+
+        val primary = if (isTv) TmdbApiClient.searchTvMultiple(cleanSearch, context) else TmdbApiClient.searchMoviesMultiple(cleanSearch, context)
+        pickFrom(primary.getOrDefault(emptyList()))?.let { return it }
+
+        val fallbackType = if (isTv) TmdbApiClient.searchMoviesMultiple(cleanSearch, context) else TmdbApiClient.searchTvMultiple(cleanSearch, context)
+        pickFrom(fallbackType.getOrDefault(emptyList()))?.let { return it }
+
+        if (!cleanSearch.equals(rawSearch, ignoreCase = true) && rawSearch.isNotBlank()) {
+            val rawResults = if (isTv) TmdbApiClient.searchTvMultiple(rawSearch, context) else TmdbApiClient.searchMoviesMultiple(rawSearch, context)
+            pickFrom(rawResults.getOrDefault(emptyList()), tag = "raw ")?.let { return it }
+        }
+        return null
+    }
+
     sealed class ResolutionOutcome {
         data class Success(val report: ResolvedItemReport) : ResolutionOutcome()
         data class Skipped(val report: SkippedItemReport) : ResolutionOutcome()
@@ -548,202 +907,128 @@ object TachiyomiResolverManager {
     suspend fun matchAndResolveEntry(
         entry: MediaEntry,
         repository: MediaRepository,
-        context: Context?
+        context: Context?,
+        skipExistingIdCheck: Boolean = false
     ): ResolutionOutcome {
         if (entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.SHOW) {
-            return matchAndResolveMovieOrShow(entry, repository, context)
+            return matchAndResolveMovieOrShow(entry, repository, context, skipExistingIdCheck)
         }
         if (entry.mediaType == MediaType.ANIME) {
-            val animeOutcome = matchAndResolveAnime(entry, repository, context)
+            val animeOutcome = matchAndResolveAnime(entry, repository, context, skipExistingIdCheck)
             if (animeOutcome is ResolutionOutcome.Success) return animeOutcome
-            val tmdbOutcome = matchAndResolveMovieOrShow(entry, repository, context)
+            val tmdbOutcome = matchAndResolveMovieOrShow(entry, repository, context, skipExistingIdCheck)
             if (tmdbOutcome is ResolutionOutcome.Success) return tmdbOutcome
             return animeOutcome
         }
-        return matchAndResolveReading(entry, repository, context)
+        return matchAndResolveReading(entry, repository, context, skipExistingIdCheck)
     }
 
     private suspend fun matchAndResolveReading(
         entry: MediaEntry,
         repository: MediaRepository,
-        context: Context?
+        context: Context?,
+        skipExistingIdCheck: Boolean = false
     ): ResolutionOutcome {
         val queryTitle = entry.title.trim()
         val cleanTitle = stripBracketedSuffixes(queryTitle).takeIf { it.isNotBlank() } ?: queryTitle
         val isManhwa = entry.mediaType == MediaType.MANHWA
         val evaluatedCandidateNames = mutableListOf<String>()
+        val combinedAltTitlesList = getCombinedAlternateTitles(entry)
+        val combinedAltTitlesStr = combinedAltTitlesList.joinToString("\n").takeIf { it.isNotBlank() }
 
         val extIdStr = (entry.externalId ?: entry.foreignDatabaseId)?.trim()
+        val srcStr = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim()
         val extractedUuid = if (!extIdStr.isNullOrBlank()) JikanSyncManager.extractMangaDexUuid(extIdStr) else null
-        val extractedMalId = if (!extIdStr.isNullOrBlank()) {
-            val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim()
-            val isExplicitMal = src?.equals("MAL", ignoreCase = true) == true || src?.equals("MyAnimeList", ignoreCase = true) == true
+        val existingAniListId = if (!extIdStr.isNullOrBlank() && srcStr?.equals("AniList", ignoreCase = true) == true) {
+            extIdStr.toLongOrNull()?.takeIf { it > 0 }
+        } else null
+        val extractedMalId = if (!extIdStr.isNullOrBlank() && existingAniListId == null) {
+            val isExplicitMal = srcStr?.equals("MAL", ignoreCase = true) == true || srcStr?.equals("MyAnimeList", ignoreCase = true) == true
             val hasMalUrl = extIdStr.contains("myanimelist.net", ignoreCase = true)
             if (isExplicitMal || hasMalUrl) JikanSyncManager.extractNumericMalId(extIdStr) else null
         } else null
 
-        var matchDetails: JikanMediaDetails? = null
-        var matchSource: String? = null
-        var matchExternalId: String? = null
+        var resolved: ResolvedJikanMatch? = null
 
-        // 1. Try extracted ID if present (UUID or MAL ID)
-        if (!extractedUuid.isNullOrBlank()) {
-            val res = MangaDexApiClient.fetchMangaDetails(extractedUuid)
-            if (res.isSuccess) {
-                val candidate = res.getOrNull()
-                if (candidate != null) {
-                    evaluatedCandidateNames.add("MangaDex(ID): ${candidate.title}")
-                    if (isConfidentExactMatch(queryTitle, candidate, entry.alternateTitle) ||
-                        isConfidentExactMatch(cleanTitle, candidate, entry.alternateTitle)
-                    ) {
-                        val srcAndId = extractCandidateSourceAndId(candidate)
-                        if (srcAndId != null) {
-                            matchDetails = candidate
-                            matchSource = srcAndId.first
-                            matchExternalId = srcAndId.second
-                        }
+        // 1. Try existing external ID if present (UUID, AniList ID, or MAL ID)
+        if (!skipExistingIdCheck && !extractedUuid.isNullOrBlank()) {
+            val candidate = MangaDexApiClient.fetchMangaDetails(extractedUuid).getOrNull()
+            if (candidate != null) {
+                evaluatedCandidateNames.add("MangaDex(ID): ${candidate.title}")
+                if (isConfidentExactMatch(queryTitle, candidate, combinedAltTitlesStr) ||
+                    isConfidentExactMatch(cleanTitle, candidate, combinedAltTitlesStr)
+                ) {
+                    extractCandidateSourceAndId(candidate)?.let { (src, id) ->
+                        resolved = ResolvedJikanMatch(candidate, src, id)
                     }
                 }
             }
-        } else if (extractedMalId != null && extractedMalId > 0) {
-            val res = JikanApiClient.fetchMediaDetails(malId = extractedMalId, isManga = true, title = cleanTitle, isManhwa = isManhwa)
-            if (res.isSuccess) {
-                val candidate = res.getOrNull()
-                if (candidate != null) {
-                    evaluatedCandidateNames.add("MAL(ID): ${candidate.title}")
-                    if (isConfidentExactMatch(queryTitle, candidate, entry.alternateTitle) ||
-                        isConfidentExactMatch(cleanTitle, candidate, entry.alternateTitle)
-                    ) {
-                        val srcAndId = extractCandidateSourceAndId(candidate)
-                        if (srcAndId != null) {
-                            matchDetails = candidate
-                            matchSource = srcAndId.first
-                            matchExternalId = srcAndId.second
-                        }
+        } else if (!skipExistingIdCheck && existingAniListId != null) {
+            val candidate = JikanApiClient.queryAniListById(aniListId = existingAniListId, isManga = true).getOrNull()
+            if (candidate != null) {
+                evaluatedCandidateNames.add("AniList(ID): ${candidate.title}")
+                if (isConfidentExactMatch(queryTitle, candidate, combinedAltTitlesStr) ||
+                    isConfidentExactMatch(cleanTitle, candidate, combinedAltTitlesStr)
+                ) {
+                    extractCandidateSourceAndId(candidate)?.let { (src, id) ->
+                        resolved = ResolvedJikanMatch(candidate, src, id)
+                    }
+                }
+            }
+        } else if (!skipExistingIdCheck && extractedMalId != null && extractedMalId > 0) {
+            val candidate = JikanApiClient.fetchMediaDetails(malId = extractedMalId, isManga = true, title = cleanTitle, isManhwa = isManhwa).getOrNull()
+            if (candidate != null) {
+                evaluatedCandidateNames.add("MAL(ID): ${candidate.title}")
+                if (isConfidentExactMatch(queryTitle, candidate, combinedAltTitlesStr) ||
+                    isConfidentExactMatch(cleanTitle, candidate, combinedAltTitlesStr)
+                ) {
+                    extractCandidateSourceAndId(candidate)?.let { (src, id) ->
+                        resolved = ResolvedJikanMatch(candidate, src, id)
                     }
                 }
             }
         }
 
-        // 2. Query Jikan (MyAnimeList, cascades to MangaDex/AniList/Kitsu if needed)
-        if (matchDetails == null) {
-            val jikanRes = JikanApiClient.searchJikanMultiple(
-                queryTitle = cleanTitle,
-                isManga = true,
-                subType = if (isManhwa) "manhwa" else null,
-                limit = 5
+        // 2. Search APIs by primary title (Jikan -> MangaDex -> AniList -> Kitsu)
+        if (resolved == null) {
+            resolved = searchReadingByTitle(
+                searchTitle = queryTitle,
+                matchTargetTitle = queryTitle,
+                cleanMatchTitle = cleanTitle,
+                entryAltTitles = combinedAltTitlesStr,
+                isManhwa = isManhwa,
+                evaluatedCandidateNames = evaluatedCandidateNames
             )
-            val candidates = if (jikanRes.isSuccess && jikanRes.getOrDefault(emptyList()).isNotEmpty()) {
-                jikanRes.getOrDefault(emptyList())
-            } else if (!cleanTitle.equals(queryTitle, ignoreCase = true)) {
-                JikanApiClient.searchJikanMultiple(
-                    queryTitle = queryTitle,
-                    isManga = true,
-                    subType = if (isManhwa) "manhwa" else null,
-                    limit = 5
-                ).getOrDefault(emptyList())
-            } else emptyList()
+        }
 
-            for (cand in candidates) {
-                evaluatedCandidateNames.add("${cand.sourceProvider}: ${cand.title}")
-                if (isConfidentExactMatch(queryTitle, cand, entry.alternateTitle) ||
-                    isConfidentExactMatch(cleanTitle, cand, entry.alternateTitle)
-                ) {
-                    val srcAndId = extractCandidateSourceAndId(cand)
-                    if (srcAndId != null) {
-                        matchDetails = cand
-                        matchSource = srcAndId.first
-                        matchExternalId = srcAndId.second
-                        break
-                    }
-                }
+        // 3. Not found by name: try AniList ID extracted from Notes
+        if (resolved == null) {
+            val notesAniListIds = extractAniListIdsFromNotes(entry.notes, preferManga = true)
+                .filter { it != existingAniListId }
+            if (notesAniListIds.isNotEmpty()) {
+                resolved = tryResolveFromAniListIds(notesAniListIds, isManga = true, evaluatedCandidateNames = evaluatedCandidateNames)
             }
         }
 
-        // 3. Query MangaDex
-        if (matchDetails == null) {
-            val mdRes = MangaDexApiClient.searchMangaMultiple(cleanTitle, isManhwa = isManhwa, limit = 5)
-            val candidates = if (mdRes.isSuccess && mdRes.getOrDefault(emptyList()).isNotEmpty()) {
-                mdRes.getOrDefault(emptyList())
-            } else if (!cleanTitle.equals(queryTitle, ignoreCase = true)) {
-                MangaDexApiClient.searchMangaMultiple(queryTitle, isManhwa = isManhwa, limit = 5).getOrDefault(emptyList())
-            } else emptyList()
-
-            for (cand in candidates) {
-                evaluatedCandidateNames.add("MangaDex: ${cand.title}")
-                if (isConfidentExactMatch(queryTitle, cand, entry.alternateTitle) ||
-                    isConfidentExactMatch(cleanTitle, cand, entry.alternateTitle)
-                ) {
-                    val srcAndId = extractCandidateSourceAndId(cand)
-                    if (srcAndId != null) {
-                        matchDetails = cand
-                        matchSource = srcAndId.first
-                        matchExternalId = srcAndId.second
-                        break
-                    }
-                }
+        // 4. Fallback to Alternate Names (both when primary name failed and when Notes/existing ID didn't work / was invalid)
+        if (resolved == null && combinedAltTitlesList.isNotEmpty()) {
+            for (altTitle in combinedAltTitlesList.take(8)) {
+                delay(250L)
+                resolved = searchReadingByTitle(
+                    searchTitle = altTitle,
+                    matchTargetTitle = queryTitle,
+                    cleanMatchTitle = cleanTitle,
+                    entryAltTitles = combinedAltTitlesStr,
+                    isManhwa = isManhwa,
+                    evaluatedCandidateNames = evaluatedCandidateNames
+                )
+                if (resolved != null) break
             }
         }
 
-        // 4. Query AniList
-        if (matchDetails == null) {
-            val aniRes = JikanApiClient.queryAniListMultiple(
-                searchTitle = cleanTitle,
-                isManga = true,
-                subType = if (isManhwa) "MANHWA" else null,
-                limit = 5
-            )
-            val candidates = if (aniRes.isSuccess && aniRes.getOrDefault(emptyList()).isNotEmpty()) {
-                aniRes.getOrDefault(emptyList())
-            } else if (!cleanTitle.equals(queryTitle, ignoreCase = true)) {
-                JikanApiClient.queryAniListMultiple(
-                    searchTitle = queryTitle,
-                    isManga = true,
-                    subType = if (isManhwa) "MANHWA" else null,
-                    limit = 5
-                ).getOrDefault(emptyList())
-            } else emptyList()
-
-            for (cand in candidates) {
-                evaluatedCandidateNames.add("AniList: ${cand.title}")
-                if (isConfidentExactMatch(queryTitle, cand, entry.alternateTitle) ||
-                    isConfidentExactMatch(cleanTitle, cand, entry.alternateTitle)
-                ) {
-                    val srcAndId = extractCandidateSourceAndId(cand)
-                    if (srcAndId != null) {
-                        matchDetails = cand
-                        matchSource = srcAndId.first
-                        matchExternalId = srcAndId.second
-                        break
-                    }
-                }
-            }
-        }
-
-        // 5. Query Kitsu
-        if (matchDetails == null) {
-            val kitsuRes = KitsuApiClient.searchMangaMultiple(cleanTitle, limit = 5)
-            val candidates = if (kitsuRes.isSuccess && kitsuRes.getOrDefault(emptyList()).isNotEmpty()) {
-                kitsuRes.getOrDefault(emptyList())
-            } else if (!cleanTitle.equals(queryTitle, ignoreCase = true)) {
-                KitsuApiClient.searchMangaMultiple(queryTitle, limit = 5).getOrDefault(emptyList())
-            } else emptyList()
-
-            for (cand in candidates) {
-                evaluatedCandidateNames.add("Kitsu: ${cand.title}")
-                if (isConfidentExactMatch(queryTitle, cand, entry.alternateTitle) ||
-                    isConfidentExactMatch(cleanTitle, cand, entry.alternateTitle)
-                ) {
-                    val srcAndId = extractCandidateSourceAndId(cand)
-                    if (srcAndId != null) {
-                        matchDetails = cand
-                        matchSource = srcAndId.first
-                        matchExternalId = srcAndId.second
-                        break
-                    }
-                }
-            }
-        }
+        val matchDetails = resolved?.details
+        val matchSource = resolved?.source
+        val matchExternalId = resolved?.externalId
 
         // If no confident exact match was found, skip updating
         if (matchDetails == null || matchSource.isNullOrBlank() || matchExternalId.isNullOrBlank()) {
@@ -752,7 +1037,7 @@ object TachiyomiResolverManager {
                     entryId = entry.id,
                     title = entry.title,
                     externalId = entry.externalId,
-                    reason = "No exact confident title match found in Jikan, MangaDex, AniList, or Kitsu.",
+                    reason = "No exact confident match found via name, Notes AniList ID, or alternate titles in Jikan, MangaDex, AniList, or Kitsu.",
                     evaluatedCandidates = evaluatedCandidateNames
                 )
             )
@@ -853,25 +1138,28 @@ object TachiyomiResolverManager {
     private suspend fun matchAndResolveMovieOrShow(
         entry: MediaEntry,
         repository: MediaRepository,
-        context: Context?
+        context: Context?,
+        skipExistingIdCheck: Boolean = false
     ): ResolutionOutcome {
         val queryTitle = entry.title.trim()
         val cleanTitle = TmdbApiClient.cleanSearchTitle(queryTitle)
         val isTv = entry.mediaType == MediaType.SHOW
         val evaluatedCandidateNames = mutableListOf<String>()
+        val combinedAltTitlesList = getCombinedAlternateTitles(entry)
+        val combinedAltTitlesStr = combinedAltTitlesList.joinToString("\n").takeIf { it.isNotBlank() }
 
         var matchDetails: TmdbMediaDetails? = null
 
         // 1. Check existing numeric TMDB ID if present
-        val extIdNum = (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull()
+        val extIdNum = if (!skipExistingIdCheck) (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull() else null
         if (extIdNum != null && extIdNum > 0) {
             val res = TmdbApiClient.fetchMediaDetails(extIdNum, isTv, context)
             if (res.isSuccess) {
                 val candidate = res.getOrNull()
                 if (candidate != null) {
                     evaluatedCandidateNames.add("TMDB(ID): ${candidate.title}")
-                    if (isConfidentExactMatch(queryTitle, candidate, entry.alternateTitle) ||
-                        isConfidentExactMatch(cleanTitle, candidate, entry.alternateTitle)
+                    if (isConfidentExactMatch(queryTitle, candidate, combinedAltTitlesStr) ||
+                        isConfidentExactMatch(cleanTitle, candidate, combinedAltTitlesStr)
                     ) {
                         matchDetails = candidate
                     }
@@ -879,66 +1167,33 @@ object TachiyomiResolverManager {
             }
         }
 
-        // 2. Search primary media type on TMDB
+        // 2. Search TMDB with primary title
         if (matchDetails == null) {
-            val primaryResults = if (isTv) {
-                TmdbApiClient.searchTvMultiple(cleanTitle, context).getOrDefault(emptyList())
-            } else {
-                TmdbApiClient.searchMoviesMultiple(cleanTitle, context).getOrDefault(emptyList())
-            }
-            for (cand in primaryResults.take(6)) {
-                evaluatedCandidateNames.add("TMDB(${if (cand.isMovie) "Movie" else "TV"}): ${cand.title}")
-                if (isConfidentExactMatch(queryTitle, cand, entry.alternateTitle) ||
-                    isConfidentExactMatch(cleanTitle, cand, entry.alternateTitle)
-                ) {
-                    val fullRes = TmdbApiClient.fetchMediaDetails(cand.tmdbId, isTv = !cand.isMovie, context = context)
-                    if (fullRes.isSuccess) {
-                        matchDetails = fullRes.getOrNull()
-                        if (matchDetails != null) break
-                    }
-                }
-            }
+            matchDetails = searchTmdbByTitle(
+                searchTitle = queryTitle,
+                matchTargetTitle = queryTitle,
+                cleanMatchTitle = cleanTitle,
+                entryAltTitles = combinedAltTitlesStr,
+                isTv = isTv,
+                context = context,
+                evaluatedCandidateNames = evaluatedCandidateNames
+            )
         }
 
-        // 3. Fallback search alternate media type on TMDB
-        if (matchDetails == null) {
-            val fallbackResults = if (isTv) {
-                TmdbApiClient.searchMoviesMultiple(cleanTitle, context).getOrDefault(emptyList())
-            } else {
-                TmdbApiClient.searchTvMultiple(cleanTitle, context).getOrDefault(emptyList())
-            }
-            for (cand in fallbackResults.take(6)) {
-                evaluatedCandidateNames.add("TMDB(${if (cand.isMovie) "Movie" else "TV"}): ${cand.title}")
-                if (isConfidentExactMatch(queryTitle, cand, entry.alternateTitle) ||
-                    isConfidentExactMatch(cleanTitle, cand, entry.alternateTitle)
-                ) {
-                    val fullRes = TmdbApiClient.fetchMediaDetails(cand.tmdbId, isTv = !cand.isMovie, context = context)
-                    if (fullRes.isSuccess) {
-                        matchDetails = fullRes.getOrNull()
-                        if (matchDetails != null) break
-                    }
-                }
-            }
-        }
-
-        // 4. Try raw title if cleaned title differed and no match was found
-        if (matchDetails == null && cleanTitle != queryTitle && queryTitle.isNotBlank()) {
-            val rawResults = if (isTv) {
-                TmdbApiClient.searchTvMultiple(queryTitle, context).getOrDefault(emptyList())
-            } else {
-                TmdbApiClient.searchMoviesMultiple(queryTitle, context).getOrDefault(emptyList())
-            }
-            for (cand in rawResults.take(6)) {
-                evaluatedCandidateNames.add("TMDB(raw ${if (cand.isMovie) "Movie" else "TV"}): ${cand.title}")
-                if (isConfidentExactMatch(queryTitle, cand, entry.alternateTitle) ||
-                    isConfidentExactMatch(cleanTitle, cand, entry.alternateTitle)
-                ) {
-                    val fullRes = TmdbApiClient.fetchMediaDetails(cand.tmdbId, isTv = !cand.isMovie, context = context)
-                    if (fullRes.isSuccess) {
-                        matchDetails = fullRes.getOrNull()
-                        if (matchDetails != null) break
-                    }
-                }
+        // 3. Fallback to Alternate Names (from entry + Notes)
+        if (matchDetails == null && combinedAltTitlesList.isNotEmpty()) {
+            for (altTitle in combinedAltTitlesList.take(8)) {
+                delay(250L)
+                matchDetails = searchTmdbByTitle(
+                    searchTitle = altTitle,
+                    matchTargetTitle = queryTitle,
+                    cleanMatchTitle = cleanTitle,
+                    entryAltTitles = combinedAltTitlesStr,
+                    isTv = isTv,
+                    context = context,
+                    evaluatedCandidateNames = evaluatedCandidateNames
+                )
+                if (matchDetails != null) break
             }
         }
 
@@ -1000,7 +1255,15 @@ object TachiyomiResolverManager {
             matchDetails.durationMinutes
         } else entry.episodeLengthMinutes
 
-        val episodes = if (matchDetails.totalEpisodes != null && matchDetails.totalEpisodes > 0 && entry.totalEpisodes == 0) matchDetails.totalEpisodes else entry.totalEpisodes
+        val episodes = if (matchDetails.totalEpisodes != null && matchDetails.totalEpisodes > 0 &&
+            (entry.totalEpisodes == 0 || (entry.totalSeasons > 1 && entry.totalEpisodes <= 1))
+        ) matchDetails.totalEpisodes else entry.totalEpisodes
+        val seasonsCount = if (entry.mediaType == MediaType.SHOW && matchDetails.totalSeasons != null && matchDetails.totalSeasons > 0 && entry.totalSeasons <= 1) {
+            matchDetails.totalSeasons
+        } else entry.totalSeasons
+        val seasonEpsJson = if (entry.mediaType == MediaType.SHOW && matchDetails.seasonEpisodes != null && !entry.hasSeasonEpisodeTracking()) {
+            MediaEntry.formatSeasonEpisodes(matchDetails.seasonEpisodes) ?: entry.seasonEpisodesJson
+        } else entry.seasonEpisodesJson
 
         val updatedEntry = entry.copy(
             title = cleanedOriginalTitle,
@@ -1011,6 +1274,8 @@ object TachiyomiResolverManager {
             durationMinutes = duration,
             episodeLengthMinutes = episodeLength,
             totalEpisodes = episodes,
+            totalSeasons = seasonsCount,
+            seasonEpisodesJson = seasonEpsJson,
             airedStartDate = matchDetails.airedStartDate ?: entry.airedStartDate,
             airedEndDate = matchDetails.airedEndDate ?: entry.airedEndDate,
             externalScore = matchDetails.externalScore ?: entry.externalScore,
@@ -1054,110 +1319,93 @@ object TachiyomiResolverManager {
     private suspend fun matchAndResolveAnime(
         entry: MediaEntry,
         repository: MediaRepository,
-        context: Context?
+        context: Context?,
+        skipExistingIdCheck: Boolean = false
     ): ResolutionOutcome {
         val queryTitle = entry.title.trim()
         val cleanTitle = stripBracketedSuffixes(queryTitle).takeIf { it.isNotBlank() } ?: queryTitle
         val evaluatedCandidateNames = mutableListOf<String>()
+        val combinedAltTitlesList = getCombinedAlternateTitles(entry)
+        val combinedAltTitlesStr = combinedAltTitlesList.joinToString("\n").takeIf { it.isNotBlank() }
 
         val extIdStr = (entry.externalId ?: entry.foreignDatabaseId)?.trim()
-        val extractedMalId = if (!extIdStr.isNullOrBlank()) {
-            val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim()
-            val isExplicitMal = src?.equals("MAL", ignoreCase = true) == true || src?.equals("MyAnimeList", ignoreCase = true) == true
+        val srcStr = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim()
+        val existingAniListId = if (!extIdStr.isNullOrBlank() && srcStr?.equals("AniList", ignoreCase = true) == true) {
+            extIdStr.toLongOrNull()?.takeIf { it > 0 }
+        } else null
+        val extractedMalId = if (!extIdStr.isNullOrBlank() && existingAniListId == null) {
+            val isExplicitMal = srcStr?.equals("MAL", ignoreCase = true) == true || srcStr?.equals("MyAnimeList", ignoreCase = true) == true
             val hasMalUrl = extIdStr.contains("myanimelist.net", ignoreCase = true)
             if (isExplicitMal || hasMalUrl) JikanSyncManager.extractNumericMalId(extIdStr) else null
         } else null
 
-        var matchDetails: JikanMediaDetails? = null
-        var matchSource: String? = null
-        var matchExternalId: String? = null
+        var resolved: ResolvedJikanMatch? = null
 
-        // 1. Try extracted MAL ID
-        if (extractedMalId != null && extractedMalId > 0) {
-            val res = JikanApiClient.fetchMediaDetails(malId = extractedMalId, isManga = false, title = cleanTitle)
-            if (res.isSuccess) {
-                val candidate = res.getOrNull()
-                if (candidate != null) {
-                    evaluatedCandidateNames.add("MAL(ID): ${candidate.title}")
-                    if (isConfidentExactMatch(queryTitle, candidate, entry.alternateTitle) ||
-                        isConfidentExactMatch(cleanTitle, candidate, entry.alternateTitle)
-                    ) {
-                        val srcAndId = extractCandidateSourceAndId(candidate)
-                        if (srcAndId != null) {
-                            matchDetails = candidate
-                            matchSource = srcAndId.first
-                            matchExternalId = srcAndId.second
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. Query Jikan multiple
-        if (matchDetails == null) {
-            val jikanRes = JikanApiClient.searchJikanMultiple(
-                queryTitle = cleanTitle,
-                isManga = false,
-                limit = 5
-            )
-            val candidates = if (jikanRes.isSuccess && jikanRes.getOrDefault(emptyList()).isNotEmpty()) {
-                jikanRes.getOrDefault(emptyList())
-            } else if (!cleanTitle.equals(queryTitle, ignoreCase = true)) {
-                JikanApiClient.searchJikanMultiple(
-                    queryTitle = queryTitle,
-                    isManga = false,
-                    limit = 5
-                ).getOrDefault(emptyList())
-            } else emptyList()
-
-            for (cand in candidates) {
-                evaluatedCandidateNames.add("${cand.sourceProvider}: ${cand.title}")
-                if (isConfidentExactMatch(queryTitle, cand, entry.alternateTitle) ||
-                    isConfidentExactMatch(cleanTitle, cand, entry.alternateTitle)
+        // 1. Try existing ID (AniList or MAL)
+        if (!skipExistingIdCheck && existingAniListId != null) {
+            val candidate = JikanApiClient.queryAniListById(aniListId = existingAniListId, isManga = false).getOrNull()
+            if (candidate != null) {
+                evaluatedCandidateNames.add("AniList(ID): ${candidate.title}")
+                if (isConfidentExactMatch(queryTitle, candidate, combinedAltTitlesStr) ||
+                    isConfidentExactMatch(cleanTitle, candidate, combinedAltTitlesStr)
                 ) {
-                    val srcAndId = extractCandidateSourceAndId(cand)
-                    if (srcAndId != null) {
-                        matchDetails = cand
-                        matchSource = srcAndId.first
-                        matchExternalId = srcAndId.second
-                        break
+                    extractCandidateSourceAndId(candidate)?.let { (src, id) ->
+                        resolved = ResolvedJikanMatch(candidate, src, id)
                     }
                 }
             }
-        }
-
-        // 3. Query AniList for anime
-        if (matchDetails == null) {
-            val aniRes = JikanApiClient.queryAniListMultiple(
-                searchTitle = cleanTitle,
-                isManga = false,
-                limit = 5
-            )
-            val candidates = if (aniRes.isSuccess && aniRes.getOrDefault(emptyList()).isNotEmpty()) {
-                aniRes.getOrDefault(emptyList())
-            } else if (!cleanTitle.equals(queryTitle, ignoreCase = true)) {
-                JikanApiClient.queryAniListMultiple(
-                    searchTitle = queryTitle,
-                    isManga = false,
-                    limit = 5
-                ).getOrDefault(emptyList())
-            } else emptyList()
-
-            for (cand in candidates) {
-                evaluatedCandidateNames.add("AniList: ${cand.title}")
-                if (isConfidentExactMatch(queryTitle, cand, entry.alternateTitle) ||
-                    isConfidentExactMatch(cleanTitle, cand, entry.alternateTitle)
+        } else if (!skipExistingIdCheck && extractedMalId != null && extractedMalId > 0) {
+            val candidate = JikanApiClient.fetchMediaDetails(malId = extractedMalId, isManga = false, title = cleanTitle).getOrNull()
+            if (candidate != null) {
+                evaluatedCandidateNames.add("MAL(ID): ${candidate.title}")
+                if (isConfidentExactMatch(queryTitle, candidate, combinedAltTitlesStr) ||
+                    isConfidentExactMatch(cleanTitle, candidate, combinedAltTitlesStr)
                 ) {
-                    val srcAndId = extractCandidateSourceAndId(cand)
-                    if (srcAndId != null) {
-                        matchDetails = cand
-                        matchSource = srcAndId.first
-                        matchExternalId = srcAndId.second
-                        break
+                    extractCandidateSourceAndId(candidate)?.let { (src, id) ->
+                        resolved = ResolvedJikanMatch(candidate, src, id)
                     }
                 }
             }
         }
+
+        // 2. Search APIs by primary title (Jikan -> AniList)
+        if (resolved == null) {
+            resolved = searchAnimeByTitle(
+                searchTitle = queryTitle,
+                matchTargetTitle = queryTitle,
+                cleanMatchTitle = cleanTitle,
+                entryAltTitles = combinedAltTitlesStr,
+                evaluatedCandidateNames = evaluatedCandidateNames
+            )
+        }
+
+        // 3. Not found by name: try AniList ID extracted from Notes
+        if (resolved == null) {
+            val notesAniListIds = extractAniListIdsFromNotes(entry.notes, preferManga = false)
+                .filter { it != existingAniListId }
+            if (notesAniListIds.isNotEmpty()) {
+                resolved = tryResolveFromAniListIds(notesAniListIds, isManga = false, evaluatedCandidateNames = evaluatedCandidateNames)
+            }
+        }
+
+        // 4. Fallback to Alternate Names
+        if (resolved == null && combinedAltTitlesList.isNotEmpty()) {
+            for (altTitle in combinedAltTitlesList.take(8)) {
+                delay(250L)
+                resolved = searchAnimeByTitle(
+                    searchTitle = altTitle,
+                    matchTargetTitle = queryTitle,
+                    cleanMatchTitle = cleanTitle,
+                    entryAltTitles = combinedAltTitlesStr,
+                    evaluatedCandidateNames = evaluatedCandidateNames
+                )
+                if (resolved != null) break
+            }
+        }
+
+        val matchDetails = resolved?.details
+        val matchSource = resolved?.source
+        val matchExternalId = resolved?.externalId
 
         if (matchDetails == null || matchSource.isNullOrBlank() || matchExternalId.isNullOrBlank()) {
             return ResolutionOutcome.Skipped(
@@ -1165,7 +1413,7 @@ object TachiyomiResolverManager {
                     entryId = entry.id,
                     title = entry.title,
                     externalId = entry.externalId,
-                    reason = "No exact confident title match found in Jikan or AniList for anime.",
+                    reason = "No exact confident match found via name, Notes AniList ID, or alternate titles in Jikan or AniList for anime.",
                     evaluatedCandidates = evaluatedCandidateNames
                 )
             )

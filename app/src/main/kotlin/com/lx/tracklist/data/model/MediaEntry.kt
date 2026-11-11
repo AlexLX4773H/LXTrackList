@@ -74,6 +74,7 @@ data class MediaEntry(
     val seasonNumber: Int = 1,
     val currentSeasons: Int = 1,
     val totalSeasons: Int = 1,
+    val seasonEpisodesJson: String? = null,
     val episodeLengthMinutes: Int? = null,
     val currentTimeMinutes: Int? = null,
     val isAiring: Boolean = false,
@@ -206,22 +207,65 @@ data class MediaEntry(
     val foreignDatabaseSource: String?
         get() = externalSource
 
+    fun getSeasonEpisodes(): List<Int> {
+        if (mediaType != MediaType.SHOW) return emptyList()
+        return parseSeasonEpisodes(seasonEpisodesJson)
+    }
+
+    fun hasSeasonEpisodeTracking(): Boolean {
+        return mediaType == MediaType.SHOW && getSeasonEpisodes().any { it > 0 }
+    }
+
+    fun getEffectiveTotalSeasons(): Int {
+        if (mediaType != MediaType.SHOW) return totalSeasons
+        val listSize = getSeasonEpisodes().size
+        return maxOf(totalSeasons, listSize, 1)
+    }
+
+    fun getTotalEpisodesForSeason(season: Int = currentSeasons): Int {
+        if (!hasSeasonEpisodeTracking()) return totalEpisodes
+        val idx = season - 1
+        if (idx < 0) return 0
+        return getSeasonEpisodes().getOrNull(idx)?.coerceAtLeast(0) ?: 0
+    }
+
+    fun getEffectiveTotalEpisodes(): Int {
+        if (!hasSeasonEpisodeTracking()) return totalEpisodes
+        val sum = getSeasonEpisodes().sum()
+        return if (sum > 0) sum else totalEpisodes
+    }
+
+    fun getTotalWatchedEpisodes(): Int {
+        if (!hasSeasonEpisodeTracking()) return currentEpisodes.coerceAtLeast(0)
+        val counts = getSeasonEpisodes()
+        val curSeason = currentSeasons.coerceIn(1, maxOf(counts.size, totalSeasons, 1))
+        val priorEpisodes = (0 until (curSeason - 1).coerceAtMost(counts.size))
+            .sumOf { counts[it].coerceAtLeast(0) }
+        return priorEpisodes + currentEpisodes.coerceAtLeast(0)
+    }
+
     val displayProgress: String
         get() = when (mediaType) {
             MediaType.ANIME, MediaType.SHOW -> {
-                val totalStr = if (totalEpisodes > 0) "$totalEpisodes" else "?"
                 val timeStr = if (currentTimeMinutes != null && currentTimeMinutes > 0) " (${formatPlaybackTime() ?: "${currentTimeMinutes}m"})" else ""
-                if (mediaType == MediaType.SHOW && (totalSeasons > 1 || currentSeasons > 1)) {
-                    if (isAiring && airedEpisodes > 0) {
-                        "S$currentSeasons • Ep $currentEpisodes/$airedEpisodes ($totalStr)$timeStr"
-                    } else {
-                        "S$currentSeasons • Ep $currentEpisodes/$totalStr$timeStr"
-                    }
+                if (hasSeasonEpisodeTracking()) {
+                    val seasonTotal = getTotalEpisodesForSeason(currentSeasons)
+                    val seasonTotalStr = if (seasonTotal > 0) "$seasonTotal" else "?"
+                    "S$currentSeasons • Ep $currentEpisodes/$seasonTotalStr$timeStr"
                 } else {
-                    if (isAiring && airedEpisodes > 0) {
-                        "$currentEpisodes/$airedEpisodes ($totalStr) ep$timeStr"
+                    val totalStr = if (totalEpisodes > 0) "$totalEpisodes" else "?"
+                    if (mediaType == MediaType.SHOW && (totalSeasons > 1 || currentSeasons > 1)) {
+                        if (isAiring && airedEpisodes > 0) {
+                            "S$currentSeasons • Ep $currentEpisodes/$airedEpisodes ($totalStr)$timeStr"
+                        } else {
+                            "S$currentSeasons • Ep $currentEpisodes/$totalStr$timeStr"
+                        }
                     } else {
-                        "$currentEpisodes/$totalStr ep$timeStr"
+                        if (isAiring && airedEpisodes > 0) {
+                            "$currentEpisodes/$airedEpisodes ($totalStr) ep$timeStr"
+                        } else {
+                            "$currentEpisodes/$totalStr ep$timeStr"
+                        }
                     }
                 }
             }
@@ -296,12 +340,14 @@ data class MediaEntry(
     val progressFraction: Float
         get() = when (mediaType) {
             MediaType.ANIME, MediaType.SHOW -> {
-                if (totalEpisodes > 0) {
+                val overallTotal = getEffectiveTotalEpisodes()
+                if (overallTotal > 0) {
                     val epLen = episodeLengthMinutes ?: 24
                     val intraEp = if (currentTimeMinutes != null && currentTimeMinutes > 0 && epLen > 0) {
                         (currentTimeMinutes.toFloat() / epLen).coerceIn(0f, 0.99f)
                     } else 0f
-                    ((currentEpisodes.toFloat() + intraEp) / totalEpisodes).coerceIn(0f, 1f)
+                    val watched = getTotalWatchedEpisodes()
+                    ((watched.toFloat() + intraEp) / overallTotal).coerceIn(0f, 1f)
                 } else if (status == MediaStatus.COMPLETED) 1f else 0f
             }
             MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> {
@@ -327,20 +373,53 @@ data class MediaEntry(
         val now = System.currentTimeMillis()
         return when (mediaType) {
             MediaType.ANIME, MediaType.SHOW -> {
-                val nextEp = currentEpisodes + 1
-                val isDone = totalEpisodes > 0 && nextEp >= totalEpisodes
-                val newStatus = if (isDone) MediaStatus.COMPLETED else status
-                val newRewatchCount = if (isDone && isRewatching) rewatchCount + 1 else rewatchCount
-                val newIsRewatching = if (isDone) false else isRewatching
-                copy(
-                    currentEpisodes = nextEp,
-                    currentTimeMinutes = null,
-                    status = newStatus,
-                    rewatchCount = newRewatchCount,
-                    isRewatching = newIsRewatching,
-                    updatedAt = now,
-                    finishDate = if (newStatus == MediaStatus.COMPLETED && finishDate == null) now else finishDate
-                )
+                if (hasSeasonEpisodeTracking()) {
+                    val effectiveSeasons = getEffectiveTotalSeasons()
+                    val curSeason = currentSeasons.coerceIn(1, effectiveSeasons)
+                    val curSeasonTotal = getTotalEpisodesForSeason(curSeason)
+                    var nextSeason = curSeason
+                    var nextEp = currentEpisodes + 1
+
+                    if (curSeasonTotal > 0 && currentEpisodes >= curSeasonTotal) {
+                        if (curSeason < effectiveSeasons) {
+                            nextSeason = curSeason + 1
+                            nextEp = 1
+                        } else {
+                            nextEp = curSeasonTotal
+                        }
+                    }
+
+                    val lastSeasonTotal = getTotalEpisodesForSeason(effectiveSeasons)
+                    val isDone = nextSeason >= effectiveSeasons && lastSeasonTotal > 0 && nextEp >= lastSeasonTotal
+                    val newStatus = if (isDone) MediaStatus.COMPLETED else status
+                    val newRewatchCount = if (isDone && isRewatching) rewatchCount + 1 else rewatchCount
+                    val newIsRewatching = if (isDone) false else isRewatching
+                    copy(
+                        currentSeasons = nextSeason,
+                        currentEpisodes = nextEp,
+                        currentTimeMinutes = null,
+                        status = newStatus,
+                        rewatchCount = newRewatchCount,
+                        isRewatching = newIsRewatching,
+                        updatedAt = now,
+                        finishDate = if (newStatus == MediaStatus.COMPLETED && finishDate == null) now else finishDate
+                    )
+                } else {
+                    val nextEp = currentEpisodes + 1
+                    val isDone = totalEpisodes > 0 && nextEp >= totalEpisodes
+                    val newStatus = if (isDone) MediaStatus.COMPLETED else status
+                    val newRewatchCount = if (isDone && isRewatching) rewatchCount + 1 else rewatchCount
+                    val newIsRewatching = if (isDone) false else isRewatching
+                    copy(
+                        currentEpisodes = nextEp,
+                        currentTimeMinutes = null,
+                        status = newStatus,
+                        rewatchCount = newRewatchCount,
+                        isRewatching = newIsRewatching,
+                        updatedAt = now,
+                        finishDate = if (newStatus == MediaStatus.COMPLETED && finishDate == null) now else finishDate
+                    )
+                }
             }
             MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> {
                 when (trackingUnit) {
@@ -407,6 +486,57 @@ data class MediaEntry(
         }
     }
 
+    fun decrementProgress(): MediaEntry {
+        val now = System.currentTimeMillis()
+        return when (mediaType) {
+            MediaType.ANIME, MediaType.SHOW -> {
+                if (hasSeasonEpisodeTracking()) {
+                    val effectiveSeasons = getEffectiveTotalSeasons()
+                    val curSeason = currentSeasons.coerceIn(1, effectiveSeasons)
+                    val (prevSeason, prevEp) = if (currentEpisodes <= 1 && curSeason > 1) {
+                        val targetSeason = curSeason - 1
+                        val targetSeasonTotal = getTotalEpisodesForSeason(targetSeason)
+                        targetSeason to if (targetSeasonTotal > 0) targetSeasonTotal else 1
+                    } else {
+                        curSeason to (currentEpisodes - 1).coerceAtLeast(0)
+                    }
+                    copy(
+                        currentSeasons = prevSeason,
+                        currentEpisodes = prevEp,
+                        currentTimeMinutes = null,
+                        updatedAt = now
+                    )
+                } else {
+                    copy(
+                        currentEpisodes = (currentEpisodes - 1).coerceAtLeast(0),
+                        currentTimeMinutes = null,
+                        updatedAt = now
+                    )
+                }
+            }
+            MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> {
+                when (trackingUnit) {
+                    TrackingUnit.VOLUMES -> copy(
+                        currentVolumes = (currentVolumes - 1).coerceAtLeast(0),
+                        updatedAt = now
+                    )
+                    TrackingUnit.PAGES -> copy(
+                        currentPages = (currentPages - 10).coerceAtLeast(0),
+                        updatedAt = now
+                    )
+                    TrackingUnit.CHAPTERS, TrackingUnit.COMBINED -> copy(
+                        currentChapters = (currentChapters - 1).coerceAtLeast(0),
+                        updatedAt = now
+                    )
+                }
+            }
+            MediaType.MOVIE -> copy(
+                status = if (status == MediaStatus.COMPLETED) MediaStatus.WATCHING else status,
+                updatedAt = now
+            )
+        }
+    }
+
     fun getAlternateTitles(): List<String> {
         return alternateTitle
             ?.split("\n")
@@ -466,6 +596,21 @@ data class MediaEntry(
             if (source.isNullOrBlank()) return null
             val upper = source.trim().uppercase(Locale.US)
             return if (upper == "MYANIMELIST") "MAL" else upper
+        }
+
+        fun formatSeasonEpisodes(counts: List<Int>): String? {
+            if (counts.isEmpty() || counts.all { it <= 0 }) return null
+            return Gson().toJson(counts.map { it.coerceAtLeast(0) })
+        }
+
+        fun parseSeasonEpisodes(json: String?): List<Int> {
+            if (json.isNullOrBlank()) return emptyList()
+            return try {
+                val type = object : TypeToken<List<Int>>() {}.type
+                Gson().fromJson<List<Int>>(json, type)?.map { it.coerceAtLeast(0) } ?: emptyList()
+            } catch (_: Exception) {
+                emptyList()
+            }
         }
     }
 }
