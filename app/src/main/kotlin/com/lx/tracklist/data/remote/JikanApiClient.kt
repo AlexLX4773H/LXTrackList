@@ -48,15 +48,18 @@ data class JikanMediaDetails(
     val externalScoreSource: String? = null,
     val type: String? = null,
     val sourceProvider: String = "Jikan",
-    val url: String? = null
+    val url: String? = null,
+    val totalPages: Int? = null,
+    val isbn: String? = null,
+    val authors: String? = null
 ) {
     val webUrl: String?
         get() {
             if (!url.isNullOrBlank()) return url
             val id = malId?.takeIf { it > 0 } ?: return null
             val typeLower = type?.lowercase(Locale.ROOT) ?: ""
-            val isMangaType = typeLower in listOf("manga", "manhwa", "manhua", "light novel", "novel", "one-shot", "doujinshi") ||
-                    (totalChapters != null && totalChapters > 0)
+            val isMangaType = typeLower in listOf("manga", "manhwa", "manhua", "light novel", "novel", "one-shot", "doujinshi", "book") ||
+                    (totalChapters != null && totalChapters > 0) || (totalPages != null && totalPages > 0)
             return if (isMangaType) "https://myanimelist.net/manga/$id" else "https://myanimelist.net/anime/$id"
         }
 }

@@ -41,9 +41,13 @@ android {
     val malClientId = envProperties.getProperty("MAL_CLIENT_ID")
       ?: System.getenv("MAL_CLIENT_ID")
       ?: ""
+    val googleBooksApiKey = envProperties.getProperty("GOOGLE_BOOKS_API_KEY")
+      ?: System.getenv("GOOGLE_BOOKS_API_KEY")
+      ?: ""
     buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"$tmdbReadToken\"")
     buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
     buildConfigField("String", "MAL_CLIENT_ID", "\"$malClientId\"")
+    buildConfigField("String", "GOOGLE_BOOKS_API_KEY", "\"$googleBooksApiKey\"")
   }
 
   signingConfigs {

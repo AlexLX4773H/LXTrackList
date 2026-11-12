@@ -10,9 +10,12 @@ import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.Priority
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.data.remote.AniListNovelApiClient
+import com.lx.tracklist.data.remote.GoogleBooksApiClient
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanMediaDetails
 import com.lx.tracklist.data.remote.MangaDexApiClient
+import com.lx.tracklist.data.remote.OpenLibraryApiClient
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.TmdbConfig
@@ -38,7 +41,10 @@ import java.util.Calendar
 enum class ExternalDbSource(val displayName: String, val shortName: String) {
     MAL("MyAnimeList (MAL)", "MAL"),
     MANGADEX("MangaDex", "MangaDex"),
-    TMDB("The Movie Database (TMDB)", "TMDB")
+    TMDB("The Movie Database (TMDB)", "TMDB"),
+    GOOGLE_BOOKS("Google Books", "Google Books"),
+    OPEN_LIBRARY("Open Library", "Open Library"),
+    ANILIST_NOVEL("AniList (Light Novels)", "AniList")
 }
 
 data class ExternalSyncUiState(
@@ -550,6 +556,42 @@ class AddEditViewModel(
                             )
                         }
                     }
+                    ExternalDbSource.GOOGLE_BOOKS -> {
+                        val res = GoogleBooksApiClient.searchBooks(cleanQuery, context, limit = 20)
+                        val items = res.getOrDefault(emptyList()).map { it.toJikanMediaDetails() }
+                        _syncState.update {
+                            it.copy(
+                                isSearching = false,
+                                malResults = items,
+                                tmdbResults = emptyList(),
+                                errorMessage = if (items.isEmpty()) "No matches found on Google Books for '$cleanQuery'" else null
+                            )
+                        }
+                    }
+                    ExternalDbSource.OPEN_LIBRARY -> {
+                        val res = OpenLibraryApiClient.searchBooks(cleanQuery, limit = 20)
+                        val items = res.getOrDefault(emptyList()).map { it.toJikanMediaDetails() }
+                        _syncState.update {
+                            it.copy(
+                                isSearching = false,
+                                malResults = items,
+                                tmdbResults = emptyList(),
+                                errorMessage = if (items.isEmpty()) "No matches found on Open Library for '$cleanQuery'" else null
+                            )
+                        }
+                    }
+                    ExternalDbSource.ANILIST_NOVEL -> {
+                        val res = AniListNovelApiClient.searchLightNovels(cleanQuery, limit = 20)
+                        val items = res.getOrDefault(emptyList())
+                        _syncState.update {
+                            it.copy(
+                                isSearching = false,
+                                malResults = items,
+                                tmdbResults = emptyList(),
+                                errorMessage = if (items.isEmpty()) "No matches found on AniList for '$cleanQuery'" else null
+                            )
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 _syncState.update {
@@ -595,6 +637,8 @@ class AddEditViewModel(
                 if (item.type.equals("Movie", ignoreCase = true)) MediaType.MOVIE else MediaType.ANIME
             } else if (item.type.equals("Manhwa", ignoreCase = true)) {
                 MediaType.MANHWA
+            } else if (item.type.equals("Book", ignoreCase = true)) {
+                MediaType.BOOK
             } else {
                 current.mediaType
             }
@@ -603,14 +647,17 @@ class AddEditViewModel(
                 "MangaDex" -> "MangaDex"
                 "Kitsu" -> "Kitsu"
                 "AniList" -> "AniList"
+                "Google Books" -> "Google Books"
+                "Open Library" -> "Open Library"
                 else -> if (item.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
             }
             val scoreSrc = item.externalScoreSource ?: externalSrc
 
-            val resolvedExtId = if (item.sourceProvider == "MangaDex") {
-                item.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: current.externalId
-            } else {
-                (item.malId ?: 0L).takeIf { it > 0 }?.toString() ?: current.externalId
+            val resolvedExtId = when (item.sourceProvider) {
+                "MangaDex" -> item.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: current.externalId
+                "Google Books", "Open Library" -> item.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                    ?: (item.isbn ?: current.externalId)
+                else -> (item.malId ?: 0L).takeIf { it > 0 }?.toString() ?: current.externalId
             }
 
             current.copy(
@@ -633,7 +680,9 @@ class AddEditViewModel(
                 durationMinutes = if (current.mediaType == MediaType.MOVIE && item.durationMinutes != null && item.durationMinutes > 0 && (current.durationMinutes == null || current.durationMinutes == 0)) item.durationMinutes else current.durationMinutes,
                 totalChapters = if (!isVideo && item.totalChapters != null && item.totalChapters > 0 && current.totalChapters == 0) item.totalChapters else current.totalChapters,
                 airedChapters = if (!isVideo && item.airedChapters != null && item.airedChapters > 0 && current.airedChapters == 0) item.airedChapters else current.airedChapters,
-                totalVolumes = if (!isVideo && item.totalVolumes != null && item.totalVolumes > 0 && current.totalVolumes == 0) item.totalVolumes else current.totalVolumes
+                totalVolumes = if (!isVideo && item.totalVolumes != null && item.totalVolumes > 0 && current.totalVolumes == 0) item.totalVolumes else current.totalVolumes,
+                totalPages = if (item.totalPages != null && item.totalPages > 0 && current.totalPages == 0) item.totalPages else current.totalPages,
+                trackingUnit = if (item.totalPages != null && item.totalPages > 0 && targetMediaType == MediaType.BOOK) TrackingUnit.PAGES else current.trackingUnit
             )
         }
         val sourceLabel = item.sourceProvider

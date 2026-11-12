@@ -389,6 +389,52 @@ fun AddEditScreen(
                                 }
                             )
                         }
+
+                        if (state.mediaType == MediaType.BOOK || state.mediaType.isReadType) {
+                            HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text("📚", fontSize = 16.sp)
+                                        Column {
+                                            Text("Google Books", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                            Text("Books, Novels, ISBNs (Open Library fallback)", fontSize = 11.sp, color = LXTextSecondary)
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    showSyncDropdown = false
+                                    selectedExternalSource = ExternalDbSource.GOOGLE_BOOKS
+                                    viewModel.searchExternalDb(state.title, ExternalDbSource.GOOGLE_BOOKS, context)
+                                    showExternalSyncDialog = true
+                                }
+                            )
+
+                            HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text("✨", fontSize = 16.sp)
+                                        Column {
+                                            Text("AniList (Light Novels)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                            Text("Light Novels & Web Novels", fontSize = 11.sp, color = LXTextSecondary)
+                                        }
+                                    }
+                                },
+                                onClick = {
+                                    showSyncDropdown = false
+                                    selectedExternalSource = ExternalDbSource.ANILIST_NOVEL
+                                    viewModel.searchExternalDb(state.title, ExternalDbSource.ANILIST_NOVEL, context)
+                                    showExternalSyncDialog = true
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -2048,10 +2094,21 @@ private fun ExternalDbSyncDialog(
 
     val availableSources = remember(mediaType, syncState.selectedSource) {
         val base = when {
-            mediaType.isReadType -> listOf(ExternalDbSource.MAL, ExternalDbSource.MANGADEX)
+            mediaType == MediaType.BOOK -> listOf(
+                ExternalDbSource.GOOGLE_BOOKS,
+                ExternalDbSource.OPEN_LIBRARY,
+                ExternalDbSource.ANILIST_NOVEL,
+                ExternalDbSource.MAL
+            )
+            mediaType.isReadType -> listOf(
+                ExternalDbSource.MAL,
+                ExternalDbSource.MANGADEX,
+                ExternalDbSource.ANILIST_NOVEL,
+                ExternalDbSource.GOOGLE_BOOKS
+            )
             mediaType == MediaType.MOVIE || mediaType == MediaType.SHOW -> listOf(ExternalDbSource.TMDB, ExternalDbSource.MAL)
             mediaType == MediaType.ANIME -> listOf(ExternalDbSource.MAL, ExternalDbSource.TMDB)
-            else -> listOf(ExternalDbSource.MAL, ExternalDbSource.MANGADEX, ExternalDbSource.TMDB)
+            else -> listOf(ExternalDbSource.MAL, ExternalDbSource.MANGADEX, ExternalDbSource.TMDB, ExternalDbSource.GOOGLE_BOOKS)
         }
         if (syncState.selectedSource !in base) {
             base + syncState.selectedSource
@@ -2196,6 +2253,60 @@ private fun ExternalDbSyncDialog(
                                     )
                                 )
                             }
+                            ExternalDbSource.GOOGLE_BOOKS -> {
+                                FilterChip(
+                                    selected = syncState.selectedSource == ExternalDbSource.GOOGLE_BOOKS,
+                                    onClick = {
+                                        if (syncState.selectedSource != ExternalDbSource.GOOGLE_BOOKS) {
+                                            expandedItemKey = null
+                                            onSearch(searchInput, ExternalDbSource.GOOGLE_BOOKS)
+                                        }
+                                    },
+                                    label = { Text("📚 Google Books", fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
+                                )
+                            }
+                            ExternalDbSource.OPEN_LIBRARY -> {
+                                FilterChip(
+                                    selected = syncState.selectedSource == ExternalDbSource.OPEN_LIBRARY,
+                                    onClick = {
+                                        if (syncState.selectedSource != ExternalDbSource.OPEN_LIBRARY) {
+                                            expandedItemKey = null
+                                            onSearch(searchInput, ExternalDbSource.OPEN_LIBRARY)
+                                        }
+                                    },
+                                    label = { Text("📖 Open Library", fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
+                                )
+                            }
+                            ExternalDbSource.ANILIST_NOVEL -> {
+                                FilterChip(
+                                    selected = syncState.selectedSource == ExternalDbSource.ANILIST_NOVEL,
+                                    onClick = {
+                                        if (syncState.selectedSource != ExternalDbSource.ANILIST_NOVEL) {
+                                            expandedItemKey = null
+                                            onSearch(searchInput, ExternalDbSource.ANILIST_NOVEL)
+                                        }
+                                    },
+                                    label = { Text("✨ AniList (LN)", fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -2234,7 +2345,7 @@ private fun ExternalDbSyncDialog(
                                 fontSize = 13.sp
                             )
                         }
-                    } else if (syncState.selectedSource == ExternalDbSource.MAL || syncState.selectedSource == ExternalDbSource.MANGADEX) {
+                    } else if (syncState.selectedSource != ExternalDbSource.TMDB) {
                         if (syncState.malResults.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Text("Enter a title and tap search.", color = LXTextSecondary, fontSize = 13.sp)

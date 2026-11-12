@@ -35,6 +35,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Explore
@@ -216,6 +217,8 @@ fun SearchScreen(
                             SearchCategory.MANHWA -> "Search manhwa titles on MangaDex..."
                             SearchCategory.MOVIES -> "Search movies on TMDB..."
                             SearchCategory.TV_SHOWS -> "Search TV shows on TMDB..."
+                            SearchCategory.BOOKS -> "Search books by title, author, or ISBN..."
+                            SearchCategory.LIGHT_NOVELS -> "Search light novels & web novels..."
                         },
                         color = LXTextSecondary,
                         style = MaterialTheme.typography.bodyMedium,
@@ -330,6 +333,8 @@ fun SearchScreen(
                     it.rawJikanDetails?.sourceProvider?.contains("AniList", ignoreCase = true) == true
                 }
                 val attributionText = when {
+                    state.selectedCategory == SearchCategory.BOOKS -> "Results from Google Books (Open Library fallback)"
+                    state.selectedCategory == SearchCategory.LIGHT_NOVELS -> "Results from AniList (Jikan/MAL fallback)"
                     hasMangaDex -> "Results from MangaDex (with MAL/AniList backup)"
                     isAniListBackup -> "Results fetched from AniList (MAL backup)"
                     state.selectedCategory == SearchCategory.MANHWA -> "Results fetched from MangaDex / AniList"
@@ -388,6 +393,7 @@ fun SearchScreen(
                         Icon(
                             imageVector = when (state.selectedCategory) {
                                 SearchCategory.MOVIES, SearchCategory.TV_SHOWS -> Icons.Default.Movie
+                                SearchCategory.BOOKS, SearchCategory.LIGHT_NOVELS -> Icons.Default.Book
                                 else -> Icons.Default.Search
                             },
                             contentDescription = null,
@@ -489,7 +495,12 @@ private fun SearchResultCard(
                     )
                 } else {
                     Icon(
-                        imageVector = if (item.mediaType == MediaType.MOVIE) Icons.Default.Movie else Icons.Default.Tv,
+                        imageVector = when (item.mediaType) {
+                            MediaType.MOVIE -> Icons.Default.Movie
+                            MediaType.SHOW -> Icons.Default.Tv
+                            MediaType.BOOK -> Icons.Default.Book
+                            else -> Icons.Default.Search
+                        },
                         contentDescription = null,
                         tint = LXTextSecondary.copy(alpha = 0.5f),
                         modifier = Modifier.size(28.dp)
@@ -875,7 +886,12 @@ private fun SearchResultDetailSheet(
                         )
                     } else {
                         Icon(
-                            imageVector = if (item.mediaType == MediaType.MOVIE) Icons.Default.Movie else Icons.Default.Tv,
+                            imageVector = when (item.mediaType) {
+                                MediaType.MOVIE -> Icons.Default.Movie
+                                MediaType.SHOW -> Icons.Default.Tv
+                                MediaType.BOOK -> Icons.Default.Book
+                                else -> Icons.Default.Search
+                            },
                             contentDescription = null,
                             tint = LXTextSecondary.copy(alpha = 0.5f),
                             modifier = Modifier.size(36.dp)

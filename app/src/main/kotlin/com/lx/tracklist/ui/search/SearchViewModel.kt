@@ -10,6 +10,7 @@ import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.data.remote.BookMetadataManager
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanMediaDetails
 import com.lx.tracklist.data.remote.TmdbApiClient
@@ -32,7 +33,9 @@ enum class SearchCategory(val displayName: String, val sourceName: String) {
     MANGA("Manga", "MAL / MangaDex"),
     MANHWA("Manhwa", "MangaDex"),
     MOVIES("Movies", "TMDB"),
-    TV_SHOWS("TV Shows", "TMDB")
+    TV_SHOWS("TV Shows", "TMDB"),
+    BOOKS("Books", "Google Books / Open Library"),
+    LIGHT_NOVELS("Light Novels", "AniList / MAL")
 }
 
 data class SearchResultItem(
@@ -288,6 +291,51 @@ class SearchViewModel(
                             )
                         }
                     }
+                    SearchCategory.BOOKS -> {
+                        val res = BookMetadataManager.searchBooks(query, context, limit = 20)
+                        if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch books")
+                        res.getOrDefault(emptyList()).mapIndexed { idx, book ->
+                            val jikanDetails = book.toJikanMediaDetails()
+                            val extId = if (book.id.isNotBlank()) book.id else "book_${book.title.hashCode()}_$idx"
+                            SearchResultItem(
+                                externalId = extId,
+                                externalSource = book.sourceProvider,
+                                mediaType = MediaType.BOOK,
+                                title = book.title,
+                                alternateTitle = book.subtitle,
+                                posterUrl = book.coverUrl,
+                                releaseYear = book.publishedDate?.take(4),
+                                totalUnits = book.pageCount,
+                                score = book.averageScore,
+                                statusText = if (book.pageCount != null && book.pageCount > 0) "${book.pageCount} pages" else "Book",
+                                synopsis = book.description,
+                                rawJikanDetails = jikanDetails
+                            )
+                        }
+                    }
+                    SearchCategory.LIGHT_NOVELS -> {
+                        val res = BookMetadataManager.searchLightNovels(query, limit = 20)
+                        if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch light novels")
+                        res.getOrDefault(emptyList()).mapIndexed { idx, details ->
+                            val extSource = details.sourceProvider
+                            val extId = details.malId?.takeIf { it > 0 }?.toString() ?: "ln_${details.title?.hashCode() ?: idx}_$idx"
+                            SearchResultItem(
+                                externalId = extId,
+                                externalSource = extSource,
+                                mediaType = MediaType.BOOK,
+                                title = details.title ?: "Unknown",
+                                alternateTitle = details.alternateTitle,
+                                posterUrl = details.posterUrl,
+                                releaseYear = details.airedStartDate?.let { extractYear(it) },
+                                totalUnits = details.totalChapters,
+                                totalVolumes = details.totalVolumes,
+                                score = details.externalScore,
+                                statusText = if (details.isAiring == true) "Publishing" else "Finished",
+                                synopsis = details.synopsis,
+                                rawJikanDetails = details
+                            )
+                        }
+                    }
                 }
             }
 
@@ -365,9 +413,16 @@ class SearchViewModel(
                     )
                 }
             } else {
-                // MAL / Jikan item
+                // MAL / Jikan / Book / Light Novel item
                 val details = item.rawJikanDetails
                 val isVideo = item.mediaType == MediaType.ANIME
+                val isBook = item.mediaType == MediaType.BOOK
+                val unit = when {
+                    isBook && (details?.totalPages ?: 0) > 0 -> TrackingUnit.PAGES
+                    isBook && (details?.totalVolumes ?: 0) > 0 -> TrackingUnit.VOLUMES
+                    isBook && (details?.totalChapters ?: 0) > 0 -> TrackingUnit.CHAPTERS
+                    else -> TrackingUnit.CHAPTERS
+                }
                 MediaEntry(
                     userId = targetUserId,
                     title = details?.title ?: item.title,
@@ -382,9 +437,10 @@ class SearchViewModel(
                     externalScoreSource = details?.externalScoreSource ?: item.externalSource,
                     coverImageUri = details?.posterUrl ?: item.posterUrl,
                     totalEpisodes = if (isVideo) (details?.totalEpisodes ?: item.totalUnits ?: 0) else 0,
-                    totalChapters = if (!isVideo) (details?.totalChapters ?: item.totalUnits ?: 0) else 0,
+                    totalChapters = if (!isVideo && !isBook) (details?.totalChapters ?: item.totalUnits ?: 0) else (details?.totalChapters ?: 0),
                     totalVolumes = if (!isVideo) (details?.totalVolumes ?: item.totalVolumes ?: 0) else 0,
-                    trackingUnit = TrackingUnit.CHAPTERS,
+                    totalPages = if (isBook) (details?.totalPages ?: item.totalUnits ?: 0) else 0,
+                    trackingUnit = unit,
                     durationMinutes = details?.durationMinutes,
                     episodeLengthMinutes = details?.durationMinutes,
                     tags = details?.tags,

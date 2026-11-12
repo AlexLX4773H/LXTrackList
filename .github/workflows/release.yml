@@ -75,6 +75,7 @@ jobs:
           TMDB_READ_ACCESS_TOKEN=${{ secrets.TMDB_READ_ACCESS_TOKEN }}
           TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
           MAL_CLIENT_ID=${{ secrets.MAL_CLIENT_ID }}
+          GOOGLE_BOOKS_API_KEY=${{ secrets.GOOGLE_BOOKS_API_KEY }}
           EOF
 
       - name: Prepare Signing Keystore
