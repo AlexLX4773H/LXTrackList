@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -107,6 +108,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
@@ -114,6 +116,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -2300,6 +2303,40 @@ private fun DetailSourceText(entry: MediaEntry) {
 }
 
 @Composable
+private fun detailPillHeight(): Dp {
+    val lineHeightDp = with(LocalDensity.current) {
+        MaterialTheme.typography.labelMedium.lineHeight.toDp()
+    }
+    return maxOf(26.dp, lineHeightDp + 10.dp)
+}
+
+@Composable
+private fun DetailPill(
+    backgroundColor: Color,
+    borderColor: Color,
+    horizontalPadding: PaddingValues = PaddingValues(horizontal = 8.dp),
+    onClick: (() -> Unit)? = null,
+    content: @Composable RowScope.() -> Unit
+) {
+    val shape = RoundedCornerShape(6.dp)
+    val baseModifier = Modifier
+        .height(detailPillHeight())
+        .clip(shape)
+        .background(backgroundColor)
+        .border(width = 1.dp, color = borderColor, shape = shape)
+    val clickableModifier = if (onClick != null) {
+        baseModifier.clickable(onClick = onClick)
+    } else {
+        baseModifier
+    }
+    Row(
+        modifier = clickableModifier.padding(horizontalPadding),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content
+    )
+}
+
+@Composable
 private fun ExternalScoreChip(
     score: Float,
     source: String?
@@ -2310,17 +2347,9 @@ private fun ExternalScoreChip(
     } else {
         String.format(Locale.US, "%.1f", score)
     }
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(LXScoreGold.copy(alpha = 0.12f))
-            .border(
-                width = 1.dp,
-                color = LXScoreGold.copy(alpha = 0.35f),
-                shape = RoundedCornerShape(6.dp)
-            )
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
+    DetailPill(
+        backgroundColor = LXScoreGold.copy(alpha = 0.12f),
+        borderColor = LXScoreGold.copy(alpha = 0.35f)
     ) {
         Icon(
             imageVector = Icons.Default.Star,
@@ -2332,24 +2361,25 @@ private fun ExternalScoreChip(
         Text(
             text = "$scoreStr ($src)",
             color = LXScoreGold,
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
 
 @Composable
 private fun MetaChip(label: String, color: Color) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(color.copy(alpha = 0.15f))
-            .border(1.dp, color.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+    DetailPill(
+        backgroundColor = color.copy(alpha = 0.15f),
+        borderColor = color.copy(alpha = 0.4f)
     ) {
         Text(
             text = label,
             color = color,
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -2371,26 +2401,25 @@ private fun StatusDropdownChip(
     }
 
     Box {
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(statusColor.copy(alpha = 0.15f))
-                .border(1.dp, statusColor.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
-                .clickable { expanded = true }
-                .padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
+        DetailPill(
+            backgroundColor = statusColor.copy(alpha = 0.15f),
+            borderColor = statusColor.copy(alpha = 0.45f),
+            horizontalPadding = PaddingValues(start = 8.dp, end = 4.dp),
+            onClick = { expanded = true }
         ) {
             Text(
                 text = status.getDisplayLabel(mediaType),
                 color = statusColor,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.width(2.dp))
             Icon(
                 imageVector = Icons.Default.ArrowDropDown,
                 contentDescription = "Change Status",
                 tint = statusColor,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(16.dp)
             )
         }
 
@@ -2444,18 +2473,11 @@ private fun ScoreDropdownChip(
     val hasScore = score != null && score > 0
 
     Box {
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(6.dp))
-                .background(if (hasScore) LXScoreGold.copy(alpha = 0.15f) else LXSurfaceElevated)
-                .border(
-                    width = 1.dp,
-                    color = if (hasScore) LXScoreGold.copy(alpha = 0.45f) else LXBorder,
-                    shape = RoundedCornerShape(6.dp)
-                )
-                .clickable { expanded = true }
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
+        DetailPill(
+            backgroundColor = if (hasScore) LXScoreGold.copy(alpha = 0.15f) else LXSurfaceElevated,
+            borderColor = if (hasScore) LXScoreGold.copy(alpha = 0.45f) else LXBorder,
+            horizontalPadding = PaddingValues(start = 8.dp, end = 4.dp),
+            onClick = { expanded = true }
         ) {
             Icon(
                 imageVector = Icons.Default.Star,
@@ -2467,7 +2489,9 @@ private fun ScoreDropdownChip(
             Text(
                 text = if (hasScore) "$score/10" else "Rate",
                 color = if (hasScore) LXScoreGold else LXTextSecondary,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.width(2.dp))
             Icon(

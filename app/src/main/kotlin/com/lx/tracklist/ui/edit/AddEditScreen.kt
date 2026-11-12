@@ -72,6 +72,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -87,6 +88,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -104,6 +106,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -452,23 +455,27 @@ fun AddEditScreen(
             }
 
             // Status Chips
-            Text("Status", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                MediaStatus.entries.forEach { st ->
-                    FilterChip(
-                        selected = state.status == st,
-                        onClick = { viewModel.updateStatus(st) },
-                        label = { Text(st.getDisplayLabel(state.mediaType)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Status", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)
+                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        MediaStatus.entries.forEach { st ->
+                            FilterChip(
+                                selected = state.status == st,
+                                onClick = { viewModel.updateStatus(st) },
+                                label = { Text(st.getDisplayLabel(state.mediaType)) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = LXPrimaryGreen,
+                                    selectedLabelColor = LXBackgroundBlack,
+                                    containerColor = LXSurfaceElevated,
+                                    labelColor = LXTextSecondary
+                                )
+                            )
+                        }
+                    }
                 }
             }
 
@@ -724,20 +731,27 @@ fun AddEditScreen(
                         }
 
                         MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> {
-                            Text("Tracking Unit", style = MaterialTheme.typography.bodyMedium, color = LXTextSecondary)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                TrackingUnit.entries.forEach { unit ->
-                                    FilterChip(
-                                        selected = state.trackingUnit == unit,
-                                        onClick = { viewModel.updateTrackingUnit(unit) },
-                                        label = { Text(unit.displayName) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = LXPrimaryGreen,
-                                            selectedLabelColor = LXBackgroundBlack,
-                                            containerColor = LXSurfaceElevated,
-                                            labelColor = LXTextSecondary
-                                        )
-                                    )
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Tracking Unit", style = MaterialTheme.typography.bodyMedium, color = LXTextSecondary)
+                                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        TrackingUnit.entries.forEach { unit ->
+                                            FilterChip(
+                                                selected = state.trackingUnit == unit,
+                                                onClick = { viewModel.updateTrackingUnit(unit) },
+                                                label = { Text(unit.displayName) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = LXPrimaryGreen,
+                                                    selectedLabelColor = LXBackgroundBlack,
+                                                    containerColor = LXSurfaceElevated,
+                                                    labelColor = LXTextSecondary
+                                                )
+                                            )
+                                        }
+                                    }
                                 }
                             }
 
@@ -2928,47 +2942,49 @@ private fun CurrentPlaybackTimeSection(
             val q2 = (runtimeMinutes * 0.50).roundToInt().coerceAtLeast(1)
             val q3 = (runtimeMinutes * 0.75).roundToInt().coerceAtLeast(1)
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                listOf(
-                    "1/4 (${q1}m)" to q1,
-                    "1/2 (${q2}m)" to q2,
-                    "3/4 (${q3}m)" to q3
-                ).forEach { (label, minVal) ->
-                    val isSelected = currentTimeMinutes == minVal
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            if (isSelected) {
+            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf(
+                        "1/4 (${q1}m)" to q1,
+                        "1/2 (${q2}m)" to q2,
+                        "3/4 (${q3}m)" to q3
+                    ).forEach { (label, minVal) ->
+                        val isSelected = currentTimeMinutes == minVal
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                if (isSelected) {
+                                    rawInput = ""
+                                    onUpdateTime(null)
+                                } else {
+                                    rawInput = minVal.toString()
+                                    onUpdateTime(minVal)
+                                }
+                            },
+                            label = { Text(label, fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = LXPrimaryGreen,
+                                selectedLabelColor = LXBackgroundBlack,
+                                containerColor = LXSurfaceBlack,
+                                labelColor = LXTextSecondary
+                            )
+                        )
+                    }
+
+                    if (currentTimeMinutes != null && currentTimeMinutes > 0) {
+                        TextButton(
+                            onClick = {
                                 rawInput = ""
                                 onUpdateTime(null)
-                            } else {
-                                rawInput = minVal.toString()
-                                onUpdateTime(minVal)
-                            }
-                        },
-                        label = { Text(label, fontSize = 11.sp) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceBlack,
-                            labelColor = LXTextSecondary
-                        )
-                    )
-                }
-
-                if (currentTimeMinutes != null && currentTimeMinutes > 0) {
-                    TextButton(
-                        onClick = {
-                            rawInput = ""
-                            onUpdateTime(null)
-                        },
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
-                    ) {
-                        Text("Clear", color = LXErrorRed, fontSize = 11.sp)
+                            },
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                        ) {
+                            Text("Clear", color = LXErrorRed, fontSize = 11.sp)
+                        }
                     }
                 }
             }
