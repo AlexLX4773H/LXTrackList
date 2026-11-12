@@ -27,8 +27,8 @@ android {
     applicationId = "com.lx.tracklist"
     minSdk = 26
     targetSdk = 36
-    versionCode = 206
-    versionName = "0.2.6"
+    versionCode = 207
+    versionName = "0.2.7"
 
     val tmdbReadToken = envProperties.getProperty("TMDB_READ_ACCESS_TOKEN")
       ?: System.getenv("TMDB_READ_ACCESS_TOKEN")
