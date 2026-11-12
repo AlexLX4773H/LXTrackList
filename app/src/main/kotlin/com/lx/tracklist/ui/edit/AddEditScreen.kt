@@ -2454,6 +2454,23 @@ private fun ExternalDbSyncDialog(
                                                                 maxLines = 1,
                                                                 softWrap = false
                                                             )
+                                                        } else if (item.totalPages != null && item.totalPages > 0) {
+                                                            Text(
+                                                                text = "${item.totalPages} pages",
+                                                                color = LXTextSecondary,
+                                                                fontSize = 11.sp,
+                                                                maxLines = 1,
+                                                                softWrap = false
+                                                            )
+                                                        }
+                                                        if (item.totalVolumes != null && item.totalVolumes > 0) {
+                                                            Text(
+                                                                text = "${item.totalVolumes} vols",
+                                                                color = LXTextSecondary,
+                                                                fontSize = 11.sp,
+                                                                maxLines = 1,
+                                                                softWrap = false
+                                                            )
                                                         }
                                                         if (!item.type.isNullOrBlank()) {
                                                             Surface(

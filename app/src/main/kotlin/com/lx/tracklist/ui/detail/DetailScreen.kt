@@ -43,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -1670,6 +1671,16 @@ private fun DetailDatesCard(entry: MediaEntry) {
                             fontWeight = FontWeight.Bold
                         )
                     }
+                } else if (entry.mediaType == MediaType.BOOK && (airedStartStr == airedEndStr || airedEndStr == null || airedStartStr == null)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Published Date", color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = airedStartStr ?: airedEndStr ?: "-",
+                            color = LXTextPrimary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 } else {
                     val airedTitle = when (entry.mediaType) {
                         MediaType.ANIME, MediaType.SHOW -> "Aired / Broadcast Dates"
@@ -2647,12 +2658,28 @@ private fun DetailRelatedCard(
                         }
                     }
                 } else {
-                    Text(
-                        text = "There are no related entries.",
-                        color = LXTextSecondary,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "There are no related entries.",
+                            color = LXTextSecondary,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                        if (onRetry != null) {
+                            TextButton(
+                                onClick = onRetry,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Check for related entries", tint = LXPrimaryGreen, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Check Again", color = LXPrimaryGreen, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
                 }
             } else {
                 // Tracking vs Untracked Stats Pills & Filter Tabs
@@ -2802,7 +2829,11 @@ private fun RelatedItemRow(
                 )
             } else {
                 Icon(
-                    imageVector = if (item.mediaType == MediaType.MOVIE) Icons.Default.Movie else Icons.Default.Tv,
+                    imageVector = when {
+                        item.mediaType == MediaType.BOOK -> Icons.Default.Book
+                        item.mediaType == MediaType.MOVIE -> Icons.Default.Movie
+                        else -> Icons.Default.Tv
+                    },
                     contentDescription = null,
                     tint = LXTextSecondary.copy(alpha = 0.6f),
                     modifier = Modifier.size(20.dp)
@@ -3036,6 +3067,47 @@ private fun RelatedItemDetailSheet(
                             webUrl = resolvedUrl
                         )
                     }
+                } else if (item.externalSource.equals("Google Books", ignoreCase = true)) {
+                    val full = com.lx.tracklist.data.remote.GoogleBooksApiClient.fetchVolumeDetails(item.externalId, context).getOrNull()
+                        ?: com.lx.tracklist.data.remote.BookMetadataManager.searchBooks(item.title, context, limit = 1).getOrNull()?.firstOrNull()
+                    val yr = full?.publishedDate?.take(4) ?: item.releaseYear
+                    detailedInfo = RelatedDetailedInfo(
+                        title = full?.title ?: item.title,
+                        alternateTitle = full?.subtitle,
+                        synopsis = full?.description,
+                        tags = full?.categories?.joinToString(", "),
+                        posterUrl = full?.coverUrl ?: item.posterUrl,
+                        score = full?.averageScore ?: item.score,
+                        scoreSource = "Google Books",
+                        releaseYear = yr,
+                        durationMinutes = null,
+                        totalUnits = full?.pageCount,
+                        statusText = "Book",
+                        externalId = item.externalId,
+                        externalSource = "Google Books",
+                        webUrl = full?.infoUrl ?: "https://books.google.com/books?id=${item.externalId}"
+                    )
+                } else if (item.externalSource.equals("Open Library", ignoreCase = true)) {
+                    val workKey = item.externalId.removePrefix("/works/").removePrefix("/").trim()
+                    val full = com.lx.tracklist.data.remote.OpenLibraryApiClient.fetchWorkDetails(workKey).getOrNull()
+                        ?: com.lx.tracklist.data.remote.BookMetadataManager.searchBooks(item.title, context, limit = 1).getOrNull()?.firstOrNull()
+                    val yr = full?.publishedDate?.take(4) ?: item.releaseYear
+                    detailedInfo = RelatedDetailedInfo(
+                        title = full?.title ?: item.title,
+                        alternateTitle = full?.subtitle,
+                        synopsis = full?.description,
+                        tags = full?.categories?.joinToString(", "),
+                        posterUrl = full?.coverUrl ?: item.posterUrl,
+                        score = full?.averageScore ?: item.score,
+                        scoreSource = "Open Library",
+                        releaseYear = yr,
+                        durationMinutes = null,
+                        totalUnits = full?.pageCount,
+                        statusText = "Book",
+                        externalId = item.externalId,
+                        externalSource = "Open Library",
+                        webUrl = full?.infoUrl ?: "https://openlibrary.org/works/$workKey"
+                    )
                 } else {
                     val malId = item.externalId.toLongOrNull() ?: 0L
                     val isManga = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA || item.mediaType == MediaType.BOOK

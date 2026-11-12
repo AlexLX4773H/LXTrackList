@@ -10,9 +10,12 @@ import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.remote.BookMetadataManager
+import com.lx.tracklist.data.remote.GoogleBooksApiClient
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.MangaDexApiClient
+import com.lx.tracklist.data.remote.OpenLibraryApiClient
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.mal.MalSyncManager
@@ -28,7 +31,9 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Locale
 import kotlin.math.max
 
 class DetailViewModel(
@@ -164,7 +169,7 @@ class DetailViewModel(
         loadedForEntryId = cur.id
 
         val localRelated = cur.getRelatedMediaItems()
-        if (localRelated.isNotEmpty() || cur.relatedEntriesJson == "[]") {
+        if (localRelated.isNotEmpty() || (cur.relatedEntriesJson == "[]" && cur.mediaType != MediaType.BOOK)) {
             _rawRelatedEntries.value = localRelated
             _isLoadingRelated.value = false
             _relatedErrorMessage.value = null
@@ -177,14 +182,13 @@ class DetailViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val isAnime = isAnimeOrManga(cur)
-                val isManga = cur.mediaType == MediaType.MANGA ||
-                        cur.mediaType == MediaType.MANHWA ||
-                        cur.mediaType == MediaType.BOOK
+                val isBook = cur.mediaType == MediaType.BOOK
+                val isManga = (cur.mediaType == MediaType.MANGA || cur.mediaType == MediaType.MANHWA) && !isBook
                 val isVideo = cur.mediaType == MediaType.MOVIE || cur.mediaType == MediaType.SHOW
                 val src = cur.externalSource ?: ""
                 var extId = cur.externalId?.toLongOrNull()
 
-                if (extId == null && cur.title.isNotBlank()) {
+                if (!isBook && extId == null && cur.title.isNotBlank()) {
                     if (!isAnime && (src.equals("TMDB", ignoreCase = true) || isVideo)) {
                         val tmdbRes = if (cur.mediaType == MediaType.MOVIE) {
                             TmdbApiClient.searchMovieByTitle(cur.title, context).getOrNull()
@@ -198,16 +202,23 @@ class DetailViewModel(
                     }
                 }
 
-                val fetchResult: Result<List<RelatedMediaItem>> = if (isAnime || src.equals("MAL", ignoreCase = true) || src.equals("AniList", ignoreCase = true)) {
-                    JikanApiClient.fetchRelatedEntries(malId = extId, isManga = isManga, title = cur.title)
-                } else if (src.equals("TMDB", ignoreCase = true) || isVideo) {
-                    if (extId != null) {
-                        TmdbApiClient.fetchRelatedEntries(extId, isTv = cur.mediaType == MediaType.SHOW, context)
-                    } else {
-                        Result.success(emptyList())
+                val fetchResult: Result<List<RelatedMediaItem>> = when {
+                    isBook -> {
+                        BookMetadataManager.fetchRelatedBooks(cur, context)
                     }
-                } else {
-                    JikanApiClient.fetchRelatedEntries(malId = extId, isManga = isManga, title = cur.title)
+                    isAnime || src.equals("MAL", ignoreCase = true) || src.equals("AniList", ignoreCase = true) -> {
+                        JikanApiClient.fetchRelatedEntries(malId = extId, isManga = isManga, title = cur.title)
+                    }
+                    src.equals("TMDB", ignoreCase = true) || isVideo -> {
+                        if (extId != null) {
+                            TmdbApiClient.fetchRelatedEntries(extId, isTv = cur.mediaType == MediaType.SHOW, context)
+                        } else {
+                            Result.success(emptyList())
+                        }
+                    }
+                    else -> {
+                        JikanApiClient.fetchRelatedEntries(malId = extId, isManga = isManga, title = cur.title)
+                    }
                 }
 
                 if (fetchResult.isSuccess) {
@@ -554,6 +565,64 @@ class DetailViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             _isRefreshingMetadata.value = true
             try {
+                if (cur.mediaType == MediaType.BOOK) {
+                    val isbnFromNotes = cur.notes?.let { Regex("(?i)ISBN:\\s*([0-9Xx-]+)").find(it)?.groupValues?.get(1)?.replace("-", "")?.trim() }
+                    val bookDetails: com.lx.tracklist.data.remote.BookDetails? = when {
+                        cur.externalSource.equals("Google Books", ignoreCase = true) && !cur.externalId.isNullOrBlank() ->
+                            GoogleBooksApiClient.fetchVolumeDetails(cur.externalId, context).getOrNull()
+                        cur.externalSource.equals("Open Library", ignoreCase = true) && !cur.externalId.isNullOrBlank() ->
+                            OpenLibraryApiClient.fetchWorkDetails(cur.externalId).getOrNull()
+                        !isbnFromNotes.isNullOrBlank() ->
+                            BookMetadataManager.searchBooks(isbnFromNotes, context, limit = 1).getOrNull()?.firstOrNull()
+                        else ->
+                            BookMetadataManager.searchBooks(cur.title, context, limit = 1).getOrNull()?.firstOrNull()
+                    }
+
+                    if (bookDetails != null) {
+                        val now = System.currentTimeMillis()
+                        val publishEpoch = bookDetails.publishedDate?.let { dateStr ->
+                            try {
+                                when (dateStr.length) {
+                                    4 -> SimpleDateFormat("yyyy", Locale.US).parse(dateStr)?.time
+                                    7 -> SimpleDateFormat("yyyy-MM", Locale.US).parse(dateStr)?.time
+                                    else -> SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(dateStr)?.time
+                                }
+                            } catch (_: Exception) { null }
+                        }
+                        val targetUnit = when {
+                            (bookDetails.pageCount ?: 0) > 0 -> TrackingUnit.PAGES
+                            (bookDetails.totalVolumes ?: 0) > 0 -> TrackingUnit.VOLUMES
+                            (bookDetails.totalChapters ?: 0) > 0 -> TrackingUnit.CHAPTERS
+                            else -> TrackingUnit.PAGES
+                        }
+                        val updated = cur.copy(
+                            coverImageUri = if (!bookDetails.coverUrl.isNullOrBlank()) bookDetails.coverUrl else cur.coverImageUri,
+                            alternateTitle = if (!bookDetails.subtitle.isNullOrBlank()) bookDetails.subtitle else cur.alternateTitle,
+                            totalPages = if (bookDetails.pageCount != null && bookDetails.pageCount > 0) bookDetails.pageCount else cur.totalPages,
+                            totalVolumes = if (bookDetails.totalVolumes != null && bookDetails.totalVolumes > 0) bookDetails.totalVolumes else cur.totalVolumes,
+                            totalChapters = if (bookDetails.totalChapters != null && bookDetails.totalChapters > 0) bookDetails.totalChapters else cur.totalChapters,
+                            trackingUnit = targetUnit,
+                            airedStartDate = publishEpoch ?: cur.airedStartDate,
+                            airedEndDate = publishEpoch ?: cur.airedEndDate ?: cur.airedStartDate,
+                            externalScore = bookDetails.averageScore ?: cur.externalScore,
+                            externalScoreSource = bookDetails.sourceProvider,
+                            tags = bookDetails.buildTagsString().takeIf { it.isNotBlank() } ?: cur.tags,
+                            notes = bookDetails.buildNotesWithMetadata().takeIf { it.isNotBlank() } ?: cur.notes,
+                            externalId = bookDetails.id.takeIf { it.isNotBlank() } ?: cur.externalId,
+                            externalSource = bookDetails.sourceProvider,
+                            relatedEntriesJson = null,
+                            updatedAt = now
+                        )
+                        repository.update(updated)
+                        _metadataRefreshMessage.value = "Metadata refreshed from ${bookDetails.sourceProvider} (${bookDetails.title})"
+                        loadRelatedEntries(updated, context)
+                        return@launch
+                    } else {
+                        _metadataRefreshMessage.value = "No metadata returned from external book databases."
+                        return@launch
+                    }
+                }
+
                 val isTachiyomi = JikanSyncManager.isTachiyomiSource(cur)
                 val hasValidId = JikanSyncManager.hasValidExternalId(cur)
                 val needsResolution = isTachiyomi || !hasValidId || cur.externalId.isNullOrBlank() || TachiyomiResolverManager.isEligibleForResolution(cur)

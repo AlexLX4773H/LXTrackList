@@ -31,8 +31,33 @@ data class BookDetails(
     val primaryIsbn: String?
         get() = isbn13 ?: isbn10
 
+    fun buildNotesWithMetadata(): String {
+        val metaLines = mutableListOf<String>()
+        if (authors.isNotEmpty()) metaLines.add("Author: $authorString")
+        if (!primaryIsbn.isNullOrBlank()) metaLines.add("ISBN: $primaryIsbn")
+        if (!publisher.isNullOrBlank()) metaLines.add("Publisher: $publisher")
+        if (pageCount != null && pageCount > 0) metaLines.add("Pages: $pageCount")
+
+        val metaBlock = metaLines.joinToString("\n")
+        val desc = description?.trim().orEmpty()
+        return when {
+            desc.isNotBlank() && metaBlock.isNotBlank() -> "$desc\n\n$metaBlock"
+            metaBlock.isNotBlank() -> metaBlock
+            else -> desc
+        }
+    }
+
+    fun buildTagsString(): String {
+        return categories
+            .flatMap { it.split("/").map { part -> part.trim() } }
+            .distinct()
+            .filter { it.isNotBlank() }
+            .joinToString(", ")
+    }
+
     fun toJikanMediaDetails(): JikanMediaDetails {
         val isNovelOrLN = totalVolumes != null || totalChapters != null
+        val publishEpoch = parsePublishDateEpoch(publishedDate)
         return JikanMediaDetails(
             malId = null,
             title = title,
@@ -44,17 +69,17 @@ data class BookDetails(
             totalVolumes = totalVolumes,
             airedChapters = null,
             alternateTitle = subtitle,
-            airedStartDate = parsePublishDateEpoch(publishedDate),
-            airedEndDate = null,
-            tags = buildTagsString(),
-            synopsis = description,
+            airedStartDate = publishEpoch,
+            airedEndDate = publishEpoch, // Explicitly set end date for published books
+            tags = buildTagsString(), // Pure genres/categories only
+            synopsis = buildNotesWithMetadata(), // Author, ISBN, Publisher appended to notes
             isAiring = false,
             externalScore = averageScore,
             externalScoreSource = sourceProvider,
             type = if (isNovelOrLN) "Light Novel" else "Book",
             sourceProvider = sourceProvider,
             url = infoUrl,
-            totalPages = pageCount,
+            totalPages = pageCount?.takeIf { it > 0 },
             isbn = primaryIsbn,
             authors = authorString.takeIf { it.isNotBlank() }
         )
@@ -73,6 +98,7 @@ data class BookDetails(
             totalChapters != null && totalChapters > 0 -> TrackingUnit.CHAPTERS
             else -> TrackingUnit.PAGES
         }
+        val publishEpoch = parsePublishDateEpoch(publishedDate)
 
         return MediaEntry(
             userId = userId,
@@ -92,18 +118,11 @@ data class BookDetails(
             totalChapters = totalChapters ?: 0,
             trackingUnit = unit,
             tags = buildTagsString(),
-            notes = description,
-            airedStartDate = parsePublishDateEpoch(publishedDate),
+            notes = buildNotesWithMetadata(),
+            airedStartDate = publishEpoch,
+            airedEndDate = publishEpoch,
             isAiring = false
         )
-    }
-
-    fun buildTagsString(): String {
-        val list = mutableListOf<String>()
-        if (authors.isNotEmpty()) list.add("Author: $authorString")
-        if (!primaryIsbn.isNullOrBlank()) list.add("ISBN: $primaryIsbn")
-        list.addAll(categories)
-        return list.joinToString(", ")
     }
 
     private fun parsePublishDateEpoch(dateStr: String?): Long? {
@@ -122,4 +141,3 @@ data class BookDetails(
         }
     }
 }
-

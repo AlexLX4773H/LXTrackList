@@ -13,6 +13,9 @@ import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.remote.BookMetadataManager
+import com.lx.tracklist.data.remote.GoogleBooksApiClient
+import com.lx.tracklist.data.remote.OpenLibraryApiClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -24,6 +27,8 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Locale
 import kotlin.math.max
 
 enum class ConflictStrategy {
@@ -891,7 +896,54 @@ class MediaRepository(
     ): Long {
         val effectiveUserId = targetUserId ?: activeUser.value.id
         return withContext(Dispatchers.IO) {
-            val entry = if (item.externalSource.equals("TMDB", ignoreCase = true)) {
+            val entry = if (item.mediaType == MediaType.BOOK || item.externalSource in listOf("Google Books", "Open Library")) {
+                val bookDetails = if (item.externalSource.equals("Google Books", ignoreCase = true)) {
+                    GoogleBooksApiClient.fetchVolumeDetails(item.externalId, context).getOrNull()
+                        ?: BookMetadataManager.searchBooks(item.title, context, limit = 1).getOrNull()?.firstOrNull()
+                } else {
+                    val workKey = item.externalId.removePrefix("/works/").removePrefix("/").trim()
+                    OpenLibraryApiClient.fetchWorkDetails(workKey).getOrNull()
+                        ?: BookMetadataManager.searchBooks(item.title, context, limit = 1).getOrNull()?.firstOrNull()
+                }
+
+                val targetUnit = when {
+                    (bookDetails?.pageCount ?: 0) > 0 -> TrackingUnit.PAGES
+                    (bookDetails?.totalVolumes ?: 0) > 0 -> TrackingUnit.VOLUMES
+                    (bookDetails?.totalChapters ?: 0) > 0 -> TrackingUnit.CHAPTERS
+                    else -> TrackingUnit.PAGES
+                }
+                val publishEpoch = bookDetails?.publishedDate?.let { dateStr ->
+                    try {
+                        when (dateStr.length) {
+                            4 -> SimpleDateFormat("yyyy", Locale.US).parse(dateStr)?.time
+                            7 -> SimpleDateFormat("yyyy-MM", Locale.US).parse(dateStr)?.time
+                            else -> SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(dateStr)?.time
+                        }
+                    } catch (_: Exception) { null }
+                }
+
+                MediaEntry(
+                    userId = effectiveUserId,
+                    title = bookDetails?.title ?: item.title,
+                    alternateTitle = bookDetails?.subtitle,
+                    mediaType = MediaType.BOOK,
+                    status = status,
+                    externalId = item.externalId,
+                    externalSource = item.externalSource,
+                    externalScore = bookDetails?.averageScore ?: item.score,
+                    externalScoreSource = item.externalSource,
+                    coverImageUri = bookDetails?.coverUrl ?: item.posterUrl,
+                    totalPages = bookDetails?.pageCount ?: 0,
+                    totalVolumes = bookDetails?.totalVolumes ?: 0,
+                    totalChapters = bookDetails?.totalChapters ?: 0,
+                    trackingUnit = targetUnit,
+                    tags = bookDetails?.buildTagsString(),
+                    notes = bookDetails?.buildNotesWithMetadata(),
+                    airedStartDate = publishEpoch,
+                    airedEndDate = publishEpoch,
+                    isAiring = false
+                )
+            } else if (item.externalSource.equals("TMDB", ignoreCase = true)) {
                 val tmdbId = item.externalId.toLongOrNull() ?: 0L
                 if (item.mediaType == MediaType.MOVIE) {
                     val fullDetails = com.lx.tracklist.data.remote.TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()

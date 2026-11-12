@@ -6,9 +6,12 @@ import androidx.core.text.HtmlCompat
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.RelatedMediaItem
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLEncoder
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 object GoogleBooksApiClient {
@@ -154,7 +157,8 @@ object GoogleBooksApiClient {
             }
         }
 
-        val pageCount = volumeInfo.get("pageCount")?.takeIf { !it.isJsonNull }?.asInt
+        val pageCount = volumeInfo.get("pageCount")?.takeIf { !it.isJsonNull && it.asInt > 0 }?.asInt
+            ?: volumeInfo.get("printedPageCount")?.takeIf { !it.isJsonNull && it.asInt > 0 }?.asInt
 
         var isbn10: String? = null
         var isbn13: String? = null
@@ -170,7 +174,13 @@ object GoogleBooksApiClient {
         val categories = mutableListOf<String>()
         volumeInfo.getAsJsonArray("categories")?.forEach { catElem ->
             if (!catElem.isJsonNull) {
-                categories.add(catElem.asString.trim())
+                val catRaw = catElem.asString.trim()
+                catRaw.split("/").forEach { part ->
+                    val clean = part.trim()
+                    if (clean.isNotBlank() && !categories.contains(clean)) {
+                        categories.add(clean)
+                    }
+                }
             }
         }
 
@@ -215,6 +225,62 @@ object GoogleBooksApiClient {
             ?: return null
 
         return raw.replace("http://", "https://")
+    }
+
+    fun fetchRelatedBooks(
+        title: String,
+        author: String? = null,
+        currentYear: String? = null,
+        context: Context? = null
+    ): Result<List<RelatedMediaItem>> {
+        val franchisePrefix = OpenLibraryApiClient.extractFranchisePrefix(title)
+        val cleanTitle = OpenLibraryApiClient.cleanSearchTitle(title)
+        val query = when {
+            !franchisePrefix.isNullOrBlank() && !author.isNullOrBlank() ->
+                "intitle:\"$franchisePrefix\" inauthor:\"$author\""
+            !franchisePrefix.isNullOrBlank() ->
+                "intitle:\"$franchisePrefix\""
+            !author.isNullOrBlank() ->
+                "intitle:\"$cleanTitle\" inauthor:\"$author\""
+            else ->
+                "intitle:\"$cleanTitle\""
+        }
+
+        val searchRes = searchBooks(query, context, limit = 15)
+        if (searchRes.isFailure) return Result.failure(searchRes.exceptionOrNull()!!)
+        val items = searchRes.getOrDefault(emptyList())
+
+        val currentYearInt = currentYear?.take(4)?.toIntOrNull()
+        val list = mutableListOf<RelatedMediaItem>()
+        val seenTitles = mutableSetOf<String>()
+        val cleanCurrentTitle = cleanTitle.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "")
+
+        for (item in items) {
+            val norm = item.title.lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "")
+            if (norm == cleanCurrentTitle || norm in seenTitles) continue
+            seenTitles.add(norm)
+
+            val itemYear = item.publishedDate?.take(4)?.toIntOrNull()
+            val relationship = when {
+                currentYearInt != null && itemYear != null && itemYear < currentYearInt -> "Prequel"
+                currentYearInt != null && itemYear != null && itemYear > currentYearInt -> "Sequel"
+                else -> "Part of Series"
+            }
+
+            list.add(
+                RelatedMediaItem(
+                    title = item.title,
+                    relationship = relationship,
+                    externalId = item.id,
+                    externalSource = "Google Books",
+                    mediaType = MediaType.BOOK,
+                    posterUrl = item.coverUrl,
+                    releaseYear = item.publishedDate?.take(4),
+                    score = item.averageScore
+                )
+            )
+        }
+        return Result.success(list)
     }
 }
 

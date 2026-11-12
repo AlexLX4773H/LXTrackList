@@ -175,13 +175,27 @@ object AniListNovelApiClient {
             }
         }
 
-        // Tags / Genres
+        // Tags / Genres (Pure genres & tags only)
         val tagList = mutableListOf<String>()
-        if (authors.isNotEmpty()) {
-            tagList.add("Staff: ${authors.joinToString(", ")}")
-        }
         mediaObj.getAsJsonArray("genres")?.forEach { g ->
-            if (!g.isJsonNull) tagList.add(g.asString)
+            if (!g.isJsonNull) {
+                val str = g.asString.trim()
+                if (str.isNotBlank() && !tagList.contains(str)) tagList.add(str)
+            }
+        }
+        mediaObj.getAsJsonArray("tags")?.forEach { t ->
+            val tagName = t?.asJsonObject?.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
+            if (!tagName.isNullOrBlank() && !tagList.contains(tagName)) {
+                tagList.add(tagName)
+            }
+        }
+
+        // Build notes with staff / author info appended
+        val staffBlock = if (authors.isNotEmpty()) "Staff:\n${authors.joinToString("\n")}" else null
+        val fullSynopsis = when {
+            !description.isNullOrBlank() && !staffBlock.isNullOrBlank() -> "$description\n\n$staffBlock"
+            !staffBlock.isNullOrBlank() -> staffBlock
+            else -> description
         }
 
         val altList = mutableListOf<String>()
@@ -197,6 +211,10 @@ object AniListNovelApiClient {
 
         val siteUrl = mediaObj.get("siteUrl")?.takeIf { !it.isJsonNull }?.asString
 
+        val startDate = parseAniListDate(mediaObj.getAsJsonObject("startDate"))
+        val endDate = parseAniListDate(mediaObj.getAsJsonObject("endDate"))
+        val resolvedEndDate = endDate ?: if (isAiring == false) startDate else null
+
         return JikanMediaDetails(
             malId = resolvedId,
             title = primaryTitle,
@@ -208,10 +226,10 @@ object AniListNovelApiClient {
             totalVolumes = totalVolumes,
             airedChapters = null,
             alternateTitle = altList.firstOrNull(),
-            airedStartDate = parseAniListDate(mediaObj.getAsJsonObject("startDate")),
-            airedEndDate = parseAniListDate(mediaObj.getAsJsonObject("endDate")),
+            airedStartDate = startDate,
+            airedEndDate = resolvedEndDate,
             tags = tagList.joinToString(", "),
-            synopsis = description,
+            synopsis = fullSynopsis,
             isAiring = isAiring,
             externalScore = avgScore,
             externalScoreSource = "AniList",

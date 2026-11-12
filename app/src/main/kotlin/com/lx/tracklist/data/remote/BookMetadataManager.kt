@@ -2,6 +2,10 @@ package com.lx.tracklist.data.remote
 
 import android.content.Context
 import android.util.Log
+import com.lx.tracklist.data.model.MediaEntry
+import com.lx.tracklist.data.model.RelatedMediaItem
+import java.util.Calendar
+import java.util.TimeZone
 
 object BookMetadataManager {
 
@@ -95,6 +99,72 @@ object BookMetadataManager {
                 limit = limit
             )
         }
+    }
+
+    /**
+     * Fetch related books (prequels, sequels, series franchise entries).
+     * 1. Checks AniList/Jikan if categorized as a Light Novel.
+     * 2. Checks Open Library Series API (canonical franchise sequencing).
+     * 3. Falls back to Open Library search.
+     * 4. Falls back to Google Books search.
+     */
+    fun fetchRelatedBooks(
+        entry: MediaEntry,
+        context: Context? = null
+    ): Result<List<RelatedMediaItem>> {
+        val title = entry.title.trim()
+        if (title.isBlank()) return Result.success(emptyList())
+
+        val isLightNovel = entry.externalSource.equals("AniList", ignoreCase = true) ||
+                entry.customCategory.equals("Light Novels", ignoreCase = true) ||
+                entry.subCategory.equals("Light Novel", ignoreCase = true)
+
+        if (isLightNovel) {
+            val lnRes = JikanApiClient.fetchRelatedEntries(
+                malId = entry.externalId?.toLongOrNull(),
+                isManga = true,
+                title = title
+            )
+            if (lnRes.isSuccess && lnRes.getOrDefault(emptyList()).isNotEmpty()) {
+                return lnRes
+            }
+        }
+
+        val authorRegex = Regex("(?i)Author:\\s*([^\r\n]+)")
+        val authorFromNotes = entry.notes?.let { authorRegex.find(it)?.groupValues?.get(1)?.trim() }
+
+        val isbnRegex = Regex("(?i)ISBN:\\s*([0-9Xx-]+)")
+        val isbnFromNotes = entry.notes?.let { isbnRegex.find(it)?.groupValues?.get(1)?.replace("-", "")?.trim() }
+
+        val publishYear = entry.airedStartDate?.let {
+            val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = it }
+            cal.get(Calendar.YEAR).toString()
+        }
+
+        // 1. Open Library Series API (canonical franchise sequencing)
+        val openLibRes = OpenLibraryApiClient.fetchRelatedBooks(
+            title = title,
+            author = authorFromNotes,
+            currentYear = publishYear,
+            isbn = isbnFromNotes,
+            externalId = entry.externalId.takeIf { entry.externalSource.equals("Open Library", ignoreCase = true) }
+        )
+        if (openLibRes.isSuccess && openLibRes.getOrDefault(emptyList()).isNotEmpty()) {
+            return openLibRes
+        }
+
+        // 2. Google Books fallback
+        val googleBooksRes = GoogleBooksApiClient.fetchRelatedBooks(
+            title = title,
+            author = authorFromNotes,
+            currentYear = publishYear,
+            context = context
+        )
+        if (googleBooksRes.isSuccess && googleBooksRes.getOrDefault(emptyList()).isNotEmpty()) {
+            return googleBooksRes
+        }
+
+        return Result.success(emptyList())
     }
 }
 

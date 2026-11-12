@@ -660,6 +660,31 @@ class AddEditViewModel(
                 else -> (item.malId ?: 0L).takeIf { it > 0 }?.toString() ?: current.externalId
             }
 
+            val isBookSource = targetMediaType == MediaType.BOOK ||
+                    item.type.equals("Book", ignoreCase = true) ||
+                    item.sourceProvider in listOf("Google Books", "Open Library")
+
+            val hasPages = item.totalPages != null && item.totalPages > 0
+            val hasVolumes = item.totalVolumes != null && item.totalVolumes > 0
+            val hasChapters = item.totalChapters != null && item.totalChapters > 0
+
+            val resolvedUnit = when {
+                hasPages -> TrackingUnit.PAGES
+                hasVolumes -> TrackingUnit.VOLUMES
+                hasChapters -> TrackingUnit.CHAPTERS
+                isBookSource -> TrackingUnit.PAGES
+                else -> current.trackingUnit
+            }
+
+            val newTotalPages = if (hasPages) (item.totalPages ?: current.totalPages) else current.totalPages
+            val newTotalVolumes = if (!isVideo && hasVolumes) (item.totalVolumes ?: current.totalVolumes) else current.totalVolumes
+            val newTotalChapters = if (!isVideo && hasChapters) (item.totalChapters ?: current.totalChapters) else current.totalChapters
+
+            val resolvedStartDate = item.airedStartDate ?: current.airedStartDate
+            val resolvedEndDate = item.airedEndDate
+                ?: if (isBookSource || item.isAiring == false) resolvedStartDate
+                else current.airedEndDate
+
             current.copy(
                 title = cleanedOriginalTitle,
                 alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
@@ -672,17 +697,17 @@ class AddEditViewModel(
                 externalScoreSource = scoreSrc,
                 notes = finalNotes,
                 tags = (if (current.tags.isBlank() && !item.tags.isNullOrBlank()) item.tags else current.tags) ?: "",
-                airedStartDate = item.airedStartDate ?: current.airedStartDate,
-                airedEndDate = item.airedEndDate ?: current.airedEndDate,
-                isAiring = item.isAiring ?: current.isAiring,
+                airedStartDate = resolvedStartDate,
+                airedEndDate = resolvedEndDate,
+                isAiring = if (isBookSource) false else (item.isAiring ?: current.isAiring),
                 totalEpisodes = if (isVideo && item.totalEpisodes != null && item.totalEpisodes > 0 && current.totalEpisodes == 0) item.totalEpisodes else current.totalEpisodes,
                 episodeLengthMinutes = if (isVideo && item.durationMinutes != null && item.durationMinutes > 0 && (current.episodeLengthMinutes == null || current.episodeLengthMinutes == 0)) item.durationMinutes else current.episodeLengthMinutes,
                 durationMinutes = if (current.mediaType == MediaType.MOVIE && item.durationMinutes != null && item.durationMinutes > 0 && (current.durationMinutes == null || current.durationMinutes == 0)) item.durationMinutes else current.durationMinutes,
-                totalChapters = if (!isVideo && item.totalChapters != null && item.totalChapters > 0 && current.totalChapters == 0) item.totalChapters else current.totalChapters,
+                totalChapters = newTotalChapters,
                 airedChapters = if (!isVideo && item.airedChapters != null && item.airedChapters > 0 && current.airedChapters == 0) item.airedChapters else current.airedChapters,
-                totalVolumes = if (!isVideo && item.totalVolumes != null && item.totalVolumes > 0 && current.totalVolumes == 0) item.totalVolumes else current.totalVolumes,
-                totalPages = if (item.totalPages != null && item.totalPages > 0 && current.totalPages == 0) item.totalPages else current.totalPages,
-                trackingUnit = if (item.totalPages != null && item.totalPages > 0 && targetMediaType == MediaType.BOOK) TrackingUnit.PAGES else current.trackingUnit
+                totalVolumes = newTotalVolumes,
+                totalPages = newTotalPages,
+                trackingUnit = resolvedUnit
             )
         }
         val sourceLabel = item.sourceProvider

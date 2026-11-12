@@ -418,11 +418,14 @@ class SearchViewModel(
                 val isVideo = item.mediaType == MediaType.ANIME
                 val isBook = item.mediaType == MediaType.BOOK
                 val unit = when {
-                    isBook && (details?.totalPages ?: 0) > 0 -> TrackingUnit.PAGES
-                    isBook && (details?.totalVolumes ?: 0) > 0 -> TrackingUnit.VOLUMES
-                    isBook && (details?.totalChapters ?: 0) > 0 -> TrackingUnit.CHAPTERS
+                    (details?.totalPages ?: 0) > 0 -> TrackingUnit.PAGES
+                    (details?.totalVolumes ?: 0) > 0 -> TrackingUnit.VOLUMES
+                    (details?.totalChapters ?: 0) > 0 -> TrackingUnit.CHAPTERS
+                    isBook -> TrackingUnit.PAGES
                     else -> TrackingUnit.CHAPTERS
                 }
+                val startEpoch = details?.airedStartDate
+                val endEpoch = details?.airedEndDate ?: if (isBook) startEpoch else null
                 MediaEntry(
                     userId = targetUserId,
                     title = details?.title ?: item.title,
@@ -445,9 +448,9 @@ class SearchViewModel(
                     episodeLengthMinutes = details?.durationMinutes,
                     tags = details?.tags,
                     notes = details?.synopsis ?: item.synopsis,
-                    airedStartDate = details?.airedStartDate,
-                    airedEndDate = details?.airedEndDate,
-                    isAiring = details?.isAiring ?: false
+                    airedStartDate = startEpoch,
+                    airedEndDate = endEpoch,
+                    isAiring = if (isBook) false else (details?.isAiring ?: false)
                 )
             }
 
