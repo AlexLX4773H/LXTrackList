@@ -567,15 +567,30 @@ class DetailViewModel(
             try {
                 if (cur.mediaType == MediaType.BOOK) {
                     val isbnFromNotes = cur.notes?.let { Regex("(?i)ISBN:\\s*([0-9Xx-]+)").find(it)?.groupValues?.get(1)?.replace("-", "")?.trim() }
-                    val bookDetails: com.lx.tracklist.data.remote.BookDetails? = when {
-                        cur.externalSource.equals("Google Books", ignoreCase = true) && !cur.externalId.isNullOrBlank() ->
-                            GoogleBooksApiClient.fetchVolumeDetails(cur.externalId, context).getOrNull()
-                        cur.externalSource.equals("Open Library", ignoreCase = true) && !cur.externalId.isNullOrBlank() ->
-                            OpenLibraryApiClient.fetchWorkDetails(cur.externalId).getOrNull()
-                        !isbnFromNotes.isNullOrBlank() ->
-                            BookMetadataManager.searchBooks(isbnFromNotes, context, limit = 1).getOrNull()?.firstOrNull()
-                        else ->
-                            BookMetadataManager.searchBooks(cur.title, context, limit = 1).getOrNull()?.firstOrNull()
+                    val cleanExtId = cur.externalId?.trim()
+                    var bookDetails: com.lx.tracklist.data.remote.BookDetails? = null
+
+                    // 1. Direct ID lookup based on externalSource
+                    if (cur.externalSource.equals("Google Books", ignoreCase = true) && !cleanExtId.isNullOrBlank()) {
+                        bookDetails = GoogleBooksApiClient.fetchVolumeDetails(cleanExtId, context).getOrNull()
+                    } else if (cur.externalSource.equals("Open Library", ignoreCase = true) && !cleanExtId.isNullOrBlank()) {
+                        bookDetails = OpenLibraryApiClient.fetchWorkDetails(cleanExtId).getOrNull()
+                    }
+
+                    // 2. Direct ID fallback if externalSource was not matched or lookup returned null
+                    if (bookDetails == null && !cleanExtId.isNullOrBlank()) {
+                        bookDetails = GoogleBooksApiClient.fetchVolumeDetails(cleanExtId, context).getOrNull()
+                            ?: OpenLibraryApiClient.fetchWorkDetails(cleanExtId).getOrNull()
+                    }
+
+                    // 3. Fallback to ISBN search
+                    if (bookDetails == null && !isbnFromNotes.isNullOrBlank()) {
+                        bookDetails = BookMetadataManager.searchBooks(isbnFromNotes, context, limit = 1).getOrNull()?.firstOrNull()
+                    }
+
+                    // 4. Fallback to title search
+                    if (bookDetails == null && cur.title.isNotBlank()) {
+                        bookDetails = BookMetadataManager.searchBooks(cur.title, context, limit = 1).getOrNull()?.firstOrNull()
                     }
 
                     if (bookDetails != null) {
@@ -615,6 +630,7 @@ class DetailViewModel(
                         )
                         repository.update(updated)
                         _metadataRefreshMessage.value = "Metadata refreshed from ${bookDetails.sourceProvider} (${bookDetails.title})"
+                        loadedForEntryId = -1L
                         loadRelatedEntries(updated, context)
                         return@launch
                     } else {

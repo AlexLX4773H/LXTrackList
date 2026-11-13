@@ -233,10 +233,12 @@ fun DetailScreen(
         val current = entry!!
         val isTachiyomi = JikanSyncManager.isTachiyomiSource(current)
         val isMovieOrShow = current.mediaType == MediaType.MOVIE || current.mediaType == MediaType.SHOW
+        val isBook = current.mediaType == MediaType.BOOK
         val hasValidId = JikanSyncManager.hasValidExternalId(current)
         val isMal = JikanSyncManager.isMalSource(current) || current.mediaType == MediaType.ANIME || current.mediaType == MediaType.MANGA || current.mediaType == MediaType.MANHWA
         val sourceName = when {
             isMovieOrShow -> "The Movie Database (TMDB)"
+            isBook -> current.externalSource?.takeIf { it.isNotBlank() } ?: "Google Books / Open Library"
             isTachiyomi -> "Jikan / MangaDex / AniList / Kitsu"
             isMal -> "MyAnimeList (MAL)"
             else -> current.externalSource?.takeIf { it.isNotBlank() } ?: "External Database"
@@ -258,7 +260,11 @@ fun DetailScreen(
                     )
                     Text(
                         text = if (isFindingAndLinking) {
-                            if (isMovieOrShow) "Find & Link TMDB ID?" else "Find & Link External ID?"
+                            when {
+                                isMovieOrShow -> "Find & Link TMDB ID?"
+                                isBook -> "Find & Link Book ID?"
+                                else -> "Find & Link External ID?"
+                            }
                         } else "Refresh Metadata?",
                         color = LXTextPrimary,
                         fontWeight = FontWeight.Bold
@@ -278,13 +284,17 @@ fun DetailScreen(
                     )
                     Text(
                         text = if (isFindingAndLinking) {
-                            if (isMovieOrShow) {
-                                "This will search TMDB to link a valid ID and update poster, release dates, runtime, genres, scores, and synopsis."
-                            } else {
-                                "This will search databases to link a valid external ID (MAL, MangaDex, AniList, Kitsu) and update cover, chapters/episodes, and synopsis. Once linked, external tracking can be enabled."
+                            when {
+                                isMovieOrShow -> "This will search TMDB to link a valid ID and update poster, release dates, runtime, genres, scores, and synopsis."
+                                isBook -> "This will search Google Books and Open Library to link a valid book ID and update cover, pages, publication details, and synopsis."
+                                else -> "This will search databases to link a valid external ID (MAL, MangaDex, AniList, Kitsu) and update cover, chapters/episodes, and synopsis. Once linked, external tracking can be enabled."
                             }
                         } else {
-                            "This will update posters, episode/chapter counts, runtime, broadcast/air dates, scores, and synopsis to the latest information from the external database."
+                            if (isBook) {
+                                "This will update cover, page counts, publisher, published dates, ratings, and description to the latest information from $sourceName."
+                            } else {
+                                "This will update posters, episode/chapter counts, runtime, broadcast/air dates, scores, and synopsis to the latest information from the external database."
+                            }
                         },
                         color = LXTextSecondary,
                         fontSize = 12.sp
@@ -2002,11 +2012,13 @@ private fun DetailExternalTrackingCard(
                 val isTachiyomi = JikanSyncManager.isTachiyomiSource(entry)
                 val hasValidId = JikanSyncManager.hasValidExternalId(entry)
                 val isMovieOrShow = entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.SHOW
+                val isBook = entry.mediaType == MediaType.BOOK
 
                 if (hasValidId) {
                     val sourceLabel = when {
                         isMovieOrShow || entry.externalSource.equals("TMDB", ignoreCase = true) -> "TMDB"
                         !entry.externalSource.isNullOrBlank() -> entry.externalSource
+                        isBook -> "Book"
                         else -> "External"
                     }
                     Surface(
@@ -2072,6 +2084,7 @@ private fun DetailExternalTrackingCard(
                     val unlinkedLabel = when {
                         isTachiyomi -> "Tachiyomi ID (Not Linked)"
                         isMovieOrShow -> "TMDB ID (Not Linked)"
+                        isBook -> "Book ID (Not Linked)"
                         else -> "No External ID Linked"
                     }
                     Surface(

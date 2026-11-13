@@ -1320,6 +1320,40 @@ class FeaturesTest {
         assertFalse(com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(tachiEntry2))
         assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(normalEntry))
 
+        // Books external ID validity checks (Google Books alphanumeric ID and Open Library works key)
+        val googleBooksEntry = MediaEntry(
+            title = "Harry Potter and the Chamber of Secrets",
+            mediaType = MediaType.BOOK,
+            status = MediaStatus.COMPLETED,
+            externalSource = "Google Books",
+            externalId = "1o7D0m_osFEC"
+        )
+        val openLibraryEntry = MediaEntry(
+            title = "Dune",
+            mediaType = MediaType.BOOK,
+            status = MediaStatus.COMPLETED,
+            externalSource = "Open Library",
+            externalId = "OL82563W"
+        )
+        val openLibraryEntryWithWorksPath = MediaEntry(
+            title = "Dune",
+            mediaType = MediaType.BOOK,
+            status = MediaStatus.COMPLETED,
+            externalSource = "Open Library",
+            externalId = "/works/OL82563W"
+        )
+        val unlinkedBook = MediaEntry(
+            title = "Custom Book",
+            mediaType = MediaType.BOOK,
+            status = MediaStatus.PLAN_TO_READ,
+            externalSource = null,
+            externalId = null
+        )
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(googleBooksEntry))
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(openLibraryEntry))
+        assertTrue(com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(openLibraryEntryWithWorksPath))
+        assertFalse(com.lx.tracklist.data.remote.JikanSyncManager.hasValidExternalId(unlinkedBook))
+
         // MangaDex UUID and numeric MAL extraction
         val uuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         assertEquals(uuid, com.lx.tracklist.data.remote.JikanSyncManager.extractMangaDexUuid("/manga/$uuid"))

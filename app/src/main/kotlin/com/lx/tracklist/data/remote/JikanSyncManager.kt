@@ -72,7 +72,15 @@ object JikanSyncManager {
     fun hasValidExternalId(entry: MediaEntry): Boolean {
         if (isTachiyomiSource(entry)) return false
         val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim() ?: ""
-        val id = (entry.externalId ?: entry.foreignDatabaseId)?.trim() ?: return false
+        val rawId = (entry.externalId ?: entry.foreignDatabaseId)?.trim() ?: return false
+        val isBook = src.equals("Google Books", ignoreCase = true) ||
+                     src.equals("Open Library", ignoreCase = true) ||
+                     entry.mediaType == MediaType.BOOK
+        val id = if (src.equals("Open Library", ignoreCase = true) || isBook) {
+            rawId.removePrefix("/works/").removePrefix("/").trim()
+        } else {
+            rawId
+        }
         if (id.isBlank() || id.startsWith("/")) return false
         if (src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true) || src.equals("AniList", ignoreCase = true)) {
             return id.toLongOrNull() != null
@@ -81,6 +89,9 @@ object JikanSyncManager {
             return id.length >= 32
         }
         if (src.equals("Kitsu", ignoreCase = true)) {
+            return id.isNotBlank()
+        }
+        if (isBook) {
             return id.isNotBlank()
         }
         return id.toLongOrNull() != null

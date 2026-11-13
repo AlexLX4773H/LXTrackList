@@ -655,8 +655,15 @@ class AddEditViewModel(
 
             val resolvedExtId = when (item.sourceProvider) {
                 "MangaDex" -> item.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: current.externalId
-                "Google Books", "Open Library" -> item.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-                    ?: (item.isbn ?: current.externalId)
+                "Google Books", "Open Library" -> {
+                    val u = item.url
+                    val fromUrl = when {
+                        u != null && u.contains("id=") -> Regex("[?&]id=([^&]+)").find(u)?.groupValues?.get(1)
+                        u != null -> u.substringAfterLast('/').removePrefix("/works/").removePrefix("/").takeIf { it.isNotBlank() }
+                        else -> null
+                    }
+                    fromUrl ?: (item.isbn ?: current.externalId)
+                }
                 else -> (item.malId ?: 0L).takeIf { it > 0 }?.toString() ?: current.externalId
             }
 

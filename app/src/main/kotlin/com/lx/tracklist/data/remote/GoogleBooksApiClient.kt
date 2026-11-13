@@ -104,7 +104,8 @@ object GoogleBooksApiClient {
     ): Result<BookDetails> {
         val apiKey = GoogleBooksConfig.getApiKey(context)
         val keyParam = if (apiKey.isNotBlank()) "?key=$apiKey" else ""
-        val endpoint = "$BASE_URL/${volumeId.trim()}$keyParam"
+        val cleanVolumeId = URLEncoder.encode(volumeId.trim(), "UTF-8")
+        val endpoint = "$BASE_URL/$cleanVolumeId$keyParam"
 
         return try {
             val request = Request.Builder()
