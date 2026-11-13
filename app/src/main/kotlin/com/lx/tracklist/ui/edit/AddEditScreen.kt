@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -147,7 +148,15 @@ fun AddEditScreen(
     val syncState by viewModel.syncState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var showExternalSyncDialog by remember { mutableStateOf(false) }
-    var selectedExternalSource by remember { mutableStateOf(ExternalDbSource.MAL) }
+    val defaultExternalSource = remember(state.mediaType) {
+        when {
+            state.mediaType == MediaType.MANHWA -> ExternalDbSource.MANGADEX
+            state.mediaType == MediaType.BOOK -> ExternalDbSource.GOOGLE_BOOKS
+            state.mediaType == MediaType.MOVIE || state.mediaType == MediaType.SHOW -> ExternalDbSource.TMDB
+            else -> ExternalDbSource.MAL
+        }
+    }
+    var selectedExternalSource by remember(state.mediaType) { mutableStateOf(defaultExternalSource) }
     val context = LocalContext.current
     val customCategories by viewModel.customCategories.collectAsState(initial = emptyList())
     val subCategories by viewModel.subCategories.collectAsState(initial = emptyList())
@@ -307,133 +316,191 @@ fun AddEditScreen(
                             .background(LXSurfaceElevated)
                             .border(1.dp, LXBorder, RoundedCornerShape(8.dp))
                     ) {
-                        val showMal = true
-                        val showMangaDex = state.mediaType.isReadType || (!state.mediaType.isWatchType)
-                        val showTmdb = state.mediaType.isWatchType || (!state.mediaType.isReadType)
-
-                        if (showMal) {
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text("🎌", fontSize = 16.sp)
-                                        Column {
-                                            Text("MyAnimeList (MAL)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
-                                            Text("Anime, Manga, Manhwa, Light Novels", fontSize = 11.sp, color = LXTextSecondary)
-                                        }
-                                    }
-                                },
-                                onClick = {
-                                    showSyncDropdown = false
-                                    selectedExternalSource = ExternalDbSource.MAL
-                                    viewModel.searchExternalDb(state.title, ExternalDbSource.MAL, context)
-                                    showExternalSyncDialog = true
-                                }
-                            )
+                        val orderedMenuSources = remember(state.mediaType) {
+                            when {
+                                state.mediaType == MediaType.MANHWA -> listOf(
+                                    ExternalDbSource.MANGADEX,
+                                    ExternalDbSource.ANILIST_NOVEL,
+                                    ExternalDbSource.MAL,
+                                    ExternalDbSource.GOOGLE_BOOKS
+                                )
+                                state.mediaType == MediaType.BOOK -> listOf(
+                                    ExternalDbSource.GOOGLE_BOOKS,
+                                    ExternalDbSource.OPEN_LIBRARY,
+                                    ExternalDbSource.ANILIST_NOVEL,
+                                    ExternalDbSource.MAL
+                                )
+                                state.mediaType == MediaType.MOVIE || state.mediaType == MediaType.SHOW -> listOf(
+                                    ExternalDbSource.TMDB,
+                                    ExternalDbSource.MAL
+                                )
+                                state.mediaType == MediaType.ANIME -> listOf(
+                                    ExternalDbSource.MAL,
+                                    ExternalDbSource.TMDB
+                                )
+                                state.mediaType == MediaType.MANGA -> listOf(
+                                    ExternalDbSource.MAL,
+                                    ExternalDbSource.MANGADEX,
+                                    ExternalDbSource.ANILIST_NOVEL,
+                                    ExternalDbSource.GOOGLE_BOOKS
+                                )
+                                state.mediaType.isReadType -> listOf(
+                                    ExternalDbSource.MANGADEX,
+                                    ExternalDbSource.ANILIST_NOVEL,
+                                    ExternalDbSource.MAL,
+                                    ExternalDbSource.GOOGLE_BOOKS
+                                )
+                                else -> listOf(
+                                    ExternalDbSource.MAL,
+                                    ExternalDbSource.MANGADEX,
+                                    ExternalDbSource.TMDB,
+                                    ExternalDbSource.GOOGLE_BOOKS
+                                )
+                            }
                         }
 
-                        if (showMangaDex) {
-                            if (showMal) {
+                        orderedMenuSources.forEachIndexed { idx, src ->
+                            if (idx > 0) {
                                 HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
                             }
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text("📖", fontSize = 16.sp)
-                                        Column {
-                                            Text("MangaDex", fontWeight = FontWeight.Bold, color = LXTextPrimary)
-                                            Text("Manga, Manhwa, Manhua", fontSize = 11.sp, color = LXTextSecondary)
+                            when (src) {
+                                ExternalDbSource.MAL -> {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text("🎌", fontSize = 16.sp)
+                                                Column {
+                                                    Text("MyAnimeList (MAL)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                                    Text("Anime, Manga, Manhwa, Light Novels", fontSize = 11.sp, color = LXTextSecondary)
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            showSyncDropdown = false
+                                            selectedExternalSource = ExternalDbSource.MAL
+                                            viewModel.searchExternalDb(state.title, ExternalDbSource.MAL, context)
+                                            showExternalSyncDialog = true
                                         }
-                                    }
-                                },
-                                onClick = {
-                                    showSyncDropdown = false
-                                    selectedExternalSource = ExternalDbSource.MANGADEX
-                                    viewModel.searchExternalDb(state.title, ExternalDbSource.MANGADEX, context)
-                                    showExternalSyncDialog = true
+                                    )
                                 }
-                            )
-                        }
-
-                        if (showTmdb) {
-                            if (showMal || showMangaDex) {
-                                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
+                                ExternalDbSource.MANGADEX -> {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text("📖", fontSize = 16.sp)
+                                                Column {
+                                                    Text("MangaDex", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                                    Text("Manga, Manhwa, Manhua", fontSize = 11.sp, color = LXTextSecondary)
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            showSyncDropdown = false
+                                            selectedExternalSource = ExternalDbSource.MANGADEX
+                                            viewModel.searchExternalDb(state.title, ExternalDbSource.MANGADEX, context)
+                                            showExternalSyncDialog = true
+                                        }
+                                    )
+                                }
+                                ExternalDbSource.TMDB -> {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Image(
+                                                    painter = painterResource(R.drawable.ic_tmdb_logo),
+                                                    contentDescription = "TMDB",
+                                                    modifier = Modifier.height(14.dp).width(20.dp)
+                                                )
+                                                Column {
+                                                    Text("The Movie Database (TMDB)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                                    Text("Movies & TV Shows", fontSize = 11.sp, color = LXTextSecondary)
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            showSyncDropdown = false
+                                            selectedExternalSource = ExternalDbSource.TMDB
+                                            viewModel.searchExternalDb(state.title, ExternalDbSource.TMDB, context)
+                                            showExternalSyncDialog = true
+                                        }
+                                    )
+                                }
+                                ExternalDbSource.GOOGLE_BOOKS -> {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text("📚", fontSize = 16.sp)
+                                                Column {
+                                                    Text("Google Books", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                                    Text("Books, Novels, ISBNs (Open Library fallback)", fontSize = 11.sp, color = LXTextSecondary)
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            showSyncDropdown = false
+                                            selectedExternalSource = ExternalDbSource.GOOGLE_BOOKS
+                                            viewModel.searchExternalDb(state.title, ExternalDbSource.GOOGLE_BOOKS, context)
+                                            showExternalSyncDialog = true
+                                        }
+                                    )
+                                }
+                                ExternalDbSource.OPEN_LIBRARY -> {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text("📖", fontSize = 16.sp)
+                                                Column {
+                                                    Text("Open Library", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                                    Text("Books & Open Library Works", fontSize = 11.sp, color = LXTextSecondary)
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            showSyncDropdown = false
+                                            selectedExternalSource = ExternalDbSource.OPEN_LIBRARY
+                                            viewModel.searchExternalDb(state.title, ExternalDbSource.OPEN_LIBRARY, context)
+                                            showExternalSyncDialog = true
+                                        }
+                                    )
+                                }
+                                ExternalDbSource.ANILIST_NOVEL -> {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text("✨", fontSize = 16.sp)
+                                                Column {
+                                                    Text(if (state.mediaType == MediaType.MANHWA) "AniList" else "AniList (Light Novels)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                                    Text(if (state.mediaType == MediaType.MANHWA) "Manhwa & Asian Comics" else "Light Novels & Web Novels", fontSize = 11.sp, color = LXTextSecondary)
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            showSyncDropdown = false
+                                            selectedExternalSource = ExternalDbSource.ANILIST_NOVEL
+                                            viewModel.searchExternalDb(state.title, ExternalDbSource.ANILIST_NOVEL, context)
+                                            showExternalSyncDialog = true
+                                        }
+                                    )
+                                }
                             }
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Image(
-                                            painter = painterResource(R.drawable.ic_tmdb_logo),
-                                            contentDescription = "TMDB",
-                                            modifier = Modifier.height(14.dp).width(20.dp)
-                                        )
-                                        Column {
-                                            Text("The Movie Database (TMDB)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
-                                            Text("Movies & TV Shows", fontSize = 11.sp, color = LXTextSecondary)
-                                        }
-                                    }
-                                },
-                                onClick = {
-                                    showSyncDropdown = false
-                                    selectedExternalSource = ExternalDbSource.TMDB
-                                    viewModel.searchExternalDb(state.title, ExternalDbSource.TMDB, context)
-                                    showExternalSyncDialog = true
-                                }
-                            )
-                        }
-
-                        if (state.mediaType == MediaType.BOOK || state.mediaType.isReadType) {
-                            HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text("📚", fontSize = 16.sp)
-                                        Column {
-                                            Text("Google Books", fontWeight = FontWeight.Bold, color = LXTextPrimary)
-                                            Text("Books, Novels, ISBNs (Open Library fallback)", fontSize = 11.sp, color = LXTextSecondary)
-                                        }
-                                    }
-                                },
-                                onClick = {
-                                    showSyncDropdown = false
-                                    selectedExternalSource = ExternalDbSource.GOOGLE_BOOKS
-                                    viewModel.searchExternalDb(state.title, ExternalDbSource.GOOGLE_BOOKS, context)
-                                    showExternalSyncDialog = true
-                                }
-                            )
-
-                            HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text("✨", fontSize = 16.sp)
-                                        Column {
-                                            Text("AniList (Light Novels)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
-                                            Text("Light Novels & Web Novels", fontSize = 11.sp, color = LXTextSecondary)
-                                        }
-                                    }
-                                },
-                                onClick = {
-                                    showSyncDropdown = false
-                                    selectedExternalSource = ExternalDbSource.ANILIST_NOVEL
-                                    viewModel.searchExternalDb(state.title, ExternalDbSource.ANILIST_NOVEL, context)
-                                    showExternalSyncDialog = true
-                                }
-                            )
                         }
                     }
                 }
@@ -2107,16 +2174,28 @@ private fun ExternalDbSyncDialog(
 
     val availableSources = remember(mediaType, syncState.selectedSource) {
         val base = when {
+            mediaType == MediaType.MANHWA -> listOf(
+                ExternalDbSource.MANGADEX,
+                ExternalDbSource.ANILIST_NOVEL,
+                ExternalDbSource.MAL,
+                ExternalDbSource.GOOGLE_BOOKS
+            )
             mediaType == MediaType.BOOK -> listOf(
                 ExternalDbSource.GOOGLE_BOOKS,
                 ExternalDbSource.OPEN_LIBRARY,
                 ExternalDbSource.ANILIST_NOVEL,
                 ExternalDbSource.MAL
             )
-            mediaType.isReadType -> listOf(
+            mediaType == MediaType.MANGA -> listOf(
                 ExternalDbSource.MAL,
                 ExternalDbSource.MANGADEX,
                 ExternalDbSource.ANILIST_NOVEL,
+                ExternalDbSource.GOOGLE_BOOKS
+            )
+            mediaType.isReadType -> listOf(
+                ExternalDbSource.MANGADEX,
+                ExternalDbSource.ANILIST_NOVEL,
+                ExternalDbSource.MAL,
                 ExternalDbSource.GOOGLE_BOOKS
             )
             mediaType == MediaType.MOVIE || mediaType == MediaType.SHOW -> listOf(ExternalDbSource.TMDB, ExternalDbSource.MAL)
@@ -2368,7 +2447,7 @@ private fun ExternalDbSyncDialog(
                                 modifier = Modifier.fillMaxSize(),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                items(syncState.malResults, key = { "${it.sourceProvider}_${it.malId ?: it.url}_${it.title.hashCode()}" }) { item ->
+                                itemsIndexed(syncState.malResults, key = { idx, item -> "${item.sourceProvider}_${item.malId ?: item.url ?: idx}_${item.title.hashCode()}_$idx" }) { _, item ->
                                     val itemKey = "${item.sourceProvider}_${item.malId ?: item.url}_${item.title}"
                                     val isExpanded = expandedItemKey == itemKey
                                     val webUrl = item.webUrl

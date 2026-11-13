@@ -24,7 +24,10 @@ import com.lx.tracklist.data.remote.TmdbSearchResult
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +40,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
+import java.util.Locale
 
 enum class ExternalDbSource(val displayName: String, val shortName: String) {
     MAL("MyAnimeList (MAL)", "MAL"),
@@ -143,7 +147,11 @@ class AddEditViewModel(
     )
     val uiState: StateFlow<AddEditUiState> = _uiState.asStateFlow()
 
-    private val _syncState = MutableStateFlow(ExternalSyncUiState())
+    private val _syncState = MutableStateFlow(
+        ExternalSyncUiState(
+            selectedSource = getDefaultSourceForType(initialMediaType ?: MediaType.ANIME)
+        )
+    )
     val syncState: StateFlow<ExternalSyncUiState> = _syncState.asStateFlow()
 
     private val _savedEvent = Channel<Unit>(Channel.BUFFERED)
@@ -232,6 +240,8 @@ class AddEditViewModel(
                             errorMessage = null
                         )
                     }
+                    val defaultSource = getDefaultSourceForType(entry.mediaType)
+                    _syncState.update { it.copy(selectedSource = defaultSource) }
                 }
             }
         } else {
@@ -283,32 +293,40 @@ class AddEditViewModel(
             }
         }
     }
-    fun updateMediaType(value: MediaType) = _uiState.update { current ->
-        val effectiveStartDate = if (current.status == MediaStatus.WATCHING && current.startDate == null) {
-            todayStartTimestamp()
-        } else {
-            current.startDate
+    fun updateMediaType(value: MediaType) {
+        val defaultSource = getDefaultSourceForType(value)
+        _syncState.update { it.copy(selectedSource = defaultSource) }
+        _uiState.update { current ->
+            val effectiveStartDate = if (current.status == MediaStatus.WATCHING && current.startDate == null) {
+                todayStartTimestamp()
+            } else {
+                current.startDate
+            }
+            current.copy(
+                mediaType = value,
+                customCategory = null,
+                subCategory = null,
+                startDate = effectiveStartDate
+            )
         }
-        current.copy(
-            mediaType = value,
-            customCategory = null,
-            subCategory = null,
-            startDate = effectiveStartDate
-        )
     }
     fun updateCustomCategory(name: String?) = _uiState.update { it.copy(customCategory = name, subCategory = null) }
-    fun selectCategory(mediaType: MediaType, customCategory: String? = null) = _uiState.update { current ->
-        val effectiveStartDate = if (current.status == MediaStatus.WATCHING && current.startDate == null) {
-            todayStartTimestamp()
-        } else {
-            current.startDate
+    fun selectCategory(mediaType: MediaType, customCategory: String? = null) {
+        val defaultSource = getDefaultSourceForType(mediaType)
+        _syncState.update { it.copy(selectedSource = defaultSource) }
+        _uiState.update { current ->
+            val effectiveStartDate = if (current.status == MediaStatus.WATCHING && current.startDate == null) {
+                todayStartTimestamp()
+            } else {
+                current.startDate
+            }
+            current.copy(
+                mediaType = mediaType,
+                customCategory = customCategory,
+                subCategory = null,
+                startDate = effectiveStartDate
+            )
         }
-        current.copy(
-            mediaType = mediaType,
-            customCategory = customCategory,
-            subCategory = null,
-            startDate = effectiveStartDate
-        )
     }
 
     fun updateSubCategory(name: String?) = _uiState.update { it.copy(subCategory = name?.trim()?.ifBlank { null }) }
@@ -499,7 +517,11 @@ class AddEditViewModel(
                                 _uiState.value.mediaType == MediaType.BOOK
                         val subType = if (_uiState.value.mediaType == MediaType.MANHWA) "manhwa" else null
                         val res = JikanApiClient.searchJikanMultiple(cleanQuery, isManga = isManga, subType = subType, limit = 20)
-                        val items = res.getOrDefault(emptyList())
+                        var items = res.getOrDefault(emptyList())
+                        if (items.isEmpty() && subType != null) {
+                            val fallback = JikanApiClient.searchJikanMultiple(cleanQuery, isManga = true, subType = null, limit = 20)
+                            items = fallback.getOrDefault(emptyList())
+                        }
                         _syncState.update {
                             it.copy(
                                 isSearching = false,
@@ -511,15 +533,35 @@ class AddEditViewModel(
                     }
                     ExternalDbSource.MANGADEX -> {
                         val isManhwa = _uiState.value.mediaType == MediaType.MANHWA
-                        val res = MangaDexApiClient.searchMangaMultiple(cleanQuery, isManhwa = isManhwa, limit = 20)
-                        val items = res.getOrDefault(emptyList<JikanMediaDetails>())
-                        _syncState.update {
-                            it.copy(
-                                isSearching = false,
-                                malResults = items,
-                                tmdbResults = emptyList(),
-                                errorMessage = if (items.isEmpty()) "No matches found on MangaDex for '$cleanQuery'" else null
-                            )
+                        coroutineScope {
+                            val mdDeferred = async { MangaDexApiClient.searchMangaMultiple(cleanQuery, isManhwa = isManhwa, limit = 20).getOrDefault(emptyList()) }
+                            val aniDeferred = if (isManhwa) {
+                                async { JikanApiClient.queryAniListMultiple(cleanQuery, isManga = true, subType = "manhwa", limit = 15).getOrDefault(emptyList()) }
+                            } else {
+                                async { emptyList<JikanMediaDetails>() }
+                            }
+                            val mdList = mdDeferred.await()
+                            val aniList = aniDeferred.await()
+
+                            val seen = mutableSetOf<String>()
+                            val combined = mutableListOf<JikanMediaDetails>()
+                            for (item in mdList) {
+                                val key = item.title?.trim()?.lowercase(Locale.ROOT) ?: continue
+                                if (seen.add(key)) combined.add(item)
+                            }
+                            for (item in aniList) {
+                                val key = item.title?.trim()?.lowercase(Locale.ROOT) ?: continue
+                                if (seen.add(key)) combined.add(item)
+                            }
+
+                            _syncState.update {
+                                it.copy(
+                                    isSearching = false,
+                                    malResults = combined,
+                                    tmdbResults = emptyList(),
+                                    errorMessage = if (combined.isEmpty()) "No matches found on MangaDex / AniList for '$cleanQuery'" else null
+                                )
+                            }
                         }
                     }
                     ExternalDbSource.TMDB -> {
@@ -537,42 +579,56 @@ class AddEditViewModel(
 
                         val isTv = _uiState.value.mediaType == MediaType.SHOW
 
-                        // Search primary type first, then fallback to other if empty
-                        val primaryResults = if (isTv) {
-                            TmdbApiClient.searchTvMultiple(cleanQuery, context).getOrDefault(emptyList())
-                        } else {
-                            TmdbApiClient.searchMoviesMultiple(cleanQuery, context).getOrDefault(emptyList())
-                        }
+                        coroutineScope {
+                            val tvDeferred = async { TmdbApiClient.searchTvMultiple(cleanQuery, context).getOrDefault(emptyList()) }
+                            val moviesDeferred = async { TmdbApiClient.searchMoviesMultiple(cleanQuery, context).getOrDefault(emptyList()) }
 
-                        val finalResults = if (primaryResults.isNotEmpty()) {
-                            primaryResults
-                        } else {
-                            if (isTv) {
-                                TmdbApiClient.searchMoviesMultiple(cleanQuery, context).getOrDefault(emptyList())
+                            val tvResults = tvDeferred.await()
+                            val movieResults = moviesDeferred.await()
+
+                            val finalResults = if (isTv) {
+                                tvResults + movieResults
                             } else {
-                                TmdbApiClient.searchTvMultiple(cleanQuery, context).getOrDefault(emptyList())
+                                movieResults + tvResults
                             }
-                        }
 
-                        _syncState.update {
-                            it.copy(
-                                isSearching = false,
-                                tmdbResults = finalResults,
-                                malResults = emptyList(),
-                                errorMessage = if (finalResults.isEmpty()) "No matches found on TMDB for '$cleanQuery'" else null
-                            )
+                            _syncState.update {
+                                it.copy(
+                                    isSearching = false,
+                                    tmdbResults = finalResults,
+                                    malResults = emptyList(),
+                                    errorMessage = if (finalResults.isEmpty()) "No matches found on TMDB for '$cleanQuery'" else null
+                                )
+                            }
                         }
                     }
                     ExternalDbSource.GOOGLE_BOOKS -> {
-                        val res = GoogleBooksApiClient.searchBooks(cleanQuery, context, limit = 20)
-                        val items = res.getOrDefault(emptyList()).map { it.toJikanMediaDetails() }
-                        _syncState.update {
-                            it.copy(
-                                isSearching = false,
-                                malResults = items,
-                                tmdbResults = emptyList(),
-                                errorMessage = if (items.isEmpty()) "No matches found on Google Books for '$cleanQuery'" else null
-                            )
+                        coroutineScope {
+                            val gbDeferred = async { GoogleBooksApiClient.searchBooks(cleanQuery, context, limit = 20).getOrDefault(emptyList()).map { it.toJikanMediaDetails() } }
+                            val olDeferred = async { OpenLibraryApiClient.searchBooks(cleanQuery, limit = 20).getOrDefault(emptyList()).map { it.toJikanMediaDetails() } }
+
+                            val gbResults = gbDeferred.await()
+                            val olResults = olDeferred.await()
+
+                            val seen = mutableSetOf<String>()
+                            val combined = mutableListOf<JikanMediaDetails>()
+                            for (item in gbResults) {
+                                val key = item.title?.trim()?.lowercase(Locale.ROOT) ?: continue
+                                if (seen.add(key)) combined.add(item)
+                            }
+                            for (item in olResults) {
+                                val key = item.title?.trim()?.lowercase(Locale.ROOT) ?: continue
+                                if (seen.add(key)) combined.add(item)
+                            }
+
+                            _syncState.update {
+                                it.copy(
+                                    isSearching = false,
+                                    malResults = combined,
+                                    tmdbResults = emptyList(),
+                                    errorMessage = if (combined.isEmpty()) "No matches found on Google Books / Open Library for '$cleanQuery'" else null
+                                )
+                            }
                         }
                     }
                     ExternalDbSource.OPEN_LIBRARY -> {
@@ -811,6 +867,13 @@ class AddEditViewModel(
     }
 
     companion object {
+        fun getDefaultSourceForType(mediaType: MediaType): ExternalDbSource = when {
+            mediaType == MediaType.MANHWA -> ExternalDbSource.MANGADEX
+            mediaType == MediaType.BOOK -> ExternalDbSource.GOOGLE_BOOKS
+            mediaType == MediaType.MOVIE || mediaType == MediaType.SHOW -> ExternalDbSource.TMDB
+            else -> ExternalDbSource.MAL
+        }
+
         fun todayStartTimestamp(): Long {
             return Calendar.getInstance().apply {
                 set(Calendar.HOUR_OF_DAY, 0)

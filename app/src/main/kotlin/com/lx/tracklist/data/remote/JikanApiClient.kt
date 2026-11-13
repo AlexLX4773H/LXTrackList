@@ -359,9 +359,71 @@ object JikanApiClient {
 
         val cleanedTitle = cleanSearchTitle(rawTitle)
         val isMangaOrManhwa = isManga || isManhwa
+
+        // For Manhwa, MangaDex and AniList have vastly superior coverage and faster responses than Jikan/MAL.
+        // MAL has minimal Korean webtoon coverage and searching it first almost always fails and causes 429 rate limit delays.
+        if (isManhwa) {
+            // 1. MangaDex search
+            val mdResult = MangaDexApiClient.searchMangaDetailsByTitle(cleanedTitle, isManhwa = true)
+            if (mdResult.isSuccess && !mdResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                Log.d(TAG, "Successfully found Manhwa on MangaDex for '$cleanedTitle'")
+                return mdResult
+            }
+            if (cleanedTitle != rawTitle) {
+                val rawMdResult = MangaDexApiClient.searchMangaDetailsByTitle(rawTitle, isManhwa = true)
+                if (rawMdResult.isSuccess && !rawMdResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully found Manhwa on MangaDex for '$rawTitle'")
+                    return rawMdResult
+                }
+            }
+
+            // 2. AniList search
+            val anilistResult = queryAniListByTitle(cleanedTitle, isManga = true, isManhwa = true)
+            if (anilistResult.isSuccess && !anilistResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                Log.d(TAG, "Successfully found Manhwa on AniList for '$cleanedTitle' (MAL ID ${anilistResult.getOrNull()?.malId})")
+                return anilistResult
+            }
+            if (cleanedTitle != rawTitle) {
+                val rawAnilistResult = queryAniListByTitle(rawTitle, isManga = true, isManhwa = true)
+                if (rawAnilistResult.isSuccess && !rawAnilistResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully found Manhwa on AniList for '$rawTitle' (MAL ID ${rawAnilistResult.getOrNull()?.malId})")
+                    return rawAnilistResult
+                }
+            }
+
+            // 3. Kitsu search
+            val kitsuResult = KitsuApiClient.searchMangaDetailsByTitle(cleanedTitle)
+            if (kitsuResult.isSuccess && !kitsuResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                Log.d(TAG, "Successfully found Manhwa on Kitsu for '$cleanedTitle'")
+                return kitsuResult
+            }
+            if (cleanedTitle != rawTitle) {
+                val rawKitsuResult = KitsuApiClient.searchMangaDetailsByTitle(rawTitle)
+                if (rawKitsuResult.isSuccess && !rawKitsuResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully found Manhwa on Kitsu for '$rawTitle'")
+                    return rawKitsuResult
+                }
+            }
+
+            // 4. Fallback to Jikan (MAL) only if previous sources didn't have it
+            val jikanResult = queryJikanByTitle(baseUrl, "manga", cleanedTitle)
+            if (jikanResult.isSuccess && !jikanResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                Log.d(TAG, "Successfully found Manhwa fallback on Jikan for '$cleanedTitle'")
+                return jikanResult
+            }
+            if (cleanedTitle != rawTitle) {
+                val rawJikanResult = queryJikanByTitle(baseUrl, "manga", rawTitle)
+                if (rawJikanResult.isSuccess && !rawJikanResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully found Manhwa fallback on Jikan for '$rawTitle'")
+                    return rawJikanResult
+                }
+            }
+            return Result.failure(Exception("Manhwa not found on MangaDex, AniList, Kitsu, or MAL for '$rawTitle'"))
+        }
+
         val primaryType = if (isMangaOrManhwa) "manga" else "anime"
 
-        // 1. Try Jikan search with cleaned title (primary for Anime, Manga, and Manhwa)
+        // 1. Try Jikan search with cleaned title (primary for Anime and Manga)
         var jikanResult = queryJikanByTitle(baseUrl, primaryType, cleanedTitle)
         if (jikanResult.isSuccess && !jikanResult.getOrNull()?.posterUrl.isNullOrBlank()) {
             val details = jikanResult.getOrNull()

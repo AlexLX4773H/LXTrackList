@@ -3251,10 +3251,10 @@ private fun SyncJobsContent(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Anime / manga / Manhwa sync",
+                            text = "Anime / Manga / Manhwa Sync",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = LXTextPrimary,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
