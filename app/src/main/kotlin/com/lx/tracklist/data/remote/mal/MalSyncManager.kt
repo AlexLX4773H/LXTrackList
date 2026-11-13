@@ -241,7 +241,7 @@ object MalSyncManager {
                             totalEpisodes = node.numEpisodes,
                             isRewatching = listStatus?.isRewatching ?: false,
                             rewatchCount = listStatus?.numTimesRewatched ?: 0,
-                            notes = node.synopsis,
+                            description = node.synopsis,
                             tags = node.genres?.joinToString(", ") { it.name },
                             airedStartDate = parseMalDateToMillis(node.startDate),
                             airedEndDate = parseMalDateToMillis(node.endDate)
@@ -293,7 +293,7 @@ object MalSyncManager {
                             trackingUnit = TrackingUnit.CHAPTERS,
                             isRewatching = listStatus?.isRereading ?: false,
                             rewatchCount = listStatus?.numTimesReread ?: 0,
-                            notes = node.synopsis,
+                            description = node.synopsis,
                             tags = node.genres?.joinToString(", ") { it.name },
                             airedStartDate = parseMalDateToMillis(node.startDate),
                             airedEndDate = parseMalDateToMillis(node.endDate)

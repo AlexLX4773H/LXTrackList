@@ -384,7 +384,7 @@ class SearchViewModel(
                         coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
                         durationMinutes = fullDetails?.durationMinutes ?: item.durationMinutes,
                         tags = fullDetails?.tags,
-                        notes = fullDetails?.synopsis ?: item.synopsis,
+                        description = fullDetails?.synopsis ?: item.synopsis,
                         airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate
                     )
                 } else {
@@ -407,7 +407,7 @@ class SearchViewModel(
                         seasonEpisodesJson = fullDetails?.seasonEpisodes?.let { MediaEntry.formatSeasonEpisodes(it) },
                         episodeLengthMinutes = fullDetails?.durationMinutes,
                         tags = fullDetails?.tags,
-                        notes = fullDetails?.synopsis ?: item.synopsis,
+                        description = fullDetails?.synopsis ?: item.synopsis,
                         airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate,
                         isAiring = fullDetails?.isAiring ?: false
                     )
@@ -447,7 +447,7 @@ class SearchViewModel(
                     durationMinutes = details?.durationMinutes,
                     episodeLengthMinutes = details?.durationMinutes,
                     tags = details?.tags,
-                    notes = details?.synopsis ?: item.synopsis,
+                    description = details?.synopsis ?: item.synopsis,
                     airedStartDate = startEpoch,
                     airedEndDate = endEpoch,
                     isAiring = if (isBook) false else (details?.isAiring ?: false)

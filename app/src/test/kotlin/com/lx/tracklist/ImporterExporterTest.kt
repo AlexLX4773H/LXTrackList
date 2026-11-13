@@ -51,11 +51,30 @@ class ImporterExporterTest {
         assertEquals(28, frieren.currentEpisodes)
         assertEquals(28, frieren.totalEpisodes)
         assertEquals("Masterpiece", frieren.notes)
+        assertEquals("Masterpiece", frieren.description)
         assertEquals("fantasy, adventure", frieren.tags)
 
         val solo = entries[1]
         assertEquals("Solo Leveling", solo.title)
         assertEquals(MediaType.MANHWA, solo.mediaType)
+    }
+
+    @Test
+    fun testCsvImporterWithDescriptionAndUserComments() {
+        val csvData = """
+            title,mediaType,status,score,description,user_comments
+            "Steins;Gate",ANIME,COMPLETED,10,"A scientist invents time travel through a microwave.","Personal favorite time-travel anime of all time."
+        """.trimIndent()
+
+        val stream = ByteArrayInputStream(csvData.toByteArray(Charsets.UTF_8))
+        val entries = CsvImporter.parse(stream)
+
+        assertEquals(1, entries.size)
+        val entry = entries[0]
+        assertEquals("Steins;Gate", entry.title)
+        assertEquals("A scientist invents time travel through a microwave.", entry.description)
+        assertEquals("A scientist invents time travel through a microwave.", entry.notes)
+        assertEquals("Personal favorite time-travel anime of all time.", entry.userComments)
     }
 
     @Test
@@ -94,7 +113,8 @@ class ImporterExporterTest {
                 totalEpisodes = 24,
                 isFavorite = true,
                 tags = "sci-fi, thriller",
-                notes = "El Psy Kongroo"
+                description = "El Psy Kongroo",
+                userComments = "Greatest sci-fi of all time"
             ),
             MediaEntry(
                 title = "Berserk",
@@ -120,6 +140,9 @@ class ImporterExporterTest {
         assertEquals("Steins;Gate", imported[0].title)
         assertEquals(10, imported[0].score)
         assertEquals(true, imported[0].isFavorite)
+        assertEquals("El Psy Kongroo", imported[0].description)
+        assertEquals("El Psy Kongroo", imported[0].notes)
+        assertEquals("Greatest sci-fi of all time", imported[0].userComments)
         assertEquals("Berserk", imported[1].title)
         assertEquals(375, imported[1].currentChapters)
     }

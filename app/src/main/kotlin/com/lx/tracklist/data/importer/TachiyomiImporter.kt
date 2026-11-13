@@ -607,7 +607,7 @@ object TachiyomiImporter {
             }
         }
 
-        // 5. Tags & Notes
+        // 5. Tags & Description
         val allTags = (manga.genres + resolvedCategories).map { it.trim() }.filter { it.isNotBlank() }.distinct()
         val tags = allTags.joinToString(", ").takeIf { it.isNotBlank() }
 
@@ -624,7 +624,7 @@ object TachiyomiImporter {
         if (!manga.description.isNullOrBlank()) {
             noteParts.add(manga.description.trim())
         }
-        val notes = noteParts.joinToString("\n\n").takeIf { it.isNotBlank() }
+        val desc = noteParts.joinToString("\n\n").takeIf { it.isNotBlank() }
 
         // 6. Cover image URL
         val coverImageUri = manga.thumbnailUrl?.takeIf { it.isNotBlank() }
@@ -670,7 +670,7 @@ object TachiyomiImporter {
             score = score,
             startDate = startDate,
             finishDate = finishDate,
-            notes = notes,
+            description = desc,
             tags = tags,
             coverImageUri = coverImageUri,
             priority = Priority.MEDIUM,

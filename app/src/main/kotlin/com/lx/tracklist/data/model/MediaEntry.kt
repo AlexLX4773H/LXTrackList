@@ -1,9 +1,12 @@
 package com.lx.tracklist.data.model
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Ignore
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -54,7 +57,9 @@ data class MediaEntry(
     val airedStartDate: Long? = null,
     val airedEndDate: Long? = null,
 
-    val notes: String? = null,
+    @ColumnInfo(name = "notes")
+    @SerializedName(value = "description", alternate = ["notes"])
+    val description: String? = null,
     val tags: String? = null,
     val coverImageUri: String? = null,
     val priority: Priority = Priority.MEDIUM,
@@ -93,8 +98,16 @@ data class MediaEntry(
     val movieSeriesNumber: Int? = null,
     val movieSeriesName: String? = null,
     val durationMinutes: Int? = null,
-    val relatedEntriesJson: String? = null
+    val relatedEntriesJson: String? = null,
+
+    // User personal thoughts / comments about the entity
+    @SerializedName("userComments")
+    val userComments: String? = null
 ) {
+    // Backward compatibility reference for legacy callers
+    @get:Ignore
+    val notes: String?
+        get() = description
     fun getRelatedMediaItems(): List<RelatedMediaItem> {
         if (relatedEntriesJson.isNullOrBlank()) return emptyList()
         return try {

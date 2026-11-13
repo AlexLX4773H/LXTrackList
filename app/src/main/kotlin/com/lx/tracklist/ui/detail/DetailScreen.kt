@@ -40,6 +40,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -598,7 +599,7 @@ fun DetailScreen(
                         }
                     }
 
-                    // Right Column (Progress, Dates, Notes, Tags)
+                    // Right Column (Progress, Dates, Description, User Comments, Tags)
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -631,7 +632,8 @@ fun DetailScreen(
                             onAddClick = { item -> relatedItemToAdd = item },
                             onViewInLibraryClick = { entryId -> onNavigateToDetail?.invoke(entryId) }
                         )
-                        DetailNotesCard(currentEntry)
+                        DetailDescriptionCard(currentEntry)
+                        DetailUserCommentsCard(currentEntry)
                         DetailExternalTrackingCard(
                             entry = currentEntry,
                             activeUser = effectiveUser,
@@ -797,7 +799,8 @@ fun DetailScreen(
                             onAddClick = { item -> relatedItemToAdd = item },
                             onViewInLibraryClick = { entryId -> onNavigateToDetail?.invoke(entryId) }
                         )
-                        DetailNotesCard(currentEntry)
+                        DetailDescriptionCard(currentEntry)
+                        DetailUserCommentsCard(currentEntry)
                         DetailExternalTrackingCard(
                             entry = currentEntry,
                             activeUser = effectiveUser,
@@ -2233,8 +2236,9 @@ private fun DetailExternalTrackingCard(
 }
 
 @Composable
-private fun DetailNotesCard(entry: MediaEntry) {
-    if (!entry.notes.isNullOrBlank()) {
+private fun DetailDescriptionCard(entry: MediaEntry) {
+    val desc = entry.description ?: entry.notes
+    if (!desc.isNullOrBlank()) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
@@ -2242,9 +2246,52 @@ private fun DetailNotesCard(entry: MediaEntry) {
             shape = RoundedCornerShape(12.dp)
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
-                Text("Notes", color = LXPrimaryGreen, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
+                Text(
+                    text = "Description",
+                    color = LXPrimaryGreen,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                )
                 Spacer(modifier = Modifier.height(6.dp))
-                Text(entry.notes, color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = desc,
+                    color = LXTextPrimary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailUserCommentsCard(entry: MediaEntry) {
+    if (!entry.userComments.isNullOrBlank()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Comment,
+                        contentDescription = null,
+                        tint = LXPrimaryGreen,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "User Comments",
+                        color = LXPrimaryGreen,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = entry.userComments,
+                    color = LXTextPrimary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
             }
         }
     }

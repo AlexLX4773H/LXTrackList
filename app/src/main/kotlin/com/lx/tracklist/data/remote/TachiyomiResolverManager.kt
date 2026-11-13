@@ -545,12 +545,12 @@ object TachiyomiResolverManager {
         val externalId: String
     )
 
-    fun extractAniListIdsFromNotes(notes: String?, preferManga: Boolean? = null): List<Long> {
-        if (notes.isNullOrBlank()) return emptyList()
+    fun extractAniListIdsFromDescription(description: String?, preferManga: Boolean? = null): List<Long> {
+        if (description.isNullOrBlank()) return emptyList()
         val ids = mutableListOf<Long>()
 
         val urlRegex = Regex("""anilist\.co/(manga|anime)/(\d+)""", RegexOption.IGNORE_CASE)
-        urlRegex.findAll(notes).forEach { match ->
+        urlRegex.findAll(description).forEach { match ->
             val kind = match.groupValues[1].lowercase(Locale.US)
             val id = match.groupValues[2].toLongOrNull() ?: return@forEach
             if (id <= 0) return@forEach
@@ -565,7 +565,7 @@ object TachiyomiResolverManager {
         }
 
         val labelRegex = Regex("""(?:\[?\s*AniList(?:\s+ID)?\s*[:=]\s*(\d+)\s*\]?)""", RegexOption.IGNORE_CASE)
-        labelRegex.findAll(notes).forEach { match ->
+        labelRegex.findAll(description).forEach { match ->
             val id = match.groupValues[1].toLongOrNull()
             if (id != null && id > 0 && !ids.contains(id)) {
                 ids.add(id)
@@ -575,8 +575,12 @@ object TachiyomiResolverManager {
         return ids
     }
 
-    fun extractAlternateTitlesFromNotes(notes: String?): List<String> {
-        if (notes.isNullOrBlank()) return emptyList()
+    @Deprecated("Use extractAniListIdsFromDescription instead", ReplaceWith("extractAniListIdsFromDescription(notes, preferManga)"))
+    fun extractAniListIdsFromNotes(notes: String?, preferManga: Boolean? = null): List<Long> =
+        extractAniListIdsFromDescription(notes, preferManga)
+
+    fun extractAlternateTitlesFromDescription(description: String?): List<String> {
+        if (description.isNullOrBlank()) return emptyList()
         val results = mutableListOf<String>()
         val headerRegex = Regex(
             """^(?:[-*•]\s*)?(?:(?:alternative|alternate|alt)\s*(?:titles?|names?)|synonyms|other\s*names?|also\s*known\s*as|aka)$""",
@@ -592,7 +596,7 @@ object TachiyomiResolverManager {
         )
         val bulletPrefixRegex = Regex("""^\s*[-*•◦▪]\s+""")
 
-        val lines = notes.lines()
+        val lines = description.lines()
         var inAltSection = false
         var sawBlankAfterHeader = false
 
@@ -660,6 +664,10 @@ object TachiyomiResolverManager {
         return results
     }
 
+    @Deprecated("Use extractAlternateTitlesFromDescription instead", ReplaceWith("extractAlternateTitlesFromDescription(notes)"))
+    fun extractAlternateTitlesFromNotes(notes: String?): List<String> =
+        extractAlternateTitlesFromDescription(notes)
+
     fun getCombinedAlternateTitles(entry: MediaEntry): List<String> {
         val seenNorm = mutableSetOf<String>()
         val mainNorm = normalizeTitle(entry.title)
@@ -668,7 +676,7 @@ object TachiyomiResolverManager {
         if (cleanMainNorm.isNotBlank()) seenNorm.add(cleanMainNorm)
 
         val combined = mutableListOf<String>()
-        (entry.getAlternateTitles() + extractAlternateTitlesFromNotes(entry.notes)).forEach { raw ->
+        (entry.getAlternateTitles() + extractAlternateTitlesFromDescription(entry.description ?: entry.notes)).forEach { raw ->
             val clean = raw.trim()
             val norm = normalizeTitle(clean)
             if (clean.isNotBlank() && norm.isNotBlank() && seenNorm.add(norm)) {
@@ -692,14 +700,14 @@ object TachiyomiResolverManager {
             if (res.isSuccess) {
                 val cand = res.getOrNull()
                 if (cand != null && !cand.title.isNullOrBlank()) {
-                    evaluatedCandidateNames.add("AniList(Notes ID #$aniId): ${cand.title}")
+                    evaluatedCandidateNames.add("AniList(Description ID #$aniId): ${cand.title}")
                     val srcAndId = extractCandidateSourceAndId(cand)
                     if (srcAndId != null) {
                         return ResolvedJikanMatch(cand, srcAndId.first, srcAndId.second)
                     }
                 }
             } else {
-                evaluatedCandidateNames.add("AniList(Notes ID #$aniId): invalid/not found")
+                evaluatedCandidateNames.add("AniList(Description ID #$aniId): invalid/not found")
             }
         }
         return null
@@ -1001,9 +1009,9 @@ object TachiyomiResolverManager {
             )
         }
 
-        // 3. Not found by name: try AniList ID extracted from Notes
+        // 3. Not found by name: try AniList ID extracted from description
         if (resolved == null) {
-            val notesAniListIds = extractAniListIdsFromNotes(entry.notes, preferManga = true)
+            val notesAniListIds = extractAniListIdsFromDescription(entry.description ?: entry.notes, preferManga = true)
                 .filter { it != existingAniListId }
             if (notesAniListIds.isNotEmpty()) {
                 resolved = tryResolveFromAniListIds(notesAniListIds, isManga = true, evaluatedCandidateNames = evaluatedCandidateNames)
@@ -1037,7 +1045,7 @@ object TachiyomiResolverManager {
                     entryId = entry.id,
                     title = entry.title,
                     externalId = entry.externalId,
-                    reason = "No exact confident match found via name, Notes AniList ID, or alternate titles in Jikan, MangaDex, AniList, or Kitsu.",
+                    reason = "No exact confident match found via name, Description AniList ID, or alternate titles in Jikan, MangaDex, AniList, or Kitsu.",
                     evaluatedCandidates = evaluatedCandidateNames
                 )
             )
@@ -1060,15 +1068,16 @@ object TachiyomiResolverManager {
             .distinct()
             .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
 
-        // Preserve original Tachiyomi ID in notes so future backup reimports match seamlessly
+        // Preserve original Tachiyomi ID in description so future backup reimports match seamlessly
         val originalTachiId = entry.externalId?.takeIf {
             !it.isNullOrBlank() && (entry.externalSource?.contains("TACHIYOMI", ignoreCase = true) == true || it.startsWith("/"))
         }
         val tachiNoteMarker = if (originalTachiId != null) "[Tachiyomi ID: $originalTachiId]" else null
-        val baseNotes = if (entry.notes.isNullOrBlank() && !matchDetails.synopsis.isNullOrBlank()) matchDetails.synopsis else entry.notes
-        val finalNotes = if (tachiNoteMarker != null && baseNotes?.contains(tachiNoteMarker) != true) {
-            if (baseNotes.isNullOrBlank()) tachiNoteMarker else "$baseNotes\n\n$tachiNoteMarker"
-        } else baseNotes
+        val curDesc = entry.description ?: entry.notes
+        val baseDesc = if (curDesc.isNullOrBlank() && !matchDetails.synopsis.isNullOrBlank()) matchDetails.synopsis else curDesc
+        val finalDesc = if (tachiNoteMarker != null && baseDesc?.contains(tachiNoteMarker) != true) {
+            if (baseDesc.isNullOrBlank()) tachiNoteMarker else "$baseDesc\n\n$tachiNoteMarker"
+        } else baseDesc
 
         val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(entry)
         val needsPoster = entry.coverImageUri.isNullOrBlank() ||
@@ -1105,7 +1114,7 @@ object TachiyomiResolverManager {
             externalScore = matchDetails.externalScore ?: entry.externalScore,
             externalScoreSource = matchDetails.externalScoreSource ?: matchSource,
             tags = if (entry.tags.isNullOrBlank() && !matchDetails.tags.isNullOrBlank()) matchDetails.tags else entry.tags,
-            notes = finalNotes,
+            description = finalDesc,
             isAiring = matchDetails.isAiring ?: entry.isAiring,
             updatedAt = System.currentTimeMillis()
         )
@@ -1281,7 +1290,7 @@ object TachiyomiResolverManager {
             externalScore = matchDetails.externalScore ?: entry.externalScore,
             externalScoreSource = "TMDB",
             tags = if (entry.tags.isNullOrBlank() && !matchDetails.tags.isNullOrBlank()) matchDetails.tags else entry.tags,
-            notes = if (entry.notes.isNullOrBlank() && !matchDetails.synopsis.isNullOrBlank()) matchDetails.synopsis else entry.notes,
+            description = if ((entry.description ?: entry.notes).isNullOrBlank() && !matchDetails.synopsis.isNullOrBlank()) matchDetails.synopsis else (entry.description ?: entry.notes),
             isAiring = matchDetails.isAiring ?: entry.isAiring,
             updatedAt = System.currentTimeMillis()
         )
@@ -1379,9 +1388,9 @@ object TachiyomiResolverManager {
             )
         }
 
-        // 3. Not found by name: try AniList ID extracted from Notes
+        // 3. Not found by name: try AniList ID extracted from description
         if (resolved == null) {
-            val notesAniListIds = extractAniListIdsFromNotes(entry.notes, preferManga = false)
+            val notesAniListIds = extractAniListIdsFromDescription(entry.description ?: entry.notes, preferManga = false)
                 .filter { it != existingAniListId }
             if (notesAniListIds.isNotEmpty()) {
                 resolved = tryResolveFromAniListIds(notesAniListIds, isManga = false, evaluatedCandidateNames = evaluatedCandidateNames)
@@ -1413,7 +1422,7 @@ object TachiyomiResolverManager {
                     entryId = entry.id,
                     title = entry.title,
                     externalId = entry.externalId,
-                    reason = "No exact confident match found via name, Notes AniList ID, or alternate titles in Jikan or AniList for anime.",
+                    reason = "No exact confident match found via name, Description AniList ID, or alternate titles in Jikan or AniList for anime.",
                     evaluatedCandidates = evaluatedCandidateNames
                 )
             )
@@ -1469,7 +1478,7 @@ object TachiyomiResolverManager {
             externalScore = matchDetails.externalScore ?: entry.externalScore,
             externalScoreSource = matchDetails.externalScoreSource ?: matchSource,
             tags = if (entry.tags.isNullOrBlank() && !matchDetails.tags.isNullOrBlank()) matchDetails.tags else entry.tags,
-            notes = if (entry.notes.isNullOrBlank() && !matchDetails.synopsis.isNullOrBlank()) matchDetails.synopsis else entry.notes,
+            description = if ((entry.description ?: entry.notes).isNullOrBlank() && !matchDetails.synopsis.isNullOrBlank()) matchDetails.synopsis else (entry.description ?: entry.notes),
             isAiring = matchDetails.isAiring ?: entry.isAiring,
             updatedAt = System.currentTimeMillis()
         )

@@ -131,10 +131,10 @@ object BookMetadataManager {
         }
 
         val authorRegex = Regex("(?i)Author:\\s*([^\r\n]+)")
-        val authorFromNotes = entry.notes?.let { authorRegex.find(it)?.groupValues?.get(1)?.trim() }
+        val authorFromDesc = (entry.description ?: entry.notes)?.let { authorRegex.find(it)?.groupValues?.get(1)?.trim() }
 
         val isbnRegex = Regex("(?i)ISBN:\\s*([0-9Xx-]+)")
-        val isbnFromNotes = entry.notes?.let { isbnRegex.find(it)?.groupValues?.get(1)?.replace("-", "")?.trim() }
+        val isbnFromDesc = (entry.description ?: entry.notes)?.let { isbnRegex.find(it)?.groupValues?.get(1)?.replace("-", "")?.trim() }
 
         val publishYear = entry.airedStartDate?.let {
             val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = it }
@@ -144,9 +144,9 @@ object BookMetadataManager {
         // 1. Open Library Series API (canonical franchise sequencing)
         val openLibRes = OpenLibraryApiClient.fetchRelatedBooks(
             title = title,
-            author = authorFromNotes,
+            author = authorFromDesc,
             currentYear = publishYear,
-            isbn = isbnFromNotes,
+            isbn = isbnFromDesc,
             externalId = entry.externalId.takeIf { entry.externalSource.equals("Open Library", ignoreCase = true) }
         )
         if (openLibRes.isSuccess && openLibRes.getOrDefault(emptyList()).isNotEmpty()) {
@@ -156,7 +156,7 @@ object BookMetadataManager {
         // 2. Google Books fallback
         val googleBooksRes = GoogleBooksApiClient.fetchRelatedBooks(
             title = title,
-            author = authorFromNotes,
+            author = authorFromDesc,
             currentYear = publishYear,
             context = context
         )

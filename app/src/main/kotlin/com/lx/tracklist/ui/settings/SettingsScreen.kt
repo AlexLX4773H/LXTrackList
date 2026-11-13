@@ -5846,7 +5846,7 @@ private fun ExportGuidesContent(
                 }
 
                 Text(
-                    text = "You can also import custom CSV files or previously exported LX Track List JSON backups. Supported columns in CSV include: title, mediaType, status, score, currentEpisodes, totalEpisodes, notes, tags, and startDate.",
+                    text = "You can also import custom CSV files or previously exported LX Track List JSON backups. Supported columns in CSV include: title, mediaType, status, score, currentEpisodes, totalEpisodes, description, user comments, tags, and startDate.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = LXTextSecondary
                 )

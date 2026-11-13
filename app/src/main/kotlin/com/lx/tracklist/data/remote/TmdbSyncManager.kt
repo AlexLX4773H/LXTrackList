@@ -89,7 +89,7 @@ object TmdbSyncManager {
         val missingAiredDates = entry.airedStartDate == null
         val missingAltTitles = entry.alternateTitle.isNullOrBlank()
         val missingTags = entry.tags.isNullOrBlank()
-        val missingNotes = entry.notes.isNullOrBlank()
+        val missingDescription = (entry.description ?: entry.notes).isNullOrBlank()
         val missingExternalScore = entry.externalScore == null
         val missingRelated = entry.relatedEntriesJson.isNullOrBlank()
 
@@ -101,7 +101,7 @@ object TmdbSyncManager {
                 missingAiredDates ||
                 missingAltTitles ||
                 missingTags ||
-                missingNotes ||
+                missingDescription ||
                 missingExternalScore ||
                 missingRelated
     }
@@ -439,15 +439,16 @@ object TmdbSyncManager {
                             entry.tags
                         }
 
-                        // Notes (synopsis)
-                        val newNotes = if (!details.synopsis.isNullOrBlank() &&
-                            (entry.notes.isNullOrBlank() || forceRefresh) &&
-                            details.synopsis != entry.notes
+                        // Description (synopsis)
+                        val curDesc = entry.description ?: entry.notes
+                        val newDescription = if (!details.synopsis.isNullOrBlank() &&
+                            (curDesc.isNullOrBlank() || forceRefresh) &&
+                            details.synopsis != curDesc
                         ) {
                             hasChanges = true
                             details.synopsis
                         } else {
-                            entry.notes
+                            curDesc
                         }
 
                         // Airing status
@@ -515,7 +516,7 @@ object TmdbSyncManager {
                                 airedEndDate = newAiredEndDate,
                                 alternateTitle = newAlternateTitle,
                                 tags = newTags,
-                                notes = newNotes,
+                                description = newDescription,
                                 isAiring = newIsAiring,
                                 externalScore = newExternalScore,
                                 externalScoreSource = newExternalScoreSource,

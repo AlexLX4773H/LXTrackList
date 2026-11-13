@@ -30,7 +30,13 @@ object CsvImporter {
         val totalVolIdx = header.indexOfFirst { it.contains("totalvolume") }
         val currentChIdx = header.indexOfFirst { it.contains("currentchapter") || it.contains("chapters") }
         val totalChIdx = header.indexOfFirst { it.contains("totalchapter") }
-        val notesIdx = header.indexOfFirst { it.contains("note") || it.contains("comment") }
+        val descIdx = header.indexOfFirst { it == "description" || it == "desc" || it == "synopsis" || it == "overview" }
+        val userCommentsIdx = header.indexOfFirst {
+            it.contains("user_comment") || it.contains("usercomment") || it.contains("user comment") ||
+            it.contains("user_notes") || it.contains("usernotes")
+        }
+        val notesIdx = header.indexOfFirst { it.contains("note") }
+        val commentIdx = header.indexOfFirst { it.contains("comment") }
         val tagsIdx = header.indexOfFirst { it.contains("tag") }
         val foreignDbIdIdx = header.indexOfFirst {
             it.contains("foreign_database_id") || it.contains("foreigndatabaseid") ||
@@ -71,7 +77,13 @@ object CsvImporter {
             val currentCh = if (currentChIdx in cols.indices) cols[currentChIdx].toIntOrNull() ?: 0 else 0
             val totalCh = if (totalChIdx in cols.indices) cols[totalChIdx].toIntOrNull() ?: 0 else 0
 
-            val notes = if (notesIdx in cols.indices) cols[notesIdx].takeIf { it.isNotBlank() } else null
+            val explicitDesc = if (descIdx in cols.indices) cols[descIdx].takeIf { it.isNotBlank() } else null
+            val explicitUserComments = if (userCommentsIdx in cols.indices) cols[userCommentsIdx].takeIf { it.isNotBlank() } else null
+            val legacyNotes = if (notesIdx in cols.indices && notesIdx != userCommentsIdx) cols[notesIdx].takeIf { it.isNotBlank() } else null
+            val legacyComments = if (commentIdx in cols.indices && commentIdx != userCommentsIdx && commentIdx != descIdx) cols[commentIdx].takeIf { it.isNotBlank() } else null
+
+            val finalDesc = explicitDesc ?: legacyNotes
+            val finalUserComments = explicitUserComments ?: legacyComments
             val tags = if (tagsIdx in cols.indices) cols[tagsIdx].takeIf { it.isNotBlank() } else null
             val foreignId = if (foreignDbIdIdx in cols.indices) cols[foreignDbIdIdx].trim().takeIf { it.isNotBlank() } else null
             val foreignSource = if (foreignDbSourceIdx in cols.indices) cols[foreignDbSourceIdx].trim().takeIf { it.isNotBlank() } else if (foreignId != null) "CSV" else null
@@ -98,7 +110,8 @@ object CsvImporter {
                     currentChapters = currentCh,
                     totalChapters = totalCh,
                     trackingUnit = if (currentVol > 0 && currentCh > 0) TrackingUnit.COMBINED else if (currentVol > 0) TrackingUnit.VOLUMES else TrackingUnit.CHAPTERS,
-                    notes = notes,
+                    description = finalDesc,
+                    userComments = finalUserComments,
                     tags = tags,
                     priority = Priority.MEDIUM,
                     externalId = foreignId,

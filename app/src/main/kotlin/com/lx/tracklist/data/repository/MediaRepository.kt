@@ -638,8 +638,8 @@ class MediaRepository(
         for (existing in userEntries) {
             if (!isMediaTypeCompatible(existing.mediaType, impType)) continue
 
-            // 5a. Preserved Tachiyomi ID match in notes
-            if (impExtId != null && existing.notes?.contains(impExtId) == true) {
+            // 5a. Preserved Tachiyomi ID match in description or user comments
+            if (impExtId != null && (((existing.description ?: existing.notes)?.contains(impExtId) == true) || existing.userComments?.contains(impExtId) == true)) {
                 return existing
             }
 
@@ -737,15 +737,19 @@ class MediaRepository(
         val mergedAlts = (existingAlts + importedAlts + otherTitles).distinct().filter { !it.equals(existing.title, ignoreCase = true) }
         val finalAlternateTitle = mergedAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: existing.alternateTitle
 
-        // Preserve Tachiyomi ID in notes if imported was from Tachiyomi
+        // Preserve Tachiyomi ID in description if imported was from Tachiyomi
         val impTachiId = imported.externalId?.takeIf {
             !it.isNullOrBlank() && (imported.externalSource?.contains("TACHIYOMI", ignoreCase = true) == true || it.startsWith("/"))
         }
         val tachiMarker = if (impTachiId != null) "[Tachiyomi ID: $impTachiId]" else null
-        val baseNotes = if (!imported.notes.isNullOrBlank()) imported.notes else existing.notes
-        val finalNotes = if (tachiMarker != null && baseNotes?.contains(tachiMarker) != true) {
-            if (baseNotes.isNullOrBlank()) tachiMarker else "$baseNotes\n\n$tachiMarker"
-        } else baseNotes
+        val importedDesc = imported.description ?: imported.notes
+        val existingDesc = existing.description ?: existing.notes
+        val baseDesc = if (!importedDesc.isNullOrBlank()) importedDesc else existingDesc
+        val finalDesc = if (tachiMarker != null && baseDesc?.contains(tachiMarker) != true) {
+            if (baseDesc.isNullOrBlank()) tachiMarker else "$baseDesc\n\n$tachiMarker"
+        } else baseDesc
+
+        val finalUserComments = if (!imported.userComments.isNullOrBlank()) imported.userComments else existing.userComments
 
         // Cover: prefer web cover over local file: covers
         val finalCover = when {
@@ -789,7 +793,8 @@ class MediaRepository(
             currentPages = maxPages,
             totalPages = maxTotalPages,
             tags = mergedTags.ifBlank { null },
-            notes = finalNotes,
+            description = finalDesc,
+            userComments = finalUserComments,
             coverImageUri = finalCover,
             customCategory = imported.customCategory ?: existing.customCategory,
             subCategory = imported.subCategory ?: existing.subCategory,
@@ -850,13 +855,17 @@ class MediaRepository(
             return true
         }
 
-        // 4. Tachiyomi ID cross-match in notes
+        // 4. Tachiyomi ID cross-match in description or user comments
         val extIdA = entryA.externalId
         val extIdB = entryB.externalId
-        if (extIdA != null && extIdA.startsWith("/") && entryB.notes?.contains(extIdA) == true) {
+        if (extIdA != null && extIdA.startsWith("/") &&
+            ((entryB.description ?: entryB.notes)?.contains(extIdA) == true || entryB.userComments?.contains(extIdA) == true)
+        ) {
             return true
         }
-        if (extIdB != null && extIdB.startsWith("/") && entryA.notes?.contains(extIdB) == true) {
+        if (extIdB != null && extIdB.startsWith("/") &&
+            ((entryA.description ?: entryA.notes)?.contains(extIdB) == true || entryA.userComments?.contains(extIdB) == true)
+        ) {
             return true
         }
 
@@ -938,7 +947,7 @@ class MediaRepository(
                     totalChapters = bookDetails?.totalChapters ?: 0,
                     trackingUnit = targetUnit,
                     tags = bookDetails?.buildTagsString(),
-                    notes = bookDetails?.buildNotesWithMetadata(),
+                    description = bookDetails?.buildDescriptionWithMetadata(),
                     airedStartDate = publishEpoch,
                     airedEndDate = publishEpoch,
                     isAiring = false
@@ -960,7 +969,7 @@ class MediaRepository(
                         coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
                         durationMinutes = fullDetails?.durationMinutes,
                         tags = fullDetails?.tags,
-                        notes = fullDetails?.synopsis,
+                        description = fullDetails?.synopsis,
                         airedStartDate = fullDetails?.airedStartDate
                     )
                 } else {
@@ -981,7 +990,7 @@ class MediaRepository(
                         seasonEpisodesJson = fullDetails?.seasonEpisodes?.let { MediaEntry.formatSeasonEpisodes(it) },
                         episodeLengthMinutes = fullDetails?.durationMinutes,
                         tags = fullDetails?.tags,
-                        notes = fullDetails?.synopsis,
+                        description = fullDetails?.synopsis,
                         airedStartDate = fullDetails?.airedStartDate,
                         isAiring = fullDetails?.isAiring ?: false
                     )
@@ -1008,7 +1017,7 @@ class MediaRepository(
                     episodeLengthMinutes = details?.durationMinutes,
                     durationMinutes = if (item.mediaType == MediaType.MOVIE) details?.durationMinutes else null,
                     tags = details?.tags,
-                    notes = details?.synopsis,
+                    description = details?.synopsis,
                     airedStartDate = details?.airedStartDate,
                     airedEndDate = details?.airedEndDate,
                     isAiring = details?.isAiring ?: false

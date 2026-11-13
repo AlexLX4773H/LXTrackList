@@ -156,7 +156,7 @@ object JikanSyncManager {
         val missingAiredDates = entry.airedStartDate == null
         val missingAltTitles = entry.alternateTitle.isNullOrBlank()
         val missingTags = entry.tags.isNullOrBlank()
-        val missingNotes = entry.notes.isNullOrBlank()
+        val missingDescription = (entry.description ?: entry.notes).isNullOrBlank()
         val missingExternalScore = entry.externalScore == null
         val missingRelated = entry.relatedEntriesJson.isNullOrBlank()
 
@@ -168,7 +168,7 @@ object JikanSyncManager {
                missingAiredDates ||
                missingAltTitles ||
                missingTags ||
-               missingNotes ||
+               missingDescription ||
                missingExternalScore ||
                missingRelated
     }
@@ -362,10 +362,10 @@ object JikanSyncManager {
                     }
 
                     if (detailsResult.isFailure) {
-                        val notesAniIds = TachiyomiResolverManager.extractAniListIdsFromNotes(entry.notes, preferManga = isManga)
+                        val descAniIds = TachiyomiResolverManager.extractAniListIdsFromDescription(entry.description ?: entry.notes, preferManga = isManga)
                             .filter { it != aniListId }
-                        for (notesId in notesAniIds) {
-                            val res = JikanApiClient.queryAniListById(aniListId = notesId, isManga = isManga)
+                        for (descId in descAniIds) {
+                            val res = JikanApiClient.queryAniListById(aniListId = descId, isManga = isManga)
                             if (res.isSuccess) {
                                 detailsResult = res
                                 usedFallbackResolution = true
@@ -572,15 +572,16 @@ object JikanSyncManager {
                             entry.tags
                         }
 
-                        // Notes (synopsis / description)
-                        val newNotes = if (!details.synopsis.isNullOrBlank() &&
-                            (entry.notes.isNullOrBlank() || forceRefresh) &&
-                            details.synopsis != entry.notes
+                        // Description (synopsis)
+                        val curDesc = entry.description ?: entry.notes
+                        val newDescription = if (!details.synopsis.isNullOrBlank() &&
+                            (curDesc.isNullOrBlank() || forceRefresh) &&
+                            details.synopsis != curDesc
                         ) {
                             hasChanges = true
                             details.synopsis
                         } else {
-                            entry.notes
+                            curDesc
                         }
 
                         // Airing status
@@ -649,7 +650,7 @@ object JikanSyncManager {
                                 airedEndDate = newAiredEndDate,
                                 alternateTitle = newAlternateTitle,
                                 tags = newTags,
-                                notes = newNotes,
+                                description = newDescription,
                                 isAiring = newIsAiring,
                                 externalScore = newExternalScore,
                                 externalScoreSource = newExternalScoreSource,

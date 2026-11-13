@@ -31,7 +31,7 @@ data class BookDetails(
     val primaryIsbn: String?
         get() = isbn13 ?: isbn10
 
-    fun buildNotesWithMetadata(): String {
+    fun buildDescriptionWithMetadata(): String {
         val metaLines = mutableListOf<String>()
         if (authors.isNotEmpty()) metaLines.add("Author: $authorString")
         if (!primaryIsbn.isNullOrBlank()) metaLines.add("ISBN: $primaryIsbn")
@@ -46,6 +46,9 @@ data class BookDetails(
             else -> desc
         }
     }
+
+    @Deprecated("Use buildDescriptionWithMetadata instead", ReplaceWith("buildDescriptionWithMetadata()"))
+    fun buildNotesWithMetadata(): String = buildDescriptionWithMetadata()
 
     fun buildTagsString(): String {
         return categories
@@ -72,7 +75,7 @@ data class BookDetails(
             airedStartDate = publishEpoch,
             airedEndDate = publishEpoch, // Explicitly set end date for published books
             tags = buildTagsString(), // Pure genres/categories only
-            synopsis = buildNotesWithMetadata(), // Author, ISBN, Publisher appended to notes
+            synopsis = buildDescriptionWithMetadata(), // Author, ISBN, Publisher appended to description
             isAiring = false,
             externalScore = averageScore,
             externalScoreSource = sourceProvider,
@@ -118,7 +121,7 @@ data class BookDetails(
             totalChapters = totalChapters ?: 0,
             trackingUnit = unit,
             tags = buildTagsString(),
-            notes = buildNotesWithMetadata(),
+            description = buildDescriptionWithMetadata(),
             airedStartDate = publishEpoch,
             airedEndDate = publishEpoch,
             isAiring = false

@@ -1447,11 +1447,24 @@ fun AddEditScreen(
                 colors = outlinedColors()
             )
 
-            // Notes
+            // Description
             OutlinedTextField(
-                value = state.notes,
-                onValueChange = { viewModel.updateNotes(it) },
-                label = { Text("Notes / Personal Comments") },
+                value = state.description,
+                onValueChange = { viewModel.updateDescription(it) },
+                label = { Text("Description") },
+                placeholder = { Text("Overview, synopsis, or background details...") },
+                minLines = 3,
+                maxLines = 6,
+                modifier = Modifier.fillMaxWidth(),
+                colors = outlinedColors()
+            )
+
+            // User Comments
+            OutlinedTextField(
+                value = state.userComments,
+                onValueChange = { viewModel.updateUserComments(it) },
+                label = { Text("User Comments") },
+                placeholder = { Text("Your personal thoughts, reflections, or review...") },
                 minLines = 3,
                 maxLines = 6,
                 modifier = Modifier.fillMaxWidth(),

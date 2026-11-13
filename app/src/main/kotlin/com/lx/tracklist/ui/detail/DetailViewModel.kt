@@ -566,7 +566,7 @@ class DetailViewModel(
             _isRefreshingMetadata.value = true
             try {
                 if (cur.mediaType == MediaType.BOOK) {
-                    val isbnFromNotes = cur.notes?.let { Regex("(?i)ISBN:\\s*([0-9Xx-]+)").find(it)?.groupValues?.get(1)?.replace("-", "")?.trim() }
+                    val isbnFromDesc = (cur.description ?: cur.notes)?.let { Regex("(?i)ISBN:\\s*([0-9Xx-]+)").find(it)?.groupValues?.get(1)?.replace("-", "")?.trim() }
                     val cleanExtId = cur.externalId?.trim()
                     var bookDetails: com.lx.tracklist.data.remote.BookDetails? = null
 
@@ -584,8 +584,8 @@ class DetailViewModel(
                     }
 
                     // 3. Fallback to ISBN search
-                    if (bookDetails == null && !isbnFromNotes.isNullOrBlank()) {
-                        bookDetails = BookMetadataManager.searchBooks(isbnFromNotes, context, limit = 1).getOrNull()?.firstOrNull()
+                    if (bookDetails == null && !isbnFromDesc.isNullOrBlank()) {
+                        bookDetails = BookMetadataManager.searchBooks(isbnFromDesc, context, limit = 1).getOrNull()?.firstOrNull()
                     }
 
                     // 4. Fallback to title search
@@ -622,7 +622,8 @@ class DetailViewModel(
                             externalScore = bookDetails.averageScore ?: cur.externalScore,
                             externalScoreSource = bookDetails.sourceProvider,
                             tags = bookDetails.buildTagsString().takeIf { it.isNotBlank() } ?: cur.tags,
-                            notes = bookDetails.buildNotesWithMetadata().takeIf { it.isNotBlank() } ?: cur.notes,
+                            description = (bookDetails.buildDescriptionWithMetadata()).takeIf { it.isNotBlank() } ?: (cur.description ?: cur.notes),
+                            userComments = cur.userComments,
                             externalId = bookDetails.id.takeIf { it.isNotBlank() } ?: cur.externalId,
                             externalSource = bookDetails.sourceProvider,
                             relatedEntriesJson = null,
@@ -707,7 +708,8 @@ class DetailViewModel(
                                 externalScore = details.externalScore ?: cur.externalScore,
                                 externalScoreSource = details.externalScoreSource ?: "MangaDex",
                                 tags = if (!details.tags.isNullOrBlank()) details.tags else cur.tags,
-                                notes = if (!details.synopsis.isNullOrBlank()) details.synopsis else cur.notes,
+                                description = if (!details.synopsis.isNullOrBlank()) details.synopsis else (cur.description ?: cur.notes),
+                                userComments = cur.userComments,
                                 isAiring = details.isAiring ?: cur.isAiring,
                                 updatedAt = now
                             )
@@ -772,7 +774,8 @@ class DetailViewModel(
                                 externalScore = details.externalScore ?: cur.externalScore,
                                 externalScoreSource = details.externalScoreSource ?: resolvedSource,
                                 tags = if (!details.tags.isNullOrBlank()) details.tags else cur.tags,
-                                notes = if (!details.synopsis.isNullOrBlank()) details.synopsis else cur.notes,
+                                description = if (!details.synopsis.isNullOrBlank()) details.synopsis else (cur.description ?: cur.notes),
+                                userComments = cur.userComments,
                                 isAiring = details.isAiring ?: cur.isAiring,
                                 updatedAt = now
                             )
@@ -817,7 +820,8 @@ class DetailViewModel(
                                 externalScore = details.externalScore ?: cur.externalScore,
                                 externalScoreSource = "TMDB",
                                 tags = if (!details.tags.isNullOrBlank()) details.tags else cur.tags,
-                                notes = if (!details.synopsis.isNullOrBlank()) details.synopsis else cur.notes,
+                                description = if (!details.synopsis.isNullOrBlank()) details.synopsis else (cur.description ?: cur.notes),
+                                userComments = cur.userComments,
                                 isAiring = details.isAiring ?: cur.isAiring,
                                 updatedAt = now
                             )

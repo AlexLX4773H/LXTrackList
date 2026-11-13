@@ -1345,7 +1345,7 @@ class FeaturesTest {
         val unlinkedBook = MediaEntry(
             title = "Custom Book",
             mediaType = MediaType.BOOK,
-            status = MediaStatus.PLAN_TO_READ,
+            status = MediaStatus.PLAN_TO_WATCH,
             externalSource = null,
             externalId = null
         )
@@ -1713,7 +1713,7 @@ class FeaturesTest {
             totalChapters = 456,
             externalSource = "MangaDex",
             externalId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-            notes = "Author: Yue Xiao\n\n[Tachiyomi ID: /manga/wife-is-school-goddess]"
+            description = "Author: Yue Xiao\n\n[Tachiyomi ID: /manga/wife-is-school-goddess]"
         )
 
         val reimportedBackupEntry = MediaEntry(
@@ -1726,7 +1726,7 @@ class FeaturesTest {
             totalChapters = 455,
             externalSource = "TACHIYOMI",
             externalId = "/manga/wife-is-school-goddess",
-            notes = "Author: Yue Xiao"
+            description = "Author: Yue Xiao"
         )
 
         // Mock DAO-free helper validation via MediaRepository instance or direct logic
@@ -2008,7 +2008,7 @@ class FeaturesTest {
             title = "Different Scraper Title",
             mediaType = MediaType.MANHWA,
             status = MediaStatus.PLAN_TO_WATCH,
-            notes = sampleNotes
+            description = sampleNotes
         )
         val combinedAltsStr = com.lx.tracklist.data.remote.TachiyomiResolverManager.getCombinedAlternateTitlesString(entry)
         assertTrue(

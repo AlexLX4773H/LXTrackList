@@ -78,7 +78,8 @@ data class AddEditUiState(
     val isRewatching: Boolean = false,
     val externalId: String = "",
     val externalSource: String = "",
-    val notes: String = "",
+    val description: String = "",
+    val userComments: String = "",
     val tags: String = "",
     val startDate: Long? = null,
     val finishDate: Long? = null,
@@ -114,7 +115,9 @@ data class AddEditUiState(
 
     val isSaved: Boolean = false,
     val errorMessage: String? = null
-)
+) {
+    val notes: String get() = description
+}
 
 class AddEditViewModel(
     private val repository: MediaRepository,
@@ -197,7 +200,8 @@ class AddEditViewModel(
                             isRewatching = entry.isRewatching,
                             externalId = entry.externalId ?: "",
                             externalSource = entry.externalSource ?: "",
-                            notes = entry.notes ?: "",
+                            description = entry.description ?: entry.notes ?: "",
+                            userComments = entry.userComments ?: "",
                             tags = entry.tags ?: "",
                             startDate = effectiveStartDate,
                             finishDate = entry.finishDate,
@@ -336,7 +340,9 @@ class AddEditViewModel(
     fun updateIsRewatching(value: Boolean) = _uiState.update { it.copy(isRewatching = value) }
     fun updateExternalId(value: String) = _uiState.update { it.copy(externalId = value) }
     fun updateExternalSource(value: String) = _uiState.update { it.copy(externalSource = value) }
-    fun updateNotes(value: String) = _uiState.update { it.copy(notes = value) }
+    fun updateDescription(value: String) = _uiState.update { it.copy(description = value) }
+    fun updateUserComments(value: String) = _uiState.update { it.copy(userComments = value) }
+    fun updateNotes(value: String) = updateDescription(value)
     fun updateTags(value: String) = _uiState.update { it.copy(tags = value) }
     fun updateStartDate(value: Long?) = _uiState.update { it.copy(startDate = value) }
     fun updateFinishDate(value: Long?) = _uiState.update { it.copy(finishDate = value) }
@@ -419,7 +425,8 @@ class AddEditViewModel(
                 isRewatching = s.isRewatching,
                 externalId = s.externalId.trim().ifBlank { null },
                 externalSource = s.externalSource.trim().ifBlank { null },
-                notes = s.notes.trim().ifBlank { null },
+                description = s.description.trim().ifBlank { null },
+                userComments = s.userComments.trim().ifBlank { null },
                 tags = s.tags.trim().ifBlank { null },
                 startDate = effectiveStartDate,
                 finishDate = s.finishDate,
@@ -622,15 +629,15 @@ class AddEditViewModel(
                 .distinct()
                 .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
 
-            // Preserve original Tachiyomi ID in notes so future backup reimports match seamlessly
+            // Preserve original Tachiyomi ID in description so future backup reimports match seamlessly
             val originalTachiId = current.externalId?.takeIf {
                 !it.isNullOrBlank() && (current.externalSource?.contains("TACHIYOMI", ignoreCase = true) == true || it.startsWith("/"))
             }
             val tachiNoteMarker = if (originalTachiId != null) "[Tachiyomi ID: $originalTachiId]" else null
-            val baseNotes = if (current.notes.isBlank() && !item.synopsis.isNullOrBlank()) (item.synopsis ?: "") else current.notes
-            val finalNotes = if (tachiNoteMarker != null && !baseNotes.contains(tachiNoteMarker)) {
-                if (baseNotes.isBlank()) tachiNoteMarker else "$baseNotes\n\n$tachiNoteMarker"
-            } else baseNotes
+            val baseDesc = if (current.description.isBlank() && !item.synopsis.isNullOrBlank()) (item.synopsis ?: "") else current.description
+            val finalDesc = if (tachiNoteMarker != null && !baseDesc.contains(tachiNoteMarker)) {
+                if (baseDesc.isBlank()) tachiNoteMarker else "$baseDesc\n\n$tachiNoteMarker"
+            } else baseDesc
 
             // Align media type if current is generic or incompatible
             val targetMediaType = if (!isVideo && (item.type.equals("TV", ignoreCase = true) || item.type.equals("Movie", ignoreCase = true))) {
@@ -702,7 +709,7 @@ class AddEditViewModel(
                 externalSource = externalSrc,
                 externalScore = item.externalScore ?: current.externalScore,
                 externalScoreSource = scoreSrc,
-                notes = finalNotes,
+                description = finalDesc,
                 tags = (if (current.tags.isBlank() && !item.tags.isNullOrBlank()) item.tags else current.tags) ?: "",
                 airedStartDate = resolvedStartDate,
                 airedEndDate = resolvedEndDate,
@@ -758,9 +765,9 @@ class AddEditViewModel(
                         .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
 
                     val targetMediaType = if (isMovie) MediaType.MOVIE else MediaType.SHOW
-                    val baseNotes = if (current.notes.isBlank() && !(fullDetails?.synopsis ?: item.overview).isNullOrBlank()) {
+                    val baseDesc = if (current.description.isBlank() && !(fullDetails?.synopsis ?: item.overview).isNullOrBlank()) {
                         (fullDetails?.synopsis ?: item.overview) ?: ""
-                    } else current.notes
+                    } else current.description
 
                     val duration = if (isMovie) {
                         if (fullDetails?.durationMinutes != null && fullDetails.durationMinutes > 0) fullDetails.durationMinutes else current.durationMinutes
@@ -780,7 +787,7 @@ class AddEditViewModel(
                         externalSource = "TMDB",
                         externalScore = fullDetails?.externalScore ?: item.voteAverage ?: current.externalScore,
                         externalScoreSource = "TMDB",
-                        notes = baseNotes,
+                        description = baseDesc,
                         tags = (if (current.tags.isBlank() && !fullDetails?.tags.isNullOrBlank()) fullDetails?.tags else current.tags) ?: "",
                         airedStartDate = fullDetails?.airedStartDate ?: item.releaseDate ?: current.airedStartDate,
                         airedEndDate = fullDetails?.airedEndDate ?: current.airedEndDate,

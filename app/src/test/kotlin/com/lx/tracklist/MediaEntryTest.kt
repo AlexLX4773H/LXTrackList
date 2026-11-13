@@ -460,4 +460,24 @@ class MediaEntryTest {
         assertEquals(9, nextAnime.currentEpisodes)
         assertEquals("9/18 ep", nextAnime.displayProgress)
     }
+
+    @Test
+    fun testDescriptionAndUserCommentsFields() {
+        val entry = MediaEntry(
+            title = "Test Description and Comments",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.WATCHING,
+            description = "Detailed official synopsis and overview.",
+            userComments = "My personal impressions and rating thoughts."
+        )
+
+        assertEquals("Detailed official synopsis and overview.", entry.description)
+        assertEquals("Detailed official synopsis and overview.", entry.notes)
+        assertEquals("My personal impressions and rating thoughts.", entry.userComments)
+
+        val updated = entry.copy(userComments = "Updated thoughts after episode 5.")
+        assertEquals("Detailed official synopsis and overview.", updated.description)
+        assertEquals("Detailed official synopsis and overview.", updated.notes)
+        assertEquals("Updated thoughts after episode 5.", updated.userComments)
+    }
 }
