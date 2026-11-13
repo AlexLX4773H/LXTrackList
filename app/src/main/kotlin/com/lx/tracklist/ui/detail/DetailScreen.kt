@@ -1832,6 +1832,9 @@ private fun DetailExternalTrackingCard(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -1842,10 +1845,16 @@ private fun DetailExternalTrackingCard(
                                     .background(LXPrimaryGreen)
                             )
                             Text(
-                                text = "Sync Active for ${activeUser.name}",
+                                text = if (!entry.externalId.isNullOrBlank()) {
+                                    "Sync Active for ${activeUser.name} (#${entry.externalId})"
+                                } else {
+                                    "Sync Active for ${activeUser.name}"
+                                },
                                 color = LXPrimaryGreen,
                                 style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 
@@ -1969,59 +1978,20 @@ private fun DetailExternalTrackingCard(
                         }
                     }
                 }
-            } else if (canTrack) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { pendingTrackingChange = true },
-                    color = LXSurfaceElevated,
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, LXBorder)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(LXTextSecondary)
-                            )
-                            Text(
-                                text = "Not Tracked (Local Only)",
-                                color = LXTextSecondary,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                        Text(
-                            text = "Tap to Enable",
-                            color = LXPrimaryGreen,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
             } else {
                 val isTachiyomi = JikanSyncManager.isTachiyomiSource(entry)
                 val hasValidId = JikanSyncManager.hasValidExternalId(entry)
                 val isMovieOrShow = entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.SHOW
                 val isBook = entry.mediaType == MediaType.BOOK
+                val isMal = JikanSyncManager.isMalSource(entry) || entry.mediaType == MediaType.ANIME
 
                 if (hasValidId) {
                     val sourceLabel = when {
                         isMovieOrShow || entry.externalSource.equals("TMDB", ignoreCase = true) -> "TMDB"
+                        entry.externalSource.equals("MAL", ignoreCase = true) || entry.externalSource.equals("MyAnimeList", ignoreCase = true) -> "MAL"
                         !entry.externalSource.isNullOrBlank() -> entry.externalSource
                         isBook -> "Book"
+                        isMal -> "MAL"
                         else -> "External"
                     }
                     Surface(
@@ -2088,6 +2058,7 @@ private fun DetailExternalTrackingCard(
                         isTachiyomi -> "Tachiyomi ID (Not Linked)"
                         isMovieOrShow -> "TMDB ID (Not Linked)"
                         isBook -> "Book ID (Not Linked)"
+                        isMal -> "MAL ID (Not Linked)"
                         else -> "No External ID Linked"
                     }
                     Surface(
