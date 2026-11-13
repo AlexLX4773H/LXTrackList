@@ -320,41 +320,39 @@ fun AddEditScreen(
                             when {
                                 state.mediaType == MediaType.MANHWA -> listOf(
                                     ExternalDbSource.MANGADEX,
-                                    ExternalDbSource.ANILIST_NOVEL,
-                                    ExternalDbSource.MAL,
-                                    ExternalDbSource.GOOGLE_BOOKS
-                                )
-                                state.mediaType == MediaType.BOOK -> listOf(
-                                    ExternalDbSource.GOOGLE_BOOKS,
-                                    ExternalDbSource.OPEN_LIBRARY,
-                                    ExternalDbSource.ANILIST_NOVEL,
+                                    ExternalDbSource.ANILIST,
                                     ExternalDbSource.MAL
-                                )
-                                state.mediaType == MediaType.MOVIE || state.mediaType == MediaType.SHOW -> listOf(
-                                    ExternalDbSource.TMDB,
-                                    ExternalDbSource.MAL
-                                )
-                                state.mediaType == MediaType.ANIME -> listOf(
-                                    ExternalDbSource.MAL,
-                                    ExternalDbSource.TMDB
                                 )
                                 state.mediaType == MediaType.MANGA -> listOf(
                                     ExternalDbSource.MAL,
                                     ExternalDbSource.MANGADEX,
-                                    ExternalDbSource.ANILIST_NOVEL,
-                                    ExternalDbSource.GOOGLE_BOOKS
+                                    ExternalDbSource.ANILIST
+                                )
+                                state.mediaType == MediaType.ANIME -> listOf(
+                                    ExternalDbSource.MAL,
+                                    ExternalDbSource.ANILIST,
+                                    ExternalDbSource.TMDB
+                                )
+                                state.mediaType == MediaType.MOVIE || state.mediaType == MediaType.SHOW -> listOf(
+                                    ExternalDbSource.TMDB,
+                                    ExternalDbSource.MAL,
+                                    ExternalDbSource.ANILIST
+                                )
+                                state.mediaType == MediaType.BOOK -> listOf(
+                                    ExternalDbSource.GOOGLE_BOOKS,
+                                    ExternalDbSource.OPEN_LIBRARY,
+                                    ExternalDbSource.ANILIST,
+                                    ExternalDbSource.MAL
                                 )
                                 state.mediaType.isReadType -> listOf(
                                     ExternalDbSource.MANGADEX,
-                                    ExternalDbSource.ANILIST_NOVEL,
-                                    ExternalDbSource.MAL,
-                                    ExternalDbSource.GOOGLE_BOOKS
+                                    ExternalDbSource.ANILIST,
+                                    ExternalDbSource.MAL
                                 )
                                 else -> listOf(
                                     ExternalDbSource.MAL,
-                                    ExternalDbSource.MANGADEX,
-                                    ExternalDbSource.TMDB,
-                                    ExternalDbSource.GOOGLE_BOOKS
+                                    ExternalDbSource.ANILIST,
+                                    ExternalDbSource.TMDB
                                 )
                             }
                         }
@@ -478,7 +476,7 @@ fun AddEditScreen(
                                         }
                                     )
                                 }
-                                ExternalDbSource.ANILIST_NOVEL -> {
+                                ExternalDbSource.ANILIST, ExternalDbSource.ANILIST_NOVEL -> {
                                     DropdownMenuItem(
                                         text = {
                                             Row(
@@ -487,15 +485,29 @@ fun AddEditScreen(
                                             ) {
                                                 Text("✨", fontSize = 16.sp)
                                                 Column {
-                                                    Text(if (state.mediaType == MediaType.MANHWA) "AniList" else "AniList (Light Novels)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
-                                                    Text(if (state.mediaType == MediaType.MANHWA) "Manhwa & Asian Comics" else "Light Novels & Web Novels", fontSize = 11.sp, color = LXTextSecondary)
+                                                    val title = when (state.mediaType) {
+                                                        MediaType.MANHWA -> "AniList"
+                                                        MediaType.MANGA -> "AniList"
+                                                        MediaType.ANIME -> "AniList"
+                                                        MediaType.BOOK -> "AniList (Light Novels)"
+                                                        else -> "AniList"
+                                                    }
+                                                    val subtitle = when (state.mediaType) {
+                                                        MediaType.MANHWA -> "Korean Webtoons & Manhwa"
+                                                        MediaType.MANGA -> "Manga & Asian Comics"
+                                                        MediaType.ANIME -> "Anime & Movies"
+                                                        MediaType.BOOK -> "Light Novels & Web Novels"
+                                                        else -> "Anime, Manga & Novels"
+                                                    }
+                                                    Text(title, fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                                    Text(subtitle, fontSize = 11.sp, color = LXTextSecondary)
                                                 }
                                             }
                                         },
                                         onClick = {
                                             showSyncDropdown = false
-                                            selectedExternalSource = ExternalDbSource.ANILIST_NOVEL
-                                            viewModel.searchExternalDb(state.title, ExternalDbSource.ANILIST_NOVEL, context)
+                                            selectedExternalSource = ExternalDbSource.ANILIST
+                                            viewModel.searchExternalDb(state.title, ExternalDbSource.ANILIST, context)
                                             showExternalSyncDialog = true
                                         }
                                     )
@@ -2176,31 +2188,40 @@ private fun ExternalDbSyncDialog(
         val base = when {
             mediaType == MediaType.MANHWA -> listOf(
                 ExternalDbSource.MANGADEX,
-                ExternalDbSource.ANILIST_NOVEL,
-                ExternalDbSource.MAL,
-                ExternalDbSource.GOOGLE_BOOKS
-            )
-            mediaType == MediaType.BOOK -> listOf(
-                ExternalDbSource.GOOGLE_BOOKS,
-                ExternalDbSource.OPEN_LIBRARY,
-                ExternalDbSource.ANILIST_NOVEL,
+                ExternalDbSource.ANILIST,
                 ExternalDbSource.MAL
             )
             mediaType == MediaType.MANGA -> listOf(
                 ExternalDbSource.MAL,
                 ExternalDbSource.MANGADEX,
-                ExternalDbSource.ANILIST_NOVEL,
-                ExternalDbSource.GOOGLE_BOOKS
+                ExternalDbSource.ANILIST
+            )
+            mediaType == MediaType.ANIME -> listOf(
+                ExternalDbSource.MAL,
+                ExternalDbSource.ANILIST,
+                ExternalDbSource.TMDB
+            )
+            mediaType == MediaType.MOVIE || mediaType == MediaType.SHOW -> listOf(
+                ExternalDbSource.TMDB,
+                ExternalDbSource.MAL,
+                ExternalDbSource.ANILIST
+            )
+            mediaType == MediaType.BOOK -> listOf(
+                ExternalDbSource.GOOGLE_BOOKS,
+                ExternalDbSource.OPEN_LIBRARY,
+                ExternalDbSource.ANILIST,
+                ExternalDbSource.MAL
             )
             mediaType.isReadType -> listOf(
                 ExternalDbSource.MANGADEX,
-                ExternalDbSource.ANILIST_NOVEL,
-                ExternalDbSource.MAL,
-                ExternalDbSource.GOOGLE_BOOKS
+                ExternalDbSource.ANILIST,
+                ExternalDbSource.MAL
             )
-            mediaType == MediaType.MOVIE || mediaType == MediaType.SHOW -> listOf(ExternalDbSource.TMDB, ExternalDbSource.MAL)
-            mediaType == MediaType.ANIME -> listOf(ExternalDbSource.MAL, ExternalDbSource.TMDB)
-            else -> listOf(ExternalDbSource.MAL, ExternalDbSource.MANGADEX, ExternalDbSource.TMDB, ExternalDbSource.GOOGLE_BOOKS)
+            else -> listOf(
+                ExternalDbSource.MAL,
+                ExternalDbSource.ANILIST,
+                ExternalDbSource.TMDB
+            )
         }
         if (syncState.selectedSource !in base) {
             base + syncState.selectedSource
@@ -2381,16 +2402,19 @@ private fun ExternalDbSyncDialog(
                                     )
                                 )
                             }
-                            ExternalDbSource.ANILIST_NOVEL -> {
+                            ExternalDbSource.ANILIST, ExternalDbSource.ANILIST_NOVEL -> {
                                 FilterChip(
-                                    selected = syncState.selectedSource == ExternalDbSource.ANILIST_NOVEL,
+                                    selected = syncState.selectedSource == ExternalDbSource.ANILIST || syncState.selectedSource == ExternalDbSource.ANILIST_NOVEL,
                                     onClick = {
-                                        if (syncState.selectedSource != ExternalDbSource.ANILIST_NOVEL) {
+                                        if (syncState.selectedSource != ExternalDbSource.ANILIST) {
                                             expandedItemKey = null
-                                            onSearch(searchInput, ExternalDbSource.ANILIST_NOVEL)
+                                            onSearch(searchInput, ExternalDbSource.ANILIST)
                                         }
                                     },
-                                    label = { Text("✨ AniList (LN)", fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                                    label = {
+                                        val labelText = if (mediaType == MediaType.BOOK) "✨ AniList (LN)" else "✨ AniList"
+                                        Text(labelText, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                    },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = LXPrimaryGreen,
                                         selectedLabelColor = LXBackgroundBlack,

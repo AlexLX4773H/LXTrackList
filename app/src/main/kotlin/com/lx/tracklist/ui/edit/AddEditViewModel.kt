@@ -45,10 +45,12 @@ import java.util.Locale
 enum class ExternalDbSource(val displayName: String, val shortName: String) {
     MAL("MyAnimeList (MAL)", "MAL"),
     MANGADEX("MangaDex", "MangaDex"),
+    ANILIST("AniList", "AniList"),
     TMDB("The Movie Database (TMDB)", "TMDB"),
     GOOGLE_BOOKS("Google Books", "Google Books"),
     OPEN_LIBRARY("Open Library", "Open Library"),
-    ANILIST_NOVEL("AniList (Light Novels)", "AniList")
+    @Deprecated("Use ANILIST instead")
+    ANILIST_NOVEL("AniList", "AniList")
 }
 
 data class ExternalSyncUiState(
@@ -643,8 +645,35 @@ class AddEditViewModel(
                             )
                         }
                     }
-                    ExternalDbSource.ANILIST_NOVEL -> {
-                        val res = AniListNovelApiClient.searchLightNovels(cleanQuery, limit = 20)
+                    ExternalDbSource.ANILIST, ExternalDbSource.ANILIST_NOVEL -> {
+                        val currentType = _uiState.value.mediaType
+                        val res = when {
+                            currentType == MediaType.BOOK -> {
+                                AniListNovelApiClient.searchLightNovels(cleanQuery, limit = 20)
+                            }
+                            currentType == MediaType.MANHWA -> {
+                                val krRes = JikanApiClient.queryAniListMultiple(cleanQuery, isManga = true, subType = "manhwa", limit = 20)
+                                val krItems = krRes.getOrDefault(emptyList())
+                                if (krItems.isNotEmpty()) {
+                                    krRes
+                                } else {
+                                    JikanApiClient.queryAniListMultiple(cleanQuery, isManga = true, subType = null, limit = 20)
+                                }
+                            }
+                            currentType == MediaType.MANGA -> {
+                                JikanApiClient.queryAniListMultiple(cleanQuery, isManga = true, subType = null, limit = 20)
+                            }
+                            currentType == MediaType.ANIME || currentType == MediaType.MOVIE || currentType == MediaType.SHOW -> {
+                                JikanApiClient.queryAniListMultiple(cleanQuery, isManga = false, subType = null, limit = 20)
+                            }
+                            else -> {
+                                if (currentType.isReadType) {
+                                    JikanApiClient.queryAniListMultiple(cleanQuery, isManga = true, subType = null, limit = 20)
+                                } else {
+                                    JikanApiClient.queryAniListMultiple(cleanQuery, isManga = false, subType = null, limit = 20)
+                                }
+                            }
+                        }
                         val items = res.getOrDefault(emptyList())
                         _syncState.update {
                             it.copy(
@@ -726,6 +755,11 @@ class AddEditViewModel(
                         else -> null
                     }
                     fromUrl ?: (item.isbn ?: current.externalId)
+                }
+                "AniList" -> {
+                    (item.malId ?: 0L).takeIf { it > 0 }?.toString()
+                        ?: item.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                        ?: current.externalId
                 }
                 else -> (item.malId ?: 0L).takeIf { it > 0 }?.toString() ?: current.externalId
             }
