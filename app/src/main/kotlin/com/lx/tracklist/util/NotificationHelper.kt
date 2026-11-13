@@ -20,11 +20,13 @@ object NotificationHelper {
     const val CHANNEL_IMPORT_EXPORT = "channel_import_export"
     const val CHANNEL_JIKAN_SYNC = "jikan_sync_channel"
     const val CHANNEL_TMDB_SYNC = "tmdb_sync_channel"
+    const val CHANNEL_BOOK_SYNC = "book_sync_channel"
     const val CHANNEL_TACHIYOMI_RESOLVE = "tachiyomi_resolve_channel"
 
     const val NOTIFICATION_ID_IMPORT = 47010
     const val NOTIFICATION_ID_JIKAN = 47007
     const val NOTIFICATION_ID_TMDB = 47008
+    const val NOTIFICATION_ID_BOOK = 47011
     const val NOTIFICATION_ID_TACHIYOMI = 47009
 
     fun initNotificationChannels(context: Context) {
@@ -56,6 +58,14 @@ object NotificationHelper {
                 description = "Shows real-time progress and completion when syncing posters and metadata from TMDB"
             }
 
+            val bookChannel = NotificationChannel(
+                CHANNEL_BOOK_SYNC,
+                "Books / Novels Sync",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Shows real-time progress and completion when syncing covers and metadata from Google Books and Open Library"
+            }
+
             val tachiyomiChannel = NotificationChannel(
                 CHANNEL_TACHIYOMI_RESOLVE,
                 "Tachiyomi ID Resolution",
@@ -67,6 +77,7 @@ object NotificationHelper {
             manager.createNotificationChannel(importChannel)
             manager.createNotificationChannel(jikanChannel)
             manager.createNotificationChannel(tmdbChannel)
+            manager.createNotificationChannel(bookChannel)
             manager.createNotificationChannel(tachiyomiChannel)
         }
     }
@@ -348,6 +359,90 @@ object NotificationHelper {
             getLargeIcon(context)?.let { builder.setLargeIcon(it) }
 
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_TMDB, builder.build())
+        } catch (_: Exception) {}
+    }
+
+    fun showBookSyncProgress(
+        context: Context,
+        completed: Int,
+        total: Int,
+        currentTitle: String,
+        profileName: String? = null
+    ) {
+        if (!hasNotificationPermission(context)) return
+
+        try {
+            val pendingIntent = getMainActivityPendingIntent(context)
+            val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
+            val text = if (currentTitle.isNotBlank()) "Fetching: $currentTitle" else "Updating Book entries..."
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_BOOK_SYNC)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("${prefix}Syncing Books Metadata ($completed/$total)")
+                .setContentText(text)
+                .setProgress(total, completed, false)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+            getLargeIcon(context)?.let { builder.setLargeIcon(it) }
+
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_BOOK, builder.build())
+        } catch (_: Exception) {}
+    }
+
+    fun showBookSyncComplete(
+        context: Context,
+        completed: Int,
+        total: Int,
+        updated: Int,
+        failed: Int,
+        lastError: String?,
+        isCancelled: Boolean,
+        profileName: String? = null
+    ) {
+        if (!hasNotificationPermission(context)) return
+
+        try {
+            val pendingIntent = getMainActivityPendingIntent(context)
+            val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
+            val title: String
+            val content: String
+            val expanded: String
+
+            if (isCancelled) {
+                title = "${prefix}Books Sync Cancelled"
+                content = "$completed / $total completed ($updated updated)"
+                expanded = "Metadata sync was cancelled by user.\n• Profile: ${profileName ?: "Active"}\n• Processed: $completed / $total\n• Updated: $updated entries"
+            } else if (total == 0) {
+                title = "${prefix}Books Sync"
+                content = if (lastError != null) lastError else "All book entries are already up to date"
+                expanded = if (lastError != null) lastError else "All book and novel entries already have covers and details."
+            } else if (failed == 0) {
+                title = "${prefix}Books Sync Completed"
+                content = "Updated $updated entries with covers & details"
+                expanded = "Successfully synced $total entries for ${profileName ?: "profile"} from Google Books & Open Library!\n• Updated: $updated entries with high-res covers, pages & descriptions"
+            } else {
+                title = "${prefix}Books Sync Finished"
+                content = "$updated updated, $failed failed"
+                expanded = "Sync finished for ${profileName ?: "profile"} with issues:\n• Updated: $updated entries\n• Failed: $failed entries${if (!lastError.isNullOrBlank()) "\n• Note: $lastError" else ""}"
+            }
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_BOOK_SYNC)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(title)
+                .setContentText(content)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
+                .setProgress(0, 0, false)
+                .setOngoing(false)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+            getLargeIcon(context)?.let { builder.setLargeIcon(it) }
+
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_BOOK, builder.build())
         } catch (_: Exception) {}
     }
 

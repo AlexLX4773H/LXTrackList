@@ -10,14 +10,18 @@ import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.data.remote.BookDetails
 import com.lx.tracklist.data.remote.BookMetadataManager
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanMediaDetails
+import com.lx.tracklist.data.remote.MangaDexApiClient
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.TmdbSearchResult
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,11 +31,12 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 enum class SearchCategory(val displayName: String, val sourceName: String) {
     ANIME("Anime", "MAL"),
     MANGA("Manga", "MAL / MangaDex"),
-    MANHWA("Manhwa", "MangaDex"),
+    MANHWA("Manhwa", "MangaDex / AniList"),
     MOVIES("Movies", "TMDB"),
     TV_SHOWS("TV Shows", "TMDB"),
     BOOKS("Books", "Google Books / Open Library"),
@@ -40,7 +45,7 @@ enum class SearchCategory(val displayName: String, val sourceName: String) {
 
 data class SearchResultItem(
     val externalId: String,
-    val externalSource: String, // "MAL" or "TMDB"
+    val externalSource: String, // "MAL", "MangaDex", "AniList", "TMDB", "Google Books", "Open Library"
     val mediaType: MediaType,
     val title: String,
     val alternateTitle: String? = null,
@@ -56,6 +61,10 @@ data class SearchResultItem(
     val isAlreadyInLibrary: Boolean = false,
     val existingEntryId: Long? = null,
     val existingStatus: MediaStatus? = null,
+    val author: String? = null,
+    val publisher: String? = null,
+    val isbn: String? = null,
+    val rawBookDetails: BookDetails? = null,
     val rawJikanDetails: JikanMediaDetails? = null,
     val rawTmdbResult: TmdbSearchResult? = null
 )
@@ -125,7 +134,7 @@ class SearchViewModel(
         searchJob?.cancel()
         if (newQuery.trim().length >= 2) {
             searchJob = viewModelScope.launch {
-                delay(600)
+                delay(300)
                 executeSearch(newQuery.trim(), _uiState.value.selectedCategory, context)
             }
         } else if (newQuery.isBlank()) {
@@ -165,92 +174,186 @@ class SearchViewModel(
             val results = withContext(Dispatchers.IO) {
                 when (category) {
                     SearchCategory.ANIME -> {
-                        val res = JikanApiClient.searchJikanMultiple(query, isManga = false, limit = 20)
-                        if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch anime")
-                        res.getOrDefault(emptyList()).mapIndexed { idx, details ->
-                            val extId = details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
-                            val extSource = if (details.sourceProvider == "AniList" && (details.malId == null || details.malId == 0L)) "AniList" else "MAL"
-                            SearchResultItem(
-                                externalId = extId,
-                                externalSource = extSource,
-                                mediaType = MediaType.ANIME,
-                                title = details.title ?: "Unknown",
-                                alternateTitle = details.alternateTitle,
-                                posterUrl = details.posterUrl,
-                                releaseYear = details.airedStartDate?.let { extractYear(it) },
-                                totalUnits = details.totalEpisodes,
-                                durationMinutes = details.durationMinutes,
-                                score = details.externalScore,
-                                statusText = if (details.isAiring == true) "Airing" else "Finished",
-                                synopsis = details.synopsis,
-                                rawJikanDetails = details
-                            )
+                        coroutineScope {
+                            val jikanDeferred = async { JikanApiClient.searchJikanDirect(query, isManga = false, limit = 20) }
+                            val anilistDeferred = async { JikanApiClient.queryAniListMultiple(query, isManga = false, limit = 20) }
+
+                            val jikanRes = jikanDeferred.await()
+                            val anilistRes = anilistDeferred.await()
+
+                            val jikanList = jikanRes.getOrDefault(emptyList())
+                            val anilistList = anilistRes.getOrDefault(emptyList())
+
+                            val seenKeys = mutableSetOf<String>()
+                            val combined = mutableListOf<JikanMediaDetails>()
+
+                            for (item in jikanList) {
+                                val key = item.title?.trim()?.lowercase(Locale.ROOT) ?: continue
+                                if (seenKeys.add(key)) combined.add(item)
+                            }
+                            for (item in anilistList) {
+                                val key = item.title?.trim()?.lowercase(Locale.ROOT) ?: continue
+                                if (seenKeys.add(key)) combined.add(item)
+                            }
+
+                            if (combined.isEmpty() && jikanRes.isFailure && anilistRes.isFailure) {
+                                throw jikanRes.exceptionOrNull() ?: anilistRes.exceptionOrNull() ?: Exception("Failed to fetch anime")
+                            }
+
+                            combined.mapIndexed { idx, details ->
+                                val extId = details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+                                val extSource = if (details.sourceProvider == "AniList" && (details.malId == null || details.malId == 0L)) "AniList" else "MAL"
+                                SearchResultItem(
+                                    externalId = extId,
+                                    externalSource = extSource,
+                                    mediaType = MediaType.ANIME,
+                                    title = details.title ?: "Unknown",
+                                    alternateTitle = details.alternateTitle,
+                                    posterUrl = details.posterUrl,
+                                    releaseYear = details.airedStartDate?.let { extractYear(it) },
+                                    totalUnits = details.totalEpisodes,
+                                    durationMinutes = details.durationMinutes,
+                                    score = details.externalScore,
+                                    statusText = if (details.isAiring == true) "Airing" else "Finished",
+                                    synopsis = details.synopsis,
+                                    rawJikanDetails = details
+                                )
+                            }
                         }
                     }
                     SearchCategory.MANGA -> {
-                        val res = JikanApiClient.searchJikanMultiple(query, isManga = true, limit = 20)
-                        if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch manga")
-                        res.getOrDefault(emptyList()).mapIndexed { idx, details ->
-                            val extSource = when (details.sourceProvider) {
-                                "MangaDex" -> "MangaDex"
-                                "Kitsu" -> "Kitsu"
-                                "AniList" -> "AniList"
-                                else -> if (details.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
+                        coroutineScope {
+                            val mangaDexDeferred = async { MangaDexApiClient.searchMangaMultiple(query, isManhwa = false, limit = 20) }
+                            val jikanDeferred = async { JikanApiClient.searchJikanDirect(query, isManga = true, limit = 20) }
+                            val anilistDeferred = async { JikanApiClient.queryAniListMultiple(query, isManga = true, limit = 20) }
+
+                            val mangaDexRes = mangaDexDeferred.await()
+                            val jikanRes = jikanDeferred.await()
+                            val anilistRes = anilistDeferred.await()
+
+                            val mangaDexList = mangaDexRes.getOrDefault(emptyList())
+                            val jikanList = jikanRes.getOrDefault(emptyList())
+                            val anilistList = anilistRes.getOrDefault(emptyList())
+
+                            val seenKeys = mutableSetOf<String>()
+                            val combined = mutableListOf<JikanMediaDetails>()
+
+                            // Add MAL results first if available
+                            for (item in jikanList) {
+                                val key = item.title?.trim()?.lowercase(Locale.ROOT) ?: continue
+                                if (seenKeys.add(key)) combined.add(item)
                             }
-                            val extId = if (details.sourceProvider == "MangaDex") {
-                                details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-                                    ?: "md_${details.title?.hashCode() ?: idx}_$idx"
-                            } else {
-                                details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+                            // Then add MangaDex results
+                            for (item in mangaDexList) {
+                                val key = item.title?.trim()?.lowercase(Locale.ROOT) ?: continue
+                                if (seenKeys.add(key)) combined.add(item)
                             }
-                            SearchResultItem(
-                                externalId = extId,
-                                externalSource = extSource,
-                                mediaType = MediaType.MANGA,
-                                title = details.title ?: "Unknown",
-                                alternateTitle = details.alternateTitle,
-                                posterUrl = details.posterUrl,
-                                releaseYear = details.airedStartDate?.let { extractYear(it) },
-                                totalUnits = details.totalChapters,
-                                totalVolumes = details.totalVolumes,
-                                score = details.externalScore,
-                                statusText = if (details.isAiring == true) "Publishing" else "Finished",
-                                synopsis = details.synopsis,
-                                rawJikanDetails = details
-                            )
+                            // Then add AniList results if list is short
+                            if (combined.size < 10) {
+                                for (item in anilistList) {
+                                    val key = item.title?.trim()?.lowercase(Locale.ROOT) ?: continue
+                                    if (seenKeys.add(key)) combined.add(item)
+                                }
+                            }
+
+                            if (combined.isEmpty() && jikanRes.isFailure && mangaDexRes.isFailure) {
+                                throw jikanRes.exceptionOrNull() ?: mangaDexRes.exceptionOrNull() ?: Exception("Failed to fetch manga")
+                            }
+
+                            combined.mapIndexed { idx, details ->
+                                val extSource = when (details.sourceProvider) {
+                                    "MangaDex" -> "MangaDex"
+                                    "Kitsu" -> "Kitsu"
+                                    "AniList" -> "AniList"
+                                    else -> if (details.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
+                                }
+                                val extId = if (details.sourceProvider == "MangaDex") {
+                                    details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                                        ?: "md_${details.title?.hashCode() ?: idx}_$idx"
+                                } else {
+                                    details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+                                }
+                                SearchResultItem(
+                                    externalId = extId,
+                                    externalSource = extSource,
+                                    mediaType = MediaType.MANGA,
+                                    title = details.title ?: "Unknown",
+                                    alternateTitle = details.alternateTitle,
+                                    posterUrl = details.posterUrl,
+                                    releaseYear = details.airedStartDate?.let { extractYear(it) },
+                                    totalUnits = details.totalChapters,
+                                    totalVolumes = details.totalVolumes,
+                                    score = details.externalScore,
+                                    statusText = if (details.isAiring == true) "Publishing" else "Finished",
+                                    synopsis = details.synopsis,
+                                    author = details.authors,
+                                    rawJikanDetails = details
+                                )
+                            }
                         }
                     }
                     SearchCategory.MANHWA -> {
-                        val res = JikanApiClient.searchJikanMultiple(query, isManga = true, subType = "manhwa", limit = 20)
-                        if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch manhwa")
-                        res.getOrDefault(emptyList()).mapIndexed { idx, details ->
-                            val extSource = when (details.sourceProvider) {
-                                "MangaDex" -> "MangaDex"
-                                "Kitsu" -> "Kitsu"
-                                "AniList" -> "AniList"
-                                else -> if (details.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
+                        coroutineScope {
+                            val mangaDexDeferred = async { MangaDexApiClient.searchMangaMultiple(query, isManhwa = true, limit = 20) }
+                            val anilistDeferred = async { JikanApiClient.queryAniListMultiple(query, isManga = true, subType = "manhwa", limit = 20) }
+
+                            val mangaDexRes = mangaDexDeferred.await()
+                            val anilistRes = anilistDeferred.await()
+
+                            val mangaDexList = mangaDexRes.getOrDefault(emptyList())
+                            val anilistList = anilistRes.getOrDefault(emptyList())
+
+                            val seenKeys = mutableSetOf<String>()
+                            val combined = mutableListOf<JikanMediaDetails>()
+
+                            for (item in mangaDexList) {
+                                val key = item.title?.trim()?.lowercase(Locale.ROOT) ?: continue
+                                if (seenKeys.add(key)) combined.add(item)
                             }
-                            val extId = if (details.sourceProvider == "MangaDex") {
-                                details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-                                    ?: "md_${details.title?.hashCode() ?: idx}_$idx"
-                            } else {
-                                details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+                            for (item in anilistList) {
+                                val key = item.title?.trim()?.lowercase(Locale.ROOT) ?: continue
+                                if (seenKeys.add(key)) combined.add(item)
                             }
-                            SearchResultItem(
-                                externalId = extId,
-                                externalSource = extSource,
-                                mediaType = MediaType.MANHWA,
-                                title = details.title ?: "Unknown",
-                                alternateTitle = details.alternateTitle,
-                                posterUrl = details.posterUrl,
-                                releaseYear = details.airedStartDate?.let { extractYear(it) },
-                                totalUnits = details.totalChapters,
-                                totalVolumes = details.totalVolumes,
-                                score = details.externalScore,
-                                statusText = if (details.isAiring == true) "Publishing" else "Finished",
-                                synopsis = details.synopsis,
-                                rawJikanDetails = details
-                            )
+
+                            if (combined.isEmpty()) {
+                                val jikanRes = JikanApiClient.searchJikanDirect(query, isManga = true, subType = "manhwa", limit = 20)
+                                combined.addAll(jikanRes.getOrDefault(emptyList()))
+                            }
+
+                            if (combined.isEmpty() && mangaDexRes.isFailure && anilistRes.isFailure) {
+                                throw mangaDexRes.exceptionOrNull() ?: anilistRes.exceptionOrNull() ?: Exception("Failed to fetch manhwa")
+                            }
+
+                            combined.mapIndexed { idx, details ->
+                                val extSource = when (details.sourceProvider) {
+                                    "MangaDex" -> "MangaDex"
+                                    "Kitsu" -> "Kitsu"
+                                    "AniList" -> "AniList"
+                                    else -> if (details.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
+                                }
+                                val extId = if (details.sourceProvider == "MangaDex") {
+                                    details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                                        ?: "md_${details.title?.hashCode() ?: idx}_$idx"
+                                } else {
+                                    details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+                                }
+                                SearchResultItem(
+                                    externalId = extId,
+                                    externalSource = extSource,
+                                    mediaType = MediaType.MANHWA,
+                                    title = details.title ?: "Unknown",
+                                    alternateTitle = details.alternateTitle,
+                                    posterUrl = details.posterUrl,
+                                    releaseYear = details.airedStartDate?.let { extractYear(it) },
+                                    totalUnits = details.totalChapters,
+                                    totalVolumes = details.totalVolumes,
+                                    score = details.externalScore,
+                                    statusText = if (details.isAiring == true) "Publishing" else "Finished",
+                                    synopsis = details.synopsis,
+                                    author = details.authors,
+                                    rawJikanDetails = details
+                                )
+                            }
                         }
                     }
                     SearchCategory.MOVIES -> {
@@ -297,6 +400,7 @@ class SearchViewModel(
                         res.getOrDefault(emptyList()).mapIndexed { idx, book ->
                             val jikanDetails = book.toJikanMediaDetails()
                             val extId = if (book.id.isNotBlank()) book.id else "book_${book.title.hashCode()}_$idx"
+                            val synopsisText = book.description?.takeIf { it.isNotBlank() } ?: book.buildDescriptionWithMetadata()
                             SearchResultItem(
                                 externalId = extId,
                                 externalSource = book.sourceProvider,
@@ -307,8 +411,12 @@ class SearchViewModel(
                                 releaseYear = book.publishedDate?.take(4),
                                 totalUnits = book.pageCount,
                                 score = book.averageScore,
-                                statusText = if (book.pageCount != null && book.pageCount > 0) "${book.pageCount} pages" else "Book",
-                                synopsis = book.description,
+                                statusText = "Book",
+                                synopsis = synopsisText,
+                                author = book.authorString.takeIf { it.isNotBlank() },
+                                publisher = book.publisher,
+                                isbn = book.primaryIsbn,
+                                rawBookDetails = book,
                                 rawJikanDetails = jikanDetails
                             )
                         }
@@ -330,8 +438,9 @@ class SearchViewModel(
                                 totalUnits = details.totalChapters,
                                 totalVolumes = details.totalVolumes,
                                 score = details.externalScore,
-                                statusText = if (details.isAiring == true) "Publishing" else "Finished",
+                                statusText = "Light Novel",
                                 synopsis = details.synopsis,
+                                author = details.authors,
                                 rawJikanDetails = details
                             )
                         }

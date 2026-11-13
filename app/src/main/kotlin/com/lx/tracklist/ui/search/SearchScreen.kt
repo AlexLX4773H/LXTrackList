@@ -34,6 +34,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Check
@@ -104,7 +105,11 @@ import com.lx.tracklist.R
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.remote.GoogleBooksApiClient
+import com.lx.tracklist.data.remote.OpenLibraryApiClient
 import com.lx.tracklist.data.remote.TmdbConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
@@ -565,13 +570,18 @@ private fun SearchResultCard(
                     // Metadata row: Year • Status • Units
                     val metaParts = mutableListOf<String>()
                     item.releaseYear?.let { metaParts.add(it) }
-                    item.statusText?.let { metaParts.add(it) }
+                    if (item.mediaType == MediaType.BOOK && !item.author.isNullOrBlank()) {
+                        metaParts.add(item.author)
+                    } else {
+                        item.statusText?.let { metaParts.add(it) }
+                    }
                     item.totalUnits?.takeIf { it > 0 }?.let {
                         val unitLabel = when (item.mediaType) {
                             MediaType.ANIME -> if (it == 1) "1 Ep" else "$it Eps"
                             MediaType.MANGA, MediaType.MANHWA -> if (it == 1) "1 Ch" else "$it Chs"
                             MediaType.SHOW -> if (it == 1) "1 Ep" else "$it Eps"
-                            else -> null
+                            MediaType.BOOK -> if (it == 1) "1 page" else "$it pages"
+                            MediaType.MOVIE -> null
                         }
                         if (unitLabel != null) metaParts.add(unitLabel)
                     }
@@ -817,6 +827,57 @@ private fun SearchResultDetailSheet(
     onViewInLibrary: (Long) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val context = LocalContext.current
+    var detailedSynopsis by remember(item.externalId) { mutableStateOf(item.synopsis) }
+    var detailedAuthor by remember(item.externalId) { mutableStateOf(item.author) }
+    var detailedPublisher by remember(item.externalId) { mutableStateOf(item.publisher) }
+    var detailedIsbn by remember(item.externalId) { mutableStateOf(item.isbn) }
+    var isLoadingDetails by remember(item.externalId) { mutableStateOf(false) }
+
+    LaunchedEffect(item.externalId) {
+        if (item.mediaType == MediaType.BOOK && (detailedSynopsis.isNullOrBlank() || detailedSynopsis == item.title || detailedSynopsis!!.startsWith("Author:"))) {
+            isLoadingDetails = true
+            withContext(Dispatchers.IO) {
+                try {
+                    if (item.externalSource.equals("Google Books", ignoreCase = true) && !item.externalId.startsWith("book_")) {
+                        val fullBook = GoogleBooksApiClient.fetchVolumeDetails(item.externalId, context).getOrNull()
+                        if (fullBook != null) {
+                            if (!fullBook.description.isNullOrBlank()) {
+                                detailedSynopsis = fullBook.description
+                            }
+                            if (detailedAuthor.isNullOrBlank() && fullBook.authors.isNotEmpty()) {
+                                detailedAuthor = fullBook.authorString
+                            }
+                            if (detailedPublisher.isNullOrBlank() && !fullBook.publisher.isNullOrBlank()) {
+                                detailedPublisher = fullBook.publisher
+                            }
+                            if (detailedIsbn.isNullOrBlank() && !fullBook.primaryIsbn.isNullOrBlank()) {
+                                detailedIsbn = fullBook.primaryIsbn
+                            }
+                        }
+                    } else if (item.externalSource.equals("Open Library", ignoreCase = true) && !item.externalId.startsWith("book_")) {
+                        val cleanKey = item.externalId.removePrefix("/works/").removePrefix("/").trim()
+                        val fullBook = OpenLibraryApiClient.fetchWorkDetails(cleanKey).getOrNull()
+                        if (fullBook != null) {
+                            if (!fullBook.description.isNullOrBlank()) {
+                                detailedSynopsis = fullBook.description
+                            }
+                            if (detailedAuthor.isNullOrBlank() && fullBook.authors.isNotEmpty()) {
+                                detailedAuthor = fullBook.authorString
+                            }
+                            if (detailedPublisher.isNullOrBlank() && !fullBook.publisher.isNullOrBlank()) {
+                                detailedPublisher = fullBook.publisher
+                            }
+                            if (detailedIsbn.isNullOrBlank() && !fullBook.primaryIsbn.isNullOrBlank()) {
+                                detailedIsbn = fullBook.primaryIsbn
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+                isLoadingDetails = false
+            }
+        }
+    }
 
     val nestedScrollConnection = remember {
         object : NestedScrollConnection {
@@ -987,10 +1048,16 @@ private fun SearchResultDetailSheet(
                         MediaType.MOVIE -> {
                             item.durationMinutes?.takeIf { it > 0 }?.let { "${it}m runtime" }
                         }
-                        MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> {
+                        MediaType.MANGA, MediaType.MANHWA -> {
                             val chs = item.totalUnits?.takeIf { it > 0 }?.let { "$it Chapters" } ?: "Ongoing"
                             val vols = item.totalVolumes?.takeIf { it > 0 }?.let { " • $it Volumes" } ?: ""
                             chs + vols
+                        }
+                        MediaType.BOOK -> {
+                            val pages = item.totalUnits?.takeIf { it > 0 }?.let { if (it == 1) "1 Page" else "$it Pages" }
+                            val vols = item.totalVolumes?.takeIf { it > 0 }?.let { if (it == 1) "1 Volume" else "$it Volumes" }
+                            val chs = item.rawBookDetails?.totalChapters?.takeIf { it > 0 }?.let { if (it == 1) "1 Chapter" else "$it Chapters" }
+                            listOfNotNull(pages, vols, chs).joinToString(" • ").ifBlank { "Pages unknown" }
                         }
                     }
                     if (!unitsInfo.isNullOrBlank()) {
@@ -999,6 +1066,80 @@ private fun SearchResultDetailSheet(
                             style = MaterialTheme.typography.bodySmall,
                             color = LXTextSecondary
                         )
+                    }
+                }
+            }
+
+            // Book Metadata Card (Authors, Publisher, ISBN)
+            val displayAuthor = detailedAuthor ?: item.author ?: item.rawBookDetails?.authorString ?: item.rawJikanDetails?.authors
+            val displayPublisher = detailedPublisher ?: item.publisher ?: item.rawBookDetails?.publisher
+            val displayIsbn = detailedIsbn ?: item.isbn ?: item.rawBookDetails?.primaryIsbn ?: item.rawJikanDetails?.isbn
+
+            if (item.mediaType == MediaType.BOOK && (!displayAuthor.isNullOrBlank() || !displayPublisher.isNullOrBlank() || !displayIsbn.isNullOrBlank())) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, LXBorder)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (!displayAuthor.isNullOrBlank()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    text = "Author:",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXPrimaryGreen
+                                )
+                                Text(
+                                    text = displayAuthor,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LXTextPrimary
+                                )
+                            }
+                        }
+                        if (!displayPublisher.isNullOrBlank()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    text = "Publisher:",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXTextSecondary
+                                )
+                                Text(
+                                    text = displayPublisher,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LXTextPrimary
+                                )
+                            }
+                        }
+                        if (!displayIsbn.isNullOrBlank()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "ISBN:",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXTextSecondary
+                                )
+                                Text(
+                                    text = displayIsbn,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LXTextSecondary
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1028,24 +1169,44 @@ private fun SearchResultDetailSheet(
             }
 
             // Synopsis Card
-            if (!item.synopsis.isNullOrBlank()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, LXBorder)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, LXBorder)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
+                    Text(
+                        text = "Synopsis / Overview",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXPrimaryGreen
+                    )
+                    if (isLoadingDetails) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                                color = LXPrimaryGreen
+                            )
+                            Text(
+                                text = "Loading overview...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = LXTextSecondary
+                            )
+                        }
+                    } else {
+                        val textToDisplay = detailedSynopsis?.takeIf { it.isNotBlank() }
+                            ?: item.synopsis?.takeIf { it.isNotBlank() }
+                            ?: "No synopsis or overview available for this title."
                         Text(
-                            text = "Synopsis / Overview",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = LXPrimaryGreen
-                        )
-                        Text(
-                            text = item.synopsis,
+                            text = textToDisplay,
                             style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),
                             color = LXTextPrimary
                         )
@@ -1053,7 +1214,7 @@ private fun SearchResultDetailSheet(
                 }
             }
 
-            // TMDB / Jikan Attribution Notice
+            // Attribution Notice
             if (item.externalSource == "TMDB") {
                 Row(
                     modifier = Modifier
@@ -1073,6 +1234,50 @@ private fun SearchResultDetailSheet(
                         text = "This product uses the TMDB API but is not endorsed or certified by TMDB.",
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
                         color = LXTextSecondary.copy(alpha = 0.6f)
+                    )
+                }
+            } else if (item.externalSource.equals("Google Books", ignoreCase = true)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Book,
+                        contentDescription = "Google Books",
+                        tint = LXPrimaryGreen,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Book metadata and covers provided by Google Books.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                        color = LXTextSecondary.copy(alpha = 0.7f)
+                    )
+                }
+            } else if (item.externalSource.equals("Open Library", ignoreCase = true)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                        contentDescription = "Open Library",
+                        tint = LXScoreGold,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Book metadata and covers provided by Open Library (Internet Archive).",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                        color = LXTextSecondary.copy(alpha = 0.7f)
                     )
                 }
             }

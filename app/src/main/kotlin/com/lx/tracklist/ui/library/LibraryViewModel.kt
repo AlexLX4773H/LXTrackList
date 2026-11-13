@@ -10,6 +10,7 @@ import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
+import com.lx.tracklist.data.remote.BookSyncManager
 import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbSyncManager
@@ -640,15 +641,24 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
 
             val jikanIds = mutableSetOf<Long>()
             val tmdbIds = mutableSetOf<Long>()
+            val bookIds = mutableSetOf<Long>()
 
             for (entry in selectedEntries) {
                 val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim() ?: ""
                 if (src.equals("TMDB", ignoreCase = true)) {
                     tmdbIds.add(entry.id)
+                } else if (src.equals("Google Books", ignoreCase = true) || src.equals("Open Library", ignoreCase = true)) {
+                    bookIds.add(entry.id)
                 } else if (src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)) {
                     jikanIds.add(entry.id)
                 } else if (entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.SHOW) {
                     tmdbIds.add(entry.id)
+                } else if (entry.mediaType == MediaType.BOOK) {
+                    if (src.equals("AniList", ignoreCase = true) || src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)) {
+                        jikanIds.add(entry.id)
+                    } else {
+                        bookIds.add(entry.id)
+                    }
                 } else {
                     jikanIds.add(entry.id)
                 }
@@ -672,6 +682,16 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                         repository = repository,
                         forceRefresh = forceRefresh,
                         targetEntryIds = tmdbIds,
+                        targetProfileId = user.id,
+                        targetProfileName = user.name
+                    )
+                }
+                if (bookIds.isNotEmpty()) {
+                    BookSyncManager.startSync(
+                        context = context,
+                        repository = repository,
+                        forceRefresh = forceRefresh,
+                        targetEntryIds = bookIds,
                         targetProfileId = user.id,
                         targetProfileName = user.name
                     )

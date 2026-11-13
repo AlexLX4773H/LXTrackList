@@ -147,6 +147,7 @@ import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.remote.BookSyncProgress
 import com.lx.tracklist.data.remote.JikanSyncProgress
 import com.lx.tracklist.data.remote.TachiyomiResolveProgress
 import com.lx.tracklist.data.remote.TmdbConfig
@@ -190,6 +191,7 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsState()
     val jikanSyncState by viewModel.jikanSyncState.collectAsState()
     val tmdbSyncState by viewModel.tmdbSyncState.collectAsState()
+    val bookSyncState by viewModel.bookSyncState.collectAsState()
     val malSyncState by viewModel.malSyncState.collectAsState()
     val tachiyomiResolveState by viewModel.tachiyomiResolveState.collectAsState()
     val context = LocalContext.current
@@ -1003,6 +1005,7 @@ fun SettingsScreen(
                         state = state,
                         jikanSyncState = jikanSyncState,
                         tmdbSyncState = tmdbSyncState,
+                        bookSyncState = bookSyncState,
                         selectedSubMenu = currentSelection,
                         onSelectSubMenu = { activeSubMenu = it },
                         onDismissStatusMessage = { viewModel.clearStatusMessage() }
@@ -1040,6 +1043,7 @@ fun SettingsScreen(
                         SettingsSubMenu.SYNC_JOBS -> SyncJobsContent(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
+                            bookSyncState = bookSyncState,
                             tachiyomiResolveState = tachiyomiResolveState,
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
@@ -1051,6 +1055,11 @@ fun SettingsScreen(
                                 viewModel.startTmdbSync(context, force)
                             },
                             onCancelTmdbSync = { viewModel.cancelTmdbSync(context) },
+                            onStartBookSync = { force ->
+                                ensureNotificationPermission()
+                                viewModel.startBookSync(context, force)
+                            },
+                            onCancelBookSync = { viewModel.cancelBookSync(context) },
                             onStartTachiyomiResolution = {
                                 ensureNotificationPermission()
                                 viewModel.startTachiyomiResolution(context)
@@ -1128,6 +1137,7 @@ fun SettingsScreen(
                             state = state,
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
+                            bookSyncState = bookSyncState,
                             selectedSubMenu = null,
                             onSelectSubMenu = { activeSubMenu = it },
                             onDismissStatusMessage = { viewModel.clearStatusMessage() },
@@ -1165,6 +1175,7 @@ fun SettingsScreen(
                         SyncJobsContent(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
+                            bookSyncState = bookSyncState,
                             tachiyomiResolveState = tachiyomiResolveState,
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
@@ -1176,6 +1187,11 @@ fun SettingsScreen(
                                 viewModel.startTmdbSync(context, force)
                             },
                             onCancelTmdbSync = { viewModel.cancelTmdbSync(context) },
+                            onStartBookSync = { force ->
+                                ensureNotificationPermission()
+                                viewModel.startBookSync(context, force)
+                            },
+                            onCancelBookSync = { viewModel.cancelBookSync(context) },
                             onStartTachiyomiResolution = {
                                 ensureNotificationPermission()
                                 viewModel.startTachiyomiResolution(context)
@@ -1413,6 +1429,7 @@ private fun SettingsMainMenu(
     state: SettingsUiState,
     jikanSyncState: JikanSyncProgress,
     tmdbSyncState: TmdbSyncProgress,
+    bookSyncState: BookSyncProgress,
     selectedSubMenu: SettingsSubMenu?,
     onSelectSubMenu: (SettingsSubMenu) -> Unit,
     onDismissStatusMessage: () -> Unit = {},
@@ -1453,7 +1470,7 @@ private fun SettingsMainMenu(
             )
 
             // 2. External Sync Jobs (Jikan & TMDB metadata)
-            val isSyncing = jikanSyncState.isRunning || tmdbSyncState.isRunning
+            val isSyncing = jikanSyncState.isRunning || tmdbSyncState.isRunning || bookSyncState.isRunning
             SettingsMenuItem(
                 icon = Icons.Default.Sync,
                 iconBackgroundColor = Color(0xFF4DA8DA).copy(alpha = 0.15f),
@@ -3155,11 +3172,14 @@ private fun ExternalTrackingContent(
 private fun SyncJobsContent(
     jikanSyncState: JikanSyncProgress,
     tmdbSyncState: TmdbSyncProgress,
+    bookSyncState: BookSyncProgress,
     tachiyomiResolveState: TachiyomiResolveProgress,
     onStartJikanSync: (Boolean) -> Unit,
     onCancelJikanSync: () -> Unit,
     onStartTmdbSync: (Boolean) -> Unit,
     onCancelTmdbSync: () -> Unit,
+    onStartBookSync: (Boolean) -> Unit,
+    onCancelBookSync: () -> Unit,
     onStartTachiyomiResolution: () -> Unit,
     onCancelTachiyomiResolution: () -> Unit,
     modifier: Modifier = Modifier
@@ -3196,7 +3216,7 @@ private fun SyncJobsContent(
                     )
                 }
                 Text(
-                    text = "Automate fetching official high-resolution posters, runtimes, broadcast dates, season & episode counts, tags, and ratings from MyAnimeList (Jikan), MangaDex, AniList, and The Movie Database (TMDB).",
+                    text = "Automate fetching official high-resolution posters, runtimes, broadcast dates, season & episode counts, tags, and ratings from MyAnimeList (Jikan), MangaDex, AniList, The Movie Database (TMDB), Google Books, and Open Library.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
@@ -3599,6 +3619,200 @@ private fun SyncJobsContent(
             }
         }
 
+        // Books / Novels Sync Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                            contentDescription = null,
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Books / Novels Sync",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    if (bookSyncState.isRunning) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "SYNCING",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "ONLINE",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Fetches official covers, author & publisher details, page & volume counts, publication dates, categories/tags, and descriptions for Books and Novels from Google Books and Open Library (with AniList for Light Novels).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                if (bookSyncState.isRunning) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Progress (${bookSyncState.completedCount}/${bookSyncState.totalCount}) • ${bookSyncState.updatedCount} updated",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = LXTextPrimary
+                            )
+                            Text(
+                                text = "${(bookSyncState.progressFraction * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                color = LXPrimaryGreen
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(LXBorder)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(bookSyncState.progressFraction)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(LXPrimaryGreen)
+                            )
+                        }
+
+                        if (bookSyncState.currentTitle.isNotBlank()) {
+                            Text(
+                                text = "Current: ${bookSyncState.currentTitle}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Text(
+                            text = "Pending: ${bookSyncState.pendingCount} remaining${if (bookSyncState.failedCount > 0) " • ${bookSyncState.failedCount} failed" else ""}",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = LXTextSecondary
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            OutlinedButton(
+                                onClick = onCancelBookSync,
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXErrorRed),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, LXErrorRed.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Cancel Sync", fontSize = 12.sp, color = LXErrorRed)
+                            }
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { onStartBookSync(false) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Fetch Missing",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { onStartBookSync(true) },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Re-fetch All",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Tachiyomi ID Resolution Card
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -3654,7 +3868,7 @@ private fun SyncJobsContent(
                 }
 
                 Text(
-                    text = "Find and link official external IDs (MyAnimeList, MangaDex, AniList, Kitsu, TMDB) for Manga, Manhwa, Movie, and TV Show entries. Only links when title match is exact and confident. Generates a full audit report in /LXTrackList/data.",
+                    text = "Find and link official external IDs (MyAnimeList, MangaDex, AniList, Kitsu, TMDB, Google Books, Open Library) for Manga, Manhwa, Books, Novels, Movie, and TV Show entries. Only links when title match is exact and confident. Generates a full audit report in /LXTrackList/data.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )

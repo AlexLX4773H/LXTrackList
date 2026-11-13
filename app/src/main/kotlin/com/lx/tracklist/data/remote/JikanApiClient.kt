@@ -456,6 +456,67 @@ object JikanApiClient {
         return Result.failure(NotFoundException(errorSummary))
     }
 
+    fun searchJikanDirect(
+        queryTitle: String,
+        isManga: Boolean,
+        subType: String? = null,
+        limit: Int = 20,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<JikanMediaDetails>> {
+        val cleanTitle = queryTitle.trim()
+        if (cleanTitle.isBlank()) return Result.success(emptyList())
+
+        val isManhwa = subType?.equals("manhwa", ignoreCase = true) == true
+        val type = if (isManga || isManhwa) "manga" else "anime"
+        val encodedQuery = URLEncoder.encode(cleanTitle, "UTF-8")
+        val subTypeParam = if (!subType.isNullOrBlank()) "&type=$subType" else ""
+        val endpoint = "${baseUrl.trimEnd('/')}/$type?q=$encodedQuery&limit=$limit$subTypeParam"
+
+        return try {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json, text/plain, */*")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .get()
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string() ?: ""
+
+            if (response.isSuccessful) {
+                val jsonObject = gson.fromJson(bodyString, JsonObject::class.java)
+                val dataArray = jsonObject?.getSafeJsonArray("data")
+                if (dataArray != null && dataArray.size() > 0) {
+                    val list = mutableListOf<JikanMediaDetails>()
+                    for (i in 0 until dataArray.size()) {
+                        val elem = dataArray.get(i)
+                        if (elem.isJsonObject) {
+                            val dataObj = elem.asJsonObject
+                            val malId = dataObj.get("mal_id")?.takeIf { !it.isJsonNull }?.asLong
+                            if (malId != null) {
+                                try {
+                                    list.add(parseJikanData(dataObj, fallbackMalId = malId))
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Error parsing Jikan item at index $i", e)
+                                }
+                            }
+                        }
+                    }
+                    if (list.isNotEmpty()) {
+                        return Result.success(list)
+                    }
+                }
+                Result.success(emptyList())
+            } else {
+                Result.failure(Exception("Jikan HTTP $code: ${bodyString.take(100)}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     fun searchJikanMultiple(
         queryTitle: String,
         isManga: Boolean,

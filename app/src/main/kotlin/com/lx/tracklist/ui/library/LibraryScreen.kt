@@ -641,16 +641,16 @@ fun LibraryScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Search and update posters, runtimes, broadcast dates, season/episode counts, and metadata for the selected ${state.selectedIds.size} entries using MyAnimeList (Jikan) and The Movie Database (TMDB).",
+                        text = "Search and update posters, runtimes, broadcast dates, season/episode counts, and metadata for the selected ${state.selectedIds.size} entries using MyAnimeList (Jikan), The Movie Database (TMDB), Google Books, and Open Library.",
                         color = LXTextSecondary
                     )
                     Text(
-                        text = "Anime, Manga, and Manhwa entries are synced with Jikan (MAL). Movies and TV Shows are synced with TMDB (or MAL if previously linked to MAL).",
+                        text = "Anime, Manga, and Manhwa entries are synced with Jikan (MAL) / MangaDex / AniList. Movies and TV Shows are synced with TMDB. Books and Novels are synced with Google Books and Open Library (or AniList/MAL for Light Novels).",
                         color = LXTextSecondary,
                         fontSize = 12.sp
                     )
                     Text(
-                        text = "Tap 'Resolve IDs' to find and link official IDs (MAL, MangaDex, AniList, Kitsu, TMDB) with confident exact title matching and audit reports.",
+                        text = "Tap 'Resolve IDs' to find and link official IDs (MAL, MangaDex, AniList, Kitsu, TMDB, Google Books, Open Library) for Manga, Manhwa, Books, Novels, Movies, and TV Shows with confident exact title matching and audit reports.",
                         color = LXScoreGold.copy(alpha = 0.9f),
                         fontSize = 11.sp
                     )
