@@ -113,7 +113,7 @@ class MediaRepository(
                         ?: userProfileDao.getAllProfilesSync().firstOrNull()
                         ?: defaultUser
                     _activeUser.value = profile
-                    com.lx.tracklist.ui.theme.ThemeManager.loadForProfile(profile.id, context)
+                    context?.let { com.lx.tracklist.ui.theme.ThemeManager.loadForProfile(profile.id, it) }
                     _isSwipeToSwitchTabsEnabled.value = prefs?.getBoolean("swipe_to_switch_tabs_${profile.id}", true) ?: true
                     _isTachiyomiImportAsFavorites.value = prefs?.getBoolean("tachiyomi_import_as_favorites_${profile.id}", false) ?: false
                     dao.sanitizeZeroUserIds(defaultUser.id)
@@ -144,7 +144,7 @@ class MediaRepository(
         prefs?.edit()?.putLong("active_user_id", profile.id)?.apply()
         _isSwipeToSwitchTabsEnabled.value = prefs?.getBoolean("swipe_to_switch_tabs_${profile.id}", true) ?: true
         _isTachiyomiImportAsFavorites.value = prefs?.getBoolean("tachiyomi_import_as_favorites_${profile.id}", false) ?: false
-        com.lx.tracklist.ui.theme.ThemeManager.loadForProfile(profile.id, context)
+        context?.let { com.lx.tracklist.ui.theme.ThemeManager.loadForProfile(profile.id, it) }
     }
 
     suspend fun createUser(

@@ -685,6 +685,7 @@ fun MediaCard(
                 }
             }
         }
+    }
 
         if (isBeyond) {
             Image(
