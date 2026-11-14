@@ -3244,7 +3244,7 @@ private fun SyncJobsContent(
                         modifier = Modifier.weight(1f).padding(end = 8.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Sync,
+                            imageVector = Icons.Default.LiveTv,
                             contentDescription = null,
                             tint = LXPrimaryGreen,
                             modifier = Modifier.size(20.dp)
@@ -3298,15 +3298,21 @@ private fun SyncJobsContent(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Progress (${jikanSyncState.completedCount}/${jikanSyncState.totalCount}) • ${jikanSyncState.updatedCount} updated",
+                                text = if (jikanSyncState.totalCount > 0) {
+                                    "Progress (${jikanSyncState.completedCount}/${jikanSyncState.totalCount}) • ${jikanSyncState.updatedCount} updated"
+                                } else {
+                                    jikanSyncState.statusMessage ?: "Preparing sync..."
+                                },
                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                                 color = LXTextPrimary
                             )
-                            Text(
-                                text = "${(jikanSyncState.progressFraction * 100).toInt()}%",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                color = LXPrimaryGreen
-                            )
+                            if (jikanSyncState.totalCount > 0) {
+                                Text(
+                                    text = "${(jikanSyncState.progressFraction * 100).toInt()}%",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXPrimaryGreen
+                                )
+                            }
                         }
 
                         Box(
@@ -3316,13 +3322,21 @@ private fun SyncJobsContent(
                                 .clip(RoundedCornerShape(3.dp))
                                 .background(LXBorder)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(jikanSyncState.progressFraction)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(LXPrimaryGreen)
-                            )
+                            if (jikanSyncState.totalCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(jikanSyncState.progressFraction)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(LXPrimaryGreen)
+                                )
+                            } else {
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxSize(),
+                                    color = LXPrimaryGreen,
+                                    trackColor = LXBorder
+                                )
+                            }
                         }
 
                         if (jikanSyncState.currentTitle.isNotBlank()) {
@@ -3333,13 +3347,23 @@ private fun SyncJobsContent(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+                        } else if (!jikanSyncState.statusMessage.isNullOrBlank() && jikanSyncState.totalCount > 0) {
+                            Text(
+                                text = jikanSyncState.statusMessage,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
 
-                        Text(
-                            text = "Pending: ${jikanSyncState.pendingCount} remaining${if (jikanSyncState.failedCount > 0) " • ${jikanSyncState.failedCount} failed" else ""}",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = LXTextSecondary
-                        )
+                        if (jikanSyncState.totalCount > 0) {
+                            Text(
+                                text = "Pending: ${jikanSyncState.pendingCount} remaining${if (jikanSyncState.failedCount > 0) " • ${jikanSyncState.failedCount} failed" else ""}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary
+                            )
+                        }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -3423,7 +3447,7 @@ private fun SyncJobsContent(
                         modifier = Modifier.weight(1f).padding(end = 8.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Sync,
+                            imageVector = Icons.Default.Movie,
                             contentDescription = null,
                             tint = LXPrimaryGreen,
                             modifier = Modifier.size(20.dp)
@@ -3515,15 +3539,21 @@ private fun SyncJobsContent(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Progress (${tmdbSyncState.completedCount}/${tmdbSyncState.totalCount}) • ${tmdbSyncState.updatedCount} updated",
+                                text = if (tmdbSyncState.totalCount > 0) {
+                                    "Progress (${tmdbSyncState.completedCount}/${tmdbSyncState.totalCount}) • ${tmdbSyncState.updatedCount} updated"
+                                } else {
+                                    tmdbSyncState.statusMessage ?: "Preparing sync..."
+                                },
                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                                 color = LXTextPrimary
                             )
-                            Text(
-                                text = "${(tmdbSyncState.progressFraction * 100).toInt()}%",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                color = LXPrimaryGreen
-                            )
+                            if (tmdbSyncState.totalCount > 0) {
+                                Text(
+                                    text = "${(tmdbSyncState.progressFraction * 100).toInt()}%",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXPrimaryGreen
+                                )
+                            }
                         }
 
                         Box(
@@ -3533,13 +3563,21 @@ private fun SyncJobsContent(
                                 .clip(RoundedCornerShape(3.dp))
                                 .background(LXBorder)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(tmdbSyncState.progressFraction)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(LXPrimaryGreen)
-                            )
+                            if (tmdbSyncState.totalCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(tmdbSyncState.progressFraction)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(LXPrimaryGreen)
+                                )
+                            } else {
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxSize(),
+                                    color = LXPrimaryGreen,
+                                    trackColor = LXBorder
+                                )
+                            }
                         }
 
                         if (tmdbSyncState.currentTitle.isNotBlank()) {
@@ -3550,13 +3588,23 @@ private fun SyncJobsContent(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+                        } else if (!tmdbSyncState.statusMessage.isNullOrBlank() && tmdbSyncState.totalCount > 0) {
+                            Text(
+                                text = tmdbSyncState.statusMessage,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
 
-                        Text(
-                            text = "Pending: ${tmdbSyncState.pendingCount} remaining${if (tmdbSyncState.failedCount > 0) " • ${tmdbSyncState.failedCount} failed" else ""}",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = LXTextSecondary
-                        )
+                        if (tmdbSyncState.totalCount > 0) {
+                            Text(
+                                text = "Pending: ${tmdbSyncState.pendingCount} remaining${if (tmdbSyncState.failedCount > 0) " • ${tmdbSyncState.failedCount} failed" else ""}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary
+                            )
+                        }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -3709,15 +3757,21 @@ private fun SyncJobsContent(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Progress (${bookSyncState.completedCount}/${bookSyncState.totalCount}) • ${bookSyncState.updatedCount} updated",
+                                text = if (bookSyncState.totalCount > 0) {
+                                    "Progress (${bookSyncState.completedCount}/${bookSyncState.totalCount}) • ${bookSyncState.updatedCount} updated"
+                                } else {
+                                    bookSyncState.statusMessage ?: "Preparing sync..."
+                                },
                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                                 color = LXTextPrimary
                             )
-                            Text(
-                                text = "${(bookSyncState.progressFraction * 100).toInt()}%",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                                color = LXPrimaryGreen
-                            )
+                            if (bookSyncState.totalCount > 0) {
+                                Text(
+                                    text = "${(bookSyncState.progressFraction * 100).toInt()}%",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXPrimaryGreen
+                                )
+                            }
                         }
 
                         Box(
@@ -3727,13 +3781,21 @@ private fun SyncJobsContent(
                                 .clip(RoundedCornerShape(3.dp))
                                 .background(LXBorder)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(bookSyncState.progressFraction)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(LXPrimaryGreen)
-                            )
+                            if (bookSyncState.totalCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(bookSyncState.progressFraction)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(LXPrimaryGreen)
+                                )
+                            } else {
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxSize(),
+                                    color = LXPrimaryGreen,
+                                    trackColor = LXBorder
+                                )
+                            }
                         }
 
                         if (bookSyncState.currentTitle.isNotBlank()) {
@@ -3744,13 +3806,23 @@ private fun SyncJobsContent(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+                        } else if (!bookSyncState.statusMessage.isNullOrBlank() && bookSyncState.totalCount > 0) {
+                            Text(
+                                text = bookSyncState.statusMessage,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
 
-                        Text(
-                            text = "Pending: ${bookSyncState.pendingCount} remaining${if (bookSyncState.failedCount > 0) " • ${bookSyncState.failedCount} failed" else ""}",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = LXTextSecondary
-                        )
+                        if (bookSyncState.totalCount > 0) {
+                            Text(
+                                text = "Pending: ${bookSyncState.pendingCount} remaining${if (bookSyncState.failedCount > 0) " • ${bookSyncState.failedCount} failed" else ""}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary
+                            )
+                        }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),

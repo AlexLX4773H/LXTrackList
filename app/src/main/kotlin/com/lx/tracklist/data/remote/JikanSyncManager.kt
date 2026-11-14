@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
 private data class JikanSyncItemResult(
     val hasChanges: Boolean,
@@ -205,6 +206,23 @@ object JikanSyncManager {
             }
         }
 
+        _syncState.update {
+            it.copy(
+                isRunning = true,
+                profileId = profileId,
+                profileName = profileName,
+                totalCount = 0,
+                completedCount = 0,
+                pendingCount = 0,
+                updatedCount = 0,
+                failedCount = 0,
+                lastErrorMessage = null,
+                currentTitle = "",
+                statusMessage = if (!forceRefresh) "Checking cover images..." else "Preparing sync...",
+                isCompleted = false
+            )
+        }
+
         syncJob = scope.launch {
             NotificationHelper.initNotificationChannels(context)
 
@@ -304,12 +322,13 @@ object JikanSyncManager {
             var failed = 0
             var lastError: String? = null
 
-            var currentBatchSize = 4
+            var currentBatchSize = 2
             val minBatchSize = 1
-            val maxBatchSize = 5
-            var interBatchDelayMs = 200L
+            val maxBatchSize = 3
+            var interBatchDelayMs = 350L
             var consecutiveCleanBatches = 0
             val mutex = Mutex()
+            val activeTitles = ConcurrentHashMap.newKeySet<String>()
 
             var index = 0
             while (index < eligible.size && syncJob?.isCancelled != true) {
@@ -329,9 +348,11 @@ object JikanSyncManager {
                 var hadRateLimit = false
 
                 coroutineScope {
-                    chunk.map { entry ->
+                    chunk.mapIndexed { chunkIdx, entry ->
                         async {
                             if (syncJob?.isCancelled == true) return@async
+                            if (chunkIdx > 0) delay(chunkIdx * 250L)
+                            activeTitles.add(entry.title)
                             try {
                                 val outcome = syncSingleEntry(
                                     context = context,
@@ -340,6 +361,8 @@ object JikanSyncManager {
                                     profileId = profileId,
                                     forceRefresh = forceRefresh
                                 )
+                                activeTitles.remove(entry.title)
+                                val currentFetching = activeTitles.firstOrNull() ?: entry.title
                                 mutex.withLock {
                                     completed++
                                     if (outcome.isSuccess) {
@@ -357,15 +380,18 @@ object JikanSyncManager {
                                             updatedCount = updated,
                                             failedCount = failed,
                                             lastErrorMessage = lastError,
-                                            currentTitle = entry.title,
+                                            currentTitle = currentFetching,
                                             statusMessage = "Synced $completed / $total ($updated updated${if (failed > 0) ", $failed failed" else ""})"
                                         )
                                     }
-                                    NotificationHelper.showJikanSyncProgress(context, completed, total, entry.title, profileName = profileName)
+                                    NotificationHelper.showJikanSyncProgress(context, completed, total, currentFetching, profileName = profileName)
                                 }
                             } catch (e: CancellationException) {
+                                activeTitles.remove(entry.title)
                                 throw e
                             } catch (e: Exception) {
+                                activeTitles.remove(entry.title)
+                                val currentFetching = activeTitles.firstOrNull() ?: entry.title
                                 val err = e.message ?: "Unknown error"
                                 mutex.withLock {
                                     completed++
@@ -380,9 +406,10 @@ object JikanSyncManager {
                                             updatedCount = updated,
                                             failedCount = failed,
                                             lastErrorMessage = lastError,
-                                            currentTitle = entry.title
+                                            currentTitle = currentFetching
                                         )
                                     }
+                                    NotificationHelper.showJikanSyncProgress(context, completed, total, currentFetching, profileName = profileName)
                                 }
                             }
                         }

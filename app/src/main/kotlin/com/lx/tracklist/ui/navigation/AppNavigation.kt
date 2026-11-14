@@ -43,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -112,6 +113,7 @@ fun AppNavigation() {
     val repository = LXApplication.instance.repository
     var backStack by remember { mutableStateOf(listOf<NavDestination>(NavDestination.Home)) }
     val currentDestination = backStack.last()
+    val saveableStateHolder = rememberSaveableStateHolder()
 
     val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModelFactory(repository))
     val homeState by homeViewModel.uiState.collectAsState()
@@ -292,6 +294,17 @@ fun AppNavigation() {
 
     fun navigateBack(): Boolean {
         if (backStack.size > 1) {
+            val popped = backStack.last()
+            val poppedKey = when (popped) {
+                is NavDestination.Home -> "screen_home"
+                is NavDestination.Library -> "screen_library"
+                is NavDestination.Search -> "screen_search"
+                is NavDestination.Stats -> "screen_stats"
+                is NavDestination.Settings -> "screen_settings"
+                is NavDestination.Detail -> "screen_detail_${popped.entryId}_${popped.sessionId}"
+                is NavDestination.AddEdit -> "screen_add_edit_${popped.entryId ?: 0L}_${popped.sessionId}"
+            }
+            saveableStateHolder.removeState(poppedKey)
             backStack = backStack.dropLast(1)
             return true
         }
@@ -327,104 +340,117 @@ fun AppNavigation() {
 
     @Composable
     fun ScreenContent() {
-        when (val dest = currentDestination) {
-            is NavDestination.Home -> {
-                HomeScreen(
-                    viewModel = homeViewModel,
-                    onEntryClick = { entryId -> navigateTo(NavDestination.Detail(entryId)) },
-                    onAddNewEntry = { mediaType, customCategory, subCategory, status ->
-                        navigateTo(
-                            NavDestination.AddEdit(
-                                entryId = null,
-                                initialMediaType = mediaType,
-                                initialCustomCategory = customCategory,
-                                initialSubCategory = subCategory,
-                                initialStatus = status
+        val dest = currentDestination
+        val destKey = when (dest) {
+            is NavDestination.Home -> "screen_home"
+            is NavDestination.Library -> "screen_library"
+            is NavDestination.Search -> "screen_search"
+            is NavDestination.Stats -> "screen_stats"
+            is NavDestination.Settings -> "screen_settings"
+            is NavDestination.Detail -> "screen_detail_${dest.entryId}_${dest.sessionId}"
+            is NavDestination.AddEdit -> "screen_add_edit_${dest.entryId ?: 0L}_${dest.sessionId}"
+        }
+
+        saveableStateHolder.SaveableStateProvider(key = destKey) {
+            when (dest) {
+                is NavDestination.Home -> {
+                    HomeScreen(
+                        viewModel = homeViewModel,
+                        onEntryClick = { entryId -> navigateTo(NavDestination.Detail(entryId)) },
+                        onAddNewEntry = { mediaType, customCategory, subCategory, status ->
+                            navigateTo(
+                                NavDestination.AddEdit(
+                                    entryId = null,
+                                    initialMediaType = mediaType,
+                                    initialCustomCategory = customCategory,
+                                    initialSubCategory = subCategory,
+                                    initialStatus = status
+                                )
                             )
-                        )
-                    },
-                    onEditEntry = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) }
-                )
-            }
-
-            is NavDestination.Library -> {
-                LibraryScreen(
-                    viewModel = libraryViewModel,
-                    onEntryClick = { entryId -> navigateTo(NavDestination.Detail(entryId)) },
-                    onEditEntry = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) },
-                    onAddNewEntry = { mediaType, customCategory, subCategory, status ->
-                        navigateTo(
-                            NavDestination.AddEdit(
-                                entryId = null,
-                                initialMediaType = mediaType,
-                                initialCustomCategory = customCategory,
-                                initialSubCategory = subCategory,
-                                initialStatus = status
-                            )
-                        )
-                    },
-                    activeUser = homeState.activeUser,
-                    onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
-                )
-            }
-
-            is NavDestination.Search -> {
-                SearchScreen(
-                    viewModel = searchViewModel,
-                    onNavigateToDetail = { entryId -> navigateTo(NavDestination.Detail(entryId)) },
-                    activeUser = homeState.activeUser,
-                    onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
-                )
-            }
-
-            is NavDestination.Stats -> {
-                com.lx.tracklist.ui.stats.StatsScreen(
-                    viewModel = statsViewModel,
-                    activeUser = homeState.activeUser,
-                    onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
-                )
-            }
-
-            is NavDestination.Settings -> {
-                SettingsScreen(
-                    viewModel = settingsViewModel,
-                    onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
-                )
-            }
-
-            is NavDestination.Detail -> {
-                val detailViewModel: DetailViewModel = viewModel(
-                    key = "detail_${dest.entryId}_${dest.sessionId}",
-                    factory = DetailViewModelFactory(repository, dest.entryId)
-                )
-                DetailScreen(
-                    viewModel = detailViewModel,
-                    onNavigateBack = { navigateBack() },
-                    onEdit = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) },
-                    onNavigateToDetail = { targetEntryId -> navigateTo(NavDestination.Detail(targetEntryId)) },
-                    activeUser = homeState.activeUser,
-                    onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
-                )
-            }
-
-            is NavDestination.AddEdit -> {
-                val addEditViewModel: AddEditViewModel = viewModel(
-                    key = "add_edit_${dest.entryId ?: 0L}_${dest.sessionId}",
-                    factory = AddEditViewModelFactory(
-                        repository = repository,
-                        entryId = dest.entryId,
-                        initialMediaType = dest.initialMediaType,
-                        initialCustomCategory = dest.initialCustomCategory,
-                        initialSubCategory = dest.initialSubCategory,
-                        initialStatus = dest.initialStatus
+                        },
+                        onEditEntry = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) }
                     )
-                )
-                AddEditScreen(
-                    viewModel = addEditViewModel,
-                    onNavigateBack = { navigateBack() },
-                    activeUser = homeState.activeUser,
-                    onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
-                )
+                }
+
+                is NavDestination.Library -> {
+                    LibraryScreen(
+                        viewModel = libraryViewModel,
+                        onEntryClick = { entryId -> navigateTo(NavDestination.Detail(entryId)) },
+                        onEditEntry = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) },
+                        onAddNewEntry = { mediaType, customCategory, subCategory, status ->
+                            navigateTo(
+                                NavDestination.AddEdit(
+                                    entryId = null,
+                                    initialMediaType = mediaType,
+                                    initialCustomCategory = customCategory,
+                                    initialSubCategory = subCategory,
+                                    initialStatus = status
+                                )
+                            )
+                        },
+                        activeUser = homeState.activeUser,
+                        onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
+                    )
+                }
+
+                is NavDestination.Search -> {
+                    SearchScreen(
+                        viewModel = searchViewModel,
+                        onNavigateToDetail = { entryId -> navigateTo(NavDestination.Detail(entryId)) },
+                        activeUser = homeState.activeUser,
+                        onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
+                    )
+                }
+
+                is NavDestination.Stats -> {
+                    com.lx.tracklist.ui.stats.StatsScreen(
+                        viewModel = statsViewModel,
+                        activeUser = homeState.activeUser,
+                        onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
+                    )
+                }
+
+                is NavDestination.Settings -> {
+                    SettingsScreen(
+                        viewModel = settingsViewModel,
+                        onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
+                    )
+                }
+
+                is NavDestination.Detail -> {
+                    val detailViewModel: DetailViewModel = viewModel(
+                        key = "detail_${dest.entryId}_${dest.sessionId}",
+                        factory = DetailViewModelFactory(repository, dest.entryId)
+                    )
+                    DetailScreen(
+                        viewModel = detailViewModel,
+                        onNavigateBack = { navigateBack() },
+                        onEdit = { entryId -> navigateTo(NavDestination.AddEdit(entryId)) },
+                        onNavigateToDetail = { targetEntryId -> navigateTo(NavDestination.Detail(targetEntryId)) },
+                        activeUser = homeState.activeUser,
+                        onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
+                    )
+                }
+
+                is NavDestination.AddEdit -> {
+                    val addEditViewModel: AddEditViewModel = viewModel(
+                        key = "add_edit_${dest.entryId ?: 0L}_${dest.sessionId}",
+                        factory = AddEditViewModelFactory(
+                            repository = repository,
+                            entryId = dest.entryId,
+                            initialMediaType = dest.initialMediaType,
+                            initialCustomCategory = dest.initialCustomCategory,
+                            initialSubCategory = dest.initialSubCategory,
+                            initialStatus = dest.initialStatus
+                        )
+                    )
+                    AddEditScreen(
+                        viewModel = addEditViewModel,
+                        onNavigateBack = { navigateBack() },
+                        activeUser = homeState.activeUser,
+                        onUserAvatarClick = { homeViewModel.setUserSwitcherOpen(true) }
+                    )
+                }
             }
         }
     }

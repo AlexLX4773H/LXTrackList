@@ -126,6 +126,23 @@ object BookSyncManager {
             }
         }
 
+        _syncState.update {
+            it.copy(
+                isRunning = true,
+                profileId = profileId,
+                profileName = profileName,
+                totalCount = 0,
+                completedCount = 0,
+                pendingCount = 0,
+                updatedCount = 0,
+                failedCount = 0,
+                lastErrorMessage = null,
+                currentTitle = "",
+                statusMessage = if (!forceRefresh) "Checking cover images..." else "Preparing sync...",
+                isCompleted = false
+            )
+        }
+
         syncJob = scope.launch {
             NotificationHelper.initNotificationChannels(context)
 

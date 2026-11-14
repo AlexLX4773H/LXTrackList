@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -50,6 +51,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -285,6 +287,20 @@ fun HomeScreen(
                     }
                 }
 
+                val tabKey = when (tab) {
+                    is HomeTab.All -> "all"
+                    is HomeTab.Status -> "status_${tab.status.name}"
+                    is HomeTab.SubCat -> "subcat_${tab.subCategory.id}"
+                }
+                val gridState = rememberSaveable(
+                    state.selectedCategory,
+                    state.selectedCustomCategory,
+                    tabKey,
+                    saver = LazyGridState.Saver
+                ) {
+                    LazyGridState()
+                }
+
                 if (pageEntries.isEmpty()) {
                     val emptyLabel = when (tab) {
                         is HomeTab.All -> state.selectedCustomCategory ?: state.selectedCategory.displayName
@@ -297,6 +313,7 @@ fun HomeScreen(
                     )
                 } else {
                     LazyVerticalGrid(
+                        state = gridState,
                         columns = GridCells.Adaptive(minSize = 360.dp),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
