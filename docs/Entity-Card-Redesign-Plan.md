@@ -402,4 +402,184 @@ The `ThemedCardShell` composable simply renders a plain `Surface` for non-advanc
 
 ---
 
-*Document version: 1.0 — 2026-11-14*
+## 11. Handoff Notes for Implementor
+
+> [!IMPORTANT]
+> Read this section carefully before writing any code. It covers project-specific conventions that are not obvious from the plan alone.
+
+---
+
+### 11.1 Sprite Recutting Is a Human Task — Code Around It
+
+The plan requires the four `card_frame_ornate` PNGs to have their center areas punched to full transparency. **This cannot be done in code — it requires a graphics tool (Photoshop / GIMP / Figma).** The sprites have NOT been recutted yet at the time of this handoff.
+
+**Implement the layered architecture regardless.** To compensate for the opaque sprite center while the artwork is pending:
+- Set the outer shell Box to `alpha = 0f` (invisible) temporarily, OR
+- Apply the frame sprite normally and rely on the **inner panel's solid surface** rendering on top of it — the inner panel will visually cover the sprite's center fill, and only the border ring will peek out around the edges. This is the preferred approach; it works correctly once the sprites are recutted too.
+
+The two thumbnail border sprites that need new artwork (`theme_gate_thumbnail_border.png` and `theme_sky_thumbnail_border.png`) also don't exist yet. For Gate, substitute a simple `border(1.dp, Color(0xFFF59E0B), RoundedCornerShape(4.dp))` on the cover art Box. For Sky, substitute `border(0.5.dp, Color(0xFF06B6D4), RoundedCornerShape(4.dp))`. These are code-only placeholders until the real sprites arrive.
+
+---
+
+### 11.2 Drawable Naming Convention
+
+All theme sprites live in one flat folder: `app/src/main/res/drawable/`
+
+Naming pattern: `theme_<themeid>_<spritename>.png`
+
+| theme id | Kotlin reference prefix |
+|---|---|
+| `beyond` | `R.drawable.theme_beyond_` |
+| `slime` | `R.drawable.theme_slime_` |
+| `gate` | `R.drawable.theme_gate_` |
+| `sky` | `R.drawable.theme_sky_` |
+
+Examples already in the project:
+```
+theme_beyond_card_frame_ornate     → R.drawable.theme_beyond_card_frame_ornate
+theme_beyond_thumbnail_border      → R.drawable.theme_beyond_thumbnail_border  ✅ exists, wire it up
+theme_slime_thumbnail_border       → R.drawable.theme_slime_thumbnail_border   ✅ exists, wire it up
+theme_gate_progress_bar_bg         → R.drawable.theme_gate_progress_bar_bg
+theme_sky_icon_plus                → R.drawable.theme_sky_icon_plus
+```
+
+There are **no drawable subdirectories** — do not try to create `drawable-xhdpi/` etc.; all assets are already density-independent PNGs in the flat `drawable/` folder.
+
+---
+
+### 11.3 `ThemeManager` Is a Kotlin `object` — Use It Directly
+
+`ThemeManager` is a plain Kotlin singleton object, not a ViewModel or composable. Access it directly anywhere:
+
+```kotlin
+// Correct — direct property access
+val isBeyond = ThemeManager.isBeyondTheme
+val colors = ThemeManager.currentColors
+
+// WRONG — do not do this
+val themeManager = viewModel<ThemeManager>()          // won't compile
+val themeManager = LocalThemeManager.current          // doesn't exist
+```
+
+The boolean helpers already on `ThemeManager`:
+```kotlin
+ThemeManager.isBeyondTheme   // true when Beyond theme active
+ThemeManager.isSlimeTheme
+ThemeManager.isGateTheme
+ThemeManager.isSkyTheme
+// isAdvanced = any of the above is true
+```
+
+The full color set for the active theme:
+```kotlin
+ThemeManager.currentColors   // LXThemeColors instance
+ThemeManager.currentColors.primary
+ThemeManager.currentColors.surface
+ThemeManager.currentColors.border
+// etc.
+```
+
+---
+
+### 11.4 Two Color Systems — Use the Theme-Aware One for New Code
+
+There are **two parallel color systems** in the project. The old one is static and always Default Dark green; the new one is per-theme. `MediaCard.kt` currently uses the old static system throughout. **Use the theme-aware system for all new code.**
+
+| Old static (avoid in new code) | Theme-aware equivalent |
+|---|---|
+| `LXPrimaryGreen` | `ThemeManager.currentColors.primary` |
+| `LXBorder` | `ThemeManager.currentColors.border` |
+| `LXTextPrimary` | `ThemeManager.currentColors.textPrimary` |
+| `LXTextSecondary` | `ThemeManager.currentColors.textSecondary` |
+| `LXSurfaceBlack` | `ThemeManager.currentColors.surface` |
+| `LXSurfaceElevated` | `ThemeManager.currentColors.surfaceElevated` |
+| `LXProgressTrack` | `ThemeManager.currentColors.progressTrack` |
+| `LXScoreGold` | `ThemeManager.currentColors.scoreGold` |
+| `LXAiringBlue` | `ThemeManager.currentColors.airingBlue` |
+| `LXErrorRed` | `ThemeManager.currentColors.error` |
+| `LXBackgroundBlack` | `ThemeManager.currentColors.background` |
+
+> **Note:** You do NOT need to migrate all existing usages of the old statics — only new composables you create. Avoid making the diff any larger than necessary.
+
+---
+
+### 11.5 Reference Implementation: `ThemedFloatingActionButton.kt`
+
+Before writing `ThemedCardShell`, read `ThemedFloatingActionButton.kt` in full. It is the existing example of correctly structured per-theme sprite branching:
+- Shows the `when (true)` / `isBeyond` / `isSlime` / `isGate` / `isSky` / `else` branching pattern
+- Shows how to stack a background sprite + foreground icon using nested `Box` composables
+- Shows `painterResource(R.drawable.theme_xyz_...)` usage alongside `ContentScale` choices
+
+**File location:** `app/src/main/kotlin/com/lx/tracklist/ui/components/ThemedFloatingActionButton.kt`
+
+---
+
+### 11.6 Strict File Scope — Do Not Touch These
+
+Only modify files directly relevant to the card rendering. **Do not modify:**
+
+| File | Reason |
+|---|---|
+| `HomeScreen.kt` | Only the two grid spacing lines from Section 5 are permitted changes — nothing else |
+| `DetailScreen.kt` | Out of scope |
+| `AddEditScreen.kt` | Out of scope |
+| `LibraryScreen.kt` | Out of scope |
+| `SearchScreen.kt` | Out of scope |
+| `AppNavigation.kt` | Out of scope |
+| Any `*ViewModel.kt` | Out of scope |
+| `theme/*.json` files | Out of scope |
+| Any file in `themes/` folder | Out of scope |
+
+**Files you will modify:**
+- `app/src/main/kotlin/com/lx/tracklist/ui/components/MediaCard.kt` — primary target
+- `app/src/main/kotlin/com/lx/tracklist/ui/theme/AppTheme.kt` — add `ThemeCardInsets` data class and instances
+- `app/src/main/kotlin/com/lx/tracklist/ui/home/HomeScreen.kt` — grid spacing only (2 lines)
+
+**New file you may create:**
+- `app/src/main/kotlin/com/lx/tracklist/ui/components/CardInsets.kt` — if you prefer to keep `ThemeCardInsets` separate from `AppTheme.kt`
+
+---
+
+### 11.7 `ContentScale` Rules Per Theme
+
+| Theme | Outer shell sprite ContentScale | Reason |
+|---|---|---|
+| Beyond | `ContentScale.FillBounds` | Frame designed to stretch to any card height |
+| Slime | `ContentScale.FillBounds` | Same; drip art is at the bottom of the PNG canvas |
+| Gate | `ContentScale.FillBounds` | Rivet frame tiles cleanly |
+| Sky | `ContentScale.FillBounds` | Frame fills bounds; outer glow handled by inner panel opacity, not by Fit cropping |
+| All non-advanced | n/a | No sprite — Surface only |
+
+> **Correction from earlier draft:** Sky also uses `FillBounds`. The glow bleed issue is solved by the inner panel rendering on top (covering the center), not by switching to `ContentScale.Fit`. The outer Box for all advanced themes should have `Modifier.matchParentSize()` and no `.clip()` on it.
+
+---
+
+### 11.8 Inner Panel Alpha Values (Quick Reference)
+
+| Theme | Surface color | Recommended alpha |
+|---|---|---|
+| Beyond | `#181928` | 0.88f |
+| Slime | `#0A4D78` | 0.85f |
+| Gate | `#222227` | 0.90f |
+| Sky | `#14203D` | 0.82f (bg dim is 0.35, so more transparency is fine) |
+
+Apply as: `color = ThemeManager.currentColors.surface.copy(alpha = <value>)`
+
+---
+
+### 11.9 Gate Theme — Progress Bar Row Balance Fix
+
+Gate intentionally has **no increment button** (see existing `if (!isGate)` guard in `MediaCard.kt`). This leaves the progress bar `Row` unbalanced. Add a `Spacer` on the right to maintain symmetric layout:
+
+```kotlin
+// Inside the progress bar Row, after the themed progress bar Box:
+if (isGate) {
+    Spacer(modifier = Modifier.width(30.dp))  // balances the missing increment btn
+} else {
+    // ... existing increment button code
+}
+```
+
+---
+
+*Document version: 1.1 — 2026-11-14 (Implementor handoff notes added)*
