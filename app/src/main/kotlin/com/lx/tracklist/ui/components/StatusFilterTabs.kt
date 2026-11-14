@@ -245,6 +245,15 @@ private fun StatusTabItem(
                     .height(4.dp)
                     .width(52.dp)
             )
+        } else if (ThemeManager.isSlimeTheme && isSelected) {
+            Image(
+                painter = painterResource(R.drawable.theme_slime_progress_bar_fill),
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier
+                    .height(5.dp)
+                    .width(52.dp)
+            )
         } else {
             Box(
                 modifier = Modifier

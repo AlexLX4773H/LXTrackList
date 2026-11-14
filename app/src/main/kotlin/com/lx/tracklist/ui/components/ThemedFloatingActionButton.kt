@@ -76,21 +76,31 @@ fun ThemedFloatingActionButton(
             }
         }
         "slime" -> {
-            // Slime theme: soft rounded cyan slime bubble
+            // Slime theme: cute cosmic slime orb with gold '+', rings, and bubbles
+            val infiniteTransition = rememberInfiniteTransition(label = "SlimeBobbing")
+            val bobbingOffset by infiniteTransition.animateFloat(
+                initialValue = -2.5f,
+                targetValue = 2.5f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 2200, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "SlimeOffset"
+            )
+
             Box(
                 modifier = modifier
-                    .size(60.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(Color(0xFF38BDF8))
-                    .border(2.dp, Color(0xFFFDE047), RoundedCornerShape(22.dp))
+                    .size(68.dp)
+                    .clip(CircleShape)
                     .clickable(onClick = onClick),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
+                Image(
+                    painter = painterResource(R.drawable.theme_slime_fab_add_full),
                     contentDescription = contentDescription,
-                    tint = Color(0xFF0369A1),
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer(translationY = bobbingOffset)
                 )
             }
         }

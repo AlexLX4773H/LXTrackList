@@ -72,6 +72,8 @@ fun UserAvatarButton(
         } else {
             val logoPainter = if (ThemeManager.isBeyondTheme) {
                 painterResource(R.drawable.theme_beyond_logo_lx)
+            } else if (ThemeManager.isSlimeTheme) {
+                painterResource(R.drawable.theme_slime_logo_slime)
             } else {
                 painterResource(R.drawable.lx_logo)
             }

@@ -514,20 +514,31 @@ fun AppNavigation() {
                 navItems.forEach { (screen, dest) ->
                     val isSelected = currentDestination == dest
                     val isBeyond = ThemeManager.isBeyondTheme
-                    val beyondIconRes = when (screen) {
-                        Screen.Home -> R.drawable.theme_beyond_nav_home
-                        Screen.Library -> R.drawable.theme_beyond_nav_library
-                        Screen.Search -> R.drawable.theme_beyond_nav_search
-                        Screen.Stats -> R.drawable.theme_beyond_nav_stats
-                        Screen.Settings -> R.drawable.theme_beyond_nav_settings
+                    val isSlime = ThemeManager.isSlimeTheme
+                    val customNavIcon = when {
+                        isBeyond -> when (screen) {
+                            Screen.Home -> R.drawable.theme_beyond_nav_home
+                            Screen.Library -> R.drawable.theme_beyond_nav_library
+                            Screen.Search -> R.drawable.theme_beyond_nav_search
+                            Screen.Stats -> R.drawable.theme_beyond_nav_stats
+                            Screen.Settings -> R.drawable.theme_beyond_nav_settings
+                        }
+                        isSlime -> when (screen) {
+                            Screen.Home -> R.drawable.theme_slime_nav_home
+                            Screen.Library -> R.drawable.theme_slime_nav_library
+                            Screen.Search -> R.drawable.theme_slime_nav_search
+                            Screen.Stats -> R.drawable.theme_slime_nav_stats
+                            Screen.Settings -> R.drawable.theme_slime_nav_settings
+                        }
+                        else -> null
                     }
                     NavigationRailItem(
                         selected = isSelected,
                         onClick = { navigateTo(dest) },
                         icon = {
-                            if (isBeyond) {
+                            if (customNavIcon != null) {
                                 Image(
-                                    painter = painterResource(beyondIconRes),
+                                    painter = painterResource(customNavIcon),
                                     contentDescription = screen.title,
                                     modifier = Modifier.size(26.dp)
                                 )
@@ -541,9 +552,9 @@ fun AppNavigation() {
                         },
                         label = { Text(screen.title) },
                         colors = NavigationRailItemDefaults.colors(
-                            selectedIconColor = if (isBeyond) Color.White else LXBackgroundBlack,
-                            selectedTextColor = if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen,
-                            indicatorColor = if (isBeyond) Color(0xFFC53030) else LXPrimaryGreen,
+                            selectedIconColor = if (isBeyond) Color.White else if (isSlime) Color.White else LXBackgroundBlack,
+                            selectedTextColor = if (isBeyond) Color(0xFFFC8181) else if (isSlime) Color(0xFF38BDF8) else LXPrimaryGreen,
+                            indicatorColor = if (isBeyond) Color(0xFFC53030) else if (isSlime) Color(0xFF0284C7).copy(alpha = 0.5f) else LXPrimaryGreen,
                             unselectedIconColor = LXTextSecondary,
                             unselectedTextColor = LXTextSecondary
                         )
@@ -568,8 +579,9 @@ fun AppNavigation() {
             bottomBar = {
                 if (isTopLevelScreen && !isMultiSelectActive) {
                     val isBeyond = ThemeManager.isBeyondTheme
+                    val isSlime = ThemeManager.isSlimeTheme
                     androidx.compose.material3.Surface(
-                        color = if (isBeyond) LXSurfaceBlack.copy(alpha = 0.92f) else LXSurfaceBlack.copy(alpha = if (ThemeManager.effectiveBackgroundImage != null) 0.90f else 1f),
+                        color = if (isBeyond || isSlime) LXSurfaceBlack.copy(alpha = 0.92f) else LXSurfaceBlack.copy(alpha = if (ThemeManager.effectiveBackgroundImage != null) 0.90f else 1f),
                         tonalElevation = 6.dp,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -580,6 +592,15 @@ fun AppNavigation() {
                             if (isBeyond) {
                                 Image(
                                     painter = painterResource(R.drawable.theme_beyond_nav_bar_frame),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.FillBounds,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(64.dp)
+                                )
+                            } else if (isSlime) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_slime_nav_bar_frame),
                                     contentDescription = null,
                                     contentScale = ContentScale.FillBounds,
                                     modifier = Modifier
@@ -598,12 +619,22 @@ fun AppNavigation() {
                             ) {
                                 navItems.forEach { (screen, dest) ->
                                     val isSelected = currentDestination == dest
-                                    val beyondIconRes = when (screen) {
-                                        Screen.Home -> R.drawable.theme_beyond_nav_home
-                                        Screen.Library -> R.drawable.theme_beyond_nav_library
-                                        Screen.Search -> R.drawable.theme_beyond_nav_search
-                                        Screen.Stats -> R.drawable.theme_beyond_nav_stats
-                                        Screen.Settings -> R.drawable.theme_beyond_nav_settings
+                                    val customNavIcon = when {
+                                        isBeyond -> when (screen) {
+                                            Screen.Home -> R.drawable.theme_beyond_nav_home
+                                            Screen.Library -> R.drawable.theme_beyond_nav_library
+                                            Screen.Search -> R.drawable.theme_beyond_nav_search
+                                            Screen.Stats -> R.drawable.theme_beyond_nav_stats
+                                            Screen.Settings -> R.drawable.theme_beyond_nav_settings
+                                        }
+                                        isSlime -> when (screen) {
+                                            Screen.Home -> R.drawable.theme_slime_nav_home
+                                            Screen.Library -> R.drawable.theme_slime_nav_library
+                                            Screen.Search -> R.drawable.theme_slime_nav_search
+                                            Screen.Stats -> R.drawable.theme_slime_nav_stats
+                                            Screen.Settings -> R.drawable.theme_slime_nav_settings
+                                        }
+                                        else -> null
                                     }
                                     Column(
                                         modifier = Modifier
@@ -622,16 +653,18 @@ fun AppNavigation() {
                                                 .clip(RoundedCornerShape(14.dp))
                                                 .background(
                                                     if (isSelected) {
-                                                        if (isBeyond) Color(0xFFC53030) else LXPrimaryGreen
+                                                        if (isBeyond) Color(0xFFC53030)
+                                                        else if (isSlime) Color(0xFF0284C7).copy(alpha = 0.5f)
+                                                        else LXPrimaryGreen
                                                     } else Color.Transparent
                                                 ),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            if (isBeyond) {
+                                            if (customNavIcon != null) {
                                                 Image(
-                                                    painter = painterResource(beyondIconRes),
+                                                    painter = painterResource(customNavIcon),
                                                     contentDescription = screen.title,
-                                                    modifier = Modifier.size(22.dp)
+                                                    modifier = Modifier.size(if (isSlime) 24.dp else 22.dp)
                                                 )
                                             } else {
                                                 Icon(
@@ -650,7 +683,9 @@ fun AppNavigation() {
                                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
                                             ),
                                             color = if (isSelected) {
-                                                if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen
+                                                if (isBeyond) Color(0xFFFC8181)
+                                                else if (isSlime) Color(0xFF38BDF8)
+                                                else LXPrimaryGreen
                                             } else LXTextSecondary,
                                             maxLines = 1
                                         )

@@ -212,6 +212,7 @@ fun SearchScreen(
                 .padding(paddingValues)
         ) {
             val isBeyond = ThemeManager.isBeyondTheme
+            val isSlime = ThemeManager.isSlimeTheme
 
             // Search Input Field
             Box(
@@ -248,6 +249,12 @@ fun SearchScreen(
                                 contentDescription = "Search",
                                 modifier = Modifier.size(22.dp)
                             )
+                        } else if (isSlime) {
+                            Image(
+                                painter = painterResource(R.drawable.theme_slime_search_icon),
+                                contentDescription = "Search",
+                                modifier = Modifier.size(22.dp)
+                            )
                         } else {
                             Icon(
                                 imageVector = Icons.Default.Search,
@@ -261,7 +268,7 @@ fun SearchScreen(
                         if (state.isLoading) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
-                                color = if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen,
+                                color = if (isBeyond) Color(0xFFFC8181) else if (isSlime) Color(0xFF38BDF8) else LXPrimaryGreen,
                                 strokeWidth = 2.dp
                             )
                         } else if (state.query.isNotEmpty()) {
@@ -271,13 +278,13 @@ fun SearchScreen(
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
-                        unfocusedContainerColor = if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
-                        focusedBorderColor = if (isBeyond) Color.Transparent else LXPrimaryGreen,
-                        unfocusedBorderColor = if (isBeyond) Color.Transparent else LXBorder,
+                        focusedContainerColor = if (isBeyond || isSlime) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
+                        unfocusedContainerColor = if (isBeyond || isSlime) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
+                        focusedBorderColor = if (isBeyond || isSlime) Color.Transparent else LXPrimaryGreen,
+                        unfocusedBorderColor = if (isBeyond || isSlime) Color.Transparent else LXBorder,
                         focusedTextColor = LXTextPrimary,
                         unfocusedTextColor = LXTextPrimary,
-                        cursorColor = if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen
+                        cursorColor = if (isBeyond) Color(0xFFFC8181) else if (isSlime) Color(0xFF38BDF8) else LXPrimaryGreen
                     ),
                     shape = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -288,6 +295,13 @@ fun SearchScreen(
                 if (isBeyond) {
                     Image(
                         painter = painterResource(R.drawable.theme_beyond_search_bar),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.matchParentSize()
+                    )
+                } else if (isSlime) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_slime_search_bar),
                         contentDescription = null,
                         contentScale = ContentScale.FillBounds,
                         modifier = Modifier.matchParentSize()
@@ -305,7 +319,12 @@ fun SearchScreen(
             ) {
                 items(SearchCategory.entries) { category ->
                     val isSelected = state.selectedCategory == category
-                    if (isBeyond) {
+                    if (isBeyond || isSlime) {
+                        val chipRes = when {
+                            isBeyond -> if (isSelected) R.drawable.theme_beyond_chip_active_border else R.drawable.theme_beyond_chip_inactive
+                            isSlime -> if (isSelected) R.drawable.theme_slime_chip_active_border else R.drawable.theme_slime_chip_inactive
+                            else -> 0
+                        }
                         Box(
                             modifier = Modifier
                                 .height(36.dp)
@@ -315,10 +334,7 @@ fun SearchScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Image(
-                                painter = painterResource(
-                                    if (isSelected) R.drawable.theme_beyond_chip_active_border
-                                    else R.drawable.theme_beyond_chip_inactive
-                                ),
+                                painter = painterResource(chipRes),
                                 contentDescription = null,
                                 contentScale = ContentScale.FillBounds,
                                 modifier = Modifier.matchParentSize()

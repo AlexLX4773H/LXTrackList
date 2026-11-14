@@ -98,16 +98,18 @@ fun MediaCard(
     var showMenu by remember { mutableStateOf(false) }
     val progressAnimated by animateFloatAsState(targetValue = entry.progressFraction, label = "progress")
     val isBeyond = ThemeManager.isBeyondTheme
+    val isSlime = ThemeManager.isSlimeTheme
+    val isAdvanced = isBeyond || isSlime
 
     Box(modifier = modifier.fillMaxWidth()) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(if (isBeyond) 10.dp else 12.dp))
+                .clip(RoundedCornerShape(if (isAdvanced) 10.dp else 12.dp))
                 .border(
-                    width = if (isSelected) 2.dp else (if (isBeyond) 1.5.dp else 1.dp),
-                    color = if (isSelected) LXPrimaryGreen else (if (isBeyond) LXBorder.copy(alpha = 0.7f) else LXBorder),
-                    shape = RoundedCornerShape(if (isBeyond) 10.dp else 12.dp)
+                    width = if (isSelected) 2.dp else (if (isAdvanced) 1.5.dp else 1.dp),
+                    color = if (isSelected) LXPrimaryGreen else (if (isAdvanced) LXBorder.copy(alpha = 0.7f) else LXBorder),
+                    shape = RoundedCornerShape(if (isAdvanced) 10.dp else 12.dp)
                 )
                 .combinedClickable(
                     onClick = {
@@ -132,10 +134,10 @@ fun MediaCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        start = if (isBeyond) 12.dp else 10.dp,
-                        end = if (isBeyond) 18.dp else 10.dp,
-                        top = if (isBeyond) 8.dp else 10.dp,
-                        bottom = if (isBeyond) 8.dp else 10.dp
+                        start = if (isAdvanced) 12.dp else 10.dp,
+                        end = if (isAdvanced) 18.dp else 10.dp,
+                        top = if (isAdvanced) 8.dp else 10.dp,
+                        bottom = if (isAdvanced) 8.dp else 10.dp
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -164,8 +166,8 @@ fun MediaCard(
             // Cover Image Thumbnail
             Box(
                 modifier = Modifier
-                    .width(if (isBeyond) 62.dp else 72.dp)
-                    .height(if (isBeyond) 88.dp else 100.dp)
+                    .width(if (isAdvanced) 62.dp else 72.dp)
+                    .height(if (isAdvanced) 88.dp else 100.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xFF1E1E1E)),
                 contentAlignment = Alignment.Center
@@ -199,10 +201,17 @@ fun MediaCard(
                         contentScale = ContentScale.FillBounds,
                         modifier = Modifier.fillMaxSize()
                     )
+                } else if (isSlime) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_slime_thumbnail_border),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.width(if (isBeyond) 10.dp else 12.dp))
+            Spacer(modifier = Modifier.width(if (isAdvanced) 10.dp else 12.dp))
 
             // Details Column
             Column(
@@ -219,7 +228,7 @@ fun MediaCard(
                 ) {
                     Text(
                         text = entry.title,
-                        style = (if (isBeyond) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium).copy(fontWeight = FontWeight.Bold),
+                        style = (if (isAdvanced) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium).copy(fontWeight = FontWeight.Bold),
                         color = LXTextPrimary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -229,20 +238,26 @@ fun MediaCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
                             onClick = onToggleFavorite,
-                            modifier = Modifier.size(if (isBeyond) 24.dp else 28.dp)
+                            modifier = Modifier.size(if (isAdvanced) 24.dp else 28.dp)
                         ) {
                             if (isBeyond && entry.isFavorite) {
                                 Image(
                                     painter = painterResource(R.drawable.theme_beyond_icon_heart_active),
                                     contentDescription = "Favorite",
-                                    modifier = Modifier.size(if (isBeyond) 18.dp else 20.dp)
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            } else if (isSlime && entry.isFavorite) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_slime_icon_heart_active),
+                                    contentDescription = "Favorite",
+                                    modifier = Modifier.size(18.dp)
                                 )
                             } else {
                                 Icon(
                                     imageVector = if (entry.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                     contentDescription = "Favorite",
                                     tint = if (entry.isFavorite) LXPrimaryGreen else LXTextSecondary,
-                                    modifier = Modifier.size(if (isBeyond) 16.dp else 18.dp)
+                                    modifier = Modifier.size(if (isAdvanced) 16.dp else 18.dp)
                                 )
                             }
                         }
@@ -250,20 +265,26 @@ fun MediaCard(
                         Box {
                             IconButton(
                                 onClick = { showMenu = true },
-                                modifier = Modifier.size(if (isBeyond) 24.dp else 28.dp)
+                                modifier = Modifier.size(if (isAdvanced) 24.dp else 28.dp)
                             ) {
                                 if (isBeyond) {
                                     Image(
                                         painter = painterResource(R.drawable.theme_beyond_icon_more),
                                         contentDescription = "Options",
-                                        modifier = Modifier.size(if (isBeyond) 12.dp else 14.dp)
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                } else if (isSlime) {
+                                    Image(
+                                        painter = painterResource(R.drawable.theme_slime_icon_more),
+                                        contentDescription = "Options",
+                                        modifier = Modifier.size(12.dp)
                                     )
                                 } else {
                                     Icon(
                                         imageVector = Icons.Default.MoreVert,
                                         contentDescription = "Options",
                                         tint = LXTextSecondary,
-                                        modifier = Modifier.size(if (isBeyond) 16.dp else 18.dp)
+                                        modifier = Modifier.size(if (isAdvanced) 16.dp else 18.dp)
                                     )
                                 }
                             }
@@ -308,10 +329,10 @@ fun MediaCard(
                     color = LXTextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(vertical = if (isBeyond) 1.dp else 2.dp)
+                    modifier = Modifier.padding(vertical = if (isAdvanced) 1.dp else 2.dp)
                 )
 
-                Spacer(modifier = Modifier.height(if (isBeyond) 2.dp else 4.dp))
+                Spacer(modifier = Modifier.height(if (isAdvanced) 2.dp else 4.dp))
 
                 // Progress info & Badges
                 Row(
@@ -321,7 +342,7 @@ fun MediaCard(
                 ) {
                     Text(
                         text = entry.displayProgress,
-                        style = MaterialTheme.typography.labelLarge.copy(fontSize = if (isBeyond) 11.5.sp else 12.sp),
+                        style = MaterialTheme.typography.labelLarge.copy(fontSize = if (isAdvanced) 11.5.sp else 12.sp),
                         color = LXPrimaryGreen
                     )
 
@@ -412,7 +433,7 @@ fun MediaCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(if (isBeyond) 4.dp else 6.dp))
+                Spacer(modifier = Modifier.height(if (isAdvanced) 4.dp else 6.dp))
 
                 // Progress bar + Quick Increment button
                 Row(
@@ -443,6 +464,30 @@ fun MediaCard(
                                 )
                             }
                         }
+                    } else if (isSlime) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(10.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Image(
+                                painter = painterResource(R.drawable.theme_slime_progress_bar_bg),
+                                contentDescription = null,
+                                contentScale = ContentScale.FillBounds,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            if (progressAnimated > 0.01f) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_slime_progress_bar_fill),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.FillBounds,
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(progressAnimated)
+                                )
+                            }
+                        }
                     } else {
                         // Custom Neon Progress Bar
                         Box(
@@ -462,12 +507,12 @@ fun MediaCard(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(if (isBeyond) 8.dp else 8.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     // +1 Quick Increment Button
                     Box(
                         modifier = Modifier
-                            .size(if (isBeyond) 22.dp else 24.dp)
+                            .size(if (isAdvanced) 22.dp else 24.dp)
                             .clip(CircleShape)
                             .background(LXPrimaryGreen.copy(alpha = 0.15f))
                             .border(1.dp, LXPrimaryGreen.copy(alpha = 0.4f), CircleShape)
@@ -478,7 +523,7 @@ fun MediaCard(
                             imageVector = Icons.Default.Add,
                             contentDescription = "+1 Progress",
                             tint = LXPrimaryGreen,
-                            modifier = Modifier.size(if (isBeyond) 13.dp else 15.dp)
+                            modifier = Modifier.size(if (isAdvanced) 13.dp else 15.dp)
                         )
                     }
                 }
@@ -695,6 +740,13 @@ fun MediaCard(
         if (isBeyond) {
             Image(
                 painter = painterResource(R.drawable.theme_beyond_card_frame_ornate),
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier.matchParentSize()
+            )
+        } else if (isSlime) {
+            Image(
+                painter = painterResource(R.drawable.theme_slime_card_frame_ornate),
                 contentDescription = null,
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier.matchParentSize()

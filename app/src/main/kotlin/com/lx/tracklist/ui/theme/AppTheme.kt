@@ -462,4 +462,10 @@ object ThemeManager {
      */
     val isBeyondTheme: Boolean
         get() = currentThemeId == ThemePreset.BEYOND.id
+
+    /**
+     * Whether the active theme preset is the Advanced "Slime" theme.
+     */
+    val isSlimeTheme: Boolean
+        get() = currentThemeId == ThemePreset.SLIME.id
 }
