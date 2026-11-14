@@ -131,7 +131,12 @@ fun MediaCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(10.dp),
+                    .padding(
+                        start = if (isBeyond) 12.dp else 10.dp,
+                        end = if (isBeyond) 18.dp else 10.dp,
+                        top = if (isBeyond) 8.dp else 10.dp,
+                        bottom = if (isBeyond) 8.dp else 10.dp
+                    ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
             // Selection Checkbox (Visible in Selection Mode)
@@ -159,8 +164,8 @@ fun MediaCard(
             // Cover Image Thumbnail
             Box(
                 modifier = Modifier
-                    .width(72.dp)
-                    .height(100.dp)
+                    .width(if (isBeyond) 62.dp else 72.dp)
+                    .height(if (isBeyond) 88.dp else 100.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xFF1E1E1E)),
                 contentAlignment = Alignment.Center
@@ -197,7 +202,7 @@ fun MediaCard(
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(if (isBeyond) 10.dp else 12.dp))
 
             // Details Column
             Column(
@@ -214,7 +219,7 @@ fun MediaCard(
                 ) {
                     Text(
                         text = entry.title,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        style = (if (isBeyond) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium).copy(fontWeight = FontWeight.Bold),
                         color = LXTextPrimary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -224,20 +229,20 @@ fun MediaCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
                             onClick = onToggleFavorite,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(if (isBeyond) 24.dp else 28.dp)
                         ) {
                             if (isBeyond && entry.isFavorite) {
                                 Image(
                                     painter = painterResource(R.drawable.theme_beyond_icon_heart_active),
                                     contentDescription = "Favorite",
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(if (isBeyond) 18.dp else 20.dp)
                                 )
                             } else {
                                 Icon(
                                     imageVector = if (entry.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                     contentDescription = "Favorite",
                                     tint = if (entry.isFavorite) LXPrimaryGreen else LXTextSecondary,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier = Modifier.size(if (isBeyond) 16.dp else 18.dp)
                                 )
                             }
                         }
@@ -245,20 +250,20 @@ fun MediaCard(
                         Box {
                             IconButton(
                                 onClick = { showMenu = true },
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(if (isBeyond) 24.dp else 28.dp)
                             ) {
                                 if (isBeyond) {
                                     Image(
                                         painter = painterResource(R.drawable.theme_beyond_icon_more),
                                         contentDescription = "Options",
-                                        modifier = Modifier.size(14.dp)
+                                        modifier = Modifier.size(if (isBeyond) 12.dp else 14.dp)
                                     )
                                 } else {
                                     Icon(
                                         imageVector = Icons.Default.MoreVert,
                                         contentDescription = "Options",
                                         tint = LXTextSecondary,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(if (isBeyond) 16.dp else 18.dp)
                                     )
                                 }
                             }
@@ -303,10 +308,10 @@ fun MediaCard(
                     color = LXTextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(vertical = 2.dp)
+                    modifier = Modifier.padding(vertical = if (isBeyond) 1.dp else 2.dp)
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(if (isBeyond) 2.dp else 4.dp))
 
                 // Progress info & Badges
                 Row(
@@ -316,7 +321,7 @@ fun MediaCard(
                 ) {
                     Text(
                         text = entry.displayProgress,
-                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 12.sp),
+                        style = MaterialTheme.typography.labelLarge.copy(fontSize = if (isBeyond) 11.5.sp else 12.sp),
                         color = LXPrimaryGreen
                     )
 
@@ -407,7 +412,7 @@ fun MediaCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(if (isBeyond) 4.dp else 6.dp))
 
                 // Progress bar + Quick Increment button
                 Row(
@@ -418,7 +423,7 @@ fun MediaCard(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(8.dp),
+                                .height(7.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
                             Image(
@@ -457,12 +462,12 @@ fun MediaCard(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(if (isBeyond) 8.dp else 8.dp))
 
                     // +1 Quick Increment Button
                     Box(
                         modifier = Modifier
-                            .size(24.dp)
+                            .size(if (isBeyond) 22.dp else 24.dp)
                             .clip(CircleShape)
                             .background(LXPrimaryGreen.copy(alpha = 0.15f))
                             .border(1.dp, LXPrimaryGreen.copy(alpha = 0.4f), CircleShape)
@@ -473,7 +478,7 @@ fun MediaCard(
                             imageVector = Icons.Default.Add,
                             contentDescription = "+1 Progress",
                             tint = LXPrimaryGreen,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(if (isBeyond) 13.dp else 15.dp)
                         )
                     }
                 }
