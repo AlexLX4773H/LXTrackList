@@ -291,60 +291,137 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        FilterChip(
-                            selected = !newCategoryIsWatch,
+                        Surface(
                             onClick = { newCategoryIsWatch = false },
-                            label = { Text("Reading (Chapters/Vol)") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = LXPrimaryGreen,
-                                selectedLabelColor = LXBackgroundBlack,
-                                containerColor = LXSurfaceElevated,
-                                labelColor = LXTextSecondary
-                            )
-                        )
-                        FilterChip(
-                            selected = newCategoryIsWatch,
-                            onClick = { newCategoryIsWatch = true },
-                            label = { Text("Watching (Episodes)") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = LXPrimaryGreen,
-                                selectedLabelColor = LXBackgroundBlack,
-                                containerColor = LXSurfaceElevated,
-                                labelColor = LXTextSecondary
-                            )
-                        )
-                    }
-
-                    if (!newCategoryIsWatch) {
-                        Text("Reading Tracking Unit", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (!newCategoryIsWatch) LXPrimaryGreen else LXSurfaceElevated,
+                            border = BorderStroke(1.dp, if (!newCategoryIsWatch) LXPrimaryGreen else LXBorder)
                         ) {
-                            TrackingUnit.entries.forEach { unit ->
-                                FilterChip(
-                                    selected = newCategoryTrackingUnit == unit,
-                                    onClick = { newCategoryTrackingUnit = unit },
-                                    label = { Text(unit.displayName, fontSize = 11.sp) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = LXPrimaryGreen,
-                                        selectedLabelColor = LXBackgroundBlack,
-                                        containerColor = LXSurfaceElevated,
-                                        labelColor = LXTextSecondary
-                                    )
+                            Column(
+                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = "Reading",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = if (!newCategoryIsWatch) LXBackgroundBlack else LXTextPrimary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Chapters / Vol",
+                                    fontSize = 11.sp,
+                                    color = if (!newCategoryIsWatch) LXBackgroundBlack.copy(alpha = 0.8f) else LXTextSecondary
+                                )
+                            }
+                        }
+
+                        Surface(
+                            onClick = { newCategoryIsWatch = true },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (newCategoryIsWatch) LXPrimaryGreen else LXSurfaceElevated,
+                            border = BorderStroke(1.dp, if (newCategoryIsWatch) LXPrimaryGreen else LXBorder)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = "Watching",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = if (newCategoryIsWatch) LXBackgroundBlack else LXTextPrimary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Episodes",
+                                    fontSize = 11.sp,
+                                    color = if (newCategoryIsWatch) LXBackgroundBlack.copy(alpha = 0.8f) else LXTextSecondary
                                 )
                             }
                         }
                     }
 
+                    if (!newCategoryIsWatch) {
+                        Text("Reading Tracking Unit", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
+                        val units = TrackingUnit.entries
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                units.take(2).forEach { unit ->
+                                    val isSelected = newCategoryTrackingUnit == unit
+                                    Surface(
+                                        onClick = { newCategoryTrackingUnit = unit },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isSelected) LXPrimaryGreen else LXSurfaceElevated,
+                                        border = BorderStroke(1.dp, if (isSelected) LXPrimaryGreen else LXBorder)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = unit.displayName,
+                                                fontSize = 12.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (isSelected) LXBackgroundBlack else LXTextPrimary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                units.drop(2).forEach { unit ->
+                                    val isSelected = newCategoryTrackingUnit == unit
+                                    Surface(
+                                        onClick = { newCategoryTrackingUnit = unit },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isSelected) LXPrimaryGreen else LXSurfaceElevated,
+                                        border = BorderStroke(1.dp, if (isSelected) LXPrimaryGreen else LXBorder)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = unit.displayName,
+                                                fontSize = 12.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (isSelected) LXBackgroundBlack else LXTextPrimary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Text("Badge Color", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(colorOptions) { hex ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        colorOptions.forEach { hex ->
                             val color = parseHexColor(hex)
                             val isChosen = selectedColor == hex
                             Box(
                                 modifier = Modifier
-                                    .size(34.dp)
+                                    .size(32.dp)
                                     .clip(CircleShape)
                                     .background(color)
                                     .border(

@@ -90,6 +90,7 @@ import com.lx.tracklist.ui.theme.LXPrimaryGreen
 import com.lx.tracklist.ui.theme.LXSurfaceBlack
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import com.lx.tracklist.ui.theme.ThemeManager
 
 sealed class NavDestination {
     data object Home : NavDestination()
@@ -482,10 +483,10 @@ fun AppNavigation() {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .background(LXBackgroundBlack)
+                .background(if (ThemeManager.effectiveBackgroundImage != null) Color.Transparent else LXBackgroundBlack)
         ) {
             NavigationRail(
-                containerColor = LXSurfaceBlack,
+                containerColor = LXSurfaceBlack.copy(alpha = if (ThemeManager.effectiveBackgroundImage != null) 0.90f else 1f),
                 contentColor = LXTextPrimary,
                 modifier = Modifier
                     .fillMaxHeight()
@@ -539,12 +540,12 @@ fun AppNavigation() {
         // Phone Layout with Bottom NavigationBar
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            containerColor = LXBackgroundBlack,
+            containerColor = if (ThemeManager.effectiveBackgroundImage != null) Color.Transparent else LXBackgroundBlack,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             bottomBar = {
                 if (isTopLevelScreen && !isMultiSelectActive) {
                     androidx.compose.material3.Surface(
-                        color = LXSurfaceBlack,
+                        color = LXSurfaceBlack.copy(alpha = if (ThemeManager.effectiveBackgroundImage != null) 0.90f else 1f),
                         tonalElevation = 6.dp,
                         modifier = Modifier
                             .fillMaxWidth()

@@ -142,6 +142,7 @@ import com.lx.tracklist.ui.components.AddRelatedToLibraryDialog
 import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.theme.LXAiringBlue
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
+import com.lx.tracklist.ui.theme.ThemeManager
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXErrorRed
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
@@ -396,7 +397,7 @@ fun DetailScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = LXBackgroundBlack,
+        containerColor = if (ThemeManager.effectiveBackgroundImage != null) Color.Transparent else LXBackgroundBlack,
         topBar = {
             TopAppBar(
                 title = { Text(if (isTablet) (entry?.title ?: "Details") else "Details", color = LXTextPrimary, maxLines = 1) },

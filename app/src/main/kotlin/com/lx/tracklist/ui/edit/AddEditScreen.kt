@@ -126,6 +126,7 @@ import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.ui.components.CoverImageSearchDialog
 import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
+import com.lx.tracklist.ui.theme.ThemeManager
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXErrorRed
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
@@ -195,7 +196,7 @@ fun AddEditScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = LXBackgroundBlack,
+        containerColor = if (ThemeManager.effectiveBackgroundImage != null) Color.Transparent else LXBackgroundBlack,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(

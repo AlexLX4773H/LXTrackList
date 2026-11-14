@@ -89,6 +89,7 @@ import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXTextDisabled
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import com.lx.tracklist.ui.theme.ThemeManager
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -137,7 +138,7 @@ fun StatsScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = LXBackgroundBlack,
+        containerColor = if (ThemeManager.effectiveBackgroundImage != null) Color.Transparent else LXBackgroundBlack,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
@@ -685,23 +686,43 @@ fun MalCategoryStatsCard(
                 }
             }
 
-            // Days & Mean Score Header Row (exactly like MAL)
+            // Days & Mean Score Header Row (Days Spent, Days to Complete, Mean Score)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Days: ",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = LXTextSecondary
-                    )
-                    Text(
-                        text = String.format(Locale.US, "%.1f", summary.daysSpent),
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = LXTextPrimary
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Days: ",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = LXTextSecondary
+                        )
+                        Text(
+                            text = String.format(Locale.US, "%.1f", summary.daysSpent),
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                    }
+
+                    if (summary.daysRemaining > 0) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Left: ",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = LXTextSecondary
+                            )
+                            Text(
+                                text = String.format(Locale.US, "%.1f d", summary.daysRemaining),
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = LXPrimaryGreen
+                            )
+                        }
+                    }
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -843,6 +864,12 @@ fun MalCategoryStatsCard(
                         if (summary.volumesCount > 0) {
                             MalMetricRow(label = "Volumes", value = summary.volumesCount.formatCommas())
                         }
+                    }
+                    if (summary.daysRemaining > 0) {
+                        MalMetricRow(
+                            label = "To Complete",
+                            value = String.format(Locale.US, "%.1f d", summary.daysRemaining)
+                        )
                     }
                 }
             }

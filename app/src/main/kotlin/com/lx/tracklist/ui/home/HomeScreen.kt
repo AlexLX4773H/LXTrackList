@@ -43,6 +43,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.lx.tracklist.ui.components.ThemedFloatingActionButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -80,6 +81,7 @@ import com.lx.tracklist.ui.theme.LXPrimaryGreen
 import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import com.lx.tracklist.ui.theme.ThemeManager
 import kotlinx.coroutines.launch
 
 private sealed interface HomeTab {
@@ -189,7 +191,7 @@ fun HomeScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = LXBackgroundBlack,
+        containerColor = if (ThemeManager.effectiveBackgroundImage != null) Color.Transparent else LXBackgroundBlack,
         contentWindowInsets = if (isTablet) ScaffoldDefaults.contentWindowInsets else WindowInsets(0, 0, 0, 0),
         topBar = {
             Column {
@@ -238,7 +240,7 @@ fun HomeScreen(
             }
         },
         floatingActionButton = {
-            FloatingActionButton(
+            ThemedFloatingActionButton(
                 onClick = {
                     val currentTab = homeTabs.getOrNull(pagerState.currentPage) ?: HomeTab.All
                     val initialStatus = when (currentTab) {
@@ -256,13 +258,8 @@ fun HomeScreen(
                         initialStatus
                     )
                 },
-                containerColor = LXPrimaryGreen,
-                contentColor = LXBackgroundBlack,
-                shape = CircleShape,
                 modifier = Modifier.padding(bottom = 8.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Entry", modifier = Modifier.size(28.dp))
-            }
+            )
         }
     ) { paddingValues ->
         Box(

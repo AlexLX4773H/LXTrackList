@@ -13,6 +13,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import com.lx.tracklist.ui.navigation.AppNavigation
+import com.lx.tracklist.ui.theme.AppThemeBackgroundContainer
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXTrackListTheme
 
@@ -41,11 +42,13 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             LXTrackListTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = LXBackgroundBlack
-                ) {
-                    AppNavigation()
+                AppThemeBackgroundContainer {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = androidx.compose.ui.graphics.Color.Transparent
+                    ) {
+                        AppNavigation()
+                    }
                 }
             }
         }

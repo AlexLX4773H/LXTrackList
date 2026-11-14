@@ -27,6 +27,8 @@ data class CategoryStatSummary(
     val displayName: String,
     val isVideo: Boolean,
     val daysSpent: Double,
+    val daysRemaining: Double = 0.0,
+    val totalDays: Double = daysSpent + daysRemaining,
     val meanScore: Double,
     val scoredCount: Int,
     val totalEntries: Int,
@@ -78,7 +80,11 @@ fun calculateCategoryStatSummary(
     }
 
     var totalMinutes = 0.0
+    var remainingMinutes = 0.0
+
     filteredEntries.forEach { entry ->
+        val isCompleted = entry.status == MediaStatus.COMPLETED
+
         when (entry.mediaType) {
             MediaType.ANIME, MediaType.SHOW -> {
                 val epLen = (entry.episodeLengthMinutes ?: 24).toDouble()
@@ -86,11 +92,20 @@ fun calculateCategoryStatSummary(
                 val effectiveTotalEp = entry.getEffectiveTotalEpisodes()
                 val totalEpConsumed = watchedEp + (entry.rewatchCount * (if (effectiveTotalEp > 0) effectiveTotalEp else watchedEp))
                 totalMinutes += totalEpConsumed * epLen
+
+                if (!isCompleted && effectiveTotalEp > 0 && effectiveTotalEp > watchedEp) {
+                    remainingMinutes += (effectiveTotalEp - watchedEp) * epLen
+                }
             }
             MediaType.MOVIE -> {
                 val dur = (entry.durationMinutes ?: 100).toDouble()
-                val totalViews = (if (entry.status == MediaStatus.COMPLETED) 1 else 0) + entry.rewatchCount
+                val totalViews = (if (isCompleted) 1 else 0) + entry.rewatchCount
                 totalMinutes += totalViews * dur
+
+                if (!isCompleted) {
+                    val watchedMin = (entry.currentTimeMinutes ?: 0).toDouble().coerceIn(0.0, dur)
+                    remainingMinutes += (dur - watchedMin).coerceAtLeast(0.0)
+                }
             }
             MediaType.MANGA, MediaType.MANHWA -> {
                 val chRead = entry.currentChapters + (entry.rewatchCount * (if (entry.totalChapters > 0) entry.totalChapters else entry.currentChapters))
@@ -99,6 +114,14 @@ fun calculateCategoryStatSummary(
                     totalMinutes += chRead * 5.0
                 } else if (volRead > 0) {
                     totalMinutes += volRead * 60.0
+                }
+
+                if (!isCompleted) {
+                    if (entry.totalChapters > 0 && entry.totalChapters > entry.currentChapters) {
+                        remainingMinutes += (entry.totalChapters - entry.currentChapters) * 5.0
+                    } else if (entry.totalVolumes > 0 && entry.totalVolumes > entry.currentVolumes) {
+                        remainingMinutes += (entry.totalVolumes - entry.currentVolumes) * 60.0
+                    }
                 }
             }
             MediaType.BOOK -> {
@@ -112,10 +135,21 @@ fun calculateCategoryStatSummary(
                 } else if (volRead > 0) {
                     totalMinutes += volRead * 180.0
                 }
+
+                if (!isCompleted) {
+                    if (entry.totalPages > 0 && entry.totalPages > entry.currentPages) {
+                        remainingMinutes += (entry.totalPages - entry.currentPages) * 1.5
+                    } else if (entry.totalChapters > 0 && entry.totalChapters > entry.currentChapters) {
+                        remainingMinutes += (entry.totalChapters - entry.currentChapters) * 10.0
+                    } else if (entry.totalVolumes > 0 && entry.totalVolumes > entry.currentVolumes) {
+                        remainingMinutes += (entry.totalVolumes - entry.currentVolumes) * 180.0
+                    }
+                }
             }
         }
     }
     val days = totalMinutes / 1440.0
+    val daysRem = remainingMinutes / 1440.0
 
     val displayName = when {
         categoryKey.equals("ALL", ignoreCase = true) -> "All Categories"
@@ -128,6 +162,8 @@ fun calculateCategoryStatSummary(
         displayName = displayName,
         isVideo = isVideo,
         daysSpent = days,
+        daysRemaining = daysRem,
+        totalDays = days + daysRem,
         meanScore = mean,
         scoredCount = scored.size,
         totalEntries = total,

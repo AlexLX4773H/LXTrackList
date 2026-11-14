@@ -78,6 +78,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
+import com.lx.tracklist.ui.components.ThemedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -139,6 +140,7 @@ import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXSurfaceVariant
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import com.lx.tracklist.ui.theme.ThemeManager
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -778,7 +780,7 @@ fun LibraryScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = LXBackgroundBlack,
+        containerColor = if (ThemeManager.effectiveBackgroundImage != null) Color.Transparent else LXBackgroundBlack,
         contentWindowInsets = if (isTablet) ScaffoldDefaults.contentWindowInsets else WindowInsets(0, 0, 0, 0),
         topBar = {
             if (state.isSelectionMode) {
@@ -1012,7 +1014,7 @@ fun LibraryScreen(
         },
         floatingActionButton = {
             if (!state.isSelectionMode && onAddNewEntry != null) {
-                FloatingActionButton(
+                ThemedFloatingActionButton(
                     onClick = {
                         onAddNewEntry(
                             state.selectedCategoryFilter ?: MediaType.ANIME,
@@ -1021,13 +1023,8 @@ fun LibraryScreen(
                             state.selectedStatusFilter ?: MediaStatus.WATCHING
                         )
                     },
-                    containerColor = LXPrimaryGreen,
-                    contentColor = LXBackgroundBlack,
-                    shape = CircleShape,
                     modifier = Modifier.padding(bottom = 8.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Entry", modifier = Modifier.size(28.dp))
-                }
+                )
             }
         }
     ) { paddingValues ->

@@ -35,6 +35,7 @@ class LXApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        com.lx.tracklist.ui.theme.ThemeManager.init(this)
         StorageHelper.init(this)
         NotificationHelper.initNotificationChannels(this)
         TmdbApiClient.initWithDoH(this)
