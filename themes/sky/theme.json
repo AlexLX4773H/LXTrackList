@@ -21,5 +21,32 @@
   "cardBorderWidthDp": 1.5,
   "cardCornerRadiusDp": 12,
   "isLight": false,
-  "backgroundDim": 0.55
+  "backgroundDim": 0.35,
+  "sprites": {
+    "logo": "sprites/sao_ic_header_badge_circle.png",
+    "logoLx": "sprites/sao_ic_header_badge_circle.png",
+    "headerBadge": "sprites/sao_ic_header_badge_circle.png",
+    "headerSearch": "sprites/sao_ic_header_search_btn.png",
+    "headerSort": "sprites/sao_ic_header_sort_btn.png",
+    "headerList": "sprites/sao_ic_header_list_btn.png",
+    "searchBar": "sprites/sao_sprite_search_bar_frame.png",
+    "searchIcon": "sprites/sao_ic_nav_search.png",
+    "chipActive": "sprites/sao_sprite_chip_category_active.png",
+    "chipInactive": "sprites/sao_sprite_chip_category_inactive.png",
+    "cardFrame": "sprites/sao_sprite_entity_card_frame.png",
+    "progressBarBg": "sprites/sao_sprite_progress_bar_track.png",
+    "progressBarFill": "sprites/sao_sprite_progress_bar_fill.png",
+    "iconHeart": "sprites/sao_ic_card_heart_active.png",
+    "iconFavorite": "sprites/sao_ic_card_favorite_heart.png",
+    "iconMore": "sprites/sao_ic_card_more_vert.png",
+    "iconPlus": "sprites/sao_ic_card_plus_btn.png",
+    "fabFull": "sprites/sao_sprite_fab_hud_add.png",
+    "navBarFrame": "sprites/sao_sprite_bottom_nav_bar.png",
+    "navTabActive": "sprites/sao_sprite_nav_tab_active_frame.png",
+    "navHome": "sprites/sao_ic_nav_home.png",
+    "navLibrary": "sprites/sao_ic_nav_library_active.png",
+    "navSearch": "sprites/sao_ic_nav_search.png",
+    "navStats": "sprites/sao_ic_nav_stats.png",
+    "navSettings": "sprites/sao_ic_nav_settings.png"
+  }
 }

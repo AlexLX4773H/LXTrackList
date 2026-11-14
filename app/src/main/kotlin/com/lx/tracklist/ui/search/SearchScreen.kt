@@ -213,6 +213,7 @@ fun SearchScreen(
         ) {
             val isBeyond = ThemeManager.isBeyondTheme
             val isGate = ThemeManager.isGateTheme
+            val isSky = ThemeManager.isSkyTheme
 
             // Search Input Field
             Box(
@@ -223,6 +224,13 @@ fun SearchScreen(
                 if (isGate) {
                     Image(
                         painter = painterResource(R.drawable.theme_gate_search_bar),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.matchParentSize()
+                    )
+                } else if (isSky) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_sky_search_bar),
                         contentDescription = null,
                         contentScale = ContentScale.FillBounds,
                         modifier = Modifier.matchParentSize()
@@ -242,7 +250,7 @@ fun SearchScreen(
                                 SearchCategory.BOOKS -> "Search books by title, author, or ISBN..."
                                 SearchCategory.LIGHT_NOVELS -> "Search light novels & web novels..."
                             },
-                            color = if (isGate) Color(0xFF9E9E96) else LXTextSecondary,
+                            color = if (isGate || isSky) Color(0xFF9E9E96) else LXTextSecondary,
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -250,30 +258,46 @@ fun SearchScreen(
                     },
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
-                    leadingIcon = {
-                        if (isGate) {
-                            Image(
-                                painter = painterResource(R.drawable.theme_gate_search_icon),
-                                contentDescription = "Search",
-                                modifier = Modifier.size(20.dp)
-                            )
-                        } else if (isBeyond) {
-                            Image(
-                                painter = painterResource(R.drawable.theme_beyond_search_icon),
-                                contentDescription = "Search",
-                                modifier = Modifier.size(22.dp)
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Search",
-                                tint = LXPrimaryGreen,
-                                modifier = Modifier.size(20.dp)
-                            )
+                    leadingIcon = if (!isSky) {
+                        {
+                            if (isGate) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_gate_search_icon),
+                                    contentDescription = "Search",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            } else if (isBeyond) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_beyond_search_icon),
+                                    contentDescription = "Search",
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
-                    },
+                    } else null,
                     trailingIcon = {
-                        if (state.isLoading) {
+                        if (isSky) {
+                            if (state.isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = Color(0xFFFB923C),
+                                    strokeWidth = 2.dp
+                                )
+                            } else if (state.query.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.onQueryChanged("", context) }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFFFB923C), modifier = Modifier.size(18.dp))
+                                }
+                            } else {
+                                Icon(Icons.Default.Search, contentDescription = "Search", tint = Color(0xFFFB923C), modifier = Modifier.size(20.dp))
+                            }
+                        } else if (state.isLoading) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
                                 color = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen,
@@ -286,13 +310,13 @@ fun SearchScreen(
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = if (isGate) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
-                        unfocusedContainerColor = if (isGate) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
-                        focusedBorderColor = if (isGate || isBeyond) Color.Transparent else LXPrimaryGreen,
-                        unfocusedBorderColor = if (isGate || isBeyond) Color.Transparent else LXBorder,
+                        focusedContainerColor = if (isGate || isSky) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
+                        unfocusedContainerColor = if (isGate || isSky) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
+                        focusedBorderColor = if (isGate || isSky || isBeyond) Color.Transparent else LXPrimaryGreen,
+                        unfocusedBorderColor = if (isGate || isSky || isBeyond) Color.Transparent else LXBorder,
                         focusedTextColor = LXTextPrimary,
                         unfocusedTextColor = LXTextPrimary,
-                        cursorColor = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen
+                        cursorColor = if (isSky) Color(0xFF06B6D4) else if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen
                     ),
                     shape = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -322,6 +346,12 @@ fun SearchScreen(
                     val isSelected = state.selectedCategory == category
                     if (isGate) {
                         com.lx.tracklist.ui.library.GateCategoryChip(
+                            label = "${category.displayName} (${category.sourceName})",
+                            isSelected = isSelected,
+                            onClick = { viewModel.onCategorySelected(category, context) }
+                        )
+                    } else if (isSky) {
+                        com.lx.tracklist.ui.library.SkyCategoryChip(
                             label = "${category.displayName} (${category.sourceName})",
                             isSelected = isSelected,
                             onClick = { viewModel.onCategorySelected(category, context) }

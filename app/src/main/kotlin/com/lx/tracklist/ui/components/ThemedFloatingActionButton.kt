@@ -134,29 +134,30 @@ fun ThemedFloatingActionButton(
         }
         "reticle" -> {
             // Sky theme: cyber holographic HUD reticle
+            val infiniteTransition = rememberInfiniteTransition(label = "SkyReticlePulse")
+            val pulseScale by infiniteTransition.animateFloat(
+                initialValue = 0.98f,
+                targetValue = 1.02f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 2400, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "SkyScale"
+            )
+
             Box(
                 modifier = modifier
-                    .size(62.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF0891B2).copy(alpha = 0.25f))
-                    .border(2.dp, Color(0xFF06B6D4), CircleShape)
+                    .size(68.dp)
                     .clickable(onClick = onClick),
                 contentAlignment = Alignment.Center
             ) {
-                Box(
+                Image(
+                    painter = painterResource(R.drawable.theme_sky_fab_add_full),
+                    contentDescription = contentDescription,
                     modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF0891B2)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = contentDescription,
-                        tint = Color.White,
-                        modifier = Modifier.size(26.dp)
-                    )
-                }
+                        .fillMaxSize()
+                        .graphicsLayer(scaleX = pulseScale, scaleY = pulseScale)
+                )
             }
         }
         else -> {

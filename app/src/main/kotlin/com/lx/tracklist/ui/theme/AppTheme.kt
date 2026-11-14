@@ -474,4 +474,10 @@ object ThemeManager {
      */
     val isGateTheme: Boolean
         get() = currentThemeId == ThemePreset.GATE.id
+
+    /**
+     * Whether the active theme preset is the Advanced "Sky" theme.
+     */
+    val isSkyTheme: Boolean
+        get() = currentThemeId == ThemePreset.SKY.id
 }

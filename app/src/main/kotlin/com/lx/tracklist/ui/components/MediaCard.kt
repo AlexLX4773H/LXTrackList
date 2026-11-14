@@ -100,12 +100,20 @@ fun MediaCard(
     val isBeyond = ThemeManager.isBeyondTheme
     val isSlime = ThemeManager.isSlimeTheme
     val isGate = ThemeManager.isGateTheme
-    val isAdvanced = isBeyond || isSlime || isGate
+    val isSky = ThemeManager.isSkyTheme
+    val isAdvanced = isBeyond || isSlime || isGate || isSky
 
     Box(modifier = modifier.fillMaxWidth()) {
         if (isGate) {
             Image(
                 painter = painterResource(R.drawable.theme_gate_card_frame_ornate),
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier.matchParentSize()
+            )
+        } else if (isSky) {
+            Image(
+                painter = painterResource(R.drawable.theme_sky_card_frame_ornate),
                 contentDescription = null,
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier.matchParentSize()
@@ -116,7 +124,7 @@ fun MediaCard(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(if (isGate) 8.dp else if (isAdvanced) 14.dp else 12.dp))
                 .border(
-                    width = if (isSelected) 2.dp else (if (isGate) 0.dp else if (isAdvanced) 1.5.dp else 1.dp),
+                    width = if (isSelected) 2.dp else (if (isGate || isSky) 0.dp else if (isAdvanced) 1.5.dp else 1.dp),
                     color = if (isSelected) LXPrimaryGreen else (if (isSlime) Color(0xFF38BDF8).copy(alpha = 0.5f) else if (isBeyond) LXPrimaryGreen.copy(alpha = 0.5f) else LXBorder),
                     shape = RoundedCornerShape(if (isGate) 8.dp else if (isAdvanced) 14.dp else 12.dp)
                 )
@@ -136,7 +144,7 @@ fun MediaCard(
                         }
                     }
                 ),
-            color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f) else if (isGate) Color.Transparent else LXSurfaceBlack
+            color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f) else if (isGate || isSky) Color.Transparent else LXSurfaceBlack
         ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -267,6 +275,12 @@ fun MediaCard(
                                     contentDescription = "Favorite",
                                     modifier = Modifier.size(18.dp)
                                 )
+                            } else if (isSky) {
+                                Image(
+                                    painter = painterResource(if (entry.isFavorite) R.drawable.theme_sky_icon_heart_active else R.drawable.theme_sky_icon_favorite),
+                                    contentDescription = "Favorite",
+                                    modifier = Modifier.size(18.dp)
+                                )
                             } else {
                                 Icon(
                                     imageVector = if (entry.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -297,6 +311,12 @@ fun MediaCard(
                                 } else if (isGate) {
                                     Image(
                                         painter = painterResource(R.drawable.theme_gate_icon_more),
+                                        contentDescription = "Options",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                } else if (isSky) {
+                                    Image(
+                                        painter = painterResource(R.drawable.theme_sky_icon_more),
                                         contentDescription = "Options",
                                         modifier = Modifier.size(14.dp)
                                     )
@@ -534,6 +554,31 @@ fun MediaCard(
                                 )
                             }
                         }
+                    } else if (isSky) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(11.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Image(
+                                painter = painterResource(R.drawable.theme_sky_progress_bar_bg),
+                                contentDescription = null,
+                                contentScale = ContentScale.FillBounds,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            if (progressAnimated > 0.01f) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_sky_progress_bar_fill),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.FillBounds,
+                                    modifier = Modifier
+                                        .padding(horizontal = 2.dp, vertical = 2.dp)
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(progressAnimated)
+                                )
+                            }
+                        }
                     } else {
                         // Custom Neon Progress Bar
                         Box(
@@ -568,6 +613,20 @@ fun MediaCard(
                                     painter = painterResource(R.drawable.theme_slime_icon_card_slime),
                                     contentDescription = "+1 Progress",
                                     modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        } else if (isSky) {
+                            // Sky Theme: Holographic HUD increment button with concentric ring
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clickable(onClick = onIncrement),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_sky_icon_plus),
+                                    contentDescription = "+1 Progress",
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         } else {

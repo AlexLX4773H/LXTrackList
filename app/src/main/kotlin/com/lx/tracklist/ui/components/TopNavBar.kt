@@ -173,6 +173,12 @@ fun TopNavBar(
                         contentDescription = "Search",
                         modifier = Modifier.size(22.dp)
                     )
+                } else if (ThemeManager.isSkyTheme) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_sky_header_search_btn),
+                        contentDescription = "Search",
+                        modifier = Modifier.size(24.dp)
+                    )
                 } else {
                     Icon(
                         imageVector = Icons.Default.Search,
@@ -209,6 +215,12 @@ fun TopNavBar(
                             painter = painterResource(R.drawable.theme_gate_header_portal_arch),
                             contentDescription = "Sort",
                             modifier = Modifier.size(22.dp)
+                        )
+                    } else if (ThemeManager.isSkyTheme) {
+                        Image(
+                            painter = painterResource(R.drawable.theme_sky_header_sort_btn),
+                            contentDescription = "Sort",
+                            modifier = Modifier.size(24.dp)
                         )
                     } else {
                         Icon(

@@ -74,6 +74,8 @@ fun UserAvatarButton(
                 painterResource(R.drawable.theme_slime_logo_slime)
             } else if (ThemeManager.isGateTheme) {
                 painterResource(R.drawable.theme_gate_logo_lx)
+            } else if (ThemeManager.isSkyTheme) {
+                painterResource(R.drawable.theme_sky_logo_lx)
             } else {
                 painterResource(R.drawable.lx_logo)
             }

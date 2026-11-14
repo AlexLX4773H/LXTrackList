@@ -887,6 +887,7 @@ fun LibraryScreen(
                     },
                     actions = {
                         val isGate = ThemeManager.isGateTheme
+                        val isSky = ThemeManager.isSkyTheme
                         if (isGate) {
                             IconButton(onClick = { viewModel.setSortMenuOpen(true) }) {
                                 Image(
@@ -944,6 +945,65 @@ fun LibraryScreen(
                                     leadingIcon = {
                                         Icon(Icons.Default.Checklist, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(18.dp))
                                     }
+                                )
+                            }
+                        } else if (isSky) {
+                            // Holographic search button
+                            IconButton(onClick = { /* Search is right below in screen */ }) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_sky_header_search_btn),
+                                    contentDescription = "Search",
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            }
+                            // Holographic sort button
+                            Box {
+                                IconButton(onClick = { viewModel.setSortMenuOpen(true) }) {
+                                    Image(
+                                        painter = painterResource(R.drawable.theme_sky_header_sort_btn),
+                                        contentDescription = "Sort",
+                                        modifier = Modifier.size(30.dp)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = state.isSortMenuOpen,
+                                    onDismissRequest = { viewModel.setSortMenuOpen(false) }
+                                ) {
+                                    LibrarySortOption.entries.forEach { option ->
+                                        val isCurrent = state.selectedSort == option
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = option.displayName,
+                                                    color = if (isCurrent) Color(0xFF06B6D4) else LXTextPrimary,
+                                                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            },
+                                            onClick = { viewModel.setSortOption(option) },
+                                            trailingIcon = {
+                                                if (isCurrent) {
+                                                    Icon(
+                                                        Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF06B6D4),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                            // Holographic checklist button
+                            IconButton(onClick = {
+                                if (visibleIds.isNotEmpty()) {
+                                    viewModel.toggleSelect(visibleIds.first())
+                                }
+                            }) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_sky_header_list_btn),
+                                    contentDescription = "Select Mode",
+                                    modifier = Modifier.size(30.dp)
                                 )
                             }
                         } else {
@@ -1100,6 +1160,7 @@ fun LibraryScreen(
                 .padding(paddingValues)
         ) {
             val isGate = ThemeManager.isGateTheme
+            val isSky = ThemeManager.isSkyTheme
 
             // Search Input
             Box(
@@ -1114,6 +1175,13 @@ fun LibraryScreen(
                         contentScale = ContentScale.FillBounds,
                         modifier = Modifier.matchParentSize()
                     )
+                } else if (isSky) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_sky_search_bar),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.matchParentSize()
+                    )
                 }
                 OutlinedTextField(
                     value = state.searchQuery,
@@ -1121,7 +1189,7 @@ fun LibraryScreen(
                     placeholder = {
                         Text(
                             "Search title, alternate title, tags...",
-                            color = if (isGate) Color(0xFF9E9E96) else LXTextSecondary,
+                            color = if (isGate || isSky) Color(0xFF9E9E96) else LXTextSecondary,
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -1129,37 +1197,47 @@ fun LibraryScreen(
                     },
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
-                    leadingIcon = {
-                        if (isGate) {
-                            Image(
-                                painter = painterResource(R.drawable.theme_gate_search_icon),
-                                contentDescription = "Search",
-                                modifier = Modifier.size(20.dp)
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Search",
-                                tint = LXPrimaryGreen,
-                                modifier = Modifier.size(20.dp)
-                            )
+                    leadingIcon = if (!isSky) {
+                        {
+                            if (isGate) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_gate_search_icon),
+                                    contentDescription = "Search",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "Search",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
-                    },
+                    } else null,
                     trailingIcon = {
-                        if (state.searchQuery.isNotEmpty()) {
+                        if (isSky) {
+                            if (state.searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFFFB923C), modifier = Modifier.size(18.dp))
+                                }
+                            } else {
+                                Icon(Icons.Default.Search, contentDescription = "Search", tint = Color(0xFFFB923C), modifier = Modifier.size(20.dp))
+                            }
+                        } else if (state.searchQuery.isNotEmpty()) {
                             IconButton(onClick = { viewModel.setSearchQuery("") }) {
                                 Icon(Icons.Default.Close, contentDescription = "Clear", tint = if (isGate) Color(0xFFFBBF24) else LXTextSecondary, modifier = Modifier.size(18.dp))
                             }
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = if (isGate) Color.Transparent else LXSurfaceElevated,
-                        unfocusedContainerColor = if (isGate) Color.Transparent else LXSurfaceElevated,
-                        focusedBorderColor = if (isGate) Color.Transparent else LXPrimaryGreen,
-                        unfocusedBorderColor = if (isGate) Color.Transparent else LXBorder,
+                        focusedContainerColor = if (isGate || isSky) Color.Transparent else LXSurfaceElevated,
+                        unfocusedContainerColor = if (isGate || isSky) Color.Transparent else LXSurfaceElevated,
+                        focusedBorderColor = if (isGate || isSky) Color.Transparent else LXPrimaryGreen,
+                        unfocusedBorderColor = if (isGate || isSky) Color.Transparent else LXBorder,
                         focusedTextColor = LXTextPrimary,
                         unfocusedTextColor = LXTextPrimary,
-                        cursorColor = if (isGate) Color(0xFFFBBF24) else LXPrimaryGreen
+                        cursorColor = if (isSky) Color(0xFF06B6D4) else if (isGate) Color(0xFFFBBF24) else LXPrimaryGreen
                     ),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -1178,6 +1256,15 @@ fun LibraryScreen(
                     val isSelected = state.selectedCategoryFilter == null && state.selectedCustomCategoryFilter == null
                     if (isGate) {
                         GateCategoryChip(
+                            label = "All Categories",
+                            isSelected = isSelected,
+                            onClick = {
+                                viewModel.setCategoryFilter(null)
+                                viewModel.setCustomCategoryFilter(null)
+                            }
+                        )
+                    } else if (isSky) {
+                        SkyCategoryChip(
                             label = "All Categories",
                             isSelected = isSelected,
                             onClick = {
@@ -1217,6 +1304,12 @@ fun LibraryScreen(
                             isSelected = isSelected,
                             onClick = { viewModel.setCategoryFilter(if (isSelected) null else cat) }
                         )
+                    } else if (isSky) {
+                        SkyCategoryChip(
+                            label = cat.displayName,
+                            isSelected = isSelected,
+                            onClick = { viewModel.setCategoryFilter(if (isSelected) null else cat) }
+                        )
                     } else {
                         FilterChip(
                             selected = isSelected,
@@ -1243,6 +1336,12 @@ fun LibraryScreen(
                     val isSelected = state.selectedCustomCategoryFilter.equals(customCat.name, ignoreCase = true)
                     if (isGate) {
                         GateCategoryChip(
+                            label = customCat.name,
+                            isSelected = isSelected,
+                            onClick = { viewModel.setCustomCategoryFilter(if (isSelected) null else customCat.name) }
+                        )
+                    } else if (isSky) {
+                        SkyCategoryChip(
                             label = customCat.name,
                             isSelected = isSelected,
                             onClick = { viewModel.setCustomCategoryFilter(if (isSelected) null else customCat.name) }
@@ -2727,4 +2826,38 @@ fun GateCategoryChip(
         )
     }
 }
+
+@Composable
+fun SkyCategoryChip(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(36.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(
+                if (isSelected) R.drawable.theme_sky_chip_active
+                else R.drawable.theme_sky_chip_inactive
+            ),
+            contentDescription = label,
+            contentScale = ContentScale.FillBounds,
+            modifier = Modifier.matchParentSize()
+        )
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = if (isSelected) Color(0xFFFB923C) else Color(0xFFF8FAFC),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+        )
+    }
+}
+
 
