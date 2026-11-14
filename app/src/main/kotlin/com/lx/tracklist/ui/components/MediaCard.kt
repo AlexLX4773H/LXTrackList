@@ -266,10 +266,8 @@ fun MediaCard(
 
                         // Details Column
                         Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                            verticalArrangement = Arrangement.SpaceBetween
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
                             // Title and Actions
                             Row(
@@ -702,7 +700,6 @@ fun MediaCard(
                             }
                         }
                     }
-                }
 
                 // Related Franchise Section (Extracted during Sync)
                 val correlatedRelated = remember(entry.relatedEntriesJson, allLibraryEntries) {
@@ -912,6 +909,7 @@ fun MediaCard(
             }
         }
     }
+}
 }
 
 private fun formatDateRange(start: Long?, finish: Long?): String {
