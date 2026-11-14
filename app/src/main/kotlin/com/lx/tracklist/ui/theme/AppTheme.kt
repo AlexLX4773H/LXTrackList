@@ -468,4 +468,10 @@ object ThemeManager {
      */
     val isSlimeTheme: Boolean
         get() = currentThemeId == ThemePreset.SLIME.id
+
+    /**
+     * Whether the active theme preset is the Advanced "Gate" theme.
+     */
+    val isGateTheme: Boolean
+        get() = currentThemeId == ThemePreset.GATE.id
 }

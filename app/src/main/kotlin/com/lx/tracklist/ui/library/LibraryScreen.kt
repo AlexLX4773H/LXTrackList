@@ -52,8 +52,12 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Image as ImageFill
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.lx.tracklist.R
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
@@ -882,16 +886,15 @@ fun LibraryScreen(
                         )
                     },
                     actions = {
-                        // Sort Button with Dropdown
-                        Box {
+                        val isGate = ThemeManager.isGateTheme
+                        if (isGate) {
                             IconButton(onClick = { viewModel.setSortMenuOpen(true) }) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Sort,
-                                    contentDescription = "Sort",
-                                    tint = LXPrimaryGreen
+                                Image(
+                                    painter = painterResource(R.drawable.theme_gate_header_portal_arch),
+                                    contentDescription = "Theme Gate Portal",
+                                    modifier = Modifier.size(28.dp)
                                 )
                             }
-
                             DropdownMenu(
                                 expanded = state.isSortMenuOpen,
                                 onDismissRequest = { viewModel.setSortMenuOpen(false) }
@@ -902,7 +905,7 @@ fun LibraryScreen(
                                         text = {
                                             Text(
                                                 text = option.displayName,
-                                                color = if (isCurrent) LXPrimaryGreen else LXTextPrimary,
+                                                color = if (isCurrent) Color(0xFFFBBF24) else LXTextPrimary,
                                                 fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
                                             )
                                         },
@@ -912,51 +915,114 @@ fun LibraryScreen(
                                                 Icon(
                                                     Icons.Default.Check,
                                                     contentDescription = null,
-                                                    tint = LXPrimaryGreen,
+                                                    tint = Color(0xFFFBBF24),
                                                     modifier = Modifier.size(16.dp)
                                                 )
                                             }
                                         }
                                     )
                                 }
-                            }
-                        }
-
-                        // Advanced Filter Button with Badge
-                        IconButton(onClick = { viewModel.setFilterSheetOpen(true) }) {
-                            if (state.activeFilterCount > 0) {
-                                BadgedBox(
-                                    badge = {
-                                        Badge(
-                                            containerColor = LXPrimaryGreen,
-                                            contentColor = LXBackgroundBlack
-                                        ) {
-                                            Text(state.activeFilterCount.toString(), fontWeight = FontWeight.Bold)
-                                        }
+                                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
+                                DropdownMenuItem(
+                                    text = { Text("All Filters", color = LXTextPrimary) },
+                                    onClick = {
+                                        viewModel.setSortMenuOpen(false)
+                                        viewModel.setFilterSheetOpen(true)
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Tune, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(18.dp))
                                     }
-                                ) {
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Select Mode", color = LXTextPrimary) },
+                                    onClick = {
+                                        viewModel.setSortMenuOpen(false)
+                                        if (visibleIds.isNotEmpty()) {
+                                            viewModel.toggleSelect(visibleIds.first())
+                                        }
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Checklist, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(18.dp))
+                                    }
+                                )
+                            }
+                        } else {
+                            // Sort Button with Dropdown
+                            Box {
+                                IconButton(onClick = { viewModel.setSortMenuOpen(true) }) {
                                     Icon(
-                                        imageVector = Icons.Default.Tune,
-                                        contentDescription = "All Filters",
+                                        imageVector = Icons.AutoMirrored.Filled.Sort,
+                                        contentDescription = "Sort",
                                         tint = LXPrimaryGreen
                                     )
                                 }
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Tune,
-                                    contentDescription = "All Filters",
-                                    tint = LXTextSecondary
-                                )
-                            }
-                        }
 
-                        // Multi-select toggle button
-                        IconButton(onClick = {
-                            if (visibleIds.isNotEmpty()) {
-                                viewModel.toggleSelect(visibleIds.first())
+                                DropdownMenu(
+                                    expanded = state.isSortMenuOpen,
+                                    onDismissRequest = { viewModel.setSortMenuOpen(false) }
+                                ) {
+                                    LibrarySortOption.entries.forEach { option ->
+                                        val isCurrent = state.selectedSort == option
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = option.displayName,
+                                                    color = if (isCurrent) LXPrimaryGreen else LXTextPrimary,
+                                                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            },
+                                            onClick = { viewModel.setSortOption(option) },
+                                            trailingIcon = {
+                                                if (isCurrent) {
+                                                    Icon(
+                                                        Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = LXPrimaryGreen,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
                             }
-                        }) {
-                            Icon(Icons.Default.Checklist, contentDescription = "Select Mode", tint = LXTextSecondary)
+
+                            // Advanced Filter Button with Badge
+                            IconButton(onClick = { viewModel.setFilterSheetOpen(true) }) {
+                                if (state.activeFilterCount > 0) {
+                                    BadgedBox(
+                                        badge = {
+                                            Badge(
+                                                containerColor = LXPrimaryGreen,
+                                                contentColor = LXBackgroundBlack
+                                            ) {
+                                                Text(state.activeFilterCount.toString(), fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Tune,
+                                            contentDescription = "All Filters",
+                                            tint = LXPrimaryGreen
+                                        )
+                                    }
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = "All Filters",
+                                        tint = LXTextSecondary
+                                    )
+                                }
+                            }
+
+                            // Multi-select toggle button
+                            IconButton(onClick = {
+                                if (visibleIds.isNotEmpty()) {
+                                    viewModel.toggleSelect(visibleIds.first())
+                                }
+                            }) {
+                                Icon(Icons.Default.Checklist, contentDescription = "Select Mode", tint = LXTextSecondary)
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = LXBackgroundBlack)
@@ -1033,50 +1099,72 @@ fun LibraryScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            val isGate = ThemeManager.isGateTheme
+
             // Search Input
-            OutlinedTextField(
-                value = state.searchQuery,
-                onValueChange = { viewModel.setSearchQuery(it) },
-                placeholder = {
-                    Text(
-                        "Search title, alternate title, tags...",
-                        color = LXTextSecondary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = LXPrimaryGreen,
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                trailingIcon = {
-                    if (state.searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = LXTextSecondary, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = LXSurfaceElevated,
-                    unfocusedContainerColor = LXSurfaceElevated,
-                    focusedBorderColor = LXPrimaryGreen,
-                    unfocusedBorderColor = LXBorder,
-                    focusedTextColor = LXTextPrimary,
-                    unfocusedTextColor = LXTextPrimary,
-                    cursorColor = LXPrimaryGreen
-                ),
-                shape = RoundedCornerShape(12.dp),
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp)
-            )
+            ) {
+                if (isGate) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_gate_search_bar),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.matchParentSize()
+                    )
+                }
+                OutlinedTextField(
+                    value = state.searchQuery,
+                    onValueChange = { viewModel.setSearchQuery(it) },
+                    placeholder = {
+                        Text(
+                            "Search title, alternate title, tags...",
+                            color = if (isGate) Color(0xFF9E9E96) else LXTextSecondary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
+                    leadingIcon = {
+                        if (isGate) {
+                            Image(
+                                painter = painterResource(R.drawable.theme_gate_search_icon),
+                                contentDescription = "Search",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = LXPrimaryGreen,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    },
+                    trailingIcon = {
+                        if (state.searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = if (isGate) Color(0xFFFBBF24) else LXTextSecondary, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = if (isGate) Color.Transparent else LXSurfaceElevated,
+                        unfocusedContainerColor = if (isGate) Color.Transparent else LXSurfaceElevated,
+                        focusedBorderColor = if (isGate) Color.Transparent else LXPrimaryGreen,
+                        unfocusedBorderColor = if (isGate) Color.Transparent else LXBorder,
+                        focusedTextColor = LXTextPrimary,
+                        unfocusedTextColor = LXTextPrimary,
+                        cursorColor = if (isGate) Color(0xFFFBBF24) else LXPrimaryGreen
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
             // Quick Category Horizontal Chips
             LazyRow(
@@ -1087,69 +1175,97 @@ fun LibraryScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 item {
-                    FilterChip(
-                        selected = state.selectedCategoryFilter == null && state.selectedCustomCategoryFilter == null,
-                        onClick = {
-                            viewModel.setCategoryFilter(null)
-                            viewModel.setCustomCategoryFilter(null)
-                        },
-                        label = { Text("All Categories", fontSize = 12.sp, fontWeight = if (state.selectedCategoryFilter == null && state.selectedCustomCategoryFilter == null) FontWeight.Bold else FontWeight.Normal) },
-                        modifier = Modifier.height(34.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = state.selectedCategoryFilter == null && state.selectedCustomCategoryFilter == null,
-                            borderColor = if (state.selectedCategoryFilter == null && state.selectedCustomCategoryFilter == null) LXPrimaryGreen else LXBorder
+                    val isSelected = state.selectedCategoryFilter == null && state.selectedCustomCategoryFilter == null
+                    if (isGate) {
+                        GateCategoryChip(
+                            label = "All Categories",
+                            isSelected = isSelected,
+                            onClick = {
+                                viewModel.setCategoryFilter(null)
+                                viewModel.setCustomCategoryFilter(null)
+                            }
                         )
-                    )
+                    } else {
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                viewModel.setCategoryFilter(null)
+                                viewModel.setCustomCategoryFilter(null)
+                            },
+                            label = { Text("All Categories", fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                            modifier = Modifier.height(34.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = LXPrimaryGreen,
+                                selectedLabelColor = LXBackgroundBlack,
+                                containerColor = LXSurfaceElevated,
+                                labelColor = LXTextSecondary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = if (isSelected) LXPrimaryGreen else LXBorder
+                            )
+                        )
+                    }
                 }
 
                 items(MediaType.entries) { cat ->
                     val isSelected = state.selectedCategoryFilter == cat
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.setCategoryFilter(if (isSelected) null else cat) },
-                        label = { Text(cat.displayName, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
-                        modifier = Modifier.height(34.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = isSelected,
-                            borderColor = if (isSelected) LXPrimaryGreen else LXBorder
+                    if (isGate) {
+                        GateCategoryChip(
+                            label = cat.displayName,
+                            isSelected = isSelected,
+                            onClick = { viewModel.setCategoryFilter(if (isSelected) null else cat) }
                         )
-                    )
+                    } else {
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewModel.setCategoryFilter(if (isSelected) null else cat) },
+                            label = { Text(cat.displayName, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                            modifier = Modifier.height(34.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = LXPrimaryGreen,
+                                selectedLabelColor = LXBackgroundBlack,
+                                containerColor = LXSurfaceElevated,
+                                labelColor = LXTextSecondary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = if (isSelected) LXPrimaryGreen else LXBorder
+                            )
+                        )
+                    }
                 }
 
                 // Custom Categories Chips
                 items(state.customCategories) { customCat ->
                     val isSelected = state.selectedCustomCategoryFilter.equals(customCat.name, ignoreCase = true)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.setCustomCategoryFilter(if (isSelected) null else customCat.name) },
-                        label = { Text(customCat.name, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
-                        modifier = Modifier.height(34.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = isSelected,
-                            borderColor = if (isSelected) LXPrimaryGreen else LXBorder
+                    if (isGate) {
+                        GateCategoryChip(
+                            label = customCat.name,
+                            isSelected = isSelected,
+                            onClick = { viewModel.setCustomCategoryFilter(if (isSelected) null else customCat.name) }
                         )
-                    )
+                    } else {
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewModel.setCustomCategoryFilter(if (isSelected) null else customCat.name) },
+                            label = { Text(customCat.name, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                            modifier = Modifier.height(34.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = LXPrimaryGreen,
+                                selectedLabelColor = LXBackgroundBlack,
+                                containerColor = LXSurfaceElevated,
+                                labelColor = LXTextSecondary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = if (isSelected) LXPrimaryGreen else LXBorder
+                            )
+                        )
+                    }
                 }
             }
 
@@ -1669,7 +1785,7 @@ private fun CoverImageFilterRow(
     val icon = when (state) {
         CoverImageFilterOption.BROKEN_COVER -> Icons.Default.BrokenImage
         CoverImageFilterOption.NO_COVER -> Icons.Default.Close
-        else -> Icons.Default.Image
+        else -> Icons.Default.ImageFill
     }
 
     val subtitle = when (state) {
@@ -2578,3 +2694,37 @@ private fun AdvancedFilterSheet(
         }
     }
 }
+
+@Composable
+fun GateCategoryChip(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(36.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(
+                if (isSelected) R.drawable.theme_gate_chip_active
+                else R.drawable.theme_gate_chip_inactive
+            ),
+            contentDescription = label,
+            contentScale = ContentScale.FillBounds,
+            modifier = Modifier.matchParentSize()
+        )
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = if (isSelected) Color(0xFFFBBF24) else Color(0xFFD4D4D8),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+        )
+    }
+}
+

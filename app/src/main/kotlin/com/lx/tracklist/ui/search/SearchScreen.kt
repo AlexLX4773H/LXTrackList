@@ -212,6 +212,7 @@ fun SearchScreen(
                 .padding(paddingValues)
         ) {
             val isBeyond = ThemeManager.isBeyondTheme
+            val isGate = ThemeManager.isGateTheme
 
             // Search Input Field
             Box(
@@ -219,6 +220,14 @@ fun SearchScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp)
             ) {
+                if (isGate) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_gate_search_bar),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.matchParentSize()
+                    )
+                }
                 OutlinedTextField(
                     value = state.query,
                     onValueChange = { viewModel.onQueryChanged(it, context) },
@@ -233,7 +242,7 @@ fun SearchScreen(
                                 SearchCategory.BOOKS -> "Search books by title, author, or ISBN..."
                                 SearchCategory.LIGHT_NOVELS -> "Search light novels & web novels..."
                             },
-                            color = LXTextSecondary,
+                            color = if (isGate) Color(0xFF9E9E96) else LXTextSecondary,
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -242,7 +251,13 @@ fun SearchScreen(
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
                     leadingIcon = {
-                        if (isBeyond) {
+                        if (isGate) {
+                            Image(
+                                painter = painterResource(R.drawable.theme_gate_search_icon),
+                                contentDescription = "Search",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        } else if (isBeyond) {
                             Image(
                                 painter = painterResource(R.drawable.theme_beyond_search_icon),
                                 contentDescription = "Search",
@@ -261,23 +276,23 @@ fun SearchScreen(
                         if (state.isLoading) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
-                                color = if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen,
+                                color = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen,
                                 strokeWidth = 2.dp
                             )
                         } else if (state.query.isNotEmpty()) {
                             IconButton(onClick = { viewModel.onQueryChanged("", context) }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = LXTextSecondary, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = if (isGate) Color(0xFFFBBF24) else LXTextSecondary, modifier = Modifier.size(18.dp))
                             }
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
-                        unfocusedContainerColor = if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
-                        focusedBorderColor = if (isBeyond) Color.Transparent else LXPrimaryGreen,
-                        unfocusedBorderColor = if (isBeyond) Color.Transparent else LXBorder,
+                        focusedContainerColor = if (isGate) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
+                        unfocusedContainerColor = if (isGate) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
+                        focusedBorderColor = if (isGate || isBeyond) Color.Transparent else LXPrimaryGreen,
+                        unfocusedBorderColor = if (isGate || isBeyond) Color.Transparent else LXBorder,
                         focusedTextColor = LXTextPrimary,
                         unfocusedTextColor = LXTextPrimary,
-                        cursorColor = if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen
+                        cursorColor = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen
                     ),
                     shape = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -305,29 +320,37 @@ fun SearchScreen(
             ) {
                 items(SearchCategory.entries) { category ->
                     val isSelected = state.selectedCategory == category
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.onCategorySelected(category, context) },
-                        label = {
-                            Text(
-                                text = "${category.displayName} (${category.sourceName})",
-                                fontSize = 12.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        modifier = Modifier.height(34.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = isSelected,
-                            borderColor = if (isSelected) LXPrimaryGreen else LXBorder
+                    if (isGate) {
+                        com.lx.tracklist.ui.library.GateCategoryChip(
+                            label = "${category.displayName} (${category.sourceName})",
+                            isSelected = isSelected,
+                            onClick = { viewModel.onCategorySelected(category, context) }
                         )
-                    )
+                    } else {
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewModel.onCategorySelected(category, context) },
+                            label = {
+                                Text(
+                                    text = "${category.displayName} (${category.sourceName})",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            modifier = Modifier.height(34.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = LXPrimaryGreen,
+                                selectedLabelColor = LXBackgroundBlack,
+                                containerColor = LXSurfaceElevated,
+                                labelColor = LXTextSecondary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = if (isSelected) LXPrimaryGreen else LXBorder
+                            )
+                        )
+                    }
                 }
             }
 

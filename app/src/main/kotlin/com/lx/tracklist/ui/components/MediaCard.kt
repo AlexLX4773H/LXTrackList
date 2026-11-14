@@ -99,17 +99,26 @@ fun MediaCard(
     val progressAnimated by animateFloatAsState(targetValue = entry.progressFraction, label = "progress")
     val isBeyond = ThemeManager.isBeyondTheme
     val isSlime = ThemeManager.isSlimeTheme
-    val isAdvanced = isBeyond || isSlime
+    val isGate = ThemeManager.isGateTheme
+    val isAdvanced = isBeyond || isSlime || isGate
 
     Box(modifier = modifier.fillMaxWidth()) {
+        if (isGate) {
+            Image(
+                painter = painterResource(R.drawable.theme_gate_card_frame_ornate),
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier.matchParentSize()
+            )
+        }
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(if (isAdvanced) 14.dp else 12.dp))
+                .clip(RoundedCornerShape(if (isGate) 8.dp else if (isAdvanced) 14.dp else 12.dp))
                 .border(
-                    width = if (isSelected) 2.dp else (if (isAdvanced) 1.5.dp else 1.dp),
+                    width = if (isSelected) 2.dp else (if (isGate) 0.dp else if (isAdvanced) 1.5.dp else 1.dp),
                     color = if (isSelected) LXPrimaryGreen else (if (isSlime) Color(0xFF38BDF8).copy(alpha = 0.5f) else if (isBeyond) LXPrimaryGreen.copy(alpha = 0.5f) else LXBorder),
-                    shape = RoundedCornerShape(if (isAdvanced) 14.dp else 12.dp)
+                    shape = RoundedCornerShape(if (isGate) 8.dp else if (isAdvanced) 14.dp else 12.dp)
                 )
                 .combinedClickable(
                     onClick = {
@@ -127,7 +136,7 @@ fun MediaCard(
                         }
                     }
                 ),
-            color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.08f) else LXSurfaceBlack
+            color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f) else if (isGate) Color.Transparent else LXSurfaceBlack
         ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -252,6 +261,12 @@ fun MediaCard(
                                     contentDescription = "Favorite",
                                     modifier = Modifier.size(18.dp)
                                 )
+                            } else if (isGate) {
+                                Image(
+                                    painter = painterResource(if (entry.isFavorite) R.drawable.theme_gate_icon_heart_active else R.drawable.theme_gate_icon_favorite),
+                                    contentDescription = "Favorite",
+                                    modifier = Modifier.size(18.dp)
+                                )
                             } else {
                                 Icon(
                                     imageVector = if (entry.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -278,6 +293,12 @@ fun MediaCard(
                                         painter = painterResource(R.drawable.theme_slime_icon_more),
                                         contentDescription = "Options",
                                         modifier = Modifier.size(12.dp)
+                                    )
+                                } else if (isGate) {
+                                    Image(
+                                        painter = painterResource(R.drawable.theme_gate_icon_more),
+                                        contentDescription = "Options",
+                                        modifier = Modifier.size(14.dp)
                                     )
                                 } else {
                                     Icon(
@@ -488,6 +509,31 @@ fun MediaCard(
                                 )
                             }
                         }
+                    } else if (isGate) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(10.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Image(
+                                painter = painterResource(R.drawable.theme_gate_progress_bar_bg),
+                                contentDescription = null,
+                                contentScale = ContentScale.FillBounds,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            if (progressAnimated > 0.01f) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_gate_progress_bar_fill),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.FillBounds,
+                                    modifier = Modifier
+                                        .padding(horizontal = 2.dp, vertical = 2.dp)
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(progressAnimated)
+                                )
+                            }
+                        }
                     } else {
                         // Custom Neon Progress Bar
                         Box(
@@ -507,39 +553,41 @@ fun MediaCard(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    if (!isGate) {
+                        Spacer(modifier = Modifier.width(8.dp))
 
-                    if (isSlime) {
-                        // Slime Theme: Cute Slime Emblem increment button as shown in concept
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clickable(onClick = onIncrement),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Image(
-                                painter = painterResource(R.drawable.theme_slime_icon_card_slime),
-                                contentDescription = "+1 Progress",
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                    } else {
-                        // Standard / Beyond +1 Quick Increment Button
-                        Box(
-                            modifier = Modifier
-                                .size(if (isBeyond) 22.dp else 24.dp)
-                                .clip(CircleShape)
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .border(1.dp, LXPrimaryGreen.copy(alpha = 0.4f), CircleShape)
-                                .clickable(onClick = onIncrement),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "+1 Progress",
-                                tint = LXPrimaryGreen,
-                                modifier = Modifier.size(if (isBeyond) 13.dp else 15.dp)
-                            )
+                        if (isSlime) {
+                            // Slime Theme: Cute Slime Emblem increment button as shown in concept
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clickable(onClick = onIncrement),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_slime_icon_card_slime),
+                                    contentDescription = "+1 Progress",
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        } else {
+                            // Standard / Beyond +1 Quick Increment Button
+                            Box(
+                                modifier = Modifier
+                                    .size(if (isBeyond) 22.dp else 24.dp)
+                                    .clip(CircleShape)
+                                    .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                    .border(1.dp, LXPrimaryGreen.copy(alpha = 0.4f), CircleShape)
+                                    .clickable(onClick = onIncrement),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "+1 Progress",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(if (isBeyond) 13.dp else 15.dp)
+                                )
+                            }
                         }
                     }
                 }

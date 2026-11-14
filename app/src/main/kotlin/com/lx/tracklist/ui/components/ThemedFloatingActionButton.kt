@@ -105,21 +105,30 @@ fun ThemedFloatingActionButton(
             }
         }
         "shield" -> {
-            // Gate theme: crusader shield / armored crest
+            // Gate theme: crusader shield / armored crest with gold wings and central cross
+            val infiniteTransition = rememberInfiniteTransition(label = "GateFabPulse")
+            val pulseScale by infiniteTransition.animateFloat(
+                initialValue = 0.98f,
+                targetValue = 1.02f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 2400, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "GateScale"
+            )
+
             Box(
                 modifier = modifier
-                    .size(58.dp)
-                    .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 24.dp, bottomEnd = 24.dp))
-                    .background(Color(0xFF991B1B))
-                    .border(2.dp, Color(0xFFF59E0B), RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp, bottomStart = 24.dp, bottomEnd = 24.dp))
+                    .size(width = 68.dp, height = 62.dp)
                     .clickable(onClick = onClick),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
+                Image(
+                    painter = painterResource(R.drawable.theme_gate_fab_add_full),
                     contentDescription = contentDescription,
-                    tint = Color(0xFFFDE047),
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer(scaleX = pulseScale, scaleY = pulseScale)
                 )
             }
         }

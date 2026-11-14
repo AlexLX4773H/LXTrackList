@@ -515,6 +515,7 @@ fun AppNavigation() {
                     val isSelected = currentDestination == dest
                     val isBeyond = ThemeManager.isBeyondTheme
                     val isSlime = ThemeManager.isSlimeTheme
+                    val isGate = ThemeManager.isGateTheme
                     val customNavIcon = when {
                         isBeyond -> when (screen) {
                             Screen.Home -> R.drawable.theme_beyond_nav_home
@@ -529,6 +530,13 @@ fun AppNavigation() {
                             Screen.Search -> R.drawable.theme_slime_nav_search
                             Screen.Stats -> R.drawable.theme_slime_nav_stats
                             Screen.Settings -> R.drawable.theme_slime_nav_settings
+                        }
+                        isGate -> when (screen) {
+                            Screen.Home -> R.drawable.theme_gate_nav_home
+                            Screen.Library -> if (isSelected) R.drawable.theme_gate_nav_library else R.drawable.theme_gate_nav_library_inactive
+                            Screen.Search -> R.drawable.theme_gate_nav_search
+                            Screen.Stats -> R.drawable.theme_gate_nav_stats
+                            Screen.Settings -> R.drawable.theme_gate_nav_settings
                         }
                         else -> null
                     }
@@ -552,11 +560,11 @@ fun AppNavigation() {
                         },
                         label = { Text(screen.title) },
                         colors = NavigationRailItemDefaults.colors(
-                            selectedIconColor = if (isBeyond) Color.White else if (isSlime) Color.White else LXBackgroundBlack,
-                            selectedTextColor = if (isBeyond) Color(0xFFFC8181) else if (isSlime) Color(0xFF38BDF8) else LXPrimaryGreen,
-                            indicatorColor = if (isBeyond) Color(0xFFC53030) else if (isSlime) Color(0xFF0284C7).copy(alpha = 0.5f) else LXPrimaryGreen,
-                            unselectedIconColor = LXTextSecondary,
-                            unselectedTextColor = LXTextSecondary
+                            selectedIconColor = if (isBeyond || isSlime || isGate) Color.White else LXBackgroundBlack,
+                            selectedTextColor = if (isBeyond) Color(0xFFFC8181) else if (isSlime) Color(0xFF38BDF8) else if (isGate) Color(0xFFFBBF24) else LXPrimaryGreen,
+                            indicatorColor = if (isBeyond) Color(0xFFC53030) else if (isSlime) Color(0xFF0284C7).copy(alpha = 0.5f) else if (isGate) Color(0xFFB45309).copy(alpha = 0.7f) else LXPrimaryGreen,
+                            unselectedIconColor = if (isGate) Color(0xFF9E9E96) else LXTextSecondary,
+                            unselectedTextColor = if (isGate) Color(0xFF9E9E96) else LXTextSecondary
                         )
                     )
                 }
@@ -580,13 +588,14 @@ fun AppNavigation() {
                 if (isTopLevelScreen && !isMultiSelectActive) {
                     val isBeyond = ThemeManager.isBeyondTheme
                     val isSlime = ThemeManager.isSlimeTheme
+                    val isGate = ThemeManager.isGateTheme
                     androidx.compose.material3.Surface(
-                        color = if (isBeyond || isSlime) LXSurfaceBlack.copy(alpha = 0.92f) else LXSurfaceBlack.copy(alpha = if (ThemeManager.effectiveBackgroundImage != null) 0.90f else 1f),
+                        color = if (isGate) Color.Transparent else if (isBeyond || isSlime) LXSurfaceBlack.copy(alpha = 0.92f) else LXSurfaceBlack.copy(alpha = if (ThemeManager.effectiveBackgroundImage != null) 0.90f else 1f),
                         tonalElevation = 6.dp,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                            .border(1.dp, LXBorder, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                            .border(if (isGate) 0.dp else 1.dp, LXBorder, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                     ) {
                         Box(modifier = Modifier.fillMaxWidth()) {
                             if (isBeyond) {
@@ -607,12 +616,21 @@ fun AppNavigation() {
                                         .fillMaxWidth()
                                         .height(64.dp)
                                 )
+                            } else if (isGate) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_gate_nav_bar_frame),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.FillBounds,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(68.dp)
+                                )
                             }
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .navigationBarsPadding()
-                                    .height(64.dp)
+                                    .height(if (isGate) 68.dp else 64.dp)
                                     .padding(horizontal = 4.dp),
                                 horizontalArrangement = Arrangement.SpaceAround,
                                 verticalAlignment = Alignment.CenterVertically
@@ -634,6 +652,13 @@ fun AppNavigation() {
                                             Screen.Stats -> R.drawable.theme_slime_nav_stats
                                             Screen.Settings -> R.drawable.theme_slime_nav_settings
                                         }
+                                        isGate -> when (screen) {
+                                            Screen.Home -> R.drawable.theme_gate_nav_home
+                                            Screen.Library -> if (isSelected) R.drawable.theme_gate_nav_library else R.drawable.theme_gate_nav_library_inactive
+                                            Screen.Search -> R.drawable.theme_gate_nav_search
+                                            Screen.Stats -> R.drawable.theme_gate_nav_stats
+                                            Screen.Settings -> R.drawable.theme_gate_nav_settings
+                                        }
                                         else -> null
                                     }
                                     Column(
@@ -648,11 +673,11 @@ fun AppNavigation() {
                                     ) {
                                         Box(
                                             modifier = Modifier
-                                                .height(28.dp)
-                                                .width(48.dp)
-                                                .clip(RoundedCornerShape(14.dp))
+                                                .height(if (isGate) 32.dp else 28.dp)
+                                                .width(if (isGate) 36.dp else 48.dp)
+                                                .clip(RoundedCornerShape(if (isGate) 6.dp else 14.dp))
                                                 .background(
-                                                    if (isSelected) {
+                                                    if (isSelected && !isGate) {
                                                         if (isBeyond) Color(0xFFC53030)
                                                         else if (isSlime) Color(0xFF0284C7).copy(alpha = 0.5f)
                                                         else LXPrimaryGreen
@@ -660,11 +685,19 @@ fun AppNavigation() {
                                                 ),
                                             contentAlignment = Alignment.Center
                                         ) {
+                                            if (isGate && isSelected) {
+                                                Image(
+                                                    painter = painterResource(R.drawable.theme_gate_nav_tab_active_frame),
+                                                    contentDescription = null,
+                                                    contentScale = ContentScale.FillBounds,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
                                             if (customNavIcon != null) {
                                                 Image(
                                                     painter = painterResource(customNavIcon),
                                                     contentDescription = screen.title,
-                                                    modifier = Modifier.size(if (isSlime) 24.dp else 22.dp)
+                                                    modifier = Modifier.size(if (isGate) 24.dp else if (isSlime) 24.dp else 22.dp)
                                                 )
                                             } else {
                                                 Icon(
@@ -675,7 +708,7 @@ fun AppNavigation() {
                                                 )
                                             }
                                         }
-                                        Spacer(modifier = Modifier.height(3.dp))
+                                        Spacer(modifier = Modifier.height(if (isGate) 1.dp else 3.dp))
                                         Text(
                                             text = screen.title,
                                             style = androidx.compose.ui.text.TextStyle(
@@ -685,8 +718,9 @@ fun AppNavigation() {
                                             color = if (isSelected) {
                                                 if (isBeyond) Color(0xFFFC8181)
                                                 else if (isSlime) Color(0xFF38BDF8)
+                                                else if (isGate) Color(0xFFFBBF24)
                                                 else LXPrimaryGreen
-                                            } else LXTextSecondary,
+                                            } else if (isGate) Color(0xFF9E9E96) else LXTextSecondary,
                                             maxLines = 1
                                         )
                                     }

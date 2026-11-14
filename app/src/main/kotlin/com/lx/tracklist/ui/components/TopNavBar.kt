@@ -167,6 +167,12 @@ fun TopNavBar(
                         contentDescription = "Search",
                         modifier = Modifier.size(22.dp)
                     )
+                } else if (ThemeManager.isGateTheme) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_gate_search_icon),
+                        contentDescription = "Search",
+                        modifier = Modifier.size(22.dp)
+                    )
                 } else {
                     Icon(
                         imageVector = Icons.Default.Search,
@@ -197,6 +203,12 @@ fun TopNavBar(
                             painter = painterResource(R.drawable.theme_slime_icon_filters),
                             contentDescription = "Sort",
                             modifier = Modifier.size(20.dp)
+                        )
+                    } else if (ThemeManager.isGateTheme) {
+                        Image(
+                            painter = painterResource(R.drawable.theme_gate_header_portal_arch),
+                            contentDescription = "Sort",
+                            modifier = Modifier.size(22.dp)
                         )
                     } else {
                         Icon(
