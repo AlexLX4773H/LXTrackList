@@ -335,18 +335,10 @@ fun SearchScreen(
                         },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
-                        leadingIcon = if (isGate) {
-                            // theme_gate_search_bar already has the reticle baked into the left side.
-                            // We provide a spacer so the text starts after the reticle without stacking an icon.
+                        leadingIcon = if (isGate || isBeyond) {
+                            // theme_gate_search_bar and theme_beyond_search_bar already have the icon baked into the left side.
+                            // We provide a spacer so the text starts after the baked-in icon without stacking a duplicate icon.
                             { Spacer(modifier = Modifier.width(36.dp)) }
-                        } else if (isBeyond) {
-                            {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_beyond_search_icon),
-                                    contentDescription = "Search",
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
                         } else if (!isSky) {
                             {
                                 Icon(
@@ -387,8 +379,8 @@ fun SearchScreen(
                             }
                         },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = if (isGate || isSky) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
-                            unfocusedContainerColor = if (isGate || isSky) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
+                            focusedContainerColor = if (isGate || isSky || isBeyond) Color.Transparent else LXSurfaceElevated,
+                            unfocusedContainerColor = if (isGate || isSky || isBeyond) Color.Transparent else LXSurfaceElevated,
                             focusedBorderColor = if (isGate || isSky || isBeyond) Color.Transparent else LXPrimaryGreen,
                             unfocusedBorderColor = if (isGate || isSky || isBeyond) Color.Transparent else LXBorder,
                             focusedTextColor = LXTextPrimary,

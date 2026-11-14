@@ -1478,18 +1478,10 @@ fun LibraryScreen(
                         },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
-                        leadingIcon = if (isGate) {
-                            // theme_gate_search_bar already has the reticle baked into the left side.
-                            // We provide a spacer so the text starts after the reticle without stacking an icon.
+                        leadingIcon = if (isGate || isBeyond) {
+                            // theme_gate_search_bar and theme_beyond_search_bar already have the icon baked into the left side.
+                            // We provide a spacer so the text starts after the baked-in icon without stacking a duplicate icon.
                             { Spacer(modifier = Modifier.width(36.dp)) }
-                        } else if (isBeyond) {
-                            {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_beyond_search_icon),
-                                    contentDescription = "Search",
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
                         } else if (!isSky) {
                             {
                                 Icon(
@@ -1961,29 +1953,6 @@ fun LibraryScreen(
                     }
                 }
             }
-        }
-
-        // Beyond Theme Blood Crystals Floating Decor
-        if (ThemeManager.isBeyondTheme && !state.isSelectionMode) {
-            val infiniteTransition = rememberInfiniteTransition(label = "BloodCrystalBobbing")
-            val bobbingOffset by infiniteTransition.animateFloat(
-                initialValue = -3f,
-                targetValue = 3f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 2800, easing = LinearEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "CrystalsOffset"
-            )
-            Image(
-                painter = painterResource(R.drawable.theme_beyond_decor_blood_crystals),
-                contentDescription = null,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(start = 12.dp, bottom = 28.dp)
-                    .size(width = 64.dp, height = 72.dp)
-                    .graphicsLayer(translationY = bobbingOffset)
-            )
         }
     }
 }
