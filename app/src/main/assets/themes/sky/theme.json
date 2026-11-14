@@ -26,6 +26,7 @@
     "logo": "sprites/sao_ic_header_badge_circle.png",
     "logoLx": "sprites/sao_ic_header_badge_circle.png",
     "headerBadge": "sprites/sao_ic_header_badge_circle.png",
+    "headerFilter": "sprites/sao_ic_header_filter_btn.png",
     "headerSearch": "sprites/sao_ic_header_search_btn.png",
     "headerSort": "sprites/sao_ic_header_sort_btn.png",
     "headerList": "sprites/sao_ic_header_list_btn.png",

@@ -25,7 +25,8 @@
   "sprites": {
     "logo": "sprites/ic_header_portal_arch.png",
     "logoLx": "sprites/ic_header_badge_circle.png",
-    "iconFilters": "sprites/ic_header_portal_arch.png",
+    "iconFilters": "sprites/icon_filters.png",
+    "iconSelect": "sprites/icon_select.png",
     "searchBar": "sprites/sprite_search_bar_frame.png",
     "searchIcon": "sprites/ic_nav_search_crosshair.png",
     "chipActive": "sprites/sprite_chip_category_active.png",

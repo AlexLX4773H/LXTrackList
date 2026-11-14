@@ -30,8 +30,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
@@ -217,83 +219,136 @@ fun SearchScreen(
             val isSlime = ThemeManager.isSlimeTheme
 
             // Search Input Field
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-            ) {
-                if (isBeyond) {
-                    Image(
-                        painter = painterResource(R.drawable.theme_beyond_search_bar),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier.matchParentSize()
-                    )
-                } else if (isGate) {
-                    Image(
-                        painter = painterResource(R.drawable.theme_gate_search_bar),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier.matchParentSize()
-                    )
-                } else if (isSky) {
-                    Image(
-                        painter = painterResource(R.drawable.theme_sky_search_bar),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier.matchParentSize()
-                    )
-                } else if (isSlime) {
+            val searchPlaceholder = when (state.selectedCategory) {
+                SearchCategory.ANIME -> "Search anime titles on MyAnimeList..."
+                SearchCategory.MANGA -> "Search manga titles on MAL / MangaDex..."
+                SearchCategory.MANHWA -> "Search manhwa titles on MangaDex..."
+                SearchCategory.MOVIES -> "Search movies on TMDB..."
+                SearchCategory.TV_SHOWS -> "Search TV shows on TMDB..."
+                SearchCategory.BOOKS -> "Search books by title, author, or ISBN..."
+                SearchCategory.LIGHT_NOVELS -> "Search light novels & web novels..."
+            }
+
+            if (isSlime) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .height(60.dp)
+                ) {
                     Image(
                         painter = painterResource(R.drawable.theme_slime_search_bar),
                         contentDescription = null,
                         contentScale = ContentScale.FillBounds,
                         modifier = Modifier.matchParentSize()
                     )
-                }
-                OutlinedTextField(
-                    value = state.query,
-                    onValueChange = { viewModel.onQueryChanged(it, context) },
-                    placeholder = {
-                        Text(
-                            text = when (state.selectedCategory) {
-                                SearchCategory.ANIME -> "Search anime titles on MyAnimeList..."
-                                SearchCategory.MANGA -> "Search manga titles on MAL / MangaDex..."
-                                SearchCategory.MANHWA -> "Search manhwa titles on MangaDex..."
-                                SearchCategory.MOVIES -> "Search movies on TMDB..."
-                                SearchCategory.TV_SHOWS -> "Search TV shows on TMDB..."
-                                SearchCategory.BOOKS -> "Search books by title, author, or ISBN..."
-                                SearchCategory.LIGHT_NOVELS -> "Search light novels & web novels..."
-                            },
-                            color = if (isGate || isSky) Color(0xFF9E9E96) else if (isSlime) Color.White.copy(alpha = 0.7f) else LXTextSecondary,
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+
+                    BasicTextField(
+                        value = state.query,
+                        onValueChange = { viewModel.onQueryChanged(it, context) },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
+                        cursorBrush = SolidColor(Color(0xFF38BDF8)),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { viewModel.submitSearch(context) }),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 58.dp, end = if (state.isLoading || state.query.isNotEmpty()) 42.dp else 20.dp, top = 8.dp, bottom = 18.dp)
+                            .align(Alignment.CenterStart),
+                        decorationBox = { innerTextField ->
+                            Box(contentAlignment = Alignment.CenterStart) {
+                                if (state.query.isEmpty()) {
+                                    Text(
+                                        text = searchPlaceholder,
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
+                    )
+
+                    if (state.isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 16.dp, bottom = 8.dp)
+                                .size(18.dp),
+                            color = Color(0xFF38BDF8),
+                            strokeWidth = 2.dp
                         )
-                    },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = if (isSlime) Color.White else LXTextPrimary),
-                    leadingIcon = if (!isSky) {
-                        {
-                            if (isGate) {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_gate_search_icon),
-                                    contentDescription = "Search",
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            } else if (isBeyond) {
+                    } else if (state.query.isNotEmpty()) {
+                        IconButton(
+                            onClick = { viewModel.onQueryChanged("", context) },
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 6.dp, bottom = 8.dp)
+                                .size(32.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFF38BDF8), modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    if (isBeyond) {
+                        Image(
+                            painter = painterResource(R.drawable.theme_beyond_search_bar),
+                            contentDescription = null,
+                            contentScale = ContentScale.FillBounds,
+                            modifier = Modifier.matchParentSize()
+                        )
+                    } else if (isGate) {
+                        Image(
+                            painter = painterResource(R.drawable.theme_gate_search_bar),
+                            contentDescription = null,
+                            contentScale = ContentScale.FillBounds,
+                            modifier = Modifier.matchParentSize()
+                        )
+                    } else if (isSky) {
+                        Image(
+                            painter = painterResource(R.drawable.theme_sky_search_bar),
+                            contentDescription = null,
+                            contentScale = ContentScale.FillBounds,
+                            modifier = Modifier.matchParentSize()
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = state.query,
+                        onValueChange = { viewModel.onQueryChanged(it, context) },
+                        placeholder = {
+                            Text(
+                                text = searchPlaceholder,
+                                color = if (isGate || isSky) Color(0xFF9E9E96) else LXTextSecondary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
+                        leadingIcon = if (isGate) {
+                            // theme_gate_search_bar already has the reticle baked into the left side.
+                            // We provide a spacer so the text starts after the reticle without stacking an icon.
+                            { Spacer(modifier = Modifier.width(36.dp)) }
+                        } else if (isBeyond) {
+                            {
                                 Image(
                                     painter = painterResource(R.drawable.theme_beyond_search_icon),
                                     contentDescription = "Search",
                                     modifier = Modifier.size(22.dp)
                                 )
-                            } else if (isSlime) {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_slime_search_icon),
-                                    contentDescription = "Search",
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            } else {
+                            }
+                        } else if (!isSky) {
+                            {
                                 Icon(
                                     imageVector = Icons.Default.Search,
                                     contentDescription = "Search",
@@ -301,49 +356,51 @@ fun SearchScreen(
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
-                        }
-                    } else null,
-                    trailingIcon = {
-                        if (isSky) {
-                            if (state.isLoading) {
+                        } else null,
+                        trailingIcon = {
+                            if (isSky) {
+                                if (state.isLoading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        color = Color(0xFFFB923C),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else if (state.query.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.onQueryChanged("", context) }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFFFB923C), modifier = Modifier.size(18.dp))
+                                    }
+                                } else {
+                                    // theme_sky_search_bar already has the orange magnifying glass baked into the right side.
+                                    // Spacer preserves spacing so text doesn't overflow into the baked-in icon.
+                                    Spacer(modifier = Modifier.width(36.dp))
+                                }
+                            } else if (state.isLoading) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(18.dp),
-                                    color = Color(0xFFFB923C),
+                                    color = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen,
                                     strokeWidth = 2.dp
                                 )
                             } else if (state.query.isNotEmpty()) {
                                 IconButton(onClick = { viewModel.onQueryChanged("", context) }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFFFB923C), modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = if (isGate) Color(0xFFFBBF24) else LXTextSecondary, modifier = Modifier.size(18.dp))
                                 }
-                            } else {
-                                Icon(Icons.Default.Search, contentDescription = "Search", tint = Color(0xFFFB923C), modifier = Modifier.size(20.dp))
                             }
-                        } else if (state.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else if (isSlime) Color(0xFF38BDF8) else LXPrimaryGreen,
-                                strokeWidth = 2.dp
-                            )
-                        } else if (state.query.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.onQueryChanged("", context) }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = if (isGate) Color(0xFFFBBF24) else if (isSlime) Color(0xFF38BDF8) else LXTextSecondary, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = if (isGate || isSky || isSlime) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
-                        unfocusedContainerColor = if (isGate || isSky || isSlime) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
-                        focusedBorderColor = if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXPrimaryGreen,
-                        unfocusedBorderColor = if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXBorder,
-                        focusedTextColor = if (isSlime) Color.White else LXTextPrimary,
-                        unfocusedTextColor = if (isSlime) Color.White else LXTextPrimary,
-                        cursorColor = if (isSky) Color(0xFF06B6D4) else if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else if (isSlime) Color(0xFF38BDF8) else LXPrimaryGreen
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { viewModel.submitSearch(context) }),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = if (isGate || isSky) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
+                            unfocusedContainerColor = if (isGate || isSky) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
+                            focusedBorderColor = if (isGate || isSky || isBeyond) Color.Transparent else LXPrimaryGreen,
+                            unfocusedBorderColor = if (isGate || isSky || isBeyond) Color.Transparent else LXBorder,
+                            focusedTextColor = LXTextPrimary,
+                            unfocusedTextColor = LXTextPrimary,
+                            cursorColor = if (isSky) Color(0xFF06B6D4) else if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { viewModel.submitSearch(context) }),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
             // Category Filter Chips

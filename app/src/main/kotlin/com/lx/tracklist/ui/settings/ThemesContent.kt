@@ -150,52 +150,51 @@ fun ThemesContent(
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
-            border = BorderStroke(1.dp, LXBorder),
+            border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.35f)),
             shape = RoundedCornerShape(12.dp)
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Header row: ACTIVE THEME label + Category badge on left, Reset button on right
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = "Active Theme: ${currentPreset.displayName}",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = LXTextPrimary
-                            )
-                            val badgeText = if (customBgUri != null) "CUSTOM BG" else if (currentPreset.category == "advanced") "ADVANCED" else "PRESET"
-                            Surface(
-                                color = LXPrimaryGreen.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(4.dp)
-                            ) {
-                                Text(
-                                    text = badgeText,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = LXPrimaryGreen
-                                )
-                            }
-                        }
                         Text(
-                            text = currentPreset.description,
-                            style = MaterialTheme.typography.bodySmall,
+                            text = "ACTIVE THEME",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.8.sp
+                            ),
                             color = LXTextSecondary
                         )
+                        val badgeText = if (customBgUri != null) "CUSTOM BG" else if (currentPreset.category == "advanced") "ADVANCED" else "PRESET"
+                        Surface(
+                            color = LXPrimaryGreen.copy(alpha = 0.18f),
+                            shape = RoundedCornerShape(4.dp),
+                            border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.35f))
+                        ) {
+                            Text(
+                                text = badgeText,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 9.sp,
+                                    letterSpacing = 0.5.sp
+                                ),
+                                color = LXPrimaryGreen,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
                     }
-
-                    Spacer(modifier = Modifier.width(10.dp))
 
                     OutlinedButton(
                         onClick = { ThemeManager.resetTheme(context, activeProfile.id) },
@@ -205,11 +204,25 @@ fun ThemesContent(
                         border = BorderStroke(1.dp, LXBorder),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(13.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Reset", fontSize = 12.sp)
+                        Text("Reset", fontSize = 11.sp, fontWeight = FontWeight.Medium)
                     }
                 }
+
+                // Active Theme Display Name
+                Text(
+                    text = currentPreset.displayName,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextPrimary
+                )
+
+                // Active Theme Description
+                Text(
+                    text = currentPreset.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
 
                 // Color Swatches of active theme
                 Row(

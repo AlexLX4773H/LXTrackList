@@ -37,6 +37,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -1058,73 +1062,86 @@ fun LibraryScreen(
                                 )
                             }
                         } else if (isGate) {
-                            IconButton(onClick = { viewModel.setSortMenuOpen(true) }) {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_gate_header_portal_arch),
-                                    contentDescription = "Theme Gate Portal",
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = state.isSortMenuOpen,
-                                onDismissRequest = { viewModel.setSortMenuOpen(false) }
-                            ) {
-                                LibrarySortOption.entries.forEach { option ->
-                                    val isCurrent = state.selectedSort == option
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = option.displayName,
-                                                color = if (isCurrent) Color(0xFFFBBF24) else LXTextPrimary,
-                                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
-                                            )
-                                        },
-                                        onClick = { viewModel.setSortOption(option) },
-                                        trailingIcon = {
-                                            if (isCurrent) {
-                                                Icon(
-                                                    Icons.Default.Check,
-                                                    contentDescription = null,
-                                                    tint = Color(0xFFFBBF24),
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                            }
-                                        }
+                            // Gate Theme: Portal Arch (Sort), Tactical Runic Sliders (All Filters), Crossed Blades (Select Mode)
+                            Box {
+                                IconButton(onClick = { viewModel.setSortMenuOpen(true) }) {
+                                    Image(
+                                        painter = painterResource(R.drawable.theme_gate_header_portal_arch),
+                                        contentDescription = "Sort",
+                                        modifier = Modifier.size(28.dp)
                                     )
                                 }
-                                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
-                                DropdownMenuItem(
-                                    text = { Text("All Filters", color = LXTextPrimary) },
-                                    onClick = {
-                                        viewModel.setSortMenuOpen(false)
-                                        viewModel.setFilterSheetOpen(true)
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.Tune, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(18.dp))
+                                DropdownMenu(
+                                    expanded = state.isSortMenuOpen,
+                                    onDismissRequest = { viewModel.setSortMenuOpen(false) }
+                                ) {
+                                    LibrarySortOption.entries.forEach { option ->
+                                        val isCurrent = state.selectedSort == option
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = option.displayName,
+                                                    color = if (isCurrent) Color(0xFFFBBF24) else LXTextPrimary,
+                                                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            },
+                                            onClick = { viewModel.setSortOption(option) },
+                                            trailingIcon = {
+                                                if (isCurrent) {
+                                                    Icon(
+                                                        Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFFFBBF24),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        )
                                     }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Select Mode", color = LXTextPrimary) },
-                                    onClick = {
-                                        viewModel.setSortMenuOpen(false)
-                                        if (visibleIds.isNotEmpty()) {
-                                            viewModel.toggleSelect(visibleIds.first())
+                                }
+                            }
+
+                            // Filter Button with Badge
+                            IconButton(onClick = { viewModel.setFilterSheetOpen(true) }) {
+                                if (state.activeFilterCount > 0) {
+                                    BadgedBox(
+                                        badge = {
+                                            Badge(
+                                                containerColor = Color(0xFFF59E0B),
+                                                contentColor = Color(0xFF141416)
+                                            ) {
+                                                Text(state.activeFilterCount.toString(), fontWeight = FontWeight.Bold)
+                                            }
                                         }
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.Checklist, contentDescription = null, tint = Color(0xFFFBBF24), modifier = Modifier.size(18.dp))
+                                    ) {
+                                        Image(
+                                            painter = painterResource(R.drawable.theme_gate_icon_filters),
+                                            contentDescription = "All Filters",
+                                            modifier = Modifier.size(24.dp)
+                                        )
                                     }
+                                } else {
+                                    Image(
+                                        painter = painterResource(R.drawable.theme_gate_icon_filters),
+                                        contentDescription = "All Filters",
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+
+                            // Tactical crossed blades multi-select toggle button
+                            IconButton(onClick = {
+                                if (visibleIds.isNotEmpty()) {
+                                    viewModel.toggleSelect(visibleIds.first())
+                                }
+                            }) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_gate_icon_select),
+                                    contentDescription = "Select Mode",
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         } else if (isSky) {
-                            // Holographic search button
-                            IconButton(onClick = { /* Search is right below in screen */ }) {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_sky_header_search_btn),
-                                    contentDescription = "Search",
-                                    modifier = Modifier.size(30.dp)
-                                )
-                            }
                             // Holographic sort button
                             Box {
                                 IconButton(onClick = { viewModel.setSortMenuOpen(true) }) {
@@ -1163,6 +1180,35 @@ fun LibraryScreen(
                                     }
                                 }
                             }
+
+                            // Holographic Filter Button with Badge (replaces redundant search button)
+                            IconButton(onClick = { viewModel.setFilterSheetOpen(true) }) {
+                                if (state.activeFilterCount > 0) {
+                                    BadgedBox(
+                                        badge = {
+                                            Badge(
+                                                containerColor = Color(0xFFFB923C),
+                                                contentColor = Color(0xFF0F172A)
+                                            ) {
+                                                Text(state.activeFilterCount.toString(), fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    ) {
+                                        Image(
+                                            painter = painterResource(R.drawable.theme_sky_header_filter_btn),
+                                            contentDescription = "All Filters",
+                                            modifier = Modifier.size(30.dp)
+                                        )
+                                    }
+                                } else {
+                                    Image(
+                                        painter = painterResource(R.drawable.theme_sky_header_filter_btn),
+                                        contentDescription = "All Filters",
+                                        modifier = Modifier.size(30.dp)
+                                    )
+                                }
+                            }
+
                             // Holographic checklist button
                             IconButton(onClick = {
                                 if (visibleIds.isNotEmpty()) {
@@ -1337,75 +1383,115 @@ fun LibraryScreen(
             val isSlime = ThemeManager.isSlimeTheme
 
             // Search Input
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-            ) {
-                if (isBeyond) {
-                    Image(
-                        painter = painterResource(R.drawable.theme_beyond_search_bar),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier.matchParentSize()
-                    )
-                } else if (isGate) {
-                    Image(
-                        painter = painterResource(R.drawable.theme_gate_search_bar),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier.matchParentSize()
-                    )
-                } else if (isSky) {
-                    Image(
-                        painter = painterResource(R.drawable.theme_sky_search_bar),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier.matchParentSize()
-                    )
-                } else if (isSlime) {
+            if (isSlime) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .height(60.dp)
+                ) {
                     Image(
                         painter = painterResource(R.drawable.theme_slime_search_bar),
                         contentDescription = null,
                         contentScale = ContentScale.FillBounds,
                         modifier = Modifier.matchParentSize()
                     )
+
+                    BasicTextField(
+                        value = state.searchQuery,
+                        onValueChange = { viewModel.setSearchQuery(it) },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
+                        cursorBrush = SolidColor(Color(0xFF38BDF8)),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 58.dp, end = if (state.searchQuery.isNotEmpty()) 42.dp else 20.dp, top = 8.dp, bottom = 18.dp)
+                            .align(Alignment.CenterStart),
+                        decorationBox = { innerTextField ->
+                            Box(contentAlignment = Alignment.CenterStart) {
+                                if (state.searchQuery.isEmpty()) {
+                                    Text(
+                                        text = "Search title, alternate title, tags...",
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
+                    )
+
+                    if (state.searchQuery.isNotEmpty()) {
+                        IconButton(
+                            onClick = { viewModel.setSearchQuery("") },
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 6.dp, bottom = 8.dp)
+                                .size(32.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFF38BDF8), modifier = Modifier.size(18.dp))
+                        }
+                    }
                 }
-                OutlinedTextField(
-                    value = state.searchQuery,
-                    onValueChange = { viewModel.setSearchQuery(it) },
-                    placeholder = {
-                        Text(
-                            "Search title, alternate title, tags...",
-                            color = if (isGate || isSky) Color(0xFF9E9E96) else if (isBeyond) Color(0xFFA78BFA).copy(alpha = 0.7f) else if (isSlime) Color.White.copy(alpha = 0.7f) else LXTextSecondary,
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    if (isBeyond) {
+                        Image(
+                            painter = painterResource(R.drawable.theme_beyond_search_bar),
+                            contentDescription = null,
+                            contentScale = ContentScale.FillBounds,
+                            modifier = Modifier.matchParentSize()
                         )
-                    },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = if (isSlime) Color.White else LXTextPrimary),
-                    leadingIcon = if (!isSky) {
-                        {
-                            if (isBeyond) {
+                    } else if (isGate) {
+                        Image(
+                            painter = painterResource(R.drawable.theme_gate_search_bar),
+                            contentDescription = null,
+                            contentScale = ContentScale.FillBounds,
+                            modifier = Modifier.matchParentSize()
+                        )
+                    } else if (isSky) {
+                        Image(
+                            painter = painterResource(R.drawable.theme_sky_search_bar),
+                            contentDescription = null,
+                            contentScale = ContentScale.FillBounds,
+                            modifier = Modifier.matchParentSize()
+                        )
+                    }
+                    OutlinedTextField(
+                        value = state.searchQuery,
+                        onValueChange = { viewModel.setSearchQuery(it) },
+                        placeholder = {
+                            Text(
+                                "Search title, alternate title, tags...",
+                                color = if (isGate || isSky) Color(0xFF9E9E96) else if (isBeyond) Color(0xFFA78BFA).copy(alpha = 0.7f) else LXTextSecondary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
+                        leadingIcon = if (isGate) {
+                            // theme_gate_search_bar already has the reticle baked into the left side.
+                            // We provide a spacer so the text starts after the reticle without stacking an icon.
+                            { Spacer(modifier = Modifier.width(36.dp)) }
+                        } else if (isBeyond) {
+                            {
                                 Image(
                                     painter = painterResource(R.drawable.theme_beyond_search_icon),
                                     contentDescription = "Search",
                                     modifier = Modifier.size(20.dp)
                                 )
-                            } else if (isGate) {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_gate_search_icon),
-                                    contentDescription = "Search",
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            } else if (isSlime) {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_slime_search_icon),
-                                    contentDescription = "Search",
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            } else {
+                            }
+                        } else if (!isSky) {
+                            {
                                 Icon(
                                     imageVector = Icons.Default.Search,
                                     contentDescription = "Search",
@@ -1413,35 +1499,37 @@ fun LibraryScreen(
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
-                        }
-                    } else null,
-                    trailingIcon = {
-                        if (isSky) {
-                            if (state.searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFFFB923C), modifier = Modifier.size(18.dp))
+                        } else null,
+                        trailingIcon = {
+                            if (isSky) {
+                                if (state.searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFFFB923C), modifier = Modifier.size(18.dp))
+                                    }
+                                } else {
+                                    // theme_sky_search_bar already has the orange magnifying glass baked into the right side.
+                                    // Spacer preserves spacing so text doesn't overflow into the baked-in icon.
+                                    Spacer(modifier = Modifier.width(36.dp))
                                 }
-                            } else {
-                                Icon(Icons.Default.Search, contentDescription = "Search", tint = Color(0xFFFB923C), modifier = Modifier.size(20.dp))
+                            } else if (state.searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXTextSecondary, modifier = Modifier.size(18.dp))
+                                }
                             }
-                        } else if (state.searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else if (isSlime) Color(0xFF38BDF8) else LXTextSecondary, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXSurfaceElevated,
-                        unfocusedContainerColor = if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXSurfaceElevated,
-                        focusedBorderColor = if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXPrimaryGreen,
-                        unfocusedBorderColor = if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXBorder,
-                        focusedTextColor = if (isSlime) Color.White else LXTextPrimary,
-                        unfocusedTextColor = if (isSlime) Color.White else LXTextPrimary,
-                        cursorColor = if (isSky) Color(0xFF06B6D4) else if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else if (isSlime) Color(0xFF38BDF8) else LXPrimaryGreen
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                        },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = if (isGate || isSky || isBeyond) Color.Transparent else LXSurfaceElevated,
+                            unfocusedContainerColor = if (isGate || isSky || isBeyond) Color.Transparent else LXSurfaceElevated,
+                            focusedBorderColor = if (isGate || isSky || isBeyond) Color.Transparent else LXPrimaryGreen,
+                            unfocusedBorderColor = if (isGate || isSky || isBeyond) Color.Transparent else LXBorder,
+                            focusedTextColor = LXTextPrimary,
+                            unfocusedTextColor = LXTextPrimary,
+                            cursorColor = if (isSky) Color(0xFF06B6D4) else if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
             // Quick Category Horizontal Chips
