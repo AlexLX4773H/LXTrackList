@@ -55,6 +55,7 @@ import com.lx.tracklist.ui.theme.LXPrimaryGreen
 import com.lx.tracklist.ui.theme.LXSurfaceVariant
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import com.lx.tracklist.ui.theme.ThemeManager
 
 enum class SortOption(val displayName: String) {
     RECENTLY_UPDATED("Recently Updated"),
@@ -148,11 +149,25 @@ fun TopNavBar(
         },
         actions = {
             IconButton(onClick = onToggleSearch) {
-                Icon(
-                    imageVector = if (isSearchActive) Icons.Default.Close else Icons.Default.Search,
-                    contentDescription = if (isSearchActive) "Close Search" else "Search",
-                    tint = if (isSearchActive) LXPrimaryGreen else LXTextSecondary
-                )
+                if (isSearchActive) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close Search",
+                        tint = LXPrimaryGreen
+                    )
+                } else if (ThemeManager.isBeyondTheme) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_beyond_search_icon),
+                        contentDescription = "Search",
+                        modifier = Modifier.size(22.dp)
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = LXTextSecondary
+                    )
+                }
             }
 
             IconButton(onClick = onRefresh) {
@@ -165,11 +180,19 @@ fun TopNavBar(
 
             Box {
                 IconButton(onClick = { showSortMenu = true }) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Sort,
-                        contentDescription = "Sort",
-                        tint = LXTextSecondary
-                    )
+                    if (ThemeManager.isBeyondTheme) {
+                        Image(
+                            painter = painterResource(R.drawable.theme_beyond_icon_filters),
+                            contentDescription = "Sort",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Sort,
+                            contentDescription = "Sort",
+                            tint = LXTextSecondary
+                        )
+                    }
                 }
 
                 DropdownMenu(

@@ -1,9 +1,17 @@
 package com.lx.tracklist.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,11 +20,15 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.lx.tracklist.R
 import com.lx.tracklist.ui.theme.ThemeManager
 
 @Composable
@@ -28,30 +40,39 @@ fun ThemedFloatingActionButton(
     val colors = ThemeManager.currentColors
     when (colors.fabBadgeShape) {
         "magic_orb" -> {
-            // Beyond theme: glowing crimson magic orb
+            // Beyond theme: glowing crimson magic orb with slowly rotating arcane rune ring
+            val infiniteTransition = rememberInfiniteTransition(label = "RuneRotation")
+            val runeRotation by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 24000, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "RuneAngle"
+            )
+
             Box(
                 modifier = modifier
-                    .size(62.dp)
+                    .size(68.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF7F1D1D))
-                    .border(2.5.dp, Color(0xFFEF4444), CircleShape)
                     .clickable(onClick = onClick),
                 contentAlignment = Alignment.Center
             ) {
-                Box(
+                // Rotating outer arcane rune ring
+                Image(
+                    painter = painterResource(R.drawable.theme_beyond_fab_bg_rune),
+                    contentDescription = null,
                     modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFDC2626)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = contentDescription,
-                        tint = Color.White,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
+                        .fillMaxSize()
+                        .graphicsLayer(rotationZ = runeRotation)
+                )
+                // Glowing crimson inner button orb with '+'
+                Image(
+                    painter = painterResource(R.drawable.theme_beyond_fab_inner_button),
+                    contentDescription = contentDescription,
+                    modifier = Modifier.size(48.dp)
+                )
             }
         }
         "slime" -> {

@@ -1,6 +1,7 @@
 package com.lx.tracklist.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -28,15 +29,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lx.tracklist.R
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import com.lx.tracklist.ui.theme.ThemeManager
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -231,13 +236,24 @@ private fun StatusTabItem(
         Spacer(modifier = Modifier.height(6.dp))
 
         // Active indicator underline
-        Box(
-            modifier = Modifier
-                .height(3.dp)
-                .width(48.dp)
-                .clip(RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
-                .background(if (isSelected) activeColor else Color.Transparent)
-        )
+        if (ThemeManager.isBeyondTheme && isSelected) {
+            Image(
+                painter = painterResource(R.drawable.theme_beyond_progress_bar_fill),
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier
+                    .height(4.dp)
+                    .width(52.dp)
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .height(3.dp)
+                    .width(48.dp)
+                    .clip(RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
+                    .background(if (isSelected) activeColor else Color.Transparent)
+            )
+        }
     }
 }
 

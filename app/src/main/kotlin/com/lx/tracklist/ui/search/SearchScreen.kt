@@ -211,66 +211,89 @@ fun SearchScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            val isBeyond = ThemeManager.isBeyondTheme
+
             // Search Input Field
-            OutlinedTextField(
-                value = state.query,
-                onValueChange = { viewModel.onQueryChanged(it, context) },
-                placeholder = {
-                    Text(
-                        text = when (state.selectedCategory) {
-                            SearchCategory.ANIME -> "Search anime titles on MyAnimeList..."
-                            SearchCategory.MANGA -> "Search manga titles on MAL / MangaDex..."
-                            SearchCategory.MANHWA -> "Search manhwa titles on MangaDex..."
-                            SearchCategory.MOVIES -> "Search movies on TMDB..."
-                            SearchCategory.TV_SHOWS -> "Search TV shows on TMDB..."
-                            SearchCategory.BOOKS -> "Search books by title, author, or ISBN..."
-                            SearchCategory.LIGHT_NOVELS -> "Search light novels & web novels..."
-                        },
-                        color = LXTextSecondary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = LXPrimaryGreen,
-                        modifier = Modifier.size(20.dp)
-                    )
-                },
-                trailingIcon = {
-                    if (state.isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = LXPrimaryGreen,
-                            strokeWidth = 2.dp
-                        )
-                    } else if (state.query.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.onQueryChanged("", context) }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = LXTextSecondary, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = LXSurfaceElevated,
-                    unfocusedContainerColor = LXSurfaceElevated,
-                    focusedBorderColor = LXPrimaryGreen,
-                    unfocusedBorderColor = LXBorder,
-                    focusedTextColor = LXTextPrimary,
-                    unfocusedTextColor = LXTextPrimary,
-                    cursorColor = LXPrimaryGreen
-                ),
-                shape = RoundedCornerShape(12.dp),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { viewModel.submitSearch(context) }),
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp)
-            )
+            ) {
+                OutlinedTextField(
+                    value = state.query,
+                    onValueChange = { viewModel.onQueryChanged(it, context) },
+                    placeholder = {
+                        Text(
+                            text = when (state.selectedCategory) {
+                                SearchCategory.ANIME -> "Search anime titles on MyAnimeList..."
+                                SearchCategory.MANGA -> "Search manga titles on MAL / MangaDex..."
+                                SearchCategory.MANHWA -> "Search manhwa titles on MangaDex..."
+                                SearchCategory.MOVIES -> "Search movies on TMDB..."
+                                SearchCategory.TV_SHOWS -> "Search TV shows on TMDB..."
+                                SearchCategory.BOOKS -> "Search books by title, author, or ISBN..."
+                                SearchCategory.LIGHT_NOVELS -> "Search light novels & web novels..."
+                            },
+                            color = LXTextSecondary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
+                    leadingIcon = {
+                        if (isBeyond) {
+                            Image(
+                                painter = painterResource(R.drawable.theme_beyond_search_icon),
+                                contentDescription = "Search",
+                                modifier = Modifier.size(22.dp)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = LXPrimaryGreen,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    },
+                    trailingIcon = {
+                        if (state.isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen,
+                                strokeWidth = 2.dp
+                            )
+                        } else if (state.query.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.onQueryChanged("", context) }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = LXTextSecondary, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
+                        unfocusedContainerColor = if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
+                        focusedBorderColor = if (isBeyond) Color.Transparent else LXPrimaryGreen,
+                        unfocusedBorderColor = if (isBeyond) Color.Transparent else LXBorder,
+                        focusedTextColor = LXTextPrimary,
+                        unfocusedTextColor = LXTextPrimary,
+                        cursorColor = if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { viewModel.submitSearch(context) }),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (isBeyond) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_beyond_search_bar),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.matchParentSize()
+                    )
+                }
+            }
 
             // Category Filter Chips
             LazyRow(
@@ -282,29 +305,57 @@ fun SearchScreen(
             ) {
                 items(SearchCategory.entries) { category ->
                     val isSelected = state.selectedCategory == category
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { viewModel.onCategorySelected(category, context) },
-                        label = {
+                    if (isBeyond) {
+                        Box(
+                            modifier = Modifier
+                                .height(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { viewModel.onCategorySelected(category, context) }
+                                .padding(horizontal = 2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                painter = painterResource(
+                                    if (isSelected) R.drawable.theme_beyond_chip_active_border
+                                    else R.drawable.theme_beyond_chip_inactive
+                                ),
+                                contentDescription = null,
+                                contentScale = ContentScale.FillBounds,
+                                modifier = Modifier.matchParentSize()
+                            )
                             Text(
                                 text = "${category.displayName} (${category.sourceName})",
-                                fontSize = 12.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                fontSize = 11.5.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) Color.White else LXTextSecondary,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             )
-                        },
-                        modifier = Modifier.height(34.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen,
-                            selectedLabelColor = LXBackgroundBlack,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
+                        }
+                    } else {
+                        FilterChip(
                             selected = isSelected,
-                            borderColor = if (isSelected) LXPrimaryGreen else LXBorder
+                            onClick = { viewModel.onCategorySelected(category, context) },
+                            label = {
+                                Text(
+                                    text = "${category.displayName} (${category.sourceName})",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            modifier = Modifier.height(34.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = LXPrimaryGreen,
+                                selectedLabelColor = LXBackgroundBlack,
+                                containerColor = LXSurfaceElevated,
+                                labelColor = LXTextSecondary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = if (isSelected) LXPrimaryGreen else LXBorder
+                            )
                         )
-                    )
+                    }
                 }
             }
 

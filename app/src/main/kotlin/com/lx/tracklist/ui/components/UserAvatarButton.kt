@@ -23,6 +23,7 @@ import com.lx.tracklist.R
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
+import com.lx.tracklist.ui.theme.ThemeManager
 
 fun parseUserAvatarHexColor(hex: String): Color {
     return try {
@@ -69,8 +70,13 @@ fun UserAvatarButton(
                     .border(1.5.dp, borderColor, CircleShape)
             )
         } else {
+            val logoPainter = if (ThemeManager.isBeyondTheme) {
+                painterResource(R.drawable.theme_beyond_logo_lx)
+            } else {
+                painterResource(R.drawable.lx_logo)
+            }
             Image(
-                painter = painterResource(R.drawable.lx_logo),
+                painter = logoPainter,
                 contentDescription = "Switch User (${activeUser?.name ?: "User"})",
                 modifier = Modifier.fillMaxSize()
             )

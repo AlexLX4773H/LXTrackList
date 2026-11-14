@@ -513,21 +513,37 @@ fun AppNavigation() {
             ) {
                 navItems.forEach { (screen, dest) ->
                     val isSelected = currentDestination == dest
+                    val isBeyond = ThemeManager.isBeyondTheme
+                    val beyondIconRes = when (screen) {
+                        Screen.Home -> R.drawable.theme_beyond_nav_home
+                        Screen.Library -> R.drawable.theme_beyond_nav_library
+                        Screen.Search -> R.drawable.theme_beyond_nav_search
+                        Screen.Stats -> R.drawable.theme_beyond_nav_stats
+                        Screen.Settings -> R.drawable.theme_beyond_nav_settings
+                    }
                     NavigationRailItem(
                         selected = isSelected,
                         onClick = { navigateTo(dest) },
                         icon = {
-                            Icon(
-                                imageVector = screen.icon,
-                                contentDescription = screen.title,
-                                modifier = Modifier.size(24.dp)
-                            )
+                            if (isBeyond) {
+                                Image(
+                                    painter = painterResource(beyondIconRes),
+                                    contentDescription = screen.title,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = screen.icon,
+                                    contentDescription = screen.title,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
                         },
                         label = { Text(screen.title) },
                         colors = NavigationRailItemDefaults.colors(
-                            selectedIconColor = LXBackgroundBlack,
-                            selectedTextColor = LXPrimaryGreen,
-                            indicatorColor = LXPrimaryGreen,
+                            selectedIconColor = if (isBeyond) Color.White else LXBackgroundBlack,
+                            selectedTextColor = if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen,
+                            indicatorColor = if (isBeyond) Color(0xFFC53030) else LXPrimaryGreen,
                             unselectedIconColor = LXTextSecondary,
                             unselectedTextColor = LXTextSecondary
                         )
@@ -551,60 +567,94 @@ fun AppNavigation() {
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             bottomBar = {
                 if (isTopLevelScreen && !isMultiSelectActive) {
+                    val isBeyond = ThemeManager.isBeyondTheme
                     androidx.compose.material3.Surface(
-                        color = LXSurfaceBlack.copy(alpha = if (ThemeManager.effectiveBackgroundImage != null) 0.90f else 1f),
+                        color = if (isBeyond) LXSurfaceBlack.copy(alpha = 0.92f) else LXSurfaceBlack.copy(alpha = if (ThemeManager.effectiveBackgroundImage != null) 0.90f else 1f),
                         tonalElevation = 6.dp,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                             .border(1.dp, LXBorder, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .navigationBarsPadding()
-                                .height(64.dp)
-                                .padding(horizontal = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceAround,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            navItems.forEach { (screen, dest) ->
-                                val isSelected = currentDestination == dest
-                                Column(
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            if (isBeyond) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_beyond_nav_bar_frame),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.FillBounds,
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .clickable { navigateTo(dest) }
-                                        .padding(vertical = 4.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Box(
+                                        .fillMaxWidth()
+                                        .height(64.dp)
+                                )
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .navigationBarsPadding()
+                                    .height(64.dp)
+                                    .padding(horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceAround,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                navItems.forEach { (screen, dest) ->
+                                    val isSelected = currentDestination == dest
+                                    val beyondIconRes = when (screen) {
+                                        Screen.Home -> R.drawable.theme_beyond_nav_home
+                                        Screen.Library -> R.drawable.theme_beyond_nav_library
+                                        Screen.Search -> R.drawable.theme_beyond_nav_search
+                                        Screen.Stats -> R.drawable.theme_beyond_nav_stats
+                                        Screen.Settings -> R.drawable.theme_beyond_nav_settings
+                                    }
+                                    Column(
                                         modifier = Modifier
-                                            .height(28.dp)
-                                            .width(48.dp)
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .background(if (isSelected) LXPrimaryGreen else Color.Transparent),
-                                        contentAlignment = Alignment.Center
+                                            .weight(1f)
+                                            .fillMaxHeight()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .clickable { navigateTo(dest) }
+                                            .padding(vertical = 4.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
                                     ) {
-                                        Icon(
-                                            imageVector = screen.icon,
-                                            contentDescription = screen.title,
-                                            tint = if (isSelected) LXBackgroundBlack else LXTextSecondary,
-                                            modifier = Modifier.size(20.dp)
+                                        Box(
+                                            modifier = Modifier
+                                                .height(28.dp)
+                                                .width(48.dp)
+                                                .clip(RoundedCornerShape(14.dp))
+                                                .background(
+                                                    if (isSelected) {
+                                                        if (isBeyond) Color(0xFFC53030) else LXPrimaryGreen
+                                                    } else Color.Transparent
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (isBeyond) {
+                                                Image(
+                                                    painter = painterResource(beyondIconRes),
+                                                    contentDescription = screen.title,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            } else {
+                                                Icon(
+                                                    imageVector = screen.icon,
+                                                    contentDescription = screen.title,
+                                                    tint = if (isSelected) LXBackgroundBlack else LXTextSecondary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(3.dp))
+                                        Text(
+                                            text = screen.title,
+                                            style = androidx.compose.ui.text.TextStyle(
+                                                fontSize = 11.sp,
+                                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+                                            ),
+                                            color = if (isSelected) {
+                                                if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen
+                                            } else LXTextSecondary,
+                                            maxLines = 1
                                         )
                                     }
-                                    Spacer(modifier = Modifier.height(3.dp))
-                                    Text(
-                                        text = screen.title,
-                                        style = androidx.compose.ui.text.TextStyle(
-                                            fontSize = 11.sp,
-                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
-                                        ),
-                                        color = if (isSelected) LXPrimaryGreen else LXTextSecondary,
-                                        maxLines = 1
-                                    )
                                 }
                             }
                         }

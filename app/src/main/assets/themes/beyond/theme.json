@@ -21,5 +21,32 @@
   "cardBorderWidthDp": 1.5,
   "cardCornerRadiusDp": 10,
   "isLight": false,
-  "backgroundDim": 0.6
+  "backgroundDim": 0.6,
+  "sprites": {
+    "logo": "sprites/logo_lx.png",
+    "iconGlasses": "sprites/icon_glasses.png",
+    "iconSword": "sprites/icon_sword.png",
+    "iconFilters": "sprites/icon_filters.png",
+    "searchBar": "sprites/search_bar.png",
+    "searchIcon": "sprites/search_icon.png",
+    "chipActive": "sprites/chip_active_border.png",
+    "chipInactive": "sprites/chip_inactive.png",
+    "cardFrame": "sprites/card_frame_ornate.png",
+    "thumbnailBorder": "sprites/thumbnail_border.png",
+    "progressBarBg": "sprites/progress_bar_bg.png",
+    "progressBarFill": "sprites/progress_bar_fill.png",
+    "iconHeart": "sprites/icon_heart_active.png",
+    "iconFavorite": "sprites/icon_favorite.png",
+    "iconMore": "sprites/icon_more.png",
+    "fabFull": "sprites/fab_add_full.png",
+    "fabBgRune": "sprites/fab_bg_rune.png",
+    "fabInnerButton": "sprites/fab_inner_button.png",
+    "navBarFrame": "sprites/nav_bar_frame.png",
+    "navHome": "sprites/nav_home.png",
+    "navLibrary": "sprites/nav_library.png",
+    "navSearch": "sprites/nav_search.png",
+    "navStats": "sprites/nav_stats.png",
+    "navSettings": "sprites/nav_settings.png",
+    "navFlourish": "sprites/nav_flourish.png"
+  }
 }

@@ -456,4 +456,10 @@ object ThemeManager {
      */
     val effectiveBackgroundImage: String?
         get() = customBackgroundUri ?: currentPreset.backgroundAssetPath
+
+    /**
+     * Whether the active theme preset is the Advanced "Beyond" theme.
+     */
+    val isBeyondTheme: Boolean
+        get() = currentThemeId == ThemePreset.BEYOND.id
 }

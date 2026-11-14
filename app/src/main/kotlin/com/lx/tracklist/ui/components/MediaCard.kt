@@ -3,6 +3,7 @@ package com.lx.tracklist.ui.components
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -71,6 +72,7 @@ import com.lx.tracklist.ui.theme.LXSurfaceBlack
 import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import com.lx.tracklist.ui.theme.ThemeManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -95,34 +97,36 @@ fun MediaCard(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val progressAnimated by animateFloatAsState(targetValue = entry.progressFraction, label = "progress")
+    val isBeyond = ThemeManager.isBeyondTheme
 
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .border(
-                width = if (isSelected) 2.dp else 1.dp,
-                color = if (isSelected) LXPrimaryGreen else LXBorder,
-                shape = RoundedCornerShape(12.dp)
-            )
-            .combinedClickable(
-                onClick = {
-                    if (isSelectionMode) {
-                        onToggleSelect?.invoke()
-                    } else {
-                        onClick()
+    Box(modifier = modifier.fillMaxWidth()) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(if (isBeyond) 10.dp else 12.dp))
+                .border(
+                    width = if (isSelected) 2.dp else (if (isBeyond) 1.5.dp else 1.dp),
+                    color = if (isSelected) LXPrimaryGreen else (if (isBeyond) LXBorder.copy(alpha = 0.7f) else LXBorder),
+                    shape = RoundedCornerShape(if (isBeyond) 10.dp else 12.dp)
+                )
+                .combinedClickable(
+                    onClick = {
+                        if (isSelectionMode) {
+                            onToggleSelect?.invoke()
+                        } else {
+                            onClick()
+                        }
+                    },
+                    onLongClick = {
+                        if (isSelectionMode) {
+                            onToggleSelect?.invoke()
+                        } else {
+                            onLongClick?.invoke()
+                        }
                     }
-                },
-                onLongClick = {
-                    if (isSelectionMode) {
-                        onToggleSelect?.invoke()
-                    } else {
-                        onLongClick?.invoke()
-                    }
-                }
-            ),
-        color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.08f) else LXSurfaceBlack
-    ) {
+                ),
+            color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.08f) else LXSurfaceBlack
+        ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
@@ -182,6 +186,15 @@ fun MediaCard(
                 } else {
                     SmallLogoPlaceholder(size = 48.dp, isError = false)
                 }
+
+                if (isBeyond) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_beyond_thumbnail_border),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -213,12 +226,20 @@ fun MediaCard(
                             onClick = onToggleFavorite,
                             modifier = Modifier.size(28.dp)
                         ) {
-                            Icon(
-                                imageVector = if (entry.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                contentDescription = "Favorite",
-                                tint = if (entry.isFavorite) LXPrimaryGreen else LXTextSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            if (isBeyond && entry.isFavorite) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_beyond_icon_heart_active),
+                                    contentDescription = "Favorite",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = if (entry.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                    contentDescription = "Favorite",
+                                    tint = if (entry.isFavorite) LXPrimaryGreen else LXTextSecondary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
 
                         Box {
@@ -226,12 +247,20 @@ fun MediaCard(
                                 onClick = { showMenu = true },
                                 modifier = Modifier.size(28.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "Options",
-                                    tint = LXTextSecondary,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                                if (isBeyond) {
+                                    Image(
+                                        painter = painterResource(R.drawable.theme_beyond_icon_more),
+                                        contentDescription = "Options",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreVert,
+                                        contentDescription = "Options",
+                                        tint = LXTextSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
 
                             DropdownMenu(
@@ -385,21 +414,47 @@ fun MediaCard(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Custom Neon Progress Bar
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(LXProgressTrack)
-                    ) {
+                    if (isBeyond) {
                         Box(
                             modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(progressAnimated)
+                                .weight(1f)
+                                .height(8.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Image(
+                                painter = painterResource(R.drawable.theme_beyond_progress_bar_bg),
+                                contentDescription = null,
+                                contentScale = ContentScale.FillBounds,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            if (progressAnimated > 0.01f) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_beyond_progress_bar_fill),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.FillBounds,
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(progressAnimated)
+                                )
+                            }
+                        }
+                    } else {
+                        // Custom Neon Progress Bar
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(6.dp)
                                 .clip(RoundedCornerShape(3.dp))
-                                .background(LXPrimaryGreen)
-                        )
+                                .background(LXProgressTrack)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(progressAnimated)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(LXPrimaryGreen)
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
@@ -629,6 +684,15 @@ fun MediaCard(
                     }
                 }
             }
+        }
+
+        if (isBeyond) {
+            Image(
+                painter = painterResource(R.drawable.theme_beyond_card_frame_ornate),
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier.matchParentSize()
+            )
         }
     }
 }
