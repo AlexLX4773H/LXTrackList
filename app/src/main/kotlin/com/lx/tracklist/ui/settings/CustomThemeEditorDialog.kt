@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -373,6 +374,23 @@ fun CustomThemeEditorDialog(
                                         color = curTextS
                                     )
 
+                                    // Mini Progress bar preview showcasing primary accent
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(4.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(curPrimary.copy(alpha = 0.20f))
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxHeight()
+                                                .fillMaxWidth(0.68f)
+                                                .clip(RoundedCornerShape(2.dp))
+                                                .background(curPrimary)
+                                        )
+                                    }
+
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -385,7 +403,7 @@ fun CustomThemeEditorDialog(
                                         ) {
                                             Text(
                                                 text = "COMPLETED",
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                                                 style = MaterialTheme.typography.labelSmall.copy(
                                                     fontWeight = FontWeight.Bold,
                                                     fontSize = 9.sp
@@ -394,16 +412,36 @@ fun CustomThemeEditorDialog(
                                             )
                                         }
 
-                                        Button(
-                                            onClick = {},
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = curPrimary,
-                                                contentColor = if (isLight) Color.White else curBg
-                                            ),
-                                            shape = RoundedCornerShape(6.dp),
-                                            modifier = Modifier.height(28.dp)
+                                        val actionTextColor = if ((0.299f * curPrimary.red + 0.587f * curPrimary.green + 0.114f * curPrimary.blue) > 0.5f) {
+                                            Color(0xFF101410)
+                                        } else {
+                                            Color.White
+                                        }
+
+                                        Surface(
+                                            color = curPrimary,
+                                            shape = RoundedCornerShape(6.dp)
                                         ) {
-                                            Text("Action", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Add,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(13.dp),
+                                                    tint = actionTextColor
+                                                )
+                                                Text(
+                                                    text = "Action",
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 11.5.sp
+                                                    ),
+                                                    color = actionTextColor
+                                                )
+                                            }
                                         }
                                     }
                                 }

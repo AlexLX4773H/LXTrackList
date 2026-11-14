@@ -335,11 +335,11 @@ fun SearchScreen(
                         },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
-                        leadingIcon = if (isGate || isBeyond) {
-                            // theme_gate_search_bar and theme_beyond_search_bar already have the icon baked into the left side.
+                        leadingIcon = if (isGate || isBeyond || isSky) {
+                            // theme_gate_search_bar, theme_beyond_search_bar, and theme_sky_search_bar already have the icon baked into the left side.
                             // We provide a spacer so the text starts after the baked-in icon without stacking a duplicate icon.
                             { Spacer(modifier = Modifier.width(36.dp)) }
-                        } else if (!isSky) {
+                        } else {
                             {
                                 Icon(
                                     imageVector = Icons.Default.Search,
@@ -348,33 +348,22 @@ fun SearchScreen(
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
-                        } else null,
+                        },
                         trailingIcon = {
-                            if (isSky) {
-                                if (state.isLoading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(18.dp),
-                                        color = Color(0xFFFB923C),
-                                        strokeWidth = 2.dp
-                                    )
-                                } else if (state.query.isNotEmpty()) {
-                                    IconButton(onClick = { viewModel.onQueryChanged("", context) }) {
-                                        Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color(0xFFFB923C), modifier = Modifier.size(18.dp))
-                                    }
-                                } else {
-                                    // theme_sky_search_bar already has the orange magnifying glass baked into the right side.
-                                    // Spacer preserves spacing so text doesn't overflow into the baked-in icon.
-                                    Spacer(modifier = Modifier.width(36.dp))
-                                }
-                            } else if (state.isLoading) {
+                            if (state.isLoading) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(18.dp),
-                                    color = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen,
+                                    color = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else if (isSky) Color(0xFFFB923C) else LXPrimaryGreen,
                                     strokeWidth = 2.dp
                                 )
                             } else if (state.query.isNotEmpty()) {
                                 IconButton(onClick = { viewModel.onQueryChanged("", context) }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Clear", tint = if (isGate) Color(0xFFFBBF24) else LXTextSecondary, modifier = Modifier.size(18.dp))
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Clear",
+                                        tint = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else if (isSky) Color(0xFFFB923C) else LXTextSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
                         },
