@@ -38,6 +38,8 @@
     "iconHeart": "sprites/icon_heart_active.png",
     "iconFavorite": "sprites/icon_favorite.png",
     "iconMore": "sprites/icon_more.png",
+    "iconCardStar": "sprites/icon_card_star.png",
+    "decorBloodCrystals": "sprites/decor_blood_crystals.png",
     "fabFull": "sprites/fab_add_full.png",
     "fabBgRune": "sprites/fab_bg_rune.png",
     "fabInnerButton": "sprites/fab_inner_button.png",

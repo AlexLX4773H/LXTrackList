@@ -240,7 +240,7 @@ fun TopNavBar(
                             text = {
                                 Text(
                                     text = option.displayName,
-                                    color = if (option == selectedSort) LXPrimaryGreen else LXTextPrimary,
+                                    color = if (option == selectedSort) (if (ThemeManager.isBeyondTheme) Color(0xFFFC8181) else LXPrimaryGreen) else LXTextPrimary,
                                     fontWeight = if (option == selectedSort) FontWeight.Bold else FontWeight.Normal
                                 )
                             },

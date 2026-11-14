@@ -242,7 +242,7 @@ private fun StatusTabItem(
                 contentDescription = null,
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier
-                    .height(4.dp)
+                    .height(8.dp)
                     .width(52.dp)
             )
         } else if (ThemeManager.isSlimeTheme && isSelected) {

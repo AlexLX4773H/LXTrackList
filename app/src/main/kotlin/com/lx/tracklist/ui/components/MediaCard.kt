@@ -104,7 +104,14 @@ fun MediaCard(
     val isAdvanced = isBeyond || isSlime || isGate || isSky
 
     Box(modifier = modifier.fillMaxWidth()) {
-        if (isGate) {
+        if (isBeyond) {
+            Image(
+                painter = painterResource(R.drawable.theme_beyond_card_frame_ornate),
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier.matchParentSize()
+            )
+        } else if (isGate) {
             Image(
                 painter = painterResource(R.drawable.theme_gate_card_frame_ornate),
                 contentDescription = null,
@@ -124,8 +131,8 @@ fun MediaCard(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(if (isGate) 8.dp else if (isAdvanced) 14.dp else 12.dp))
                 .border(
-                    width = if (isSelected) 2.dp else (if (isGate || isSky) 0.dp else if (isAdvanced) 1.5.dp else 1.dp),
-                    color = if (isSelected) LXPrimaryGreen else (if (isSlime) Color(0xFF38BDF8).copy(alpha = 0.5f) else if (isBeyond) LXPrimaryGreen.copy(alpha = 0.5f) else LXBorder),
+                    width = if (isSelected) 2.dp else (if (isGate || isSky || isBeyond) 0.dp else if (isAdvanced) 1.5.dp else 1.dp),
+                    color = if (isSelected) LXPrimaryGreen else (if (isSlime) Color(0xFF38BDF8).copy(alpha = 0.5f) else LXBorder),
                     shape = RoundedCornerShape(if (isGate) 8.dp else if (isAdvanced) 14.dp else 12.dp)
                 )
                 .combinedClickable(
@@ -144,7 +151,7 @@ fun MediaCard(
                         }
                     }
                 ),
-            color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f) else if (isGate || isSky) Color.Transparent else LXSurfaceBlack
+            color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f) else if (isGate || isSky || isBeyond) Color.Transparent else LXSurfaceBlack
         ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -211,14 +218,7 @@ fun MediaCard(
                     SmallLogoPlaceholder(size = 48.dp, isError = false)
                 }
 
-                if (isBeyond) {
-                    Image(
-                        painter = painterResource(R.drawable.theme_beyond_thumbnail_border),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else if (isSlime) {
+                if (isSlime) {
                     Image(
                         painter = painterResource(R.drawable.theme_slime_thumbnail_border),
                         contentDescription = null,
@@ -257,9 +257,9 @@ fun MediaCard(
                             onClick = onToggleFavorite,
                             modifier = Modifier.size(if (isAdvanced) 24.dp else 28.dp)
                         ) {
-                            if (isBeyond && entry.isFavorite) {
+                            if (isBeyond) {
                                 Image(
-                                    painter = painterResource(R.drawable.theme_beyond_icon_heart_active),
+                                    painter = painterResource(if (entry.isFavorite) R.drawable.theme_beyond_icon_heart_active else R.drawable.theme_beyond_icon_favorite),
                                     contentDescription = "Favorite",
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -300,7 +300,7 @@ fun MediaCard(
                                     Image(
                                         painter = painterResource(R.drawable.theme_beyond_icon_more),
                                         contentDescription = "Options",
-                                        modifier = Modifier.size(12.dp)
+                                        modifier = Modifier.size(14.dp)
                                     )
                                 } else if (isSlime) {
                                     Image(
@@ -485,14 +485,16 @@ fun MediaCard(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(7.dp),
+                                .height(16.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
                             Image(
                                 painter = painterResource(R.drawable.theme_beyond_progress_bar_bg),
                                 contentDescription = null,
                                 contentScale = ContentScale.FillBounds,
-                                modifier = Modifier.fillMaxSize()
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(8.dp)
                             )
                             if (progressAnimated > 0.01f) {
                                 Image(
@@ -601,7 +603,21 @@ fun MediaCard(
                     if (!isGate) {
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        if (isSlime) {
+                        if (isBeyond) {
+                            // Beyond Theme: Crimson Star quick increment button as shown in concept
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clickable(onClick = onIncrement),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_beyond_icon_card_star),
+                                    contentDescription = "+1 Progress",
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        } else if (isSlime) {
                             // Slime Theme: Cute Slime Emblem increment button as shown in concept
                             Box(
                                 modifier = Modifier
@@ -860,14 +876,7 @@ fun MediaCard(
         }
     }
 
-        if (isBeyond) {
-            Image(
-                painter = painterResource(R.drawable.theme_beyond_card_frame_ornate),
-                contentDescription = null,
-                contentScale = ContentScale.FillBounds,
-                modifier = Modifier.matchParentSize()
-            )
-        } else if (isSlime) {
+        if (isSlime) {
             Image(
                 painter = painterResource(R.drawable.theme_slime_card_frame_ornate),
                 contentDescription = null,

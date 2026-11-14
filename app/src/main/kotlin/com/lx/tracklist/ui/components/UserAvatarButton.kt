@@ -70,7 +70,9 @@ fun UserAvatarButton(
                     .border(1.5.dp, borderColor, CircleShape)
             )
         } else {
-            val logoPainter = if (ThemeManager.isSlimeTheme) {
+            val logoPainter = if (ThemeManager.isBeyondTheme) {
+                painterResource(R.drawable.theme_beyond_logo_lx)
+            } else if (ThemeManager.isSlimeTheme) {
                 painterResource(R.drawable.theme_slime_logo_slime)
             } else if (ThemeManager.isGateTheme) {
                 painterResource(R.drawable.theme_gate_logo_lx)

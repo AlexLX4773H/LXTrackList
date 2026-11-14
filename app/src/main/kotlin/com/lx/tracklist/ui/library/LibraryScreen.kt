@@ -54,6 +54,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Image as ImageFill
 import androidx.compose.foundation.Image
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import com.lx.tracklist.R
@@ -886,9 +893,90 @@ fun LibraryScreen(
                         )
                     },
                     actions = {
+                        val isBeyond = ThemeManager.isBeyondTheme
                         val isGate = ThemeManager.isGateTheme
                         val isSky = ThemeManager.isSkyTheme
-                        if (isGate) {
+                        if (isBeyond) {
+                            // Beyond Theme: Glasses (Sort), Sliders (All Filters), Blood Sword (Select Mode)
+                            Box {
+                                IconButton(onClick = { viewModel.setSortMenuOpen(true) }) {
+                                    Image(
+                                        painter = painterResource(R.drawable.theme_beyond_icon_glasses),
+                                        contentDescription = "Sort",
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = state.isSortMenuOpen,
+                                    onDismissRequest = { viewModel.setSortMenuOpen(false) }
+                                ) {
+                                    LibrarySortOption.entries.forEach { option ->
+                                        val isCurrent = state.selectedSort == option
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = option.displayName,
+                                                    color = if (isCurrent) Color(0xFFFC8181) else LXTextPrimary,
+                                                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            },
+                                            onClick = { viewModel.setSortOption(option) },
+                                            trailingIcon = {
+                                                if (isCurrent) {
+                                                    Icon(
+                                                        Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFFFC8181),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Filter Button with Badge
+                            IconButton(onClick = { viewModel.setFilterSheetOpen(true) }) {
+                                if (state.activeFilterCount > 0) {
+                                    BadgedBox(
+                                        badge = {
+                                            Badge(
+                                                containerColor = Color(0xFFE53E3E),
+                                                contentColor = Color.White
+                                            ) {
+                                                Text(state.activeFilterCount.toString(), fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    ) {
+                                        Image(
+                                            painter = painterResource(R.drawable.theme_beyond_icon_filters),
+                                            contentDescription = "All Filters",
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                } else {
+                                    Image(
+                                        painter = painterResource(R.drawable.theme_beyond_icon_filters),
+                                        contentDescription = "All Filters",
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+
+                            // Blood sword multi-select toggle button
+                            IconButton(onClick = {
+                                if (visibleIds.isNotEmpty()) {
+                                    viewModel.toggleSelect(visibleIds.first())
+                                }
+                            }) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_beyond_icon_sword),
+                                    contentDescription = "Select Mode",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        } else if (isGate) {
                             IconButton(onClick = { viewModel.setSortMenuOpen(true) }) {
                                 Image(
                                     painter = painterResource(R.drawable.theme_gate_header_portal_arch),
@@ -1154,11 +1242,15 @@ fun LibraryScreen(
             }
         }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+            val isBeyond = ThemeManager.isBeyondTheme
             val isGate = ThemeManager.isGateTheme
             val isSky = ThemeManager.isSkyTheme
 
@@ -1168,7 +1260,14 @@ fun LibraryScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp)
             ) {
-                if (isGate) {
+                if (isBeyond) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_beyond_search_bar),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.matchParentSize()
+                    )
+                } else if (isGate) {
                     Image(
                         painter = painterResource(R.drawable.theme_gate_search_bar),
                         contentDescription = null,
@@ -1189,7 +1288,7 @@ fun LibraryScreen(
                     placeholder = {
                         Text(
                             "Search title, alternate title, tags...",
-                            color = if (isGate || isSky) Color(0xFF9E9E96) else LXTextSecondary,
+                            color = if (isGate || isSky) Color(0xFF9E9E96) else if (isBeyond) Color(0xFFA78BFA).copy(alpha = 0.7f) else LXTextSecondary,
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -1199,7 +1298,13 @@ fun LibraryScreen(
                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
                     leadingIcon = if (!isSky) {
                         {
-                            if (isGate) {
+                            if (isBeyond) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_beyond_search_icon),
+                                    contentDescription = "Search",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            } else if (isGate) {
                                 Image(
                                     painter = painterResource(R.drawable.theme_gate_search_icon),
                                     contentDescription = "Search",
@@ -1226,18 +1331,18 @@ fun LibraryScreen(
                             }
                         } else if (state.searchQuery.isNotEmpty()) {
                             IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = if (isGate) Color(0xFFFBBF24) else LXTextSecondary, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXTextSecondary, modifier = Modifier.size(18.dp))
                             }
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = if (isGate || isSky) Color.Transparent else LXSurfaceElevated,
-                        unfocusedContainerColor = if (isGate || isSky) Color.Transparent else LXSurfaceElevated,
-                        focusedBorderColor = if (isGate || isSky) Color.Transparent else LXPrimaryGreen,
-                        unfocusedBorderColor = if (isGate || isSky) Color.Transparent else LXBorder,
+                        focusedContainerColor = if (isGate || isSky || isBeyond) Color.Transparent else LXSurfaceElevated,
+                        unfocusedContainerColor = if (isGate || isSky || isBeyond) Color.Transparent else LXSurfaceElevated,
+                        focusedBorderColor = if (isGate || isSky || isBeyond) Color.Transparent else LXPrimaryGreen,
+                        unfocusedBorderColor = if (isGate || isSky || isBeyond) Color.Transparent else LXBorder,
                         focusedTextColor = LXTextPrimary,
                         unfocusedTextColor = LXTextPrimary,
-                        cursorColor = if (isSky) Color(0xFF06B6D4) else if (isGate) Color(0xFFFBBF24) else LXPrimaryGreen
+                        cursorColor = if (isSky) Color(0xFF06B6D4) else if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen
                     ),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -1254,7 +1359,16 @@ fun LibraryScreen(
             ) {
                 item {
                     val isSelected = state.selectedCategoryFilter == null && state.selectedCustomCategoryFilter == null
-                    if (isGate) {
+                    if (isBeyond) {
+                        BeyondCategoryChip(
+                            label = "All Categories",
+                            isSelected = isSelected,
+                            onClick = {
+                                viewModel.setCategoryFilter(null)
+                                viewModel.setCustomCategoryFilter(null)
+                            }
+                        )
+                    } else if (isGate) {
                         GateCategoryChip(
                             label = "All Categories",
                             isSelected = isSelected,
@@ -1298,7 +1412,13 @@ fun LibraryScreen(
 
                 items(MediaType.entries) { cat ->
                     val isSelected = state.selectedCategoryFilter == cat
-                    if (isGate) {
+                    if (isBeyond) {
+                        BeyondCategoryChip(
+                            label = cat.displayName,
+                            isSelected = isSelected,
+                            onClick = { viewModel.setCategoryFilter(if (isSelected) null else cat) }
+                        )
+                    } else if (isGate) {
                         GateCategoryChip(
                             label = cat.displayName,
                             isSelected = isSelected,
@@ -1334,7 +1454,13 @@ fun LibraryScreen(
                 // Custom Categories Chips
                 items(state.customCategories) { customCat ->
                     val isSelected = state.selectedCustomCategoryFilter.equals(customCat.name, ignoreCase = true)
-                    if (isGate) {
+                    if (isBeyond) {
+                        BeyondCategoryChip(
+                            label = customCat.name,
+                            isSelected = isSelected,
+                            onClick = { viewModel.setCustomCategoryFilter(if (isSelected) null else customCat.name) }
+                        )
+                    } else if (isGate) {
                         GateCategoryChip(
                             label = customCat.name,
                             isSelected = isSelected,
@@ -1632,7 +1758,31 @@ fun LibraryScreen(
                 }
             }
         }
+
+        // Beyond Theme Blood Crystals Floating Decor
+        if (ThemeManager.isBeyondTheme && !state.isSelectionMode) {
+            val infiniteTransition = rememberInfiniteTransition(label = "BloodCrystalBobbing")
+            val bobbingOffset by infiniteTransition.animateFloat(
+                initialValue = -3f,
+                targetValue = 3f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 2800, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "CrystalsOffset"
+            )
+            Image(
+                painter = painterResource(R.drawable.theme_beyond_decor_blood_crystals),
+                contentDescription = null,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 12.dp, bottom = 28.dp)
+                    .size(width = 64.dp, height = 72.dp)
+                    .graphicsLayer(translationY = bobbingOffset)
+            )
+        }
     }
+}
 }
 
 @Composable
@@ -2855,6 +3005,39 @@ fun SkyCategoryChip(
             fontSize = 12.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
             color = if (isSelected) Color(0xFFFB923C) else Color(0xFFF8FAFC),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+        )
+    }
+}
+
+@Composable
+fun BeyondCategoryChip(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(36.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(
+                if (isSelected) R.drawable.theme_beyond_chip_active_border
+                else R.drawable.theme_beyond_chip_inactive
+            ),
+            contentDescription = label,
+            contentScale = ContentScale.FillBounds,
+            modifier = Modifier.matchParentSize()
+        )
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = if (isSelected) Color.White else Color(0xFFC4B5FD).copy(alpha = 0.85f),
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
         )
     }

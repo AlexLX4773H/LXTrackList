@@ -221,7 +221,14 @@ fun SearchScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp)
             ) {
-                if (isGate) {
+                if (isBeyond) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_beyond_search_bar),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.matchParentSize()
+                    )
+                } else if (isGate) {
                     Image(
                         painter = painterResource(R.drawable.theme_gate_search_bar),
                         contentDescription = null,
@@ -323,15 +330,6 @@ fun SearchScreen(
                     keyboardActions = KeyboardActions(onSearch = { viewModel.submitSearch(context) }),
                     modifier = Modifier.fillMaxWidth()
                 )
-
-                if (isBeyond) {
-                    Image(
-                        painter = painterResource(R.drawable.theme_beyond_search_bar),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier.matchParentSize()
-                    )
-                }
             }
 
             // Category Filter Chips
@@ -344,7 +342,13 @@ fun SearchScreen(
             ) {
                 items(SearchCategory.entries) { category ->
                     val isSelected = state.selectedCategory == category
-                    if (isGate) {
+                    if (isBeyond) {
+                        com.lx.tracklist.ui.library.BeyondCategoryChip(
+                            label = "${category.displayName} (${category.sourceName})",
+                            isSelected = isSelected,
+                            onClick = { viewModel.onCategorySelected(category, context) }
+                        )
+                    } else if (isGate) {
                         com.lx.tracklist.ui.library.GateCategoryChip(
                             label = "${category.displayName} (${category.sourceName})",
                             isSelected = isSelected,

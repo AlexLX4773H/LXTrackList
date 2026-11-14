@@ -599,12 +599,12 @@ fun AppNavigation() {
                     val isGate = ThemeManager.isGateTheme
                     val isSky = ThemeManager.isSkyTheme
                     androidx.compose.material3.Surface(
-                        color = if (isGate || isSky) Color.Transparent else if (isBeyond || isSlime) LXSurfaceBlack.copy(alpha = 0.92f) else LXSurfaceBlack.copy(alpha = if (ThemeManager.effectiveBackgroundImage != null) 0.90f else 1f),
+                        color = if (isGate || isSky || isBeyond) Color.Transparent else if (isSlime) LXSurfaceBlack.copy(alpha = 0.92f) else LXSurfaceBlack.copy(alpha = if (ThemeManager.effectiveBackgroundImage != null) 0.90f else 1f),
                         tonalElevation = 6.dp,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                            .border(if (isGate || isSky) 0.dp else 1.dp, LXBorder, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                            .border(if (isGate || isSky || isBeyond) 0.dp else 1.dp, LXBorder, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                     ) {
                         Box(modifier = Modifier.fillMaxWidth()) {
                             if (isBeyond) {
@@ -614,7 +614,7 @@ fun AppNavigation() {
                                     contentScale = ContentScale.FillBounds,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(64.dp)
+                                        .height(68.dp)
                                 )
                             } else if (isSlime) {
                                 Image(
@@ -648,7 +648,7 @@ fun AppNavigation() {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .navigationBarsPadding()
-                                    .height(if (isGate || isSky) 68.dp else 64.dp)
+                                    .height(if (isGate || isSky || isBeyond) 68.dp else 64.dp)
                                     .padding(horizontal = 4.dp),
                                 horizontalArrangement = Arrangement.SpaceAround,
                                 verticalAlignment = Alignment.CenterVertically
@@ -702,9 +702,8 @@ fun AppNavigation() {
                                                 .width(if (isGate || isSky) 36.dp else 48.dp)
                                                 .clip(RoundedCornerShape(if (isGate || isSky) 6.dp else 14.dp))
                                                 .background(
-                                                    if (isSelected && !isGate && !isSky) {
-                                                        if (isBeyond) Color(0xFFC53030)
-                                                        else if (isSlime) Color(0xFF0284C7).copy(alpha = 0.5f)
+                                                    if (isSelected && !isGate && !isSky && !isBeyond) {
+                                                        if (isSlime) Color(0xFF0284C7).copy(alpha = 0.5f)
                                                         else LXPrimaryGreen
                                                     } else Color.Transparent
                                                 ),
@@ -729,7 +728,7 @@ fun AppNavigation() {
                                                 Image(
                                                     painter = painterResource(customNavIcon),
                                                     contentDescription = screen.title,
-                                                    modifier = Modifier.size(if (isGate || isSky) 24.dp else if (isSlime) 24.dp else 22.dp)
+                                                    modifier = Modifier.size(if (isGate || isSky || isBeyond) 26.dp else if (isSlime) 24.dp else 22.dp)
                                                 )
                                             } else {
                                                 Icon(
@@ -748,16 +747,26 @@ fun AppNavigation() {
                                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
                                             ),
                                             color = if (isSelected) {
-                                                if (isBeyond) Color(0xFFFC8181)
+                                                if (isBeyond) Color(0xFFF6E05E)
                                                 else if (isSlime) Color(0xFF38BDF8)
                                                 else if (isGate) Color(0xFFFBBF24)
                                                 else if (isSky) Color(0xFFFB923C)
                                                 else LXPrimaryGreen
-                                            } else if (isGate || isSky) Color(0xFF9E9E96) else LXTextSecondary,
+                                            } else if (isGate || isSky || isBeyond) Color(0xFF9E9E96) else LXTextSecondary,
                                             maxLines = 1
                                         )
                                     }
                                 }
+                            }
+                            if (isBeyond) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_beyond_nav_flourish),
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .padding(end = 68.dp, bottom = 4.dp)
+                                        .size(16.dp)
+                                )
                             }
                         }
                     }

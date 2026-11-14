@@ -40,38 +40,30 @@ fun ThemedFloatingActionButton(
     val colors = ThemeManager.currentColors
     when (colors.fabBadgeShape) {
         "magic_orb" -> {
-            // Beyond theme: glowing crimson magic orb with slowly rotating arcane rune ring
-            val infiniteTransition = rememberInfiniteTransition(label = "RuneRotation")
-            val runeRotation by infiniteTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = 360f,
+            // Beyond theme: glowing crimson magic orb with runic ring and gentle pulse
+            val infiniteTransition = rememberInfiniteTransition(label = "BeyondFabPulse")
+            val pulseScale by infiniteTransition.animateFloat(
+                initialValue = 0.97f,
+                targetValue = 1.03f,
                 animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 24000, easing = LinearEasing),
-                    repeatMode = RepeatMode.Restart
+                    animation = tween(durationMillis = 2600, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse
                 ),
-                label = "RuneAngle"
+                label = "BeyondScale"
             )
 
             Box(
                 modifier = modifier
-                    .size(68.dp)
-                    .clip(CircleShape)
+                    .size(72.dp)
                     .clickable(onClick = onClick),
                 contentAlignment = Alignment.Center
             ) {
-                // Rotating outer arcane rune ring
                 Image(
-                    painter = painterResource(R.drawable.theme_beyond_fab_bg_rune),
-                    contentDescription = null,
+                    painter = painterResource(R.drawable.theme_beyond_fab_add_full),
+                    contentDescription = contentDescription,
                     modifier = Modifier
                         .fillMaxSize()
-                        .graphicsLayer(rotationZ = runeRotation)
-                )
-                // Glowing crimson inner button orb with '+'
-                Image(
-                    painter = painterResource(R.drawable.theme_beyond_fab_inner_button),
-                    contentDescription = contentDescription,
-                    modifier = Modifier.size(48.dp)
+                        .graphicsLayer(scaleX = pulseScale, scaleY = pulseScale)
                 )
             }
         }
