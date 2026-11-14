@@ -166,10 +166,15 @@ fun StatusFilterTabs(
                         .padding(horizontal = 10.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val defaultAccent = if (ThemeManager.isBeyondTheme) Color(0xFFF87171)
+                        else if (ThemeManager.isSlimeTheme) Color(0xFF38BDF8)
+                        else if (ThemeManager.isGateTheme) Color(0xFFFBBF24)
+                        else if (ThemeManager.isSkyTheme) Color(0xFF38BDF8)
+                        else LXPrimaryGreen
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Add Sub Category",
-                        tint = LXPrimaryGreen,
+                        tint = defaultAccent,
                         modifier = Modifier.size(15.dp)
                     )
                     Spacer(modifier = Modifier.width(3.dp))
@@ -179,7 +184,7 @@ fun StatusFilterTabs(
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp
                         ),
-                        color = LXPrimaryGreen
+                        color = defaultAccent
                     )
                 }
             }
@@ -201,7 +206,11 @@ private fun StatusTabItem(
     label: String,
     count: Int,
     isSelected: Boolean,
-    activeColor: Color = LXPrimaryGreen,
+    activeColor: Color = if (ThemeManager.isBeyondTheme) Color(0xFFF87171)
+        else if (ThemeManager.isSlimeTheme) Color(0xFF38BDF8)
+        else if (ThemeManager.isGateTheme) Color(0xFFFBBF24)
+        else if (ThemeManager.isSkyTheme) Color(0xFF38BDF8)
+        else LXPrimaryGreen,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null
 ) {
@@ -251,7 +260,7 @@ private fun StatusTabItem(
                 contentDescription = null,
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier
-                    .height(5.dp)
+                    .height(6.dp)
                     .width(52.dp)
             )
         } else if (ThemeManager.isGateTheme && isSelected) {

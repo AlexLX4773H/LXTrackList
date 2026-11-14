@@ -202,7 +202,7 @@ fun SearchScreen(
                         color = LXTextPrimary
                     )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = LXBackgroundBlack)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = if (ThemeManager.effectiveBackgroundImage != null) Color.Transparent else LXBackgroundBlack)
             )
         }
     ) { paddingValues ->
@@ -214,6 +214,7 @@ fun SearchScreen(
             val isBeyond = ThemeManager.isBeyondTheme
             val isGate = ThemeManager.isGateTheme
             val isSky = ThemeManager.isSkyTheme
+            val isSlime = ThemeManager.isSlimeTheme
 
             // Search Input Field
             Box(
@@ -242,6 +243,13 @@ fun SearchScreen(
                         contentScale = ContentScale.FillBounds,
                         modifier = Modifier.matchParentSize()
                     )
+                } else if (isSlime) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_slime_search_bar),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.matchParentSize()
+                    )
                 }
                 OutlinedTextField(
                     value = state.query,
@@ -257,14 +265,14 @@ fun SearchScreen(
                                 SearchCategory.BOOKS -> "Search books by title, author, or ISBN..."
                                 SearchCategory.LIGHT_NOVELS -> "Search light novels & web novels..."
                             },
-                            color = if (isGate || isSky) Color(0xFF9E9E96) else LXTextSecondary,
+                            color = if (isGate || isSky) Color(0xFF9E9E96) else if (isSlime) Color.White.copy(alpha = 0.7f) else LXTextSecondary,
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     },
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = if (isSlime) Color.White else LXTextPrimary),
                     leadingIcon = if (!isSky) {
                         {
                             if (isGate) {
@@ -278,6 +286,12 @@ fun SearchScreen(
                                     painter = painterResource(R.drawable.theme_beyond_search_icon),
                                     contentDescription = "Search",
                                     modifier = Modifier.size(22.dp)
+                                )
+                            } else if (isSlime) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_slime_search_icon),
+                                    contentDescription = "Search",
+                                    modifier = Modifier.size(20.dp)
                                 )
                             } else {
                                 Icon(
@@ -307,23 +321,23 @@ fun SearchScreen(
                         } else if (state.isLoading) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
-                                color = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen,
+                                color = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else if (isSlime) Color(0xFF38BDF8) else LXPrimaryGreen,
                                 strokeWidth = 2.dp
                             )
                         } else if (state.query.isNotEmpty()) {
                             IconButton(onClick = { viewModel.onQueryChanged("", context) }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = if (isGate) Color(0xFFFBBF24) else LXTextSecondary, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = if (isGate) Color(0xFFFBBF24) else if (isSlime) Color(0xFF38BDF8) else LXTextSecondary, modifier = Modifier.size(18.dp))
                             }
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = if (isGate || isSky) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
-                        unfocusedContainerColor = if (isGate || isSky) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
-                        focusedBorderColor = if (isGate || isSky || isBeyond) Color.Transparent else LXPrimaryGreen,
-                        unfocusedBorderColor = if (isGate || isSky || isBeyond) Color.Transparent else LXBorder,
-                        focusedTextColor = LXTextPrimary,
-                        unfocusedTextColor = LXTextPrimary,
-                        cursorColor = if (isSky) Color(0xFF06B6D4) else if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen
+                        focusedContainerColor = if (isGate || isSky || isSlime) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
+                        unfocusedContainerColor = if (isGate || isSky || isSlime) Color.Transparent else if (isBeyond) LXSurfaceElevated.copy(alpha = 0.85f) else LXSurfaceElevated,
+                        focusedBorderColor = if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXPrimaryGreen,
+                        unfocusedBorderColor = if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXBorder,
+                        focusedTextColor = if (isSlime) Color.White else LXTextPrimary,
+                        unfocusedTextColor = if (isSlime) Color.White else LXTextPrimary,
+                        cursorColor = if (isSky) Color(0xFF06B6D4) else if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else if (isSlime) Color(0xFF38BDF8) else LXPrimaryGreen
                     ),
                     shape = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -344,6 +358,12 @@ fun SearchScreen(
                     val isSelected = state.selectedCategory == category
                     if (isBeyond) {
                         com.lx.tracklist.ui.library.BeyondCategoryChip(
+                            label = "${category.displayName} (${category.sourceName})",
+                            isSelected = isSelected,
+                            onClick = { viewModel.onCategorySelected(category, context) }
+                        )
+                    } else if (isSlime) {
+                        com.lx.tracklist.ui.library.SlimeCategoryChip(
                             label = "${category.displayName} (${category.sourceName})",
                             isSelected = isSelected,
                             onClick = { viewModel.onCategorySelected(category, context) }

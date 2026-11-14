@@ -111,6 +111,13 @@ fun MediaCard(
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier.matchParentSize()
             )
+        } else if (isSlime) {
+            Image(
+                painter = painterResource(R.drawable.theme_slime_card_frame_ornate),
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier.matchParentSize()
+            )
         } else if (isGate) {
             Image(
                 painter = painterResource(R.drawable.theme_gate_card_frame_ornate),
@@ -131,8 +138,8 @@ fun MediaCard(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(if (isGate) 8.dp else if (isAdvanced) 14.dp else 12.dp))
                 .border(
-                    width = if (isSelected) 2.dp else (if (isGate || isSky || isBeyond) 0.dp else if (isAdvanced) 1.5.dp else 1.dp),
-                    color = if (isSelected) LXPrimaryGreen else (if (isSlime) Color(0xFF38BDF8).copy(alpha = 0.5f) else LXBorder),
+                    width = if (isSelected) 2.dp else (if (isGate || isSky || isBeyond || isSlime) 0.dp else if (isAdvanced) 1.5.dp else 1.dp),
+                    color = if (isSelected) LXPrimaryGreen else LXBorder,
                     shape = RoundedCornerShape(if (isGate) 8.dp else if (isAdvanced) 14.dp else 12.dp)
                 )
                 .combinedClickable(
@@ -151,7 +158,7 @@ fun MediaCard(
                         }
                     }
                 ),
-            color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f) else if (isGate || isSky || isBeyond) Color.Transparent else LXSurfaceBlack
+            color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f) else if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXSurfaceBlack
         ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -217,15 +224,6 @@ fun MediaCard(
                 } else {
                     SmallLogoPlaceholder(size = 48.dp, isError = false)
                 }
-
-                if (isSlime) {
-                    Image(
-                        painter = painterResource(R.drawable.theme_slime_thumbnail_border),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.width(if (isAdvanced) 10.dp else 12.dp))
@@ -263,9 +261,9 @@ fun MediaCard(
                                     contentDescription = "Favorite",
                                     modifier = Modifier.size(18.dp)
                                 )
-                            } else if (isSlime && entry.isFavorite) {
+                            } else if (isSlime) {
                                 Image(
-                                    painter = painterResource(R.drawable.theme_slime_icon_heart_active),
+                                    painter = painterResource(if (entry.isFavorite) R.drawable.theme_slime_icon_heart_active else R.drawable.theme_slime_icon_favorite),
                                     contentDescription = "Favorite",
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -306,7 +304,7 @@ fun MediaCard(
                                     Image(
                                         painter = painterResource(R.drawable.theme_slime_icon_more),
                                         contentDescription = "Options",
-                                        modifier = Modifier.size(12.dp)
+                                        modifier = Modifier.size(14.dp)
                                     )
                                 } else if (isGate) {
                                     Image(
@@ -511,14 +509,16 @@ fun MediaCard(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(12.dp),
+                                .height(16.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
                             Image(
                                 painter = painterResource(R.drawable.theme_slime_progress_bar_bg),
                                 contentDescription = null,
                                 contentScale = ContentScale.FillBounds,
-                                modifier = Modifier.fillMaxSize()
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(8.dp)
                             )
                             if (progressAnimated > 0.01f) {
                                 Image(
@@ -875,16 +875,7 @@ fun MediaCard(
             }
         }
     }
-
-        if (isSlime) {
-            Image(
-                painter = painterResource(R.drawable.theme_slime_card_frame_ornate),
-                contentDescription = null,
-                contentScale = ContentScale.FillBounds,
-                modifier = Modifier.matchParentSize()
-            )
-        }
-    }
+}
 }
 
 private fun formatDateRange(start: Long?, finish: Long?): String {

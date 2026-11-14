@@ -38,7 +38,12 @@ fun ThemedFloatingActionButton(
     contentDescription: String = "Add Entry"
 ) {
     val colors = ThemeManager.currentColors
-    when (colors.fabBadgeShape) {
+    val badgeShape = if (ThemeManager.isSlimeTheme) "slime"
+        else if (ThemeManager.isBeyondTheme) "magic_orb"
+        else if (ThemeManager.isGateTheme) "shield"
+        else if (ThemeManager.isSkyTheme) "reticle"
+        else colors.fabBadgeShape
+    when (badgeShape) {
         "magic_orb" -> {
             // Beyond theme: glowing crimson magic orb with runic ring and gentle pulse
             val infiniteTransition = rememberInfiniteTransition(label = "BeyondFabPulse")
@@ -82,8 +87,7 @@ fun ThemedFloatingActionButton(
 
             Box(
                 modifier = modifier
-                    .size(68.dp)
-                    .clip(CircleShape)
+                    .size(width = 72.dp, height = 64.dp)
                     .clickable(onClick = onClick),
                 contentAlignment = Alignment.Center
             ) {

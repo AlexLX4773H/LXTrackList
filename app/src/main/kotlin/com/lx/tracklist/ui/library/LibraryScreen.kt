@@ -894,6 +894,7 @@ fun LibraryScreen(
                     },
                     actions = {
                         val isBeyond = ThemeManager.isBeyondTheme
+                        val isSlime = ThemeManager.isSlimeTheme
                         val isGate = ThemeManager.isGateTheme
                         val isSky = ThemeManager.isSkyTheme
                         if (isBeyond) {
@@ -972,6 +973,86 @@ fun LibraryScreen(
                             }) {
                                 Image(
                                     painter = painterResource(R.drawable.theme_beyond_icon_sword),
+                                    contentDescription = "Select Mode",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        } else if (isSlime) {
+                            // Slime Theme: Sort Bars (Sort), Sliders (All Filters), Checklist (Select Mode)
+                            Box {
+                                IconButton(onClick = { viewModel.setSortMenuOpen(true) }) {
+                                    Image(
+                                        painter = painterResource(R.drawable.theme_slime_icon_sort),
+                                        contentDescription = "Sort",
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = state.isSortMenuOpen,
+                                    onDismissRequest = { viewModel.setSortMenuOpen(false) }
+                                ) {
+                                    LibrarySortOption.entries.forEach { option ->
+                                        val isCurrent = state.selectedSort == option
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(
+                                                    text = option.displayName,
+                                                    color = if (isCurrent) Color(0xFF38BDF8) else LXTextPrimary,
+                                                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                            },
+                                            onClick = { viewModel.setSortOption(option) },
+                                            trailingIcon = {
+                                                if (isCurrent) {
+                                                    Icon(
+                                                        Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF38BDF8),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Filter Button with Badge
+                            IconButton(onClick = { viewModel.setFilterSheetOpen(true) }) {
+                                if (state.activeFilterCount > 0) {
+                                    BadgedBox(
+                                        badge = {
+                                            Badge(
+                                                containerColor = Color(0xFF38BDF8),
+                                                contentColor = Color(0xFF0369A1)
+                                            ) {
+                                                Text(state.activeFilterCount.toString(), fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    ) {
+                                        Image(
+                                            painter = painterResource(R.drawable.theme_slime_icon_filters),
+                                            contentDescription = "All Filters",
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                } else {
+                                    Image(
+                                        painter = painterResource(R.drawable.theme_slime_icon_filters),
+                                        contentDescription = "All Filters",
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+
+                            // Slime checklist multi-select toggle button
+                            IconButton(onClick = {
+                                if (visibleIds.isNotEmpty()) {
+                                    viewModel.toggleSelect(visibleIds.first())
+                                }
+                            }) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_slime_icon_checklist),
                                     contentDescription = "Select Mode",
                                     modifier = Modifier.size(24.dp)
                                 )
@@ -1173,7 +1254,7 @@ fun LibraryScreen(
                             }
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = LXBackgroundBlack)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = if (ThemeManager.effectiveBackgroundImage != null) Color.Transparent else LXBackgroundBlack)
                 )
             }
         },
@@ -1253,6 +1334,7 @@ fun LibraryScreen(
             val isBeyond = ThemeManager.isBeyondTheme
             val isGate = ThemeManager.isGateTheme
             val isSky = ThemeManager.isSkyTheme
+            val isSlime = ThemeManager.isSlimeTheme
 
             // Search Input
             Box(
@@ -1281,6 +1363,13 @@ fun LibraryScreen(
                         contentScale = ContentScale.FillBounds,
                         modifier = Modifier.matchParentSize()
                     )
+                } else if (isSlime) {
+                    Image(
+                        painter = painterResource(R.drawable.theme_slime_search_bar),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.matchParentSize()
+                    )
                 }
                 OutlinedTextField(
                     value = state.searchQuery,
@@ -1288,14 +1377,14 @@ fun LibraryScreen(
                     placeholder = {
                         Text(
                             "Search title, alternate title, tags...",
-                            color = if (isGate || isSky) Color(0xFF9E9E96) else if (isBeyond) Color(0xFFA78BFA).copy(alpha = 0.7f) else LXTextSecondary,
+                            color = if (isGate || isSky) Color(0xFF9E9E96) else if (isBeyond) Color(0xFFA78BFA).copy(alpha = 0.7f) else if (isSlime) Color.White.copy(alpha = 0.7f) else LXTextSecondary,
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     },
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = LXTextPrimary),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = if (isSlime) Color.White else LXTextPrimary),
                     leadingIcon = if (!isSky) {
                         {
                             if (isBeyond) {
@@ -1307,6 +1396,12 @@ fun LibraryScreen(
                             } else if (isGate) {
                                 Image(
                                     painter = painterResource(R.drawable.theme_gate_search_icon),
+                                    contentDescription = "Search",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            } else if (isSlime) {
+                                Image(
+                                    painter = painterResource(R.drawable.theme_slime_search_icon),
                                     contentDescription = "Search",
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -1331,18 +1426,18 @@ fun LibraryScreen(
                             }
                         } else if (state.searchQuery.isNotEmpty()) {
                             IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXTextSecondary, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else if (isSlime) Color(0xFF38BDF8) else LXTextSecondary, modifier = Modifier.size(18.dp))
                             }
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = if (isGate || isSky || isBeyond) Color.Transparent else LXSurfaceElevated,
-                        unfocusedContainerColor = if (isGate || isSky || isBeyond) Color.Transparent else LXSurfaceElevated,
-                        focusedBorderColor = if (isGate || isSky || isBeyond) Color.Transparent else LXPrimaryGreen,
-                        unfocusedBorderColor = if (isGate || isSky || isBeyond) Color.Transparent else LXBorder,
-                        focusedTextColor = LXTextPrimary,
-                        unfocusedTextColor = LXTextPrimary,
-                        cursorColor = if (isSky) Color(0xFF06B6D4) else if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else LXPrimaryGreen
+                        focusedContainerColor = if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXSurfaceElevated,
+                        unfocusedContainerColor = if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXSurfaceElevated,
+                        focusedBorderColor = if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXPrimaryGreen,
+                        unfocusedBorderColor = if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXBorder,
+                        focusedTextColor = if (isSlime) Color.White else LXTextPrimary,
+                        unfocusedTextColor = if (isSlime) Color.White else LXTextPrimary,
+                        cursorColor = if (isSky) Color(0xFF06B6D4) else if (isGate) Color(0xFFFBBF24) else if (isBeyond) Color(0xFFFC8181) else if (isSlime) Color(0xFF38BDF8) else LXPrimaryGreen
                     ),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -1361,6 +1456,15 @@ fun LibraryScreen(
                     val isSelected = state.selectedCategoryFilter == null && state.selectedCustomCategoryFilter == null
                     if (isBeyond) {
                         BeyondCategoryChip(
+                            label = "All Categories",
+                            isSelected = isSelected,
+                            onClick = {
+                                viewModel.setCategoryFilter(null)
+                                viewModel.setCustomCategoryFilter(null)
+                            }
+                        )
+                    } else if (isSlime) {
+                        SlimeCategoryChip(
                             label = "All Categories",
                             isSelected = isSelected,
                             onClick = {
@@ -1418,6 +1522,12 @@ fun LibraryScreen(
                             isSelected = isSelected,
                             onClick = { viewModel.setCategoryFilter(if (isSelected) null else cat) }
                         )
+                    } else if (isSlime) {
+                        SlimeCategoryChip(
+                            label = cat.displayName,
+                            isSelected = isSelected,
+                            onClick = { viewModel.setCategoryFilter(if (isSelected) null else cat) }
+                        )
                     } else if (isGate) {
                         GateCategoryChip(
                             label = cat.displayName,
@@ -1456,6 +1566,12 @@ fun LibraryScreen(
                     val isSelected = state.selectedCustomCategoryFilter.equals(customCat.name, ignoreCase = true)
                     if (isBeyond) {
                         BeyondCategoryChip(
+                            label = customCat.name,
+                            isSelected = isSelected,
+                            onClick = { viewModel.setCustomCategoryFilter(if (isSelected) null else customCat.name) }
+                        )
+                    } else if (isSlime) {
+                        SlimeCategoryChip(
                             label = customCat.name,
                             isSelected = isSelected,
                             onClick = { viewModel.setCustomCategoryFilter(if (isSelected) null else customCat.name) }
@@ -3038,6 +3154,39 @@ fun BeyondCategoryChip(
             fontSize = 12.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
             color = if (isSelected) Color.White else Color(0xFFC4B5FD).copy(alpha = 0.85f),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+        )
+    }
+}
+
+@Composable
+fun SlimeCategoryChip(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(36.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(
+                if (isSelected) R.drawable.theme_slime_chip_active_border
+                else R.drawable.theme_slime_chip_inactive
+            ),
+            contentDescription = label,
+            contentScale = ContentScale.FillBounds,
+            modifier = Modifier.matchParentSize()
+        )
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = if (isSelected) Color(0xFF0369A1) else Color(0xFF0C4A6E),
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
         )
     }

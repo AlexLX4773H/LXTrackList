@@ -599,12 +599,12 @@ fun AppNavigation() {
                     val isGate = ThemeManager.isGateTheme
                     val isSky = ThemeManager.isSkyTheme
                     androidx.compose.material3.Surface(
-                        color = if (isGate || isSky || isBeyond) Color.Transparent else if (isSlime) LXSurfaceBlack.copy(alpha = 0.92f) else LXSurfaceBlack.copy(alpha = if (ThemeManager.effectiveBackgroundImage != null) 0.90f else 1f),
+                        color = if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXSurfaceBlack.copy(alpha = if (ThemeManager.effectiveBackgroundImage != null) 0.90f else 1f),
                         tonalElevation = 6.dp,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                            .border(if (isGate || isSky || isBeyond) 0.dp else 1.dp, LXBorder, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                            .border(if (isGate || isSky || isBeyond || isSlime) 0.dp else 1.dp, LXBorder, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
                     ) {
                         Box(modifier = Modifier.fillMaxWidth()) {
                             if (isBeyond) {
@@ -623,7 +623,7 @@ fun AppNavigation() {
                                     contentScale = ContentScale.FillBounds,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(64.dp)
+                                        .height(68.dp)
                                 )
                             } else if (isGate) {
                                 Image(
@@ -648,7 +648,7 @@ fun AppNavigation() {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .navigationBarsPadding()
-                                    .height(if (isGate || isSky || isBeyond) 68.dp else 64.dp)
+                                    .height(if (isGate || isSky || isBeyond || isSlime) 68.dp else 64.dp)
                                     .padding(horizontal = 4.dp),
                                 horizontalArrangement = Arrangement.SpaceAround,
                                 verticalAlignment = Alignment.CenterVertically
@@ -702,9 +702,8 @@ fun AppNavigation() {
                                                 .width(if (isGate || isSky) 36.dp else 48.dp)
                                                 .clip(RoundedCornerShape(if (isGate || isSky) 6.dp else 14.dp))
                                                 .background(
-                                                    if (isSelected && !isGate && !isSky && !isBeyond) {
-                                                        if (isSlime) Color(0xFF0284C7).copy(alpha = 0.5f)
-                                                        else LXPrimaryGreen
+                                                    if (isSelected && !isGate && !isSky && !isBeyond && !isSlime) {
+                                                        LXPrimaryGreen
                                                     } else Color.Transparent
                                                 ),
                                             contentAlignment = Alignment.Center
@@ -728,7 +727,7 @@ fun AppNavigation() {
                                                 Image(
                                                     painter = painterResource(customNavIcon),
                                                     contentDescription = screen.title,
-                                                    modifier = Modifier.size(if (isGate || isSky || isBeyond) 26.dp else if (isSlime) 24.dp else 22.dp)
+                                                    modifier = Modifier.size(if (isGate || isSky || isBeyond || isSlime) 26.dp else 22.dp)
                                                 )
                                             } else {
                                                 Icon(
@@ -752,7 +751,7 @@ fun AppNavigation() {
                                                 else if (isGate) Color(0xFFFBBF24)
                                                 else if (isSky) Color(0xFFFB923C)
                                                 else LXPrimaryGreen
-                                            } else if (isGate || isSky || isBeyond) Color(0xFF9E9E96) else LXTextSecondary,
+                                            } else if (isGate || isSky || isBeyond || isSlime) Color(0xFF9E9E96) else LXTextSecondary,
                                             maxLines = 1
                                         )
                                     }
