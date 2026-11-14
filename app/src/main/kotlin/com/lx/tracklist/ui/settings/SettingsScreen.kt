@@ -67,6 +67,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
@@ -169,6 +170,7 @@ import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
 
 enum class SettingsSubMenu(val title: String) {
+    THEMES("Themes & Styling"),
     CATEGORIES("Custom Categories"),
     EXTERNAL_TRACKING("External Tracking"),
     SYNC_JOBS("External Sync Jobs"),
@@ -1096,6 +1098,7 @@ fun SettingsScreen(
                         .fillMaxHeight()
                 ) {
                     when (currentSelection) {
+                        SettingsSubMenu.THEMES -> ThemesContent(activeProfile = state.activeUser)
                         SettingsSubMenu.CATEGORIES -> CustomCategoriesContent(
                             customCategories = state.customCategories,
                             onAddCategoryClick = { showAddCategoryDialog = true },
@@ -1218,6 +1221,12 @@ fun SettingsScreen(
                             selectedSubMenu = null,
                             onSelectSubMenu = { activeSubMenu = it },
                             onDismissStatusMessage = { viewModel.clearStatusMessage() },
+                            modifier = Modifier.widthIn(max = 840.dp)
+                        )
+                    }
+                    SettingsSubMenu.THEMES -> {
+                        ThemesContent(
+                            activeProfile = state.activeUser,
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -1558,6 +1567,25 @@ private fun SettingsMainMenu(
                 badgeColor = if (isSyncing) LXPrimaryGreen else Color(0xFF4DA8DA),
                 isSelected = selectedSubMenu == SettingsSubMenu.SYNC_JOBS,
                 onClick = { onSelectSubMenu(SettingsSubMenu.SYNC_JOBS) }
+            )
+        }
+
+        // Section: Personalization & Themes
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SettingsSectionHeader("Personalization & Appearance")
+            val activePreset = com.lx.tracklist.ui.theme.ThemeManager.currentPreset
+            val hasCustomBg = com.lx.tracklist.ui.theme.ThemeManager.customBackgroundUri != null
+            val themeBadge = if (hasCustomBg) "CUSTOM BG" else if (activePreset.category == "advanced") "ADVANCED" else "ACTIVE"
+            SettingsMenuItem(
+                icon = Icons.Default.Palette,
+                iconBackgroundColor = LXPrimaryGreen.copy(alpha = 0.15f),
+                iconTintColor = LXPrimaryGreen,
+                title = "Themes & Styling",
+                subtitle = "${activePreset.displayName} • ${if (hasCustomBg) "Custom Wallpaper active" else activePreset.description}",
+                badgeText = themeBadge,
+                badgeColor = LXPrimaryGreen,
+                isSelected = selectedSubMenu == SettingsSubMenu.THEMES,
+                onClick = { onSelectSubMenu(SettingsSubMenu.THEMES) }
             )
         }
 

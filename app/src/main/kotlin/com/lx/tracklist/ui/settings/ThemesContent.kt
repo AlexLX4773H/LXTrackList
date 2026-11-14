@@ -71,12 +71,19 @@ import com.lx.tracklist.ui.theme.ThemePreset
 
 @Composable
 fun ThemesContent(
+    activeProfile: com.lx.tracklist.data.model.UserProfile,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val currentPreset = ThemeManager.currentPreset
     val customBgUri = ThemeManager.customBackgroundUri
     val dimAlpha = ThemeManager.backgroundDimAlpha
+
+    androidx.compose.runtime.LaunchedEffect(activeProfile.id) {
+        if (ThemeManager.currentProfileId != activeProfile.id) {
+            ThemeManager.loadForProfile(activeProfile.id, context)
+        }
+    }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -88,7 +95,7 @@ fun ThemesContent(
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
             } catch (_: Exception) {}
-            ThemeManager.setCustomBackground(uri.toString(), context)
+            ThemeManager.setCustomBackground(uri.toString(), context, activeProfile.id)
         }
     }
 
@@ -98,6 +105,44 @@ fun ThemesContent(
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
+        // Profile Identification Header
+        Surface(
+            color = LXSurfaceElevated,
+            shape = RoundedCornerShape(10.dp),
+            border = BorderStroke(1.dp, LXBorder),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(14.dp)
+                        .clip(CircleShape)
+                        .background(
+                            try {
+                                Color(android.graphics.Color.parseColor(activeProfile.avatarColorHex))
+                            } catch (_: Exception) {
+                                LXPrimaryGreen
+                            }
+                        )
+                )
+                Text(
+                    text = "Profile: ${activeProfile.name}",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextPrimary
+                )
+                Text(
+                    text = "• Theme & wallpaper are unique to this profile",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+            }
+        }
         // Active Theme Banner
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -145,7 +190,7 @@ fun ThemesContent(
                     }
 
                     OutlinedButton(
-                        onClick = { ThemeManager.resetTheme(context) },
+                        onClick = { ThemeManager.resetTheme(context, activeProfile.id) },
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
                         border = BorderStroke(1.dp, LXBorder),
                         shape = RoundedCornerShape(8.dp)
@@ -198,7 +243,7 @@ fun ThemesContent(
                         preset = preset,
                         isSelected = isSelected,
                         onClick = {
-                            ThemeManager.setTheme(preset.id, context)
+                            ThemeManager.setTheme(preset.id, context, activeProfile.id)
                         }
                     )
                 }
@@ -232,7 +277,7 @@ fun ThemesContent(
                         preset = preset,
                         isSelected = isSelected,
                         onClick = {
-                            ThemeManager.setTheme(preset.id, context)
+                            ThemeManager.setTheme(preset.id, context, activeProfile.id)
                         }
                     )
                 }
@@ -325,7 +370,7 @@ fun ThemesContent(
                             }
                             Slider(
                                 value = dimAlpha,
-                                onValueChange = { ThemeManager.setBackgroundDim(it, context) },
+                                onValueChange = { ThemeManager.setBackgroundDim(it, context, activeProfile.id) },
                                 valueRange = 0.10f..0.90f,
                                 colors = SliderDefaults.colors(
                                     thumbColor = LXPrimaryGreen,
@@ -356,7 +401,7 @@ fun ThemesContent(
                             }
 
                             Button(
-                                onClick = { ThemeManager.setCustomBackground(null, context) },
+                                onClick = { ThemeManager.setCustomBackground(null, context, activeProfile.id) },
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444).copy(alpha = 0.2f), contentColor = Color(0xFFEF4444)),
                                 shape = RoundedCornerShape(8.dp)

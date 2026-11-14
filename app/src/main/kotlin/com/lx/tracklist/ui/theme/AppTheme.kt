@@ -324,6 +324,9 @@ object ThemeManager {
     private const val KEY_CUSTOM_BG_URI = "custom_bg_uri"
     private const val KEY_CUSTOM_BG_DIM = "custom_bg_dim"
 
+    var currentProfileId by mutableStateOf(1L)
+        private set
+
     var currentThemeId by mutableStateOf(ThemePreset.DEFAULT_DARK.id)
         private set
 
@@ -342,46 +345,92 @@ object ThemeManager {
     var isInitialized by mutableStateOf(false)
         private set
 
-    fun init(context: Context) {
-        if (isInitialized) return
+    fun init(context: Context, profileId: Long? = null) {
+        val targetProfileId = profileId ?: run {
+            val mainPrefs = context.getSharedPreferences("com.lx.tracklist_preferences", Context.MODE_PRIVATE)
+            mainPrefs.getLong("active_user_id", 1L)
+        }
+        loadForProfile(targetProfileId, context)
+        isInitialized = true
+    }
+
+    /**
+     * Loads theme settings specifically for the given profile.
+     * Prevents any cross bleed between user profiles.
+     */
+    fun loadForProfile(profileId: Long, context: Context) {
+        currentProfileId = profileId
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val savedThemeId = prefs.getString(KEY_THEME_ID, ThemePreset.DEFAULT_DARK.id) ?: ThemePreset.DEFAULT_DARK.id
-        val savedBgUri = prefs.getString(KEY_CUSTOM_BG_URI, null)
-        val savedDim = prefs.getFloat(KEY_CUSTOM_BG_DIM, 0.60f)
+        val profileThemeKey = "theme_id_$profileId"
+        val profileBgKey = "custom_bg_uri_$profileId"
+        val profileDimKey = "custom_bg_dim_$profileId"
+
+        // Read profile-specific setting, falling back to legacy global only if this profile was the only one
+        val savedThemeId = prefs.getString(profileThemeKey, null)
+            ?: (if (profileId == 1L) prefs.getString(KEY_THEME_ID, ThemePreset.DEFAULT_DARK.id) else null)
+            ?: ThemePreset.DEFAULT_DARK.id
+
+        val savedBgUri = prefs.getString(profileBgKey, null)
+            ?: (if (profileId == 1L) prefs.getString(KEY_CUSTOM_BG_URI, null) else null)
+
+        val savedDim = if (prefs.contains(profileDimKey)) {
+            prefs.getFloat(profileDimKey, 0.60f)
+        } else if (profileId == 1L && prefs.contains(KEY_CUSTOM_BG_DIM)) {
+            prefs.getFloat(KEY_CUSTOM_BG_DIM, 0.60f)
+        } else {
+            0.60f
+        }
 
         customBackgroundUri = savedBgUri
         backgroundDimAlpha = savedDim.coerceIn(0.10f, 0.90f)
         applyThemeInternal(savedThemeId)
-        isInitialized = true
     }
 
-    fun setTheme(themeId: String, context: Context) {
+    fun setTheme(themeId: String, context: Context, profileId: Long = currentProfileId) {
+        currentProfileId = profileId
         applyThemeInternal(themeId)
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putString(KEY_THEME_ID, themeId).apply()
+        prefs.edit()
+            .putString("theme_id_$profileId", themeId)
+            .apply()
     }
 
-    fun setCustomBackground(uriString: String?, context: Context) {
+    fun setCustomBackground(uriString: String?, context: Context, profileId: Long = currentProfileId) {
+        currentProfileId = profileId
         customBackgroundUri = uriString
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val editor = prefs.edit()
         if (uriString == null) {
-            prefs.edit().remove(KEY_CUSTOM_BG_URI).apply()
+            editor.remove("custom_bg_uri_$profileId")
         } else {
-            prefs.edit().putString(KEY_CUSTOM_BG_URI, uriString).apply()
+            editor.putString("custom_bg_uri_$profileId", uriString)
         }
+        editor.apply()
     }
 
-    fun setBackgroundDim(dimAlpha: Float, context: Context) {
+    fun setBackgroundDim(dimAlpha: Float, context: Context, profileId: Long = currentProfileId) {
+        currentProfileId = profileId
         val clamped = dimAlpha.coerceIn(0.10f, 0.90f)
         backgroundDimAlpha = clamped
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().putFloat(KEY_CUSTOM_BG_DIM, clamped).apply()
+        prefs.edit()
+            .putFloat("custom_bg_dim_$profileId", clamped)
+            .apply()
     }
 
-    fun resetTheme(context: Context) {
-        setTheme(ThemePreset.DEFAULT_DARK.id, context)
-        setCustomBackground(null, context)
-        setBackgroundDim(0.60f, context)
+    fun resetTheme(context: Context, profileId: Long = currentProfileId) {
+        setTheme(ThemePreset.DEFAULT_DARK.id, context, profileId)
+        setCustomBackground(null, context, profileId)
+        setBackgroundDim(0.60f, context, profileId)
+    }
+
+    fun deleteForProfile(profileId: Long, context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit()
+            .remove("theme_id_$profileId")
+            .remove("custom_bg_uri_$profileId")
+            .remove("custom_bg_dim_$profileId")
+            .apply()
     }
 
     private fun applyThemeInternal(themeId: String) {

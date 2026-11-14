@@ -121,6 +121,13 @@ fun AppNavigation() {
 
     val context = LocalContext.current
     val activity = context as? Activity
+
+    androidx.compose.runtime.LaunchedEffect(homeState.activeUser.id, homeState.isUserInitialized) {
+        if (homeState.isUserInitialized) {
+            ThemeManager.loadForProfile(homeState.activeUser.id, context)
+        }
+    }
+
     var isAppUnlocked by rememberSaveable { mutableStateOf(false) }
     var showUnlockDialog by remember { mutableStateOf(true) }
 
