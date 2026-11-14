@@ -97,13 +97,16 @@ fun MediaCard(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val progressAnimated by animateFloatAsState(targetValue = entry.progressFraction, label = "progress")
+    val colors = ThemeManager.currentColors
+    val insets = ThemeManager.currentCardInsets
     val isBeyond = ThemeManager.isBeyondTheme
     val isSlime = ThemeManager.isSlimeTheme
     val isGate = ThemeManager.isGateTheme
     val isSky = ThemeManager.isSkyTheme
-    val isAdvanced = isBeyond || isSlime || isGate || isSky
+    val isAdvanced = ThemeManager.isAdvancedTheme
 
     Box(modifier = modifier.fillMaxWidth()) {
+        // Outer Shell Sprites for Advanced Themes
         if (isBeyond) {
             Image(
                 painter = painterResource(R.drawable.theme_beyond_card_frame_ornate),
@@ -133,739 +136,773 @@ fun MediaCard(
                 modifier = Modifier.matchParentSize()
             )
         }
-        Surface(
+
+        // Inner Panel Box with theme-specific padding insets
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(if (isGate) 8.dp else if (isAdvanced) 14.dp else 12.dp))
-                .border(
-                    width = if (isSelected) 2.dp else (if (isGate || isSky || isBeyond || isSlime) 0.dp else if (isAdvanced) 1.5.dp else 1.dp),
-                    color = if (isSelected) LXPrimaryGreen else LXBorder,
-                    shape = RoundedCornerShape(if (isGate) 8.dp else if (isAdvanced) 14.dp else 12.dp)
+                .padding(
+                    start = insets.outerToInnerStart,
+                    end = insets.outerToInnerEnd,
+                    top = insets.outerToInnerTop,
+                    bottom = insets.outerToInnerBottom
                 )
-                .combinedClickable(
-                    onClick = {
-                        if (isSelectionMode) {
-                            onToggleSelect?.invoke()
-                        } else {
-                            onClick()
-                        }
-                    },
-                    onLongClick = {
-                        if (isSelectionMode) {
-                            onToggleSelect?.invoke()
-                        } else {
-                            onLongClick?.invoke()
-                        }
-                    }
-                ),
-            color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f) else if (isGate || isSky || isBeyond || isSlime) Color.Transparent else LXSurfaceBlack
         ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(
-                        start = if (isAdvanced) 12.dp else 10.dp,
-                        end = if (isAdvanced) 14.dp else 10.dp,
-                        top = if (isAdvanced) 12.dp else 10.dp,
-                        bottom = if (isAdvanced) 12.dp else 10.dp
-                    ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-            // Selection Checkbox (Visible in Selection Mode)
-            if (isSelectionMode) {
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(if (isSelected) LXPrimaryGreen else Color.Transparent)
-                        .border(2.dp, if (isSelected) LXPrimaryGreen else LXBorder, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isSelected) {
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = "Selected",
-                            tint = LXBackgroundBlack,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-            }
-
-            // Cover Image Thumbnail
-            Box(
-                modifier = Modifier
-                    .width(if (isAdvanced) 66.dp else 72.dp)
-                    .height(if (isAdvanced) 94.dp else 100.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF1E1E1E)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (!entry.coverImageUri.isNullOrBlank()) {
-                    SubcomposeAsyncImage(
-                        model = entry.coverImageUri,
-                        contentDescription = entry.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                        success = {
-                            com.lx.tracklist.data.local.FailedCoverTracker.markSuccess(entry.id, entry.coverImageUri)
-                            SubcomposeAsyncImageContent()
-                        },
-                        loading = {
-                            SmallLogoPlaceholder(size = 48.dp, isError = false)
-                        },
-                        error = {
-                            com.lx.tracklist.data.local.FailedCoverTracker.markFailed(entry.id, entry.coverImageUri)
-                            SmallLogoPlaceholder(size = 48.dp, isError = true)
-                        }
+                    .clip(RoundedCornerShape(insets.innerCornerRadius))
+                    .border(
+                        width = if (isSelected) 2.dp else insets.innerBorderWidth,
+                        color = if (isSelected) colors.primary else insets.innerBorderColor,
+                        shape = RoundedCornerShape(insets.innerCornerRadius)
                     )
-                } else {
-                    SmallLogoPlaceholder(size = 48.dp, isError = false)
-                }
-            }
-
-            Spacer(modifier = Modifier.width(if (isAdvanced) 10.dp else 12.dp))
-
-            // Details Column
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Title and Actions
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Text(
-                        text = entry.title,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = LXTextPrimary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = onToggleFavorite,
-                            modifier = Modifier.size(if (isAdvanced) 24.dp else 28.dp)
-                        ) {
-                            if (isBeyond) {
-                                Image(
-                                    painter = painterResource(if (entry.isFavorite) R.drawable.theme_beyond_icon_heart_active else R.drawable.theme_beyond_icon_favorite),
-                                    contentDescription = "Favorite",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            } else if (isSlime) {
-                                Image(
-                                    painter = painterResource(if (entry.isFavorite) R.drawable.theme_slime_icon_heart_active else R.drawable.theme_slime_icon_favorite),
-                                    contentDescription = "Favorite",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            } else if (isGate) {
-                                Image(
-                                    painter = painterResource(if (entry.isFavorite) R.drawable.theme_gate_icon_heart_active else R.drawable.theme_gate_icon_favorite),
-                                    contentDescription = "Favorite",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            } else if (isSky) {
-                                Image(
-                                    painter = painterResource(if (entry.isFavorite) R.drawable.theme_sky_icon_heart_active else R.drawable.theme_sky_icon_favorite),
-                                    contentDescription = "Favorite",
-                                    modifier = Modifier.size(18.dp)
-                                )
+                    .combinedClickable(
+                        onClick = {
+                            if (isSelectionMode) {
+                                onToggleSelect?.invoke()
                             } else {
-                                Icon(
-                                    imageVector = if (entry.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                                    contentDescription = "Favorite",
-                                    tint = if (entry.isFavorite) LXPrimaryGreen else LXTextSecondary,
-                                    modifier = Modifier.size(if (isAdvanced) 16.dp else 18.dp)
-                                )
+                                onClick()
+                            }
+                        },
+                        onLongClick = {
+                            if (isSelectionMode) {
+                                onToggleSelect?.invoke()
+                            } else {
+                                onLongClick?.invoke()
                             }
                         }
-
-                        Box {
-                            IconButton(
-                                onClick = { showMenu = true },
-                                modifier = Modifier.size(if (isAdvanced) 24.dp else 28.dp)
+                    ),
+                color = if (isSelected) {
+                    colors.primary.copy(alpha = 0.12f)
+                } else if (isAdvanced) {
+                    colors.surface.copy(alpha = insets.innerSurfaceAlpha)
+                } else {
+                    colors.surface
+                }
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = 10.dp,
+                                end = 10.dp,
+                                top = 8.dp,
+                                bottom = 8.dp
+                            ),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Selection Checkbox (Visible in Selection Mode)
+                        if (isSelectionMode) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isSelected) colors.primary else Color.Transparent)
+                                    .border(2.dp, if (isSelected) colors.primary else colors.border, CircleShape),
+                                contentAlignment = Alignment.Center
                             ) {
-                                if (isBeyond) {
-                                    Image(
-                                        painter = painterResource(R.drawable.theme_beyond_icon_more),
-                                        contentDescription = "Options",
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                } else if (isSlime) {
-                                    Image(
-                                        painter = painterResource(R.drawable.theme_slime_icon_more),
-                                        contentDescription = "Options",
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                } else if (isGate) {
-                                    Image(
-                                        painter = painterResource(R.drawable.theme_gate_icon_more),
-                                        contentDescription = "Options",
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                } else if (isSky) {
-                                    Image(
-                                        painter = painterResource(R.drawable.theme_sky_icon_more),
-                                        contentDescription = "Options",
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                } else {
+                                if (isSelected) {
                                     Icon(
-                                        imageVector = Icons.Default.MoreVert,
-                                        contentDescription = "Options",
-                                        tint = LXTextSecondary,
-                                        modifier = Modifier.size(if (isAdvanced) 16.dp else 18.dp)
+                                        Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = colors.background,
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
                             }
+                            Spacer(modifier = Modifier.width(10.dp))
+                        }
 
-                            DropdownMenu(
-                                expanded = showMenu,
-                                onDismissRequest = { showMenu = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Edit Entry") },
-                                    onClick = {
-                                        showMenu = false
-                                        onEdit()
+                        // Cover Image Thumbnail
+                        Box(
+                            modifier = Modifier
+                                .width(insets.thumbnailWidth)
+                                .height(insets.thumbnailHeight)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF1E1E1E))
+                                .then(
+                                    if (insets.thumbnailBorderWidth > 0.dp) {
+                                        Modifier.border(insets.thumbnailBorderWidth, insets.thumbnailBorderColor, RoundedCornerShape(6.dp))
+                                    } else Modifier
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (!entry.coverImageUri.isNullOrBlank()) {
+                                SubcomposeAsyncImage(
+                                    model = entry.coverImageUri,
+                                    contentDescription = entry.title,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop,
+                                    success = {
+                                        com.lx.tracklist.data.local.FailedCoverTracker.markSuccess(entry.id, entry.coverImageUri)
+                                        SubcomposeAsyncImageContent()
+                                    },
+                                    loading = {
+                                        SmallLogoPlaceholder(size = 40.dp, isError = false)
+                                    },
+                                    error = {
+                                        com.lx.tracklist.data.local.FailedCoverTracker.markFailed(entry.id, entry.coverImageUri)
+                                        SmallLogoPlaceholder(size = 40.dp, isError = true)
                                     }
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Delete", color = LXErrorRed) },
-                                    onClick = {
-                                        showMenu = false
-                                        onDelete()
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Subtitle / Date / Alternate title
-                val dateInfo = when {
-                    entry.formatAiredDateRange().isNotBlank() -> entry.formatAiredDateRange()
-                    entry.formatUserDateRange().isNotBlank() -> entry.formatUserDateRange()
-                    else -> formatDateRange(entry.startDate, entry.finishDate)
-                }
-                val subtitleText = when {
-                    !entry.alternateTitle.isNullOrBlank() -> entry.getAlternateTitles().joinToString(" • ")
-                    dateInfo.isNotBlank() -> dateInfo
-                    else -> entry.mediaType.displayName
-                }
-                Text(
-                    text = subtitleText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = LXTextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(vertical = if (isAdvanced) 1.dp else 2.dp)
-                )
-
-                Spacer(modifier = Modifier.height(if (isAdvanced) 2.dp else 4.dp))
-
-                // Progress info & Badges
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = entry.displayProgress,
-                        style = MaterialTheme.typography.labelLarge.copy(fontSize = if (isAdvanced) 11.5.sp else 12.sp),
-                        color = LXPrimaryGreen
-                    )
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (!entry.customCategory.isNullOrBlank()) {
-                            Text(
-                                text = entry.customCategory,
-                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                color = LXPrimaryGreen,
-                                modifier = Modifier
-                                    .background(LXPrimaryGreen.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 5.dp, vertical = 2.dp)
-                            )
-                        }
-
-                        if (entry.isAiring) {
-                            val airingLabel = if (entry.mediaType.isWatchType) "AIRING" else "PUBLISHING"
-                            Text(
-                                text = airingLabel,
-                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                color = LXAiringBlue,
-                                modifier = Modifier
-                                    .background(LXAiringBlue.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 5.dp, vertical = 2.dp)
-                            )
-                        }
-
-                        if (entry.isRewatching) {
-                            Text(
-                                text = "REWATCHING",
-                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                color = LXPrimaryGreen,
-                                modifier = Modifier
-                                    .background(LXPrimaryGreen.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 5.dp, vertical = 2.dp)
-                            )
-                        }
-
-                        if (entry.score != null && entry.score > 0) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .background(LXScoreGold.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 5.dp, vertical = 2.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Star,
-                                    contentDescription = null,
-                                    tint = LXScoreGold,
-                                    modifier = Modifier.size(11.dp)
-                                )
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Text(
-                                    text = "${entry.score}",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                    color = LXScoreGold
-                                )
-                            }
-                        } else if (entry.externalScore != null && entry.externalScore > 0f) {
-                            val scoreStr = if (entry.externalScore % 1.0f == 0.0f) {
-                                entry.externalScore.toInt().toString()
                             } else {
-                                String.format(Locale.US, "%.2f", entry.externalScore).trimEnd('0').trimEnd('.')
+                                SmallLogoPlaceholder(size = 40.dp, isError = false)
                             }
+
+                            // Decorative Thumbnail Border Sprite (Beyond and Slime)
+                            if (insets.showThumbnailBorderSprite && insets.thumbnailBorderRes != null) {
+                                Image(
+                                    painter = painterResource(insets.thumbnailBorderRes),
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.FillBounds
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        // Details Column
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            verticalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            // Title and Actions
                             Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .background(LXScoreGold.copy(alpha = 0.10f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 5.dp, vertical = 2.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Star,
-                                    contentDescription = null,
-                                    tint = LXScoreGold.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(11.dp)
-                                )
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Text(
-                                    text = scoreStr,
-                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp, fontWeight = FontWeight.Normal),
-                                    color = LXScoreGold.copy(alpha = 0.85f)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(if (isAdvanced) 4.dp else 6.dp))
-
-                // Progress bar + Quick Increment button
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (isBeyond) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(16.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Image(
-                                painter = painterResource(R.drawable.theme_beyond_progress_bar_bg),
-                                contentDescription = null,
-                                contentScale = ContentScale.FillBounds,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(8.dp)
-                            )
-                            if (progressAnimated > 0.01f) {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_beyond_progress_bar_fill),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.FillBounds,
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .fillMaxWidth(progressAnimated)
-                                )
-                            }
-                        }
-                    } else if (isSlime) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(16.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Image(
-                                painter = painterResource(R.drawable.theme_slime_progress_bar_bg),
-                                contentDescription = null,
-                                contentScale = ContentScale.FillBounds,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(8.dp)
-                            )
-                            if (progressAnimated > 0.01f) {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_slime_progress_bar_fill),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.FillBounds,
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .fillMaxWidth(progressAnimated)
-                                )
-                            }
-                        }
-                    } else if (isGate) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(10.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Image(
-                                painter = painterResource(R.drawable.theme_gate_progress_bar_bg),
-                                contentDescription = null,
-                                contentScale = ContentScale.FillBounds,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            if (progressAnimated > 0.01f) {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_gate_progress_bar_fill),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.FillBounds,
-                                    modifier = Modifier
-                                        .padding(horizontal = 2.dp, vertical = 2.dp)
-                                        .fillMaxHeight()
-                                        .fillMaxWidth(progressAnimated)
-                                )
-                            }
-                        }
-                    } else if (isSky) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(11.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Image(
-                                painter = painterResource(R.drawable.theme_sky_progress_bar_bg),
-                                contentDescription = null,
-                                contentScale = ContentScale.FillBounds,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            if (progressAnimated > 0.01f) {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_sky_progress_bar_fill),
-                                    contentDescription = null,
-                                    contentScale = ContentScale.FillBounds,
-                                    modifier = Modifier
-                                        .padding(horizontal = 2.dp, vertical = 2.dp)
-                                        .fillMaxHeight()
-                                        .fillMaxWidth(progressAnimated)
-                                )
-                            }
-                        }
-                    } else {
-                        // Custom Neon Progress Bar
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(LXProgressTrack)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(progressAnimated)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(LXPrimaryGreen)
-                            )
-                        }
-                    }
-
-                    if (!isGate) {
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        if (isBeyond) {
-                            // Beyond Theme: Crimson Star quick increment button as shown in concept
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .clickable(onClick = onIncrement),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_beyond_icon_card_star),
-                                    contentDescription = "+1 Progress",
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        } else if (isSlime) {
-                            // Slime Theme: Cute Slime Emblem increment button as shown in concept
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .clickable(onClick = onIncrement),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_slime_icon_card_slime),
-                                    contentDescription = "+1 Progress",
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        } else if (isSky) {
-                            // Sky Theme: Holographic HUD increment button with concentric ring
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .clickable(onClick = onIncrement),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Image(
-                                    painter = painterResource(R.drawable.theme_sky_icon_plus),
-                                    contentDescription = "+1 Progress",
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        } else {
-                            // Standard / Beyond +1 Quick Increment Button
-                            Box(
-                                modifier = Modifier
-                                    .size(if (isBeyond) 22.dp else 24.dp)
-                                    .clip(CircleShape)
-                                    .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                    .border(1.dp, LXPrimaryGreen.copy(alpha = 0.4f), CircleShape)
-                                    .clickable(onClick = onIncrement),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "+1 Progress",
-                                    tint = LXPrimaryGreen,
-                                    modifier = Modifier.size(if (isBeyond) 13.dp else 15.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Related Franchise Section (Extracted during Sync)
-            val correlatedRelated = remember(entry.relatedEntriesJson, allLibraryEntries) {
-                entry.getCorrelatedRelatedItems(allLibraryEntries)
-            }
-
-            if (correlatedRelated.isNotEmpty()) {
-                var isRelatedExpanded by remember { mutableStateOf(false) }
-                val trackingCount = remember(correlatedRelated) { correlatedRelated.count { it.inLibraryEntryId != null } }
-                val untrackedCount = correlatedRelated.size - trackingCount
-
-                HorizontalDivider(
-                    color = LXBorder.copy(alpha = 0.5f),
-                    thickness = 0.5.dp
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
-                        .clickable { isRelatedExpanded = !isRelatedExpanded }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "🔗 ${correlatedRelated.size} Related:",
-                            color = LXTextSecondary,
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                            fontSize = 10.5.sp
-                        )
-
-                        // Tracking pill
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 5.dp, vertical = 1.5.dp)
-                        ) {
-                            Text(
-                                text = "$trackingCount Tracking",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                fontSize = 9.5.sp
-                            )
-                        }
-
-                        // Untracked pill
-                        if (untrackedCount > 0) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFFF59E0B).copy(alpha = 0.15f))
-                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
                             ) {
                                 Text(
-                                    text = "$untrackedCount Untracked",
-                                    color = Color(0xFFF59E0B),
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    fontSize = 9.5.sp
+                                    text = entry.title,
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 13.5.sp),
+                                    color = colors.textPrimary,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
                                 )
-                            }
-                        }
-                    }
 
-                    Text(
-                        text = if (isRelatedExpanded) "Hide ▲" else "View ▼",
-                        color = LXPrimaryGreen,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                        fontSize = 10.sp
-                    )
-                }
-
-                if (isRelatedExpanded) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFF141414))
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        correlatedRelated.forEach { relItem ->
-                            val isItemTracking = relItem.inLibraryEntryId != null
-                            val relColor = when {
-                                relItem.relationship.contains("Sequel", ignoreCase = true) -> LXPrimaryGreen
-                                relItem.relationship.contains("Prequel", ignoreCase = true) -> Color(0xFF38BDF8)
-                                relItem.relationship.contains("Collection", ignoreCase = true) || relItem.relationship.contains("Part", ignoreCase = true) -> LXScoreGold
-                                relItem.relationship.contains("Spin", ignoreCase = true) || relItem.relationship.contains("Side", ignoreCase = true) -> Color(0xFFA78BFA)
-                                else -> LXTextSecondary
-                            }
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(LXSurfaceBlack)
-                                    .border(BorderStroke(0.5.dp, LXBorder.copy(alpha = 0.5f)), RoundedCornerShape(6.dp))
-                                    .clickable {
-                                        if (isItemTracking && relItem.inLibraryEntryId != null) {
-                                            onRelatedEntryClick?.invoke(relItem.inLibraryEntryId)
-                                        } else if (!isItemTracking) {
-                                            onAddRelatedItem?.invoke(relItem)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = onToggleFavorite,
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        if (isBeyond) {
+                                            Image(
+                                                painter = painterResource(if (entry.isFavorite) R.drawable.theme_beyond_icon_heart_active else R.drawable.theme_beyond_icon_favorite),
+                                                contentDescription = "Favorite",
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        } else if (isSlime) {
+                                            Image(
+                                                painter = painterResource(if (entry.isFavorite) R.drawable.theme_slime_icon_heart_active else R.drawable.theme_slime_icon_favorite),
+                                                contentDescription = "Favorite",
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        } else if (isGate) {
+                                            Image(
+                                                painter = painterResource(if (entry.isFavorite) R.drawable.theme_gate_icon_heart_active else R.drawable.theme_gate_icon_favorite),
+                                                contentDescription = "Favorite",
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        } else if (isSky) {
+                                            Image(
+                                                painter = painterResource(if (entry.isFavorite) R.drawable.theme_sky_icon_heart_active else R.drawable.theme_sky_icon_favorite),
+                                                contentDescription = "Favorite",
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = if (entry.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                                contentDescription = "Favorite",
+                                                tint = if (entry.isFavorite) colors.primary else colors.textSecondary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
                                         }
                                     }
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+
+                                    Box {
+                                        IconButton(
+                                            onClick = { showMenu = true },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            if (isBeyond) {
+                                                Image(
+                                                    painter = painterResource(R.drawable.theme_beyond_icon_more),
+                                                    contentDescription = "Options",
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            } else if (isSlime) {
+                                                Image(
+                                                    painter = painterResource(R.drawable.theme_slime_icon_more),
+                                                    contentDescription = "Options",
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            } else if (isGate) {
+                                                Image(
+                                                    painter = painterResource(R.drawable.theme_gate_icon_more),
+                                                    contentDescription = "Options",
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            } else if (isSky) {
+                                                Image(
+                                                    painter = painterResource(R.drawable.theme_sky_icon_more),
+                                                    contentDescription = "Options",
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            } else {
+                                                Icon(
+                                                    imageVector = Icons.Default.MoreVert,
+                                                    contentDescription = "Options",
+                                                    tint = colors.textSecondary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+
+                                        DropdownMenu(
+                                            expanded = showMenu,
+                                            onDismissRequest = { showMenu = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text("Edit Entry") },
+                                                onClick = {
+                                                    showMenu = false
+                                                    onEdit()
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Delete", color = colors.error) },
+                                                onClick = {
+                                                    showMenu = false
+                                                    onDelete()
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Subtitle / Date / Alternate title
+                            val dateInfo = when {
+                                entry.formatAiredDateRange().isNotBlank() -> entry.formatAiredDateRange()
+                                entry.formatUserDateRange().isNotBlank() -> entry.formatUserDateRange()
+                                else -> formatDateRange(entry.startDate, entry.finishDate)
+                            }
+                            val subtitleText = when {
+                                !entry.alternateTitle.isNullOrBlank() -> entry.getAlternateTitles().joinToString(" • ")
+                                dateInfo.isNotBlank() -> dateInfo
+                                else -> entry.mediaType.displayName
+                            }
+                            Text(
+                                text = subtitleText,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.5.sp),
+                                color = colors.textSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(vertical = 1.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            // Progress info & Badges
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                Text(
+                                    text = entry.displayProgress,
+                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold),
+                                    color = colors.primary
+                                )
+
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                    if (!entry.customCategory.isNullOrBlank()) {
+                                        Text(
+                                            text = entry.customCategory,
+                                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                            color = colors.primary,
+                                            modifier = Modifier
+                                                .background(colors.primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                                        )
+                                    }
+
+                                    if (entry.isAiring) {
+                                        val airingLabel = if (entry.mediaType.isWatchType) "AIRING" else "PUBLISHING"
+                                        Text(
+                                            text = airingLabel,
+                                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                            color = colors.airingBlue,
+                                            modifier = Modifier
+                                                .background(colors.airingBlue.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                                        )
+                                    }
+
+                                    if (entry.isRewatching) {
+                                        Text(
+                                            text = "REWATCHING",
+                                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                            color = colors.primary,
+                                            modifier = Modifier
+                                                .background(colors.primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                                        )
+                                    }
+
+                                    if (entry.score != null && entry.score > 0) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier
+                                                .background(colors.scoreGold.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Star,
+                                                contentDescription = null,
+                                                tint = colors.scoreGold,
+                                                modifier = Modifier.size(11.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(2.dp))
+                                            Text(
+                                                text = "${entry.score}",
+                                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                                                color = colors.scoreGold
+                                            )
+                                        }
+                                    } else if (entry.externalScore != null && entry.externalScore > 0f) {
+                                        val scoreStr = if (entry.externalScore % 1.0f == 0.0f) {
+                                            entry.externalScore.toInt().toString()
+                                        } else {
+                                            String.format(Locale.US, "%.2f", entry.externalScore).trimEnd('0').trimEnd('.')
+                                        }
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier
+                                                .background(colors.scoreGold.copy(alpha = 0.10f), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Star,
+                                                contentDescription = null,
+                                                tint = colors.scoreGold.copy(alpha = 0.7f),
+                                                modifier = Modifier.size(11.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(2.dp))
+                                            Text(
+                                                text = scoreStr,
+                                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp, fontWeight = FontWeight.Normal),
+                                                color = colors.scoreGold.copy(alpha = 0.85f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(3.dp))
+
+                            // Progress bar + Quick Increment button
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (isBeyond) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(14.dp),
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
+                                        Image(
+                                            painter = painterResource(R.drawable.theme_beyond_progress_bar_bg),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.FillBounds,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(8.dp)
+                                        )
+                                        if (progressAnimated > 0.01f) {
+                                            Image(
+                                                painter = painterResource(R.drawable.theme_beyond_progress_bar_fill),
+                                                contentDescription = null,
+                                                contentScale = ContentScale.FillBounds,
+                                                modifier = Modifier
+                                                    .fillMaxHeight()
+                                                    .fillMaxWidth(progressAnimated)
+                                            )
+                                        }
+                                    }
+                                } else if (isSlime) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(14.dp),
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
+                                        Image(
+                                            painter = painterResource(R.drawable.theme_slime_progress_bar_bg),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.FillBounds,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(8.dp)
+                                        )
+                                        if (progressAnimated > 0.01f) {
+                                            Image(
+                                                painter = painterResource(R.drawable.theme_slime_progress_bar_fill),
+                                                contentDescription = null,
+                                                contentScale = ContentScale.FillBounds,
+                                                modifier = Modifier
+                                                    .fillMaxHeight()
+                                                    .fillMaxWidth(progressAnimated)
+                                            )
+                                        }
+                                    }
+                                } else if (isGate) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(10.dp),
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
+                                        Image(
+                                            painter = painterResource(R.drawable.theme_gate_progress_bar_bg),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.FillBounds,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                        if (progressAnimated > 0.01f) {
+                                            Image(
+                                                painter = painterResource(R.drawable.theme_gate_progress_bar_fill),
+                                                contentDescription = null,
+                                                contentScale = ContentScale.FillBounds,
+                                                modifier = Modifier
+                                                    .padding(horizontal = 2.dp, vertical = 2.dp)
+                                                    .fillMaxHeight()
+                                                    .fillMaxWidth(progressAnimated)
+                                            )
+                                        }
+                                    }
+                                } else if (isSky) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(11.dp),
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
+                                        Image(
+                                            painter = painterResource(R.drawable.theme_sky_progress_bar_bg),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.FillBounds,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                        if (progressAnimated > 0.01f) {
+                                            Image(
+                                                painter = painterResource(R.drawable.theme_sky_progress_bar_fill),
+                                                contentDescription = null,
+                                                contentScale = ContentScale.FillBounds,
+                                                modifier = Modifier
+                                                    .padding(horizontal = 2.dp, vertical = 2.dp)
+                                                    .fillMaxHeight()
+                                                    .fillMaxWidth(progressAnimated)
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(6.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(colors.progressTrack)
                                     ) {
                                         Box(
                                             modifier = Modifier
-                                                .clip(RoundedCornerShape(3.dp))
-                                                .background(relColor.copy(alpha = 0.15f))
-                                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                                        ) {
-                                            Text(
-                                                text = relItem.relationship.uppercase(),
-                                                color = relColor,
-                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                                fontSize = 8.sp
-                                            )
-                                        }
-                                        if (!relItem.releaseYear.isNullOrBlank()) {
-                                            Text(
-                                                text = relItem.releaseYear,
-                                                color = LXTextSecondary,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontSize = 8.5.sp
-                                            )
-                                        }
+                                                .fillMaxHeight()
+                                                .fillMaxWidth(progressAnimated)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(colors.primary)
+                                        )
                                     }
-                                    Text(
-                                        text = relItem.title,
-                                        color = LXTextPrimary,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                                        fontSize = 11.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
                                 }
 
-                                Spacer(modifier = Modifier.width(6.dp))
+                                if (!isGate) {
+                                    Spacer(modifier = Modifier.width(8.dp))
 
-                                if (isItemTracking) {
-                                    Row(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                            .padding(horizontal = 6.dp, vertical = 2.5.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(3.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = null,
-                                            tint = LXPrimaryGreen,
-                                            modifier = Modifier.size(10.dp)
-                                        )
-                                        Text(
-                                            text = relItem.inLibraryStatus?.getDisplayLabel(relItem.mediaType) ?: "Tracking",
-                                            color = LXPrimaryGreen,
-                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                            fontSize = 9.sp
-                                        )
+                                    if (isBeyond) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clickable(onClick = onIncrement),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Image(
+                                                painter = painterResource(R.drawable.theme_beyond_icon_card_star),
+                                                contentDescription = "+1 Progress",
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    } else if (isSlime) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clickable(onClick = onIncrement),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Image(
+                                                painter = painterResource(R.drawable.theme_slime_icon_card_slime),
+                                                contentDescription = "+1 Progress",
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    } else if (isSky) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clickable(onClick = onIncrement),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Image(
+                                                painter = painterResource(R.drawable.theme_sky_icon_plus),
+                                                contentDescription = "+1 Progress",
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(22.dp)
+                                                .clip(CircleShape)
+                                                .background(colors.primary.copy(alpha = 0.15f))
+                                                .border(1.dp, colors.primary.copy(alpha = 0.4f), CircleShape)
+                                                .clickable(onClick = onIncrement),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = "+1 Progress",
+                                                tint = colors.primary,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
                                     }
                                 } else {
-                                    Row(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(LXSurfaceElevated)
-                                            .border(0.5.dp, LXBorder, RoundedCornerShape(4.dp))
-                                            .padding(horizontal = 6.dp, vertical = 2.5.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                    // Section 11.9: Gate theme progress bar balance spacer
+                                    Spacer(modifier = Modifier.width(30.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Related Franchise Section (Extracted during Sync)
+                val correlatedRelated = remember(entry.relatedEntriesJson, allLibraryEntries) {
+                    entry.getCorrelatedRelatedItems(allLibraryEntries)
+                }
+
+                if (correlatedRelated.isNotEmpty()) {
+                    var isRelatedExpanded by remember { mutableStateOf(false) }
+                    val trackingCount = remember(correlatedRelated) { correlatedRelated.count { it.inLibraryEntryId != null } }
+                    val untrackedCount = correlatedRelated.size - trackingCount
+
+                    HorizontalDivider(
+                        color = colors.border.copy(alpha = 0.4f),
+                        thickness = 0.5.dp
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(bottomStart = insets.innerCornerRadius, bottomEnd = insets.innerCornerRadius))
+                            .background(colors.surfaceVariant.copy(alpha = 0.85f))
+                            .clickable { isRelatedExpanded = !isRelatedExpanded }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "🔗 ${correlatedRelated.size} Related:",
+                                color = colors.textSecondary,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                                fontSize = 10.sp
+                            )
+
+                            // Tracking pill
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(colors.primary.copy(alpha = 0.15f))
+                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                            ) {
+                                Text(
+                                    text = "$trackingCount Tracking",
+                                    color = colors.primary,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    fontSize = 9.sp
+                                )
+                            }
+
+                            // Untracked pill
+                            if (untrackedCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Color(0xFFF59E0B).copy(alpha = 0.15f))
+                                        .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                                ) {
+                                    Text(
+                                        text = "$untrackedCount Untracked",
+                                        color = Color(0xFFF59E0B),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        fontSize = 9.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = if (isRelatedExpanded) "Hide ▲" else "View ▼",
+                            color = colors.primary,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            fontSize = 9.5.sp
+                        )
+                    }
+
+                    if (isRelatedExpanded) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(colors.surfaceVariant.copy(alpha = 0.95f))
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            correlatedRelated.forEach { relItem ->
+                                val isItemTracking = relItem.inLibraryEntryId != null
+                                val relColor = when {
+                                    relItem.relationship.contains("Sequel", ignoreCase = true) -> colors.primary
+                                    relItem.relationship.contains("Prequel", ignoreCase = true) -> Color(0xFF38BDF8)
+                                    relItem.relationship.contains("Collection", ignoreCase = true) || relItem.relationship.contains("Part", ignoreCase = true) -> colors.scoreGold
+                                    relItem.relationship.contains("Spin", ignoreCase = true) || relItem.relationship.contains("Side", ignoreCase = true) -> Color(0xFFA78BFA)
+                                    else -> colors.textSecondary
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(colors.surface)
+                                        .border(BorderStroke(0.5.dp, colors.border.copy(alpha = 0.5f)), RoundedCornerShape(6.dp))
+                                        .clickable {
+                                            if (isItemTracking && relItem.inLibraryEntryId != null) {
+                                                onRelatedEntryClick?.invoke(relItem.inLibraryEntryId)
+                                            } else if (!isItemTracking) {
+                                                onAddRelatedItem?.invoke(relItem)
+                                            }
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Add,
-                                            contentDescription = null,
-                                            tint = LXTextPrimary,
-                                            modifier = Modifier.size(10.dp)
-                                        )
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(3.dp))
+                                                    .background(relColor.copy(alpha = 0.15f))
+                                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                            ) {
+                                                Text(
+                                                    text = relItem.relationship.uppercase(),
+                                                    color = relColor,
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                    fontSize = 8.sp
+                                                )
+                                            }
+                                            if (!relItem.releaseYear.isNullOrBlank()) {
+                                                Text(
+                                                    text = relItem.releaseYear,
+                                                    color = colors.textSecondary,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontSize = 8.5.sp
+                                                )
+                                            }
+                                        }
                                         Text(
-                                            text = "Track",
-                                            color = LXTextPrimary,
-                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                            fontSize = 9.sp
+                                            text = relItem.title,
+                                            color = colors.textPrimary,
+                                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                            fontSize = 11.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(6.dp))
+
+                                    if (isItemTracking) {
+                                        Row(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(colors.primary.copy(alpha = 0.15f))
+                                                .padding(horizontal = 6.dp, vertical = 2.5.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = colors.primary,
+                                                modifier = Modifier.size(10.dp)
+                                            )
+                                            Text(
+                                                text = relItem.inLibraryStatus?.getDisplayLabel(relItem.mediaType) ?: "Tracking",
+                                                color = colors.primary,
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                fontSize = 9.sp
+                                            )
+                                        }
+                                    } else {
+                                        Row(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(colors.surfaceElevated)
+                                                .border(0.5.dp, colors.border, RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 6.dp, vertical = 2.5.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = null,
+                                                tint = colors.textPrimary,
+                                                modifier = Modifier.size(10.dp)
+                                            )
+                                            Text(
+                                                text = "Track",
+                                                color = colors.textPrimary,
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                fontSize = 9.sp
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -875,7 +912,6 @@ fun MediaCard(
             }
         }
     }
-}
 }
 
 private fun formatDateRange(start: Long?, finish: Long?): String {

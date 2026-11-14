@@ -13,6 +13,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.lx.tracklist.R
 
 enum class ThemePreset(
     val id: String,
@@ -318,6 +319,137 @@ val SkyThemeColors = LXThemeColors(
 
 val LocalLXColors = staticCompositionLocalOf { DefaultDarkColors }
 
+data class ThemeCardInsets(
+    val outerToInnerStart: Dp,
+    val outerToInnerEnd: Dp,
+    val outerToInnerTop: Dp,
+    val outerToInnerBottom: Dp,
+    val innerCornerRadius: Dp,
+    val innerBorderColor: Color,
+    val innerBorderWidth: Dp,
+    val innerSurfaceAlpha: Float,
+    val thumbnailWidth: Dp = 60.dp,
+    val thumbnailHeight: Dp = 86.dp,
+    val showThumbnailBorderSprite: Boolean = false,
+    val thumbnailBorderRes: Int? = null,
+    val thumbnailBorderColor: Color = Color.Transparent,
+    val thumbnailBorderWidth: Dp = 0.dp
+)
+
+val DefaultCardInsets = ThemeCardInsets(
+    outerToInnerStart = 0.dp,
+    outerToInnerEnd = 0.dp,
+    outerToInnerTop = 0.dp,
+    outerToInnerBottom = 0.dp,
+    innerCornerRadius = 12.dp,
+    innerBorderColor = Color(0xFF2C2C2C),
+    innerBorderWidth = 1.dp,
+    innerSurfaceAlpha = 1.0f,
+    thumbnailWidth = 60.dp,
+    thumbnailHeight = 86.dp
+)
+
+val CleanLightCardInsets = ThemeCardInsets(
+    outerToInnerStart = 0.dp,
+    outerToInnerEnd = 0.dp,
+    outerToInnerTop = 0.dp,
+    outerToInnerBottom = 0.dp,
+    innerCornerRadius = 12.dp,
+    innerBorderColor = Color(0xFFCBD5E1),
+    innerBorderWidth = 1.dp,
+    innerSurfaceAlpha = 1.0f,
+    thumbnailWidth = 60.dp,
+    thumbnailHeight = 86.dp
+)
+
+val CrimsonDarkCardInsets = ThemeCardInsets(
+    outerToInnerStart = 0.dp,
+    outerToInnerEnd = 0.dp,
+    outerToInnerTop = 0.dp,
+    outerToInnerBottom = 0.dp,
+    innerCornerRadius = 12.dp,
+    innerBorderColor = Color(0xFF3B282F),
+    innerBorderWidth = 1.dp,
+    innerSurfaceAlpha = 1.0f,
+    thumbnailWidth = 60.dp,
+    thumbnailHeight = 86.dp
+)
+
+val SlateBlueGreyCardInsets = ThemeCardInsets(
+    outerToInnerStart = 0.dp,
+    outerToInnerEnd = 0.dp,
+    outerToInnerTop = 0.dp,
+    outerToInnerBottom = 0.dp,
+    innerCornerRadius = 12.dp,
+    innerBorderColor = Color(0xFF2E3C52),
+    innerBorderWidth = 1.dp,
+    innerSurfaceAlpha = 1.0f,
+    thumbnailWidth = 60.dp,
+    thumbnailHeight = 86.dp
+)
+
+val BeyondCardInsets = ThemeCardInsets(
+    outerToInnerStart = 14.dp,
+    outerToInnerEnd = 14.dp,
+    outerToInnerTop = 10.dp,
+    outerToInnerBottom = 10.dp,
+    innerCornerRadius = 10.dp,
+    innerBorderColor = Color(0xFF8C2828),
+    innerBorderWidth = 0.5.dp,
+    innerSurfaceAlpha = 0.88f,
+    thumbnailWidth = 60.dp,
+    thumbnailHeight = 86.dp,
+    showThumbnailBorderSprite = true,
+    thumbnailBorderRes = R.drawable.theme_beyond_thumbnail_border
+)
+
+val SlimeCardInsets = ThemeCardInsets(
+    outerToInnerStart = 14.dp,
+    outerToInnerEnd = 14.dp,
+    outerToInnerTop = 8.dp,
+    outerToInnerBottom = 14.dp,
+    innerCornerRadius = 12.dp,
+    innerBorderColor = Color(0xFF38BDF8).copy(alpha = 0.5f),
+    innerBorderWidth = 1.dp,
+    innerSurfaceAlpha = 0.85f,
+    thumbnailWidth = 60.dp,
+    thumbnailHeight = 86.dp,
+    showThumbnailBorderSprite = true,
+    thumbnailBorderRes = R.drawable.theme_slime_thumbnail_border
+)
+
+val GateCardInsets = ThemeCardInsets(
+    outerToInnerStart = 12.dp,
+    outerToInnerEnd = 12.dp,
+    outerToInnerTop = 8.dp,
+    outerToInnerBottom = 8.dp,
+    innerCornerRadius = 6.dp,
+    innerBorderColor = Color.Transparent,
+    innerBorderWidth = 0.dp,
+    innerSurfaceAlpha = 0.90f,
+    thumbnailWidth = 60.dp,
+    thumbnailHeight = 86.dp,
+    showThumbnailBorderSprite = false,
+    thumbnailBorderColor = Color(0xFFF59E0B),
+    thumbnailBorderWidth = 1.dp
+)
+
+val SkyCardInsets = ThemeCardInsets(
+    outerToInnerStart = 16.dp,
+    outerToInnerEnd = 16.dp,
+    outerToInnerTop = 10.dp,
+    outerToInnerBottom = 10.dp,
+    innerCornerRadius = 10.dp,
+    innerBorderColor = Color(0xFF06B6D4).copy(alpha = 0.6f),
+    innerBorderWidth = 0.5.dp,
+    innerSurfaceAlpha = 0.82f,
+    thumbnailWidth = 60.dp,
+    thumbnailHeight = 86.dp,
+    showThumbnailBorderSprite = false,
+    thumbnailBorderColor = Color(0xFF06B6D4),
+    thumbnailBorderWidth = 0.5.dp
+)
+
 object ThemeManager {
     private const val PREFS_NAME = "lx_theme_preferences"
     private const val KEY_THEME_ID = "active_theme_id"
@@ -480,4 +612,25 @@ object ThemeManager {
      */
     val isSkyTheme: Boolean
         get() = currentThemeId == ThemePreset.SKY.id
+
+    /**
+     * Whether the active theme preset is any of the Advanced themes.
+     */
+    val isAdvancedTheme: Boolean
+        get() = isBeyondTheme || isSlimeTheme || isGateTheme || isSkyTheme
+
+    /**
+     * Resolves the card insets and layout metrics for the active theme preset.
+     */
+    val currentCardInsets: ThemeCardInsets
+        get() = when (currentPreset) {
+            ThemePreset.DEFAULT_DARK -> DefaultCardInsets
+            ThemePreset.LIGHT -> CleanLightCardInsets
+            ThemePreset.DARK_RED -> CrimsonDarkCardInsets
+            ThemePreset.DARK_BLUE_GREY -> SlateBlueGreyCardInsets
+            ThemePreset.BEYOND -> BeyondCardInsets
+            ThemePreset.SLIME -> SlimeCardInsets
+            ThemePreset.GATE -> GateCardInsets
+            ThemePreset.SKY -> SkyCardInsets
+        }
 }

@@ -311,11 +311,11 @@ fun HomeScreen(
                 } else {
                     LazyVerticalGrid(
                         state = gridState,
-                        columns = GridCells.Adaptive(minSize = 360.dp),
+                        columns = GridCells.Adaptive(minSize = 340.dp),
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(
                             items = pageEntries,
