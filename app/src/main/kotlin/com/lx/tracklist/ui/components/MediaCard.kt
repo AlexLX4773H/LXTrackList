@@ -105,11 +105,11 @@ fun MediaCard(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(if (isAdvanced) 10.dp else 12.dp))
+                .clip(RoundedCornerShape(if (isSlime) 14.dp else if (isBeyond) 10.dp else 12.dp))
                 .border(
                     width = if (isSelected) 2.dp else (if (isAdvanced) 1.5.dp else 1.dp),
-                    color = if (isSelected) LXPrimaryGreen else (if (isAdvanced) LXBorder.copy(alpha = 0.7f) else LXBorder),
-                    shape = RoundedCornerShape(if (isAdvanced) 10.dp else 12.dp)
+                    color = if (isSelected) LXPrimaryGreen else (if (isSlime) Color(0xFF38BDF8).copy(alpha = 0.5f) else if (isBeyond) LXBorder.copy(alpha = 0.7f) else LXBorder),
+                    shape = RoundedCornerShape(if (isSlime) 14.dp else if (isBeyond) 10.dp else 12.dp)
                 )
                 .combinedClickable(
                     onClick = {
@@ -134,10 +134,10 @@ fun MediaCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        start = if (isAdvanced) 12.dp else 10.dp,
-                        end = if (isAdvanced) 18.dp else 10.dp,
-                        top = if (isAdvanced) 8.dp else 10.dp,
-                        bottom = if (isAdvanced) 8.dp else 10.dp
+                        start = if (isSlime) 12.dp else if (isBeyond) 12.dp else 10.dp,
+                        end = if (isSlime) 14.dp else if (isBeyond) 18.dp else 10.dp,
+                        top = if (isSlime) 12.dp else if (isBeyond) 8.dp else 10.dp,
+                        bottom = if (isSlime) 12.dp else if (isBeyond) 8.dp else 10.dp
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -166,8 +166,8 @@ fun MediaCard(
             // Cover Image Thumbnail
             Box(
                 modifier = Modifier
-                    .width(if (isAdvanced) 62.dp else 72.dp)
-                    .height(if (isAdvanced) 88.dp else 100.dp)
+                    .width(if (isSlime) 66.dp else if (isBeyond) 62.dp else 72.dp)
+                    .height(if (isSlime) 94.dp else if (isBeyond) 88.dp else 100.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xFF1E1E1E)),
                 contentAlignment = Alignment.Center
@@ -228,7 +228,7 @@ fun MediaCard(
                 ) {
                     Text(
                         text = entry.title,
-                        style = (if (isAdvanced) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium).copy(fontWeight = FontWeight.Bold),
+                        style = (if (isBeyond) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium).copy(fontWeight = FontWeight.Bold),
                         color = LXTextPrimary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -468,7 +468,7 @@ fun MediaCard(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(10.dp),
+                                .height(12.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
                             Image(
@@ -509,22 +509,38 @@ fun MediaCard(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // +1 Quick Increment Button
-                    Box(
-                        modifier = Modifier
-                            .size(if (isAdvanced) 22.dp else 24.dp)
-                            .clip(CircleShape)
-                            .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                            .border(1.dp, LXPrimaryGreen.copy(alpha = 0.4f), CircleShape)
-                            .clickable(onClick = onIncrement),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "+1 Progress",
-                            tint = LXPrimaryGreen,
-                            modifier = Modifier.size(if (isAdvanced) 13.dp else 15.dp)
-                        )
+                    if (isSlime) {
+                        // Slime Theme: Cute Slime Emblem increment button as shown in concept
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clickable(onClick = onIncrement),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                painter = painterResource(R.drawable.theme_slime_icon_card_slime),
+                                contentDescription = "+1 Progress",
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    } else {
+                        // Standard / Beyond +1 Quick Increment Button
+                        Box(
+                            modifier = Modifier
+                                .size(if (isBeyond) 22.dp else 24.dp)
+                                .clip(CircleShape)
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .border(1.dp, LXPrimaryGreen.copy(alpha = 0.4f), CircleShape)
+                                .clickable(onClick = onIncrement),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "+1 Progress",
+                                tint = LXPrimaryGreen,
+                                modifier = Modifier.size(if (isBeyond) 13.dp else 15.dp)
+                            )
+                        }
                     }
                 }
             }
