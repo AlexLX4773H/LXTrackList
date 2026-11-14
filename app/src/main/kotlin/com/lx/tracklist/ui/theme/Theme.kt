@@ -116,7 +116,7 @@ fun AppThemeBackgroundContainer(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = ThemeManager.backgroundDimAlpha))
+                    .background(Color.Black.copy(alpha = ThemeManager.effectiveBackgroundDimAlpha))
             )
         }
         content()

@@ -1574,14 +1574,26 @@ private fun SettingsMainMenu(
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SettingsSectionHeader("Personalization & Appearance")
             val activePreset = com.lx.tracklist.ui.theme.ThemeManager.currentPreset
+            val activeCustom = com.lx.tracklist.ui.theme.ThemeManager.currentCustomTheme
             val hasCustomBg = com.lx.tracklist.ui.theme.ThemeManager.customBackgroundUri != null
-            val themeBadge = if (hasCustomBg) "CUSTOM BG" else if (activePreset.category == "advanced") "ADVANCED" else "ACTIVE"
+            val themeBadge = when {
+                hasCustomBg -> "CUSTOM BG"
+                activeCustom != null && activeCustom.backgroundUri != null -> "CUSTOM + BG"
+                activeCustom != null -> "CUSTOM"
+                activePreset.category == "advanced" -> "ADVANCED"
+                else -> "ACTIVE"
+            }
+            val subtitleText = when {
+                activeCustom != null -> "${activeCustom.name} • Custom User Theme${if (activeCustom.backgroundUri != null) " with wallpaper" else ""}"
+                hasCustomBg -> "${activePreset.displayName} • Custom Wallpaper active"
+                else -> "${activePreset.displayName} • ${activePreset.description}"
+            }
             SettingsMenuItem(
                 icon = Icons.Default.Palette,
                 iconBackgroundColor = LXPrimaryGreen.copy(alpha = 0.15f),
                 iconTintColor = LXPrimaryGreen,
                 title = "Themes & Styling",
-                subtitle = "${activePreset.displayName} • ${if (hasCustomBg) "Custom Wallpaper active" else activePreset.description}",
+                subtitle = subtitleText,
                 badgeText = themeBadge,
                 badgeColor = LXPrimaryGreen,
                 isSelected = selectedSubMenu == SettingsSubMenu.THEMES,

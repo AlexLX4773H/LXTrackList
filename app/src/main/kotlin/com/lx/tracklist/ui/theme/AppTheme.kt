@@ -11,8 +11,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.lx.tracklist.R
 
 enum class ThemePreset(
@@ -110,6 +113,103 @@ data class LXThemeColors(
     val navUnselectedContentColor: Color = textSecondary,
     val fabBadgeShape: String = "circle" // "circle", "magic_orb", "slime", "shield", "reticle"
 )
+
+data class CustomThemeData(
+    val id: String = "custom_" + System.currentTimeMillis(),
+    val name: String = "My Theme",
+    val primaryHex: String = "#A7EF60",
+    val backgroundHex: String = "#000000",
+    val surfaceHex: String = "#121212",
+    val surfaceElevatedHex: String = "#252525",
+    val borderHex: String = "#2C2C2C",
+    val accentSecondaryHex: String = "#C4FF8E",
+    val textPrimaryHex: String = "#FFFFFF",
+    val textSecondaryHex: String = "#B0B0B0",
+    val scoreHex: String = "#FFD166",
+    val isLight: Boolean = false,
+    val backgroundUri: String? = null,
+    val backgroundDimAlpha: Float = 0.60f,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+fun parseThemeHexColor(hex: String?, fallback: Color): Color {
+    if (hex.isNullOrBlank()) return fallback
+    return try {
+        val clean = hex.trim()
+        val formatted = when {
+            clean.startsWith("#") && (clean.length == 7 || clean.length == 9) -> clean
+            clean.length == 6 -> "#$clean"
+            clean.length == 8 -> "#$clean"
+            else -> null
+        }
+        if (formatted != null) {
+            Color(android.graphics.Color.parseColor(formatted))
+        } else fallback
+    } catch (_: Exception) {
+        fallback
+    }
+}
+
+fun Color.toHexRgb(): String {
+    val r = (red * 255).toInt().coerceIn(0, 255)
+    val g = (green * 255).toInt().coerceIn(0, 255)
+    val b = (blue * 255).toInt().coerceIn(0, 255)
+    return String.format("#%02X%02X%02X", r, g, b)
+}
+
+fun CustomThemeData.toLXThemeColors(): LXThemeColors {
+    val prim = parseThemeHexColor(primaryHex, Color(0xFFA7EF60))
+    val bg = parseThemeHexColor(backgroundHex, Color(0xFF000000))
+    val surf = parseThemeHexColor(surfaceHex, Color(0xFF121212))
+    val surfElev = parseThemeHexColor(surfaceElevatedHex, Color(0xFF252525))
+    val textP = parseThemeHexColor(textPrimaryHex, Color(0xFFFFFFFF))
+    val textS = parseThemeHexColor(textSecondaryHex, Color(0xFFB0B0B0))
+    val bord = parseThemeHexColor(borderHex, Color(0xFF2C2C2C))
+    val accent = parseThemeHexColor(accentSecondaryHex, Color(0xFFC4FF8E))
+    val score = parseThemeHexColor(scoreHex, Color(0xFFFFD166))
+
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(prim.toArgb(), hsv)
+    val primDarkHsv = floatArrayOf(hsv[0], (hsv[1] * 1.15f).coerceIn(0f, 1f), (hsv[2] * 0.75f).coerceIn(0f, 1f))
+    val primLightHsv = floatArrayOf(hsv[0], (hsv[1] * 0.80f).coerceIn(0f, 1f), (hsv[2] * 1.25f).coerceIn(0f, 1f))
+    val primDark = Color(android.graphics.Color.HSVToColor(primDarkHsv))
+    val primLight = Color(android.graphics.Color.HSVToColor(primLightHsv))
+
+    return LXThemeColors(
+        primary = prim,
+        primaryDark = primDark,
+        primaryLight = primLight,
+        background = bg,
+        surface = surf,
+        surfaceVariant = surfElev,
+        surfaceElevated = surfElev,
+        textPrimary = textP,
+        textSecondary = textS,
+        textDisabled = textS.copy(alpha = 0.5f),
+        border = bord,
+        progressTrack = surfElev,
+        error = Color(0xFFFF5252),
+        scoreGold = score,
+        airingBlue = Color(0xFF4EA8DE),
+        accentSecondary = accent,
+        isLight = isLight,
+        cardCornerRadius = 12.dp,
+        cardBorderWidth = 1.dp,
+        cardBackgroundColor = surf,
+        fabContainerColor = prim,
+        fabContentColor = if (isLight) Color.White else bg,
+        navContainerColor = surf,
+        navSelectedIndicatorColor = prim,
+        navSelectedContentColor = if (isLight) Color.White else bg,
+        navUnselectedContentColor = textS,
+        fabBadgeShape = "circle"
+    )
+}
+
+fun CustomThemeData.toCardInsets(): ThemeCardInsets {
+    val bord = parseThemeHexColor(borderHex, Color(0xFF2C2C2C))
+    return DefaultCardInsets.copy(innerBorderColor = bord)
+}
 
 val DefaultDarkColors = LXThemeColors(
     primary = Color(0xFFA7EF60),
@@ -455,6 +555,7 @@ object ThemeManager {
     private const val KEY_THEME_ID = "active_theme_id"
     private const val KEY_CUSTOM_BG_URI = "custom_bg_uri"
     private const val KEY_CUSTOM_BG_DIM = "custom_bg_dim"
+    private const val KEY_CUSTOM_THEMES_JSON = "custom_themes_list_v1"
 
     var currentProfileId by mutableStateOf(1L)
         private set
@@ -466,6 +567,12 @@ object ThemeManager {
         private set
 
     var currentColors by mutableStateOf(DefaultDarkColors)
+        private set
+
+    var customThemes by mutableStateOf<List<CustomThemeData>>(emptyList())
+        private set
+
+    var currentCustomTheme by mutableStateOf<CustomThemeData?>(null)
         private set
 
     var customBackgroundUri by mutableStateOf<String?>(null)
@@ -493,6 +600,8 @@ object ThemeManager {
     fun loadForProfile(profileId: Long, context: Context) {
         currentProfileId = profileId
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        loadCustomThemes(context)
+
         val profileThemeKey = "theme_id_$profileId"
         val profileBgKey = "custom_bg_uri_$profileId"
         val profileDimKey = "custom_bg_dim_$profileId"
@@ -565,7 +674,66 @@ object ThemeManager {
             .apply()
     }
 
+    fun loadCustomThemes(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_CUSTOM_THEMES_JSON, null)
+        if (!json.isNullOrBlank()) {
+            try {
+                val listType = object : TypeToken<List<CustomThemeData>>() {}.type
+                val parsed: List<CustomThemeData>? = Gson().fromJson(json, listType)
+                customThemes = parsed ?: emptyList()
+            } catch (_: Exception) {
+                customThemes = emptyList()
+            }
+        } else {
+            customThemes = emptyList()
+        }
+    }
+
+    fun saveCustomTheme(theme: CustomThemeData, context: Context, autoApplyForProfileId: Long? = null) {
+        val existingIndex = customThemes.indexOfFirst { it.id == theme.id }
+        val updatedList = if (existingIndex >= 0) {
+            customThemes.toMutableList().apply { set(existingIndex, theme) }
+        } else {
+            customThemes + theme
+        }
+        customThemes = updatedList
+
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_CUSTOM_THEMES_JSON, Gson().toJson(updatedList)).apply()
+
+        if (currentThemeId == theme.id) {
+            applyThemeInternal(theme.id)
+        } else if (autoApplyForProfileId != null) {
+            setTheme(theme.id, context, autoApplyForProfileId)
+        }
+    }
+
+    fun deleteCustomTheme(themeId: String, context: Context, profileId: Long = currentProfileId) {
+        val updatedList = customThemes.filterNot { it.id == themeId }
+        customThemes = updatedList
+
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(KEY_CUSTOM_THEMES_JSON, Gson().toJson(updatedList)).apply()
+
+        if (currentThemeId == themeId) {
+            setTheme(ThemePreset.DEFAULT_DARK.id, context, profileId)
+        }
+    }
+
     private fun applyThemeInternal(themeId: String) {
+        if (themeId.startsWith("custom_")) {
+            val custom = customThemes.find { it.id == themeId }
+            if (custom != null) {
+                currentThemeId = custom.id
+                currentCustomTheme = custom
+                currentPreset = ThemePreset.DEFAULT_DARK
+                currentColors = custom.toLXThemeColors()
+                return
+            }
+        }
+
+        currentCustomTheme = null
         val preset = ThemePreset.entries.find { it.id == themeId } ?: ThemePreset.DEFAULT_DARK
         currentThemeId = preset.id
         currentPreset = preset
@@ -584,34 +752,57 @@ object ThemeManager {
 
     /**
      * Resolves the effective background image to render.
-     * Custom user background takes priority; otherwise falls back to preset's background asset if any.
+     * Custom user background takes priority; otherwise falls back to custom theme's wallpaper or preset's background asset if any.
      */
     val effectiveBackgroundImage: String?
-        get() = customBackgroundUri ?: currentPreset.backgroundAssetPath
+        get() = customBackgroundUri ?: currentCustomTheme?.backgroundUri ?: currentPreset.backgroundAssetPath
+
+    /**
+     * Resolves the effective dimming level.
+     * Standalone custom wallpaper dim takes priority; otherwise custom theme's dim; otherwise preset dim.
+     */
+    val effectiveBackgroundDimAlpha: Float
+        get() = if (customBackgroundUri != null) backgroundDimAlpha
+                else (currentCustomTheme?.backgroundDimAlpha ?: backgroundDimAlpha)
+
+    /**
+     * Display name for active theme (preset or custom).
+     */
+    val activeThemeDisplayName: String
+        get() = currentCustomTheme?.name ?: currentPreset.displayName
+
+    /**
+     * Description for active theme.
+     */
+    val activeThemeDescription: String
+        get() = currentCustomTheme?.let {
+            if (it.backgroundUri != null) "Custom user defined theme with custom wallpaper."
+            else "Custom user defined color scheme."
+        } ?: currentPreset.description
 
     /**
      * Whether the active theme preset is the Advanced "Beyond" theme.
      */
     val isBeyondTheme: Boolean
-        get() = currentThemeId == ThemePreset.BEYOND.id
+        get() = currentCustomTheme == null && currentThemeId == ThemePreset.BEYOND.id
 
     /**
      * Whether the active theme preset is the Advanced "Slime" theme.
      */
     val isSlimeTheme: Boolean
-        get() = currentThemeId == ThemePreset.SLIME.id
+        get() = currentCustomTheme == null && currentThemeId == ThemePreset.SLIME.id
 
     /**
      * Whether the active theme preset is the Advanced "Gate" theme.
      */
     val isGateTheme: Boolean
-        get() = currentThemeId == ThemePreset.GATE.id
+        get() = currentCustomTheme == null && currentThemeId == ThemePreset.GATE.id
 
     /**
      * Whether the active theme preset is the Advanced "Sky" theme.
      */
     val isSkyTheme: Boolean
-        get() = currentThemeId == ThemePreset.SKY.id
+        get() = currentCustomTheme == null && currentThemeId == ThemePreset.SKY.id
 
     /**
      * Whether the active theme preset is any of the Advanced themes.
@@ -623,14 +814,16 @@ object ThemeManager {
      * Resolves the card insets and layout metrics for the active theme preset.
      */
     val currentCardInsets: ThemeCardInsets
-        get() = when (currentPreset) {
-            ThemePreset.DEFAULT_DARK -> DefaultCardInsets
-            ThemePreset.LIGHT -> CleanLightCardInsets
-            ThemePreset.DARK_RED -> CrimsonDarkCardInsets
-            ThemePreset.DARK_BLUE_GREY -> SlateBlueGreyCardInsets
-            ThemePreset.BEYOND -> BeyondCardInsets
-            ThemePreset.SLIME -> SlimeCardInsets
-            ThemePreset.GATE -> GateCardInsets
-            ThemePreset.SKY -> SkyCardInsets
+        get() = when {
+            currentCustomTheme != null -> currentCustomTheme!!.toCardInsets()
+            currentPreset == ThemePreset.DEFAULT_DARK -> DefaultCardInsets
+            currentPreset == ThemePreset.LIGHT -> CleanLightCardInsets
+            currentPreset == ThemePreset.DARK_RED -> CrimsonDarkCardInsets
+            currentPreset == ThemePreset.DARK_BLUE_GREY -> SlateBlueGreyCardInsets
+            currentPreset == ThemePreset.BEYOND -> BeyondCardInsets
+            currentPreset == ThemePreset.SLIME -> SlimeCardInsets
+            currentPreset == ThemePreset.GATE -> GateCardInsets
+            currentPreset == ThemePreset.SKY -> SkyCardInsets
+            else -> DefaultCardInsets
         }
 }

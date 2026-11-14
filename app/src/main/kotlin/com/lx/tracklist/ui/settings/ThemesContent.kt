@@ -29,19 +29,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
@@ -49,6 +53,10 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.lx.tracklist.ui.theme.CustomThemeData
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
@@ -71,6 +80,7 @@ import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
 import com.lx.tracklist.ui.theme.ThemeManager
 import com.lx.tracklist.ui.theme.ThemePreset
+import com.lx.tracklist.ui.theme.parseThemeHexColor
 
 @Composable
 fun ThemesContent(
@@ -79,8 +89,13 @@ fun ThemesContent(
 ) {
     val context = LocalContext.current
     val currentPreset = ThemeManager.currentPreset
+    val currentCustom = ThemeManager.currentCustomTheme
     val customBgUri = ThemeManager.customBackgroundUri
     val dimAlpha = ThemeManager.backgroundDimAlpha
+
+    var showEditorDialog by remember { mutableStateOf(false) }
+    var themeToEdit by remember { mutableStateOf<CustomThemeData?>(null) }
+    var themeToDelete by remember { mutableStateOf<CustomThemeData?>(null) }
 
     androidx.compose.runtime.LaunchedEffect(activeProfile.id) {
         if (ThemeManager.currentProfileId != activeProfile.id) {
@@ -175,7 +190,13 @@ fun ThemesContent(
                             ),
                             color = LXTextSecondary
                         )
-                        val badgeText = if (customBgUri != null) "CUSTOM BG" else if (currentPreset.category == "advanced") "ADVANCED" else "PRESET"
+                        val badgeText = when {
+                            customBgUri != null -> "CUSTOM BG"
+                            currentCustom != null && currentCustom.backgroundUri != null -> "CUSTOM + BG"
+                            currentCustom != null -> "CUSTOM THEME"
+                            currentPreset.category == "advanced" -> "ADVANCED"
+                            else -> "PRESET"
+                        }
                         Surface(
                             color = LXPrimaryGreen.copy(alpha = 0.18f),
                             shape = RoundedCornerShape(4.dp),
@@ -212,14 +233,14 @@ fun ThemesContent(
 
                 // Active Theme Display Name
                 Text(
-                    text = currentPreset.displayName,
+                    text = ThemeManager.activeThemeDisplayName,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = LXTextPrimary
                 )
 
                 // Active Theme Description
                 Text(
-                    text = currentPreset.description,
+                    text = ThemeManager.activeThemeDescription,
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
@@ -263,7 +284,7 @@ fun ThemesContent(
             val defaultPresets = ThemePreset.entries.filter { it.category == "default" }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 defaultPresets.forEach { preset ->
-                    val isSelected = currentPreset.id == preset.id && customBgUri == null
+                    val isSelected = currentCustom == null && currentPreset.id == preset.id && customBgUri == null
                     ThemePresetCard(
                         preset = preset,
                         isSelected = isSelected,
@@ -297,7 +318,7 @@ fun ThemesContent(
             val advancedPresets = ThemePreset.entries.filter { it.category == "advanced" }
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 advancedPresets.forEach { preset ->
-                    val isSelected = currentPreset.id == preset.id && customBgUri == null
+                    val isSelected = currentCustom == null && currentPreset.id == preset.id && customBgUri == null
                     AdvancedThemeCard(
                         preset = preset,
                         isSelected = isSelected,
@@ -471,7 +492,366 @@ fun ThemesContent(
             }
         }
 
+        // Section 4: Custom User Defined Themes
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Palette,
+                        contentDescription = null,
+                        tint = LXPrimaryGreen,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Custom User Themes",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextPrimary
+                    )
+                }
+
+                Button(
+                    onClick = {
+                        themeToEdit = null
+                        showEditorDialog = true
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXPrimaryGreen,
+                        contentColor = LXBackgroundBlack
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Create Theme", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
+            }
+
+            Text(
+                text = "Personalize your app with bespoke color palettes, RGB hex codes, and saved custom wallpapers.",
+                style = MaterialTheme.typography.bodySmall,
+                color = LXTextSecondary
+            )
+
+            val customList = ThemeManager.customThemes
+            if (customList.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    customList.forEach { customTheme ->
+                        val isSelected = currentCustom?.id == customTheme.id && customBgUri == null
+                        CustomThemeCard(
+                            theme = customTheme,
+                            isSelected = isSelected,
+                            onApply = {
+                                ThemeManager.setTheme(customTheme.id, context, activeProfile.id)
+                            },
+                            onEdit = {
+                                themeToEdit = customTheme
+                                showEditorDialog = true
+                            },
+                            onDelete = {
+                                themeToDelete = customTheme
+                            }
+                        )
+                    }
+                }
+            } else {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            themeToEdit = null
+                            showEditorDialog = true
+                        },
+                    colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+                    border = BorderStroke(1.dp, LXBorder),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = null,
+                                tint = LXPrimaryGreen,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Text(
+                            text = "No Custom Themes Yet",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                        Text(
+                            text = "Tap here or '+ Create Theme' to build your own personalized color palette and wallpaper.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LXTextSecondary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(20.dp))
+    }
+
+    if (showEditorDialog) {
+        CustomThemeEditorDialog(
+            themeToEdit = themeToEdit,
+            onDismiss = {
+                showEditorDialog = false
+                themeToEdit = null
+            },
+            onSave = { savedTheme ->
+                showEditorDialog = false
+                themeToEdit = null
+                ThemeManager.saveCustomTheme(
+                    theme = savedTheme,
+                    context = context,
+                    autoApplyForProfileId = activeProfile.id
+                )
+            }
+        )
+    }
+
+    val toDelete = themeToDelete
+    if (toDelete != null) {
+        AlertDialog(
+            onDismissRequest = { themeToDelete = null },
+            title = {
+                Text("Delete Custom Theme", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text("Are you sure you want to delete '${toDelete.name}'? This cannot be undone.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        ThemeManager.deleteCustomTheme(toDelete.id, context, activeProfile.id)
+                        themeToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFEF4444),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { themeToDelete = null }) {
+                    Text("Cancel")
+                }
+            },
+            containerColor = LXSurfaceBlack,
+            titleContentColor = LXTextPrimary,
+            textContentColor = LXTextSecondary,
+            shape = RoundedCornerShape(14.dp)
+        )
+    }
+}
+
+@Composable
+private fun CustomThemeCard(
+    theme: CustomThemeData,
+    isSelected: Boolean,
+    onApply: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val context = LocalContext.current
+    val prim = parseThemeHexColor(theme.primaryHex, Color(0xFFA7EF60))
+    val bg = parseThemeHexColor(theme.backgroundHex, Color.Black)
+    val surf = parseThemeHexColor(theme.surfaceHex, Color(0xFF121212))
+    val accent = parseThemeHexColor(theme.accentSecondaryHex, Color(0xFFC4FF8E))
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onApply),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) LXSurfaceElevated else LXSurfaceBlack
+        ),
+        border = BorderStroke(
+            width = if (isSelected) 1.5.dp else 1.dp,
+            color = if (isSelected) LXPrimaryGreen else LXBorder
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Header: Name + Badges + Edit/Delete
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Text(
+                        text = theme.name,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextPrimary
+                    )
+
+                    if (isSelected) {
+                        Surface(
+                            color = LXPrimaryGreen,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "ACTIVE",
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 9.sp
+                                ),
+                                color = LXBackgroundBlack
+                            )
+                        }
+                    }
+
+                    if (theme.backgroundUri != null) {
+                        Surface(
+                            color = LXPrimaryGreen.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(4.dp),
+                            border = BorderStroke(0.5.dp, LXPrimaryGreen.copy(alpha = 0.4f))
+                        ) {
+                            Text(
+                                text = "WALLPAPER",
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 9.sp
+                                ),
+                                color = LXPrimaryGreen
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    IconButton(
+                        onClick = onEdit,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Theme",
+                            tint = LXTextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete Theme",
+                            tint = Color(0xFFEF4444).copy(alpha = 0.8f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            // Swatches Row + Wallpaper preview
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ColorSwatchPill(label = "Primary", color = prim)
+                    ColorSwatchPill(label = "Surface", color = surf)
+                    ColorSwatchPill(label = "Background", color = bg)
+                    ColorSwatchPill(label = "Accent", color = accent)
+                }
+
+                if (theme.backgroundUri != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .border(1.dp, LXBorder, RoundedCornerShape(6.dp))
+                    ) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(theme.backgroundUri)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+            }
+
+            // Bottom Action Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (theme.isLight) "Light Canvas Base" else "Dark Canvas Base",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LXTextDisabled
+                )
+
+                Button(
+                    onClick = onApply,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isSelected) LXPrimaryGreen else LXSurfaceElevated,
+                        contentColor = if (isSelected) LXBackgroundBlack else LXTextPrimary
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                    modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp)
+                ) {
+                    Text(
+                        text = if (isSelected) "Applied" else "Apply",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+        }
     }
 }
 
