@@ -105,11 +105,11 @@ fun MediaCard(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(if (isSlime) 14.dp else if (isBeyond) 10.dp else 12.dp))
+                .clip(RoundedCornerShape(if (isAdvanced) 14.dp else 12.dp))
                 .border(
                     width = if (isSelected) 2.dp else (if (isAdvanced) 1.5.dp else 1.dp),
-                    color = if (isSelected) LXPrimaryGreen else (if (isSlime) Color(0xFF38BDF8).copy(alpha = 0.5f) else if (isBeyond) LXBorder.copy(alpha = 0.7f) else LXBorder),
-                    shape = RoundedCornerShape(if (isSlime) 14.dp else if (isBeyond) 10.dp else 12.dp)
+                    color = if (isSelected) LXPrimaryGreen else (if (isSlime) Color(0xFF38BDF8).copy(alpha = 0.5f) else if (isBeyond) LXPrimaryGreen.copy(alpha = 0.5f) else LXBorder),
+                    shape = RoundedCornerShape(if (isAdvanced) 14.dp else 12.dp)
                 )
                 .combinedClickable(
                     onClick = {
@@ -134,10 +134,10 @@ fun MediaCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        start = if (isSlime) 12.dp else if (isBeyond) 12.dp else 10.dp,
-                        end = if (isSlime) 14.dp else if (isBeyond) 18.dp else 10.dp,
-                        top = if (isSlime) 12.dp else if (isBeyond) 8.dp else 10.dp,
-                        bottom = if (isSlime) 12.dp else if (isBeyond) 8.dp else 10.dp
+                        start = if (isAdvanced) 12.dp else 10.dp,
+                        end = if (isAdvanced) 14.dp else 10.dp,
+                        top = if (isAdvanced) 12.dp else 10.dp,
+                        bottom = if (isAdvanced) 12.dp else 10.dp
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -166,8 +166,8 @@ fun MediaCard(
             // Cover Image Thumbnail
             Box(
                 modifier = Modifier
-                    .width(if (isSlime) 66.dp else if (isBeyond) 62.dp else 72.dp)
-                    .height(if (isSlime) 94.dp else if (isBeyond) 88.dp else 100.dp)
+                    .width(if (isAdvanced) 66.dp else 72.dp)
+                    .height(if (isAdvanced) 94.dp else 100.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xFF1E1E1E)),
                 contentAlignment = Alignment.Center
@@ -228,7 +228,7 @@ fun MediaCard(
                 ) {
                     Text(
                         text = entry.title,
-                        style = (if (isBeyond) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium).copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = LXTextPrimary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
