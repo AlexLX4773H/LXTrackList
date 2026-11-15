@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 data class AppUpdateInfo(
@@ -24,7 +25,15 @@ data class AppUpdateInfo(
 sealed interface AppUpdateStatus {
     object Idle : AppUpdateStatus
     object Checking : AppUpdateStatus
-    data class UpdateAvailable(val updateInfo: AppUpdateInfo) : AppUpdateStatus
+    data class UpdateAvailable(
+        val updateInfo: AppUpdateInfo,
+        val downloadProgress: Float? = null,
+        val downloadedBytes: Long = 0L,
+        val totalBytes: Long = 0L,
+        val isDownloading: Boolean = false,
+        val downloadedFile: File? = null,
+        val downloadError: String? = null
+    ) : AppUpdateStatus
     data class UpToDate(val updateInfo: AppUpdateInfo) : AppUpdateStatus
     data class Error(val message: String, val fallbackUrl: String) : AppUpdateStatus
 }

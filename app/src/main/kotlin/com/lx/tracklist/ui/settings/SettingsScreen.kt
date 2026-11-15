@@ -1,6 +1,7 @@
 package com.lx.tracklist.ui.settings
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -55,6 +56,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Favorite
@@ -93,6 +96,7 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -162,6 +166,7 @@ import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXErrorRed
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
+import com.lx.tracklist.ui.theme.LXProgressTrack
 import com.lx.tracklist.ui.theme.LXScoreGold
 import com.lx.tracklist.ui.theme.LXSurfaceBlack
 import com.lx.tracklist.ui.theme.LXSurfaceElevated
@@ -1198,7 +1203,10 @@ fun SettingsScreen(
                         )
                         SettingsSubMenu.ABOUT -> AboutContent(
                             state = state,
-                            onCheckForUpdates = { viewModel.checkForUpdates() }
+                            onCheckForUpdates = { viewModel.checkForUpdates() },
+                            onDownloadUpdate = { viewModel.downloadAndInstallUpdate(it) },
+                            onCancelDownload = { viewModel.cancelUpdateDownload() },
+                            onInstallDownloadedUpdate = { viewModel.installDownloadedUpdate(it) }
                         )
                     }
                 }
@@ -1358,6 +1366,9 @@ fun SettingsScreen(
                         AboutContent(
                             state = state,
                             onCheckForUpdates = { viewModel.checkForUpdates() },
+                            onDownloadUpdate = { viewModel.downloadAndInstallUpdate(it) },
+                            onCancelDownload = { viewModel.cancelUpdateDownload() },
+                            onInstallDownloadedUpdate = { viewModel.installDownloadedUpdate(it) },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -4923,6 +4934,9 @@ private fun StartupViewContent(
 private fun AboutContent(
     state: SettingsUiState,
     onCheckForUpdates: () -> Unit,
+    onDownloadUpdate: (Context) -> Unit = {},
+    onCancelDownload: () -> Unit = {},
+    onInstallDownloadedUpdate: (Context) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -5213,60 +5227,240 @@ private fun AboutContent(
                             }
 
                             Text(
-                                text = "A new version (${status.updateInfo.latestVersion}) is available on GitHub! Click anywhere on this banner or below to open the release page and download the APK.",
+                                text = "A new version (${status.updateInfo.latestVersion}) is available! You can download and install it directly from the app.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = LXTextPrimary
                             )
-                        }
 
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(IntrinsicSize.Min),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Button(
-                                onClick = { openUrl(status.updateInfo.releaseUrl) },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = LXPrimaryGreen,
-                                    contentColor = Color.Black
-                                ),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
+                            if (!status.updateInfo.releaseNotes.isNullOrBlank()) {
+                                val snippet = status.updateInfo.releaseNotes.trim().lines().take(3).joinToString("\n")
                                 Text(
-                                    text = "Open Release (${status.updateInfo.latestVersion})",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    softWrap = false,
+                                    text = snippet,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = LXTextSecondary,
+                                    maxLines = 3,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
+                        }
 
-                            OutlinedButton(
-                                onClick = onCheckForUpdates,
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                border = BorderStroke(1.dp, LXBorder),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
-                                modifier = Modifier.fillMaxHeight()
+                        if (status.isDownloading) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(LXSurfaceElevated)
+                                    .border(1.dp, LXBorder, RoundedCornerShape(8.dp))
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Downloading update...",
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        color = LXTextPrimary
+                                    )
+                                    val pct = status.downloadProgress?.let { (it * 100).toInt() }
+                                    if (pct != null) {
+                                        Text(
+                                            text = "$pct%",
+                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = LXPrimaryGreen
+                                        )
+                                    }
+                                }
+
+                                if (status.downloadProgress != null) {
+                                    LinearProgressIndicator(
+                                        progress = { status.downloadProgress },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(8.dp)
+                                            .clip(RoundedCornerShape(4.dp)),
+                                        color = LXPrimaryGreen,
+                                        trackColor = LXProgressTrack
+                                    )
+                                } else {
+                                    LinearProgressIndicator(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(8.dp)
+                                            .clip(RoundedCornerShape(4.dp)),
+                                        color = LXPrimaryGreen,
+                                        trackColor = LXProgressTrack
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val downloadedMb = String.format(java.util.Locale.US, "%.1f MB", status.downloadedBytes / (1024.0 * 1024.0))
+                                    val totalMb = if (status.totalBytes > 0) {
+                                        String.format(java.util.Locale.US, "%.1f MB", status.totalBytes / (1024.0 * 1024.0))
+                                    } else "?"
+                                    Text(
+                                        text = "$downloadedMb / $totalMb",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                        color = LXTextSecondary
+                                    )
+
+                                    TextButton(
+                                        onClick = onCancelDownload,
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.height(28.dp)
+                                    ) {
+                                        Text("Cancel", color = Color(0xFFEF4444), fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        } else if (status.downloadedFile != null) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = { onInstallDownloadedUpdate(context) },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = LXPrimaryGreen,
+                                        contentColor = Color.Black
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    modifier = Modifier.fillMaxWidth().height(42.dp)
+                                ) {
+                                    Icon(Icons.Default.DownloadDone, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Install Update Now", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { onDownloadUpdate(context) },
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, LXBorder),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
+                                        modifier = Modifier.weight(1f).height(38.dp)
+                                    ) {
+                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Re-download", fontSize = 12.sp)
+                                    }
+                                    OutlinedButton(
+                                        onClick = { openUrl(status.updateInfo.releaseUrl) },
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, LXBorder),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
+                                        modifier = Modifier.weight(1f).height(38.dp)
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Release Page", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        } else {
+                            if (!status.downloadError.isNullOrBlank()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFFEF4444).copy(alpha = 0.12f))
+                                        .border(1.dp, Color(0xFFEF4444).copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ErrorOutline,
+                                        contentDescription = null,
+                                        tint = Color(0xFFEF4444),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Download failed: ${status.downloadError}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFFEF4444)
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Min),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val hasApk = !status.updateInfo.apkDownloadUrl.isNullOrBlank()
+                                Button(
+                                    onClick = {
+                                        if (hasApk) {
+                                            onDownloadUpdate(context)
+                                        } else {
+                                            openUrl(status.updateInfo.releaseUrl)
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = LXPrimaryGreen,
+                                        contentColor = Color.Black
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                ) {
+                                    Icon(
+                                        imageVector = if (hasApk) Icons.Default.Download else Icons.AutoMirrored.Filled.OpenInNew,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (hasApk) "Download & Install (${status.updateInfo.latestVersion})" else "Open Release (${status.updateInfo.latestVersion})",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = { openUrl(status.updateInfo.releaseUrl) },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    border = BorderStroke(1.dp, LXBorder),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
+                                    modifier = Modifier.fillMaxHeight()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                        contentDescription = "Open in Browser",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = onCheckForUpdates,
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                    border = BorderStroke(1.dp, LXBorder),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
+                                    modifier = Modifier.fillMaxHeight()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Re-check",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
                         }
                     }

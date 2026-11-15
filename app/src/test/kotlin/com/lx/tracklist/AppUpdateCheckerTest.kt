@@ -44,5 +44,23 @@ class AppUpdateCheckerTest {
         // Pre-release tag handling
         assertTrue(AppUpdateChecker.isVersionNewer(latest = "0.1.7-beta1", current = "0.1.6"))
     }
+
+    @Test
+    fun testUpdateAvailableDataClass() {
+        val info = com.lx.tracklist.data.remote.AppUpdateInfo(
+            latestVersion = "v0.1.7",
+            currentVersion = "v0.1.6",
+            releaseName = "v0.1.7 Update",
+            releaseUrl = "https://github.com/AlexLX4773H/LXTrackList/releases/v0.1.7",
+            isUpdateAvailable = true,
+            apkDownloadUrl = "https://github.com/AlexLX4773H/LXTrackList/releases/download/v0.1.7/app-release.apk"
+        )
+        val status = com.lx.tracklist.data.remote.AppUpdateStatus.UpdateAvailable(info)
+        assertFalse(status.isDownloading)
+        assertEquals(null, status.downloadProgress)
+        assertEquals(0L, status.downloadedBytes)
+        assertEquals(null, status.downloadedFile)
+        assertEquals(null, status.downloadError)
+    }
 }
 

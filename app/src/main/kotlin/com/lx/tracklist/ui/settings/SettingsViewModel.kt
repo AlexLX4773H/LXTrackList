@@ -16,6 +16,7 @@ import com.lx.tracklist.data.local.CoverCacheManager
 import com.lx.tracklist.data.local.StorageFileInfo
 import com.lx.tracklist.data.local.StorageHelper
 import com.lx.tracklist.data.remote.AppUpdateChecker
+import com.lx.tracklist.data.remote.AppUpdateDownloader
 import com.lx.tracklist.data.remote.AppUpdateStatus
 import com.lx.tracklist.data.remote.BookSyncManager
 import com.lx.tracklist.data.remote.JikanSyncManager
@@ -725,7 +726,11 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         _uiState.update { it.copy(statusMessage = null) }
     }
 
+    private var updateDownloadJob: kotlinx.coroutines.Job? = null
+
     fun checkForUpdates() {
+        updateDownloadJob?.cancel()
+        updateDownloadJob = null
         viewModelScope.launch {
             _uiState.update { it.copy(updateStatus = AppUpdateStatus.Checking) }
             val result = AppUpdateChecker.checkForUpdate()
@@ -755,7 +760,119 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         }
     }
 
+    fun downloadAndInstallUpdate(context: Context) {
+        val currentStatus = _uiState.value.updateStatus
+        if (currentStatus !is AppUpdateStatus.UpdateAvailable) return
+        val downloadUrl = currentStatus.updateInfo.apkDownloadUrl
+        if (downloadUrl.isNullOrBlank()) {
+            return
+        }
+
+        updateDownloadJob?.cancel()
+        updateDownloadJob = viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update {
+                it.copy(
+                    updateStatus = currentStatus.copy(
+                        isDownloading = true,
+                        downloadProgress = 0f,
+                        downloadedBytes = 0L,
+                        totalBytes = 0L,
+                        downloadError = null,
+                        downloadedFile = null
+                    )
+                )
+            }
+
+            val result = AppUpdateDownloader.downloadApk(
+                context = context.applicationContext,
+                downloadUrl = downloadUrl,
+                version = currentStatus.updateInfo.latestVersion
+            ) { downloaded, total ->
+                val fraction = if (total > 0L) (downloaded.toFloat() / total.toFloat()).coerceIn(0f, 1f) else null
+                _uiState.update { state ->
+                    val s = state.updateStatus
+                    if (s is AppUpdateStatus.UpdateAvailable && s.isDownloading) {
+                        state.copy(
+                            updateStatus = s.copy(
+                                downloadProgress = fraction,
+                                downloadedBytes = downloaded,
+                                totalBytes = total
+                            )
+                        )
+                    } else state
+                }
+            }
+
+            result.fold(
+                onSuccess = { apkFile ->
+                    _uiState.update { state ->
+                        val s = state.updateStatus
+                        if (s is AppUpdateStatus.UpdateAvailable) {
+                            state.copy(
+                                updateStatus = s.copy(
+                                    isDownloading = false,
+                                    downloadProgress = 1f,
+                                    downloadedFile = apkFile,
+                                    downloadError = null
+                                )
+                            )
+                        } else state
+                    }
+                    withContext(Dispatchers.Main) {
+                        AppUpdateDownloader.installApk(context, apkFile)
+                    }
+                },
+                onFailure = { error ->
+                    if (error is kotlinx.coroutines.CancellationException) return@fold
+                    _uiState.update { state ->
+                        val s = state.updateStatus
+                        if (s is AppUpdateStatus.UpdateAvailable) {
+                            state.copy(
+                                updateStatus = s.copy(
+                                    isDownloading = false,
+                                    downloadError = error.message ?: "Failed to download update"
+                                )
+                            )
+                        } else state
+                    }
+                }
+            )
+        }
+    }
+
+    fun cancelUpdateDownload() {
+        updateDownloadJob?.cancel()
+        updateDownloadJob = null
+        _uiState.update { state ->
+            val s = state.updateStatus
+            if (s is AppUpdateStatus.UpdateAvailable) {
+                state.copy(
+                    updateStatus = s.copy(
+                        isDownloading = false,
+                        downloadProgress = null,
+                        downloadedBytes = 0L,
+                        totalBytes = 0L,
+                        downloadError = null
+                    )
+                )
+            } else state
+        }
+    }
+
+    fun installDownloadedUpdate(context: Context) {
+        val s = _uiState.value.updateStatus
+        if (s is AppUpdateStatus.UpdateAvailable && s.downloadedFile != null) {
+            val result = AppUpdateDownloader.installApk(context, s.downloadedFile)
+            if (result.isFailure) {
+                val err = result.exceptionOrNull()?.message
+                _uiState.update { it.copy(statusMessage = err) }
+            }
+        }
+    }
+
     fun resetUpdateStatus() {
+        updateDownloadJob?.cancel()
+        updateDownloadJob = null
         _uiState.update { it.copy(updateStatus = AppUpdateStatus.Idle) }
     }
 
