@@ -76,11 +76,15 @@ data class SearchUiState(
     val query: String = "",
     val selectedCategory: SearchCategory = SearchCategory.ANIME,
     val isLoading: Boolean = false,
+    val isLoadingMore: Boolean = false,
+    val canLoadMore: Boolean = false,
+    val currentPage: Int = 1,
     val errorMessage: String? = null,
     val results: List<SearchResultItem> = emptyList(),
     val customCategories: List<CustomCategory> = emptyList(),
     val subCategories: List<SubCategory> = emptyList(),
-    val userAddedMessage: String? = null
+    val userAddedMessage: String? = null,
+    val activeDiscoveryFilter: DiscoveryFilter? = null
 )
 
 class SearchViewModel(
@@ -135,17 +139,26 @@ class SearchViewModel(
 
     fun onQueryChanged(newQuery: String, context: Context? = null) {
         val oldQuery = _uiState.value.query
+        val activeFilter = _uiState.value.activeDiscoveryFilter
         _uiState.update { it.copy(query = newQuery) }
         val trimmed = newQuery.trim()
         if (trimmed.length < 2) {
-            searchJob?.cancel()
-            activeSearchKey = null
-            _uiState.update {
-                it.copy(
-                    results = emptyList(),
-                    isLoading = false,
-                    errorMessage = null
-                )
+            if (activeFilter != null) {
+                // If a discovery filter was active and user cleared their query, reload the seasonal/year list
+                if (oldQuery.trim().length >= 2) {
+                    reloadDiscoveryFilter(activeFilter, context)
+                }
+            } else {
+                searchJob?.cancel()
+                activeSearchKey = null
+                _uiState.update {
+                    it.copy(
+                        results = emptyList(),
+                        isLoading = false,
+                        canLoadMore = false,
+                        errorMessage = null
+                    )
+                }
             }
             return
         }
@@ -163,13 +176,340 @@ class SearchViewModel(
         if (_uiState.value.selectedCategory == category) return
         searchJob?.cancel()
         activeSearchKey = null
-        _uiState.update { it.copy(selectedCategory = category, results = emptyList(), errorMessage = null) }
+        _uiState.update {
+            it.copy(
+                selectedCategory = category,
+                activeDiscoveryFilter = null,
+                results = emptyList(),
+                currentPage = 1,
+                canLoadMore = false,
+                errorMessage = null
+            )
+        }
         val currentQuery = _uiState.value.query.trim()
         if (currentQuery.length >= 2) {
             searchJob = viewModelScope.launch {
                 executeSearch(currentQuery, category, context)
             }
         }
+    }
+
+    private fun reloadDiscoveryFilter(filter: DiscoveryFilter, context: Context? = null) {
+        when (filter) {
+            is DiscoveryFilter.Anime -> applyAnimeSeasonalFilter(filter.season, filter.year, filter.sortOrder, filter.includeAdult)
+            is DiscoveryFilter.Movie -> applyMovieDiscoveryFilter(filter.year, filter.sortOrder, filter.includeAdult, context)
+            is DiscoveryFilter.Tv -> applyTvDiscoveryFilter(filter.year, filter.sortOrder, filter.includeAdult, context)
+        }
+    }
+
+    fun applyAnimeSeasonalFilter(
+        season: AnimeSeason,
+        year: Int,
+        sort: AnimeSortOrder,
+        includeAdult: Boolean = false
+    ) {
+        searchJob?.cancel()
+        val filter = DiscoveryFilter.Anime(season, year, sort, includeAdult)
+        activeSearchKey = "DISCOVER:ANIME:$season:$year:$sort:$includeAdult"
+        _uiState.update {
+            it.copy(
+                selectedCategory = SearchCategory.ANIME,
+                activeDiscoveryFilter = filter,
+                query = "",
+                isLoading = true,
+                currentPage = 1,
+                canLoadMore = false,
+                errorMessage = null,
+                results = emptyList()
+            )
+        }
+        searchJob = viewModelScope.launch {
+            try {
+                val detailsList = withContext(Dispatchers.IO) {
+                    JikanApiClient.fetchSeasonalAnime(
+                        year = year,
+                        season = season.apiValue,
+                        sort = sort.apiValue,
+                        search = null,
+                        includeAdult = includeAdult,
+                        page = 1
+                    ).getOrThrow()
+                }
+                val mapped = detailsList.mapIndexed { idx, details ->
+                    mapJikanToSearchResult(details, idx)
+                }
+                _uiState.update {
+                    it.copy(
+                        results = mapped,
+                        isLoading = false,
+                        currentPage = 1,
+                        canLoadMore = mapped.size >= 20
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("SearchViewModel", "Error fetching seasonal anime", e)
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to load seasonal anime") }
+            }
+        }
+    }
+
+    fun applyMovieDiscoveryFilter(
+        year: Int,
+        sort: TmdbMovieSort,
+        includeAdult: Boolean = false,
+        context: Context? = null
+    ) {
+        searchJob?.cancel()
+        val filter = DiscoveryFilter.Movie(year, sort, includeAdult)
+        activeSearchKey = "DISCOVER:MOVIE:$year:$sort:$includeAdult"
+        _uiState.update {
+            it.copy(
+                selectedCategory = SearchCategory.MOVIES,
+                activeDiscoveryFilter = filter,
+                query = "",
+                isLoading = true,
+                currentPage = 1,
+                canLoadMore = false,
+                errorMessage = null,
+                results = emptyList()
+            )
+        }
+        searchJob = viewModelScope.launch {
+            try {
+                val list = withContext(Dispatchers.IO) {
+                    TmdbApiClient.discoverMovies(
+                        year = year,
+                        sortBy = sort.apiValue,
+                        page = 1,
+                        includeAdult = includeAdult,
+                        context = context
+                    ).getOrThrow()
+                }
+                val mapped = list.map { tmdb ->
+                    mapTmdbToSearchResult(tmdb, isMovie = true)
+                }
+                _uiState.update {
+                    it.copy(
+                        results = mapped,
+                        isLoading = false,
+                        currentPage = 1,
+                        canLoadMore = mapped.size >= 20
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("SearchViewModel", "Error discovering movies", e)
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to discover movies") }
+            }
+        }
+    }
+
+    fun applyTvDiscoveryFilter(
+        year: Int,
+        sort: TmdbTvSort,
+        includeAdult: Boolean = false,
+        context: Context? = null
+    ) {
+        searchJob?.cancel()
+        val filter = DiscoveryFilter.Tv(year, sort, includeAdult)
+        activeSearchKey = "DISCOVER:TV:$year:$sort:$includeAdult"
+        _uiState.update {
+            it.copy(
+                selectedCategory = SearchCategory.TV_SHOWS,
+                activeDiscoveryFilter = filter,
+                query = "",
+                isLoading = true,
+                currentPage = 1,
+                canLoadMore = false,
+                errorMessage = null,
+                results = emptyList()
+            )
+        }
+        searchJob = viewModelScope.launch {
+            try {
+                val list = withContext(Dispatchers.IO) {
+                    TmdbApiClient.discoverTvShows(
+                        year = year,
+                        sortBy = sort.apiValue,
+                        page = 1,
+                        includeAdult = includeAdult,
+                        context = context
+                    ).getOrThrow()
+                }
+                val mapped = list.map { tmdb ->
+                    mapTmdbToSearchResult(tmdb, isMovie = false)
+                }
+                _uiState.update {
+                    it.copy(
+                        results = mapped,
+                        isLoading = false,
+                        currentPage = 1,
+                        canLoadMore = mapped.size >= 20
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("SearchViewModel", "Error discovering TV shows", e)
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to discover TV shows") }
+            }
+        }
+    }
+
+    fun loadMore(context: Context? = null) {
+        val currentState = _uiState.value
+        if (currentState.isLoading || currentState.isLoadingMore || !currentState.canLoadMore) return
+
+        val nextPage = currentState.currentPage + 1
+        _uiState.update { it.copy(isLoadingMore = true) }
+
+        viewModelScope.launch {
+            try {
+                val newItems: List<SearchResultItem> = withContext(Dispatchers.IO) {
+                    val filter = currentState.activeDiscoveryFilter
+                    val query = currentState.query.trim()
+                    when {
+                        filter is DiscoveryFilter.Anime -> {
+                            val detailsList = JikanApiClient.fetchSeasonalAnime(
+                                year = filter.year,
+                                season = filter.season.apiValue,
+                                sort = filter.sortOrder.apiValue,
+                                search = if (query.length >= 2) query else null,
+                                includeAdult = filter.includeAdult,
+                                page = nextPage
+                            ).getOrThrow()
+                            detailsList.mapIndexed { idx, details ->
+                                mapJikanToSearchResult(details, currentState.results.size + idx)
+                            }
+                        }
+                        filter is DiscoveryFilter.Movie -> {
+                            val list = if (query.length >= 2) {
+                                TmdbApiClient.searchMoviesMultiple(
+                                    title = query,
+                                    year = filter.year,
+                                    includeAdult = filter.includeAdult,
+                                    page = nextPage,
+                                    context = context
+                                ).getOrThrow()
+                            } else {
+                                TmdbApiClient.discoverMovies(
+                                    year = filter.year,
+                                    sortBy = filter.sortOrder.apiValue,
+                                    page = nextPage,
+                                    includeAdult = filter.includeAdult,
+                                    context = context
+                                ).getOrThrow()
+                            }
+                            list.map { mapTmdbToSearchResult(it, isMovie = true) }
+                        }
+                        filter is DiscoveryFilter.Tv -> {
+                            val list = if (query.length >= 2) {
+                                TmdbApiClient.searchTvMultiple(
+                                    title = query,
+                                    year = filter.year,
+                                    includeAdult = filter.includeAdult,
+                                    page = nextPage,
+                                    context = context
+                                ).getOrThrow()
+                            } else {
+                                TmdbApiClient.discoverTvShows(
+                                    year = filter.year,
+                                    sortBy = filter.sortOrder.apiValue,
+                                    page = nextPage,
+                                    includeAdult = filter.includeAdult,
+                                    context = context
+                                ).getOrThrow()
+                            }
+                            list.map { mapTmdbToSearchResult(it, isMovie = false) }
+                        }
+                        currentState.selectedCategory == SearchCategory.MOVIES && query.length >= 2 -> {
+                            val list = TmdbApiClient.searchMoviesMultiple(
+                                title = query,
+                                page = nextPage,
+                                context = context
+                            ).getOrThrow()
+                            list.map { mapTmdbToSearchResult(it, isMovie = true) }
+                        }
+                        currentState.selectedCategory == SearchCategory.TV_SHOWS && query.length >= 2 -> {
+                            val list = TmdbApiClient.searchTvMultiple(
+                                title = query,
+                                page = nextPage,
+                                context = context
+                            ).getOrThrow()
+                            list.map { mapTmdbToSearchResult(it, isMovie = false) }
+                        }
+                        else -> emptyList()
+                    }
+                }
+
+                _uiState.update { state ->
+                    val combinedResults = (state.results + newItems).distinctBy { "${it.externalSource}_${it.externalId}" }
+                    state.copy(
+                        results = combinedResults,
+                        currentPage = nextPage,
+                        canLoadMore = newItems.isNotEmpty() && newItems.size >= 15,
+                        isLoadingMore = false
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("SearchViewModel", "Error loading more results", e)
+                _uiState.update { it.copy(isLoadingMore = false, canLoadMore = false) }
+            }
+        }
+    }
+
+    fun clearDiscoveryFilter() {
+        searchJob?.cancel()
+        activeSearchKey = null
+        _uiState.update {
+            it.copy(
+                activeDiscoveryFilter = null,
+                results = emptyList(),
+                currentPage = 1,
+                canLoadMore = false,
+                isLoading = false,
+                errorMessage = null
+            )
+        }
+    }
+
+    private fun mapJikanToSearchResult(details: JikanMediaDetails, idx: Int): SearchResultItem {
+        val extId = details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+        val extSource = if (details.sourceProvider == "AniList" && (details.malId == null || details.malId == 0L)) "AniList" else "MAL"
+        return SearchResultItem(
+            externalId = extId,
+            externalSource = extSource,
+            mediaType = MediaType.ANIME,
+            title = details.title ?: "Unknown",
+            alternateTitle = details.alternateTitle,
+            posterUrl = details.posterUrl,
+            releaseYear = details.airedStartDate?.let { extractYear(it) },
+            totalUnits = details.totalEpisodes,
+            durationMinutes = details.durationMinutes,
+            score = details.externalScore,
+            statusText = if (details.isAiring == true) "Airing" else "Finished",
+            synopsis = details.synopsis,
+            rawJikanDetails = details
+        )
+    }
+
+    private fun mapTmdbToSearchResult(tmdb: TmdbSearchResult, isMovie: Boolean): SearchResultItem {
+        return SearchResultItem(
+            externalId = tmdb.tmdbId.toString(),
+            externalSource = "TMDB",
+            mediaType = if (isMovie) MediaType.MOVIE else MediaType.SHOW,
+            title = tmdb.title,
+            alternateTitle = tmdb.originalTitle,
+            posterUrl = tmdb.posterUrl,
+            releaseYear = tmdb.releaseYear,
+            score = tmdb.voteAverage,
+            statusText = if (isMovie) "Movie" else "TV Show",
+            synopsis = tmdb.overview,
+            rawTmdbResult = tmdb
+        )
     }
 
     fun submitSearch(context: Context? = null) {
@@ -195,10 +535,49 @@ class SearchViewModel(
     ) {
         val searchKey = "$category:$query"
         activeSearchKey = searchKey
-        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+        _uiState.update { it.copy(isLoading = true, errorMessage = null, currentPage = 1, canLoadMore = false) }
+
+        val activeFilter = _uiState.value.activeDiscoveryFilter
 
         try {
             val results = withContext(Dispatchers.IO) {
+                // If a discovery filter is active, perform scoped search on that specific season or year!
+                if (activeFilter != null) {
+                    when (activeFilter) {
+                        is DiscoveryFilter.Anime -> {
+                            val list = JikanApiClient.fetchSeasonalAnime(
+                                year = activeFilter.year,
+                                season = activeFilter.season.apiValue,
+                                sort = activeFilter.sortOrder.apiValue,
+                                search = query,
+                                includeAdult = activeFilter.includeAdult,
+                                page = 1
+                            ).getOrThrow()
+                            return@withContext list.mapIndexed { idx, d -> mapJikanToSearchResult(d, idx) }
+                        }
+                        is DiscoveryFilter.Movie -> {
+                            val list = TmdbApiClient.searchMoviesMultiple(
+                                title = query,
+                                year = activeFilter.year,
+                                includeAdult = activeFilter.includeAdult,
+                                page = 1,
+                                context = context
+                            ).getOrThrow()
+                            return@withContext list.map { mapTmdbToSearchResult(it, isMovie = true) }
+                        }
+                        is DiscoveryFilter.Tv -> {
+                            val list = TmdbApiClient.searchTvMultiple(
+                                title = query,
+                                year = activeFilter.year,
+                                includeAdult = activeFilter.includeAdult,
+                                page = 1,
+                                context = context
+                            ).getOrThrow()
+                            return@withContext list.map { mapTmdbToSearchResult(it, isMovie = false) }
+                        }
+                    }
+                }
+
                 when (category) {
                     SearchCategory.ANIME -> {
                         supervisorScope {
@@ -603,6 +982,8 @@ class SearchViewModel(
                     it.copy(
                         results = results,
                         isLoading = false,
+                        currentPage = 1,
+                        canLoadMore = results.size >= 15,
                         errorMessage = if (results.isEmpty()) "No results found for '$query'" else null
                     )
                 }

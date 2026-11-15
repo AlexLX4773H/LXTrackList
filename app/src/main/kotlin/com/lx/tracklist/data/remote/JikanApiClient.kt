@@ -1751,6 +1751,263 @@ object JikanApiClient {
 
         return Result.success(emptyList())
     }
+
+    fun queryAniListSeasonal(
+        year: Int,
+        season: String,
+        sort: String = "POPULARITY_DESC",
+        search: String? = null,
+        includeAdult: Boolean = false,
+        page: Int = 1,
+        perPage: Int = 25
+    ): Result<List<JikanMediaDetails>> {
+        val normalizedSeason = season.uppercase(Locale.ROOT)
+        val hasSearch = !search.isNullOrBlank()
+        val query = if (hasSearch) {
+            """
+            query (${'$'}search: String, ${'$'}season: MediaSeason, ${'$'}seasonYear: Int, ${'$'}sort: [MediaSort], ${'$'}page: Int, ${'$'}perPage: Int) {
+              Page(page: ${'$'}page, perPage: ${'$'}perPage) {
+                pageInfo {
+                  hasNextPage
+                  total
+                }
+                media(search: ${'$'}search, season: ${'$'}season, seasonYear: ${'$'}seasonYear, type: ANIME, sort: ${'$'}sort${if (!includeAdult) ", isAdult: false" else ""}) {
+                  id
+                  idMal
+                  siteUrl
+                  title { romaji english native }
+                  synonyms
+                  coverImage { extraLarge large }
+                  duration
+                  episodes
+                  chapters
+                  volumes
+                  format
+                  status
+                  averageScore
+                  meanScore
+                  description(asHtml: false)
+                  startDate { year month day }
+                  endDate { year month day }
+                  genres
+                  tags { name }
+                  nextAiringEpisode { id airingAt timeUntilAiring episode }
+                }
+              }
+            }
+            """.trimIndent()
+        } else {
+            """
+            query (${'$'}season: MediaSeason, ${'$'}seasonYear: Int, ${'$'}sort: [MediaSort], ${'$'}page: Int, ${'$'}perPage: Int) {
+              Page(page: ${'$'}page, perPage: ${'$'}perPage) {
+                pageInfo {
+                  hasNextPage
+                  total
+                }
+                media(season: ${'$'}season, seasonYear: ${'$'}seasonYear, type: ANIME, sort: ${'$'}sort${if (!includeAdult) ", isAdult: false" else ""}) {
+                  id
+                  idMal
+                  siteUrl
+                  title { romaji english native }
+                  synonyms
+                  coverImage { extraLarge large }
+                  duration
+                  episodes
+                  chapters
+                  volumes
+                  format
+                  status
+                  averageScore
+                  meanScore
+                  description(asHtml: false)
+                  startDate { year month day }
+                  endDate { year month day }
+                  genres
+                  tags { name }
+                  nextAiringEpisode { id airingAt timeUntilAiring episode }
+                }
+              }
+            }
+            """.trimIndent()
+        }
+
+        val jsonBody = JsonObject().apply {
+            addProperty("query", query)
+            val vars = JsonObject().apply {
+                if (hasSearch) {
+                    addProperty("search", search!!.trim())
+                }
+                addProperty("season", normalizedSeason)
+                addProperty("seasonYear", year)
+                val sortArray = JsonArray().apply { add(sort) }
+                add("sort", sortArray)
+                addProperty("page", page)
+                addProperty("perPage", perPage.coerceIn(1, 50))
+            }
+            add("variables", vars)
+        }
+
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val requestBody = jsonBody.toString().toRequestBody(mediaType)
+
+        val request = Request.Builder()
+            .url("https://graphql.anilist.co")
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "application/json")
+            .post(requestBody)
+            .build()
+
+        return try {
+            val response = searchOkHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string() ?: ""
+
+            Log.d(TAG, "AniList seasonal HTTP $code for $normalizedSeason $year (sort=$sort, search=$search, 18+=$includeAdult)")
+
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("AniList HTTP $code: ${bodyString.take(200)}"))
+            }
+
+            val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
+            val dataObj = rootObj?.getSafeJsonObject("data")
+            val pageObj = dataObj?.getSafeJsonObject("Page")
+            val mediaArray = pageObj?.getSafeJsonArray("media")
+                ?: return Result.failure(NotFoundException("No seasonal anime found on AniList for $normalizedSeason $year"))
+
+            val list = mutableListOf<JikanMediaDetails>()
+            for (i in 0 until mediaArray.size()) {
+                val elem = mediaArray.get(i)
+                if (elem.isJsonObject) {
+                    val mediaObj = elem.asJsonObject
+                    val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong
+                    val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull }?.asLong
+                    val fallbackId = idMal ?: aniId
+                    try {
+                        list.add(parseAniListMedia(mediaObj, fallbackMalId = fallbackId))
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error parsing AniList seasonal item at index $i", e)
+                    }
+                }
+            }
+            Result.success(list)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying AniList seasonal for $normalizedSeason $year", e)
+            Result.failure(e)
+        }
+    }
+
+    fun queryJikanSeasonal(
+        year: Int,
+        season: String,
+        search: String? = null,
+        includeAdult: Boolean = false,
+        page: Int = 1,
+        limit: Int = 25,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<JikanMediaDetails>> {
+        val cleanSeason = season.lowercase(Locale.ROOT)
+        val sfwParam = if (!includeAdult) "&sfw=true" else ""
+        val endpoint = "${baseUrl.trimEnd('/')}/seasons/$year/$cleanSeason?page=$page&limit=$limit$sfwParam"
+
+        return try {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json, text/plain, */*")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .get()
+                .build()
+
+            var response = searchOkHttpClient.newCall(request).execute()
+            var code = response.code
+
+            if (code == 429) {
+                Log.w(TAG, "Jikan seasonal rate limited (429) for $cleanSeason $year, waiting 1s...")
+                try {
+                    Thread.sleep(1000)
+                } catch (_: InterruptedException) {}
+                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+                code = response.code
+            }
+
+            val bodyString = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("Jikan seasonal HTTP $code: ${bodyString.take(200)}"))
+            }
+
+            val jsonObject = gson.fromJson(bodyString, JsonObject::class.java)
+            val dataArray = jsonObject?.getSafeJsonArray("data")
+                ?: return Result.success(emptyList())
+
+            val list = mutableListOf<JikanMediaDetails>()
+            for (i in 0 until dataArray.size()) {
+                val elem = dataArray.get(i)
+                if (elem.isJsonObject) {
+                    val dataObj = elem.asJsonObject
+                    val malId = dataObj.get("mal_id")?.takeIf { !it.isJsonNull }?.asLong
+                    if (malId != null) {
+                        try {
+                            list.add(parseJikanData(dataObj, fallbackMalId = malId))
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error parsing Jikan seasonal item at index $i", e)
+                        }
+                    }
+                }
+            }
+
+            val filteredList = if (!search.isNullOrBlank()) {
+                val q = search.trim().lowercase(Locale.ROOT)
+                list.filter { item ->
+                    item.title?.lowercase(Locale.ROOT)?.contains(q) == true ||
+                    item.alternateTitle?.lowercase(Locale.ROOT)?.contains(q) == true
+                }
+            } else {
+                list
+            }
+
+            Result.success(filteredList)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying Jikan seasonal for $cleanSeason $year", e)
+            Result.failure(e)
+        }
+    }
+
+    fun fetchSeasonalAnime(
+        year: Int,
+        season: String,
+        sort: String = "POPULARITY_DESC",
+        search: String? = null,
+        includeAdult: Boolean = false,
+        page: Int = 1,
+        limit: Int = 25
+    ): Result<List<JikanMediaDetails>> {
+        // 1. Try AniList GraphQL first for fast, direct sorted response
+        val anilistRes = queryAniListSeasonal(year, season, sort, search, includeAdult, page, limit)
+        if (anilistRes.isSuccess) {
+            val list = anilistRes.getOrDefault(emptyList())
+            if (list.isNotEmpty()) {
+                Log.d(TAG, "Successfully fetched ${list.size} seasonal anime from AniList for $season $year (search=$search, 18+=$includeAdult)")
+                return anilistRes
+            }
+        }
+
+        // 2. Fall back to Jikan API v4
+        Log.w(TAG, "AniList seasonal lookup failed or empty. Falling back to Jikan for $season $year...")
+        val jikanRes = queryJikanSeasonal(year, season, search, includeAdult, page, limit)
+        if (jikanRes.isSuccess) {
+            val list = jikanRes.getOrDefault(emptyList())
+            val sortedList = when (sort) {
+                "SCORE_DESC" -> list.sortedByDescending { it.externalScore ?: 0f }
+                "START_DATE_DESC" -> list.sortedByDescending { it.airedStartDate ?: 0L }
+                "TITLE_ROMAJI" -> list.sortedBy { it.title?.lowercase(Locale.ROOT) ?: "" }
+                else -> list // Default Jikan MAL popularity
+            }
+            return Result.success(sortedList)
+        }
+
+        return if (anilistRes.isFailure) anilistRes else jikanRes
+    }
 }
 
 class RateLimitException(message: String) : Exception(message)

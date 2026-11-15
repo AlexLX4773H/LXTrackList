@@ -399,14 +399,20 @@ object TmdbApiClient {
     fun searchMoviesMultiple(
         title: String,
         context: Context? = null,
+        year: Int? = null,
+        includeAdult: Boolean = false,
+        page: Int = 1,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> = withFallback(baseUrl) { activeBaseUrl ->
-        searchMoviesMultipleInternal(title, context, activeBaseUrl)
+        searchMoviesMultipleInternal(title, context, year, includeAdult, page, activeBaseUrl)
     }
 
     private fun searchMoviesMultipleInternal(
         title: String,
         context: Context? = null,
+        year: Int? = null,
+        includeAdult: Boolean = false,
+        page: Int = 1,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> {
         val token = TmdbConfig.getAccessToken(context)
@@ -415,7 +421,8 @@ object TmdbApiClient {
         }
 
         val encodedQuery = URLEncoder.encode(title.trim(), "UTF-8")
-        val endpoint = "${baseUrl.trimEnd('/')}/search/movie?query=$encodedQuery&page=1&include_adult=false"
+        val yearParam = if (year != null && year > 1900) "&primary_release_year=$year" else ""
+        val endpoint = "${baseUrl.trimEnd('/')}/search/movie?query=$encodedQuery&page=$page&include_adult=$includeAdult$yearParam"
 
         return try {
             val request = buildRequest(endpoint, token)
@@ -472,14 +479,20 @@ object TmdbApiClient {
     fun searchTvMultiple(
         title: String,
         context: Context? = null,
+        year: Int? = null,
+        includeAdult: Boolean = false,
+        page: Int = 1,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> = withFallback(baseUrl) { activeBaseUrl ->
-        searchTvMultipleInternal(title, context, activeBaseUrl)
+        searchTvMultipleInternal(title, context, year, includeAdult, page, activeBaseUrl)
     }
 
     private fun searchTvMultipleInternal(
         title: String,
         context: Context? = null,
+        year: Int? = null,
+        includeAdult: Boolean = false,
+        page: Int = 1,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> {
         val token = TmdbConfig.getAccessToken(context)
@@ -488,7 +501,8 @@ object TmdbApiClient {
         }
 
         val encodedQuery = URLEncoder.encode(title.trim(), "UTF-8")
-        val endpoint = "${baseUrl.trimEnd('/')}/search/tv?query=$encodedQuery&page=1&include_adult=false"
+        val yearParam = if (year != null && year > 1900) "&first_air_date_year=$year" else ""
+        val endpoint = "${baseUrl.trimEnd('/')}/search/tv?query=$encodedQuery&page=$page&include_adult=$includeAdult$yearParam"
 
         return try {
             val request = buildRequest(endpoint, token)
@@ -538,6 +552,166 @@ object TmdbApiClient {
             Result.success(list)
         } catch (e: Exception) {
             Log.e(TAG, "Exception searching TMDB TV for '$title'", e)
+            Result.failure(e)
+        }
+    }
+
+    fun discoverMovies(
+        year: Int? = null,
+        sortBy: String = "popularity.desc",
+        page: Int = 1,
+        includeAdult: Boolean = false,
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<TmdbSearchResult>> = withFallback(baseUrl) { activeBaseUrl ->
+        discoverMoviesInternal(year, sortBy, page, includeAdult, context, activeBaseUrl)
+    }
+
+    private fun discoverMoviesInternal(
+        year: Int?,
+        sortBy: String,
+        page: Int,
+        includeAdult: Boolean = false,
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<TmdbSearchResult>> {
+        val token = TmdbConfig.getAccessToken(context)
+        if (token.isBlank()) {
+            return Result.failure(TmdbAuthException("TMDB Read Access Token is not configured."))
+        }
+
+        val voteGteParam = if (sortBy.startsWith("vote_average")) "&vote_count.gte=50" else ""
+        val yearParam = if (year != null && year > 1900) "&primary_release_year=$year" else ""
+        val endpoint = "${baseUrl.trimEnd('/')}/discover/movie?sort_by=$sortBy&page=$page&include_adult=$includeAdult$yearParam$voteGteParam"
+
+        return try {
+            val request = buildRequest(endpoint, token)
+            val response = okHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("TMDB discover movies HTTP $code: ${bodyString.take(200)}"))
+            }
+
+            val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
+            val results = rootObj?.getAsJsonArray("results") ?: return Result.success(emptyList())
+
+            val list = mutableListOf<TmdbSearchResult>()
+            for (i in 0 until results.size()) {
+                val item = results.get(i).asJsonObject
+                val id = item.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
+                val itemTitle = item.get("title")?.takeIf { !it.isJsonNull }?.asString
+                    ?: item.get("original_title")?.takeIf { !it.isJsonNull }?.asString ?: "Untitled"
+                val origTitle = item.get("original_title")?.takeIf { !it.isJsonNull }?.asString
+                val posterPath = item.get("poster_path")?.takeIf { !it.isJsonNull }?.asString
+                val backdropPath = item.get("backdrop_path")?.takeIf { !it.isJsonNull }?.asString
+                val posterUrl = buildImageUrl(posterPath) ?: buildImageUrl(backdropPath)
+                val backdropUrl = buildImageUrl(backdropPath, BACKDROP_SIZE)
+                val releaseDateStr = item.get("release_date")?.takeIf { !it.isJsonNull }?.asString
+                val releaseDate = parseDateString(releaseDateStr)
+                val releaseYear = releaseDateStr?.take(4)?.takeIf { it.length == 4 && it.all { c -> c.isDigit() } }
+                val voteAvg = item.get("vote_average")?.takeIf { !it.isJsonNull }?.asFloat?.takeIf { it > 0f }
+                val overview = item.get("overview")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+
+                list.add(
+                    TmdbSearchResult(
+                        tmdbId = id,
+                        title = itemTitle,
+                        originalTitle = origTitle,
+                        posterUrl = posterUrl,
+                        backdropUrl = backdropUrl,
+                        overview = overview,
+                        releaseDate = releaseDate,
+                        releaseYear = releaseYear,
+                        voteAverage = voteAvg,
+                        isMovie = true
+                    )
+                )
+            }
+            Result.success(list)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception discovering TMDB movies (year=$year, sort=$sortBy)", e)
+            Result.failure(e)
+        }
+    }
+
+    fun discoverTvShows(
+        year: Int? = null,
+        sortBy: String = "popularity.desc",
+        page: Int = 1,
+        includeAdult: Boolean = false,
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<TmdbSearchResult>> = withFallback(baseUrl) { activeBaseUrl ->
+        discoverTvShowsInternal(year, sortBy, page, includeAdult, context, activeBaseUrl)
+    }
+
+    private fun discoverTvShowsInternal(
+        year: Int?,
+        sortBy: String,
+        page: Int,
+        includeAdult: Boolean = false,
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<TmdbSearchResult>> {
+        val token = TmdbConfig.getAccessToken(context)
+        if (token.isBlank()) {
+            return Result.failure(TmdbAuthException("TMDB Read Access Token is not configured."))
+        }
+
+        val voteGteParam = if (sortBy.startsWith("vote_average")) "&vote_count.gte=20" else ""
+        val yearParam = if (year != null && year > 1900) "&first_air_date_year=$year" else ""
+        val endpoint = "${baseUrl.trimEnd('/')}/discover/tv?sort_by=$sortBy&page=$page&include_adult=$includeAdult$yearParam$voteGteParam"
+
+        return try {
+            val request = buildRequest(endpoint, token)
+            val response = okHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("TMDB discover TV HTTP $code: ${bodyString.take(200)}"))
+            }
+
+            val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
+            val results = rootObj?.getAsJsonArray("results") ?: return Result.success(emptyList())
+
+            val list = mutableListOf<TmdbSearchResult>()
+            for (i in 0 until results.size()) {
+                val item = results.get(i).asJsonObject
+                val id = item.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
+                val itemTitle = item.get("name")?.takeIf { !it.isJsonNull }?.asString
+                    ?: item.get("original_name")?.takeIf { !it.isJsonNull }?.asString ?: "Untitled"
+                val origTitle = item.get("original_name")?.takeIf { !it.isJsonNull }?.asString
+                val posterPath = item.get("poster_path")?.takeIf { !it.isJsonNull }?.asString
+                val backdropPath = item.get("backdrop_path")?.takeIf { !it.isJsonNull }?.asString
+                val posterUrl = buildImageUrl(posterPath) ?: buildImageUrl(backdropPath)
+                val backdropUrl = buildImageUrl(backdropPath, BACKDROP_SIZE)
+                val firstAirDateStr = item.get("first_air_date")?.takeIf { !it.isJsonNull }?.asString
+                val firstAirDate = parseDateString(firstAirDateStr)
+                val releaseYear = firstAirDateStr?.take(4)?.takeIf { it.length == 4 && it.all { c -> c.isDigit() } }
+                val voteAvg = item.get("vote_average")?.takeIf { !it.isJsonNull }?.asFloat?.takeIf { it > 0f }
+                val overview = item.get("overview")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+
+                list.add(
+                    TmdbSearchResult(
+                        tmdbId = id,
+                        title = itemTitle,
+                        originalTitle = origTitle,
+                        posterUrl = posterUrl,
+                        backdropUrl = backdropUrl,
+                        overview = overview,
+                        releaseDate = firstAirDate,
+                        releaseYear = releaseYear,
+                        voteAverage = voteAvg,
+                        isMovie = false
+                    )
+                )
+            }
+            Result.success(list)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception discovering TMDB TV (year=$year, sort=$sortBy)", e)
             Result.failure(e)
         }
     }

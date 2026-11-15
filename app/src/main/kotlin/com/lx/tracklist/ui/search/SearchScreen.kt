@@ -42,8 +42,10 @@ import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tv
@@ -142,12 +144,33 @@ fun SearchScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var itemToAdd by remember { mutableStateOf<SearchResultItem?>(null) }
     var previewItem by remember { mutableStateOf<SearchResultItem?>(null) }
+    var showDiscoverySheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.userAddedMessage) {
         state.userAddedMessage?.let { msg ->
             snackbarHostState.showSnackbar(msg)
             viewModel.clearAddedMessage()
         }
+    }
+
+    if (showDiscoverySheet) {
+        SearchDiscoverySheet(
+            category = state.selectedCategory,
+            activeFilter = state.activeDiscoveryFilter,
+            onDismiss = { showDiscoverySheet = false },
+            onApplyAnime = { season, year, sort, includeAdult ->
+                viewModel.applyAnimeSeasonalFilter(season, year, sort, includeAdult)
+            },
+            onApplyMovie = { year, sort, includeAdult ->
+                viewModel.applyMovieDiscoveryFilter(year, sort, includeAdult, context)
+            },
+            onApplyTv = { year, sort, includeAdult ->
+                viewModel.applyTvDiscoveryFilter(year, sort, includeAdult, context)
+            },
+            onResetFilter = {
+                viewModel.clearDiscoveryFilter()
+            }
+        )
     }
 
     if (itemToAdd != null) {
@@ -203,6 +226,34 @@ fun SearchScreen(
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = LXTextPrimary
                     )
+                },
+                actions = {
+                    val isDiscoverSupported = state.selectedCategory in listOf(
+                        SearchCategory.ANIME,
+                        SearchCategory.MOVIES,
+                        SearchCategory.TV_SHOWS
+                    )
+                    if (isDiscoverSupported) {
+                        IconButton(
+                            onClick = { showDiscoverySheet = true }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Menu,
+                                    contentDescription = "Discovery Options",
+                                    tint = if (state.activeDiscoveryFilter != null) LXPrimaryGreen else LXTextPrimary
+                                )
+                                if (state.activeDiscoveryFilter != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .align(Alignment.TopEnd)
+                                            .background(LXPrimaryGreen, CircleShape)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = if (ThemeManager.effectiveBackgroundImage != null) Color.Transparent else LXBackgroundBlack)
             )
@@ -446,69 +497,118 @@ fun SearchScreen(
                 }
             }
 
-            // TMDB / Jikan Attribution Strip
-            if (state.selectedCategory == SearchCategory.MOVIES || state.selectedCategory == SearchCategory.TV_SHOWS) {
+            // TMDB / Jikan Attribution Strip (hidden when discovery results are active)
+            if (state.activeDiscoveryFilter == null) {
+                if (state.selectedCategory == SearchCategory.MOVIES || state.selectedCategory == SearchCategory.TV_SHOWS) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceBlack)
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_tmdb_logo),
+                            contentDescription = "TMDB",
+                            modifier = Modifier.height(16.dp).width(24.dp)
+                        )
+                        Text(
+                            text = TmdbConfig.ATTRIBUTION_TEXT,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = LXTextSecondary.copy(alpha = 0.75f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                } else {
+                    val hasMangaDex = state.results.any { it.externalSource == "MangaDex" }
+                    val isAniListBackup = state.results.isNotEmpty() && state.results.all {
+                        it.rawJikanDetails?.sourceProvider?.contains("AniList", ignoreCase = true) == true
+                    }
+                    val attributionText = when {
+                        state.selectedCategory == SearchCategory.BOOKS -> "Results from Google Books (Open Library fallback)"
+                        state.selectedCategory == SearchCategory.LIGHT_NOVELS -> "Results from AniList (Jikan/MAL fallback)"
+                        hasMangaDex -> "Results from MangaDex (with MAL/AniList backup)"
+                        isAniListBackup -> "Results fetched from AniList (MAL backup)"
+                        state.selectedCategory == SearchCategory.MANHWA -> "Results fetched from MangaDex / AniList"
+                        else -> "Results fetched from MyAnimeList"
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceBlack)
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Explore,
+                            contentDescription = null,
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = attributionText,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = LXTextSecondary.copy(alpha = 0.75f)
+                        )
+                    }
+                }
+            }
+
+            // Active Discovery Filter Banner
+            state.activeDiscoveryFilter?.let { filter ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(LXSurfaceBlack)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                        .border(1.dp, LXPrimaryGreen.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Image(
-                        painter = painterResource(R.drawable.ic_tmdb_logo),
-                        contentDescription = "TMDB",
-                        modifier = Modifier.height(16.dp).width(24.dp)
-                    )
-                    Text(
-                        text = TmdbConfig.ATTRIBUTION_TEXT,
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = LXTextSecondary.copy(alpha = 0.75f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            } else {
-                val hasMangaDex = state.results.any { it.externalSource == "MangaDex" }
-                val isAniListBackup = state.results.isNotEmpty() && state.results.all {
-                    it.rawJikanDetails?.sourceProvider?.contains("AniList", ignoreCase = true) == true
-                }
-                val attributionText = when {
-                    state.selectedCategory == SearchCategory.BOOKS -> "Results from Google Books (Open Library fallback)"
-                    state.selectedCategory == SearchCategory.LIGHT_NOVELS -> "Results from AniList (Jikan/MAL fallback)"
-                    hasMangaDex -> "Results from MangaDex (with MAL/AniList backup)"
-                    isAniListBackup -> "Results fetched from AniList (MAL backup)"
-                    state.selectedCategory == SearchCategory.MANHWA -> "Results fetched from MangaDex / AniList"
-                    else -> "Results fetched from MyAnimeList"
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(LXSurfaceBlack)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Explore,
-                        contentDescription = null,
-                        tint = LXPrimaryGreen,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = attributionText,
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = LXTextSecondary.copy(alpha = 0.75f)
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Explore,
+                            contentDescription = null,
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = filter.label,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = LXPrimaryGreen,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    IconButton(
+                        onClick = { viewModel.clearDiscoveryFilter() },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear Filter",
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
 
             // Results List / Empty States
+            val activeDiscovery = state.activeDiscoveryFilter
             Box(modifier = Modifier.fillMaxSize()) {
                 if (state.isLoading && state.results.isEmpty()) {
                     Column(
@@ -521,7 +621,11 @@ fun SearchScreen(
                         CircularProgressIndicator(color = LXPrimaryGreen)
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Searching ${state.selectedCategory.displayName} on ${state.selectedCategory.sourceName}...",
+                            text = if (activeDiscovery != null) {
+                                "Discovering ${activeDiscovery.label}..."
+                            } else {
+                                "Searching ${state.selectedCategory.displayName} on ${state.selectedCategory.sourceName}..."
+                            },
                             color = LXTextSecondary,
                             style = MaterialTheme.typography.bodyMedium
                         )
@@ -547,7 +651,9 @@ fun SearchScreen(
                         Spacer(modifier = Modifier.height(12.dp))
                         val cleanErrorMessage = state.errorMessage?.takeIf { !it.contains("cancel", ignoreCase = true) }
                         Text(
-                            text = if (state.query.isBlank()) {
+                            text = if (activeDiscovery != null) {
+                                cleanErrorMessage ?: "No titles found for ${activeDiscovery.label}"
+                            } else if (state.query.isBlank()) {
                                 "Search ${state.selectedCategory.displayName} on ${state.selectedCategory.sourceName}"
                             } else {
                                 cleanErrorMessage ?: "No results found for '${state.query}'"
@@ -558,8 +664,13 @@ fun SearchScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if (state.query.isBlank()) {
-                                "Type at least 2 characters to discover and add entries directly to your library."
+                            text = if (activeDiscovery != null) {
+                                "Try selecting another season, year, or sort order from the menu (☰)."
+                            } else if (state.query.isBlank()) {
+                                val seasonalHint = if (state.selectedCategory in listOf(SearchCategory.ANIME, SearchCategory.MOVIES, SearchCategory.TV_SHOWS)) {
+                                    " Tap ☰ at the top left to explore seasonal & year lists."
+                                } else ""
+                                "Type at least 2 characters to discover and add entries directly to your library.$seasonalHint"
                             } else {
                                 "Try searching by alternate title, romaji, or English name."
                             },
@@ -592,6 +703,43 @@ fun SearchScreen(
                                     previewItem = item
                                 }
                             )
+                        }
+
+                        if (state.canLoadMore) {
+                            item(key = "load_more_footer") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (state.isLoadingMore) {
+                                        CircularProgressIndicator(
+                                            color = LXPrimaryGreen,
+                                            modifier = Modifier.size(28.dp),
+                                            strokeWidth = 2.5.dp
+                                        )
+                                    } else {
+                                        OutlinedButton(
+                                            onClick = { viewModel.loadMore(context) },
+                                            shape = RoundedCornerShape(8.dp),
+                                            border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(44.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Refresh,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Load More Results", fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
