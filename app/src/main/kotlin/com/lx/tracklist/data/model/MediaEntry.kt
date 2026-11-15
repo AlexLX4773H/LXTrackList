@@ -13,6 +13,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.TimeUnit
 
 @Entity(
     tableName = "media_entries",
@@ -83,6 +84,8 @@ data class MediaEntry(
     val episodeLengthMinutes: Int? = null,
     val currentTimeMinutes: Int? = null,
     val isAiring: Boolean = false,
+    val broadcastTime: String? = null,
+    val nextAiringEpoch: Long? = null,
 
     // Reading fields (Manga, Manhwa, Book)
     val currentVolumes: Int = 0,
@@ -593,7 +596,132 @@ data class MediaEntry(
         return if (finishStr.isNotBlank()) "$startStr - $finishStr" else startStr
     }
 
+    fun getEffectiveAiredEpisodes(): Int {
+        if (airedEpisodes > 0) return airedEpisodes
+        if (isAiring && mediaType == MediaType.ANIME && airedStartDate != null && airedStartDate > 0L) {
+            val now = System.currentTimeMillis()
+            if (now < airedStartDate) return 0
+            val weeks = ((now - airedStartDate) / (7L * 24 * 60 * 60 * 1000L)).toInt() + 1
+            return if (totalEpisodes > 0) minOf(weeks, totalEpisodes) else weeks
+        }
+        return airedEpisodes
+    }
+
+    fun getComputedNextAiringEpoch(): Long? {
+        if (mediaType != MediaType.ANIME || !isAiring) return null
+        val now = System.currentTimeMillis()
+
+        // 1. If nextAiringEpoch is explicitly available, use it (roll forward if elapsed)
+        if (nextAiringEpoch != null && nextAiringEpoch > 0L) {
+            var epoch = nextAiringEpoch
+            while (epoch <= now) {
+                epoch += 7L * 24 * 60 * 60 * 1000L
+            }
+            return epoch
+        }
+
+        // 2. If broadcastTime string is available (e.g. "Sundays at 00:00 (JST)")
+        if (!broadcastTime.isNullOrBlank()) {
+            val parsed = parseBroadcastToNextEpoch(broadcastTime, now)
+            if (parsed != null) return parsed
+        }
+
+        // 3. Fallback: project from airedStartDate
+        if (airedStartDate != null && airedStartDate > 0L) {
+            var epoch = airedStartDate
+            while (epoch <= now) {
+                epoch += 7L * 24 * 60 * 60 * 1000L
+            }
+            return epoch
+        }
+
+        return null
+    }
+
+    fun formatAiringSchedule(short: Boolean = false, timeZone: TimeZone = TimeZone.getDefault()): String? {
+        if (mediaType != MediaType.ANIME || !isAiring) return null
+        val nextEpoch = getComputedNextAiringEpoch() ?: return null
+        val pattern = if (short) "EEE HH:mm z" else "EEEE 'at' HH:mm z"
+        val sdf = SimpleDateFormat(pattern, Locale.getDefault()).apply {
+            this.timeZone = timeZone
+        }
+        return sdf.format(Date(nextEpoch))
+    }
+
+    fun getTimeUntilNextEpisode(prefixIn: Boolean = true): String? {
+        if (mediaType != MediaType.ANIME || !isAiring) return null
+        val nextEpoch = getComputedNextAiringEpoch() ?: return null
+        val now = System.currentTimeMillis()
+        val diff = nextEpoch - now
+        if (diff <= 0) return "Airing now"
+
+        val totalHours = TimeUnit.MILLISECONDS.toHours(diff)
+        val days = totalHours / 24
+        val hours = totalHours % 24
+        val timeStr = when {
+            days > 0 && hours > 0 -> "${days}d ${hours}h"
+            days > 0 -> "${days}d"
+            hours > 0 -> "${hours}h"
+            else -> {
+                val mins = TimeUnit.MILLISECONDS.toMinutes(diff).coerceAtLeast(1)
+                "${mins}m"
+            }
+        }
+        return if (prefixIn) "In $timeStr" else timeStr
+    }
+
+    fun formatAiringCardText(): String? {
+        if (mediaType != MediaType.ANIME || !isAiring) return null
+        val schedule = formatAiringSchedule(short = true)
+        val countdown = getTimeUntilNextEpisode(prefixIn = true)
+        return when {
+            !schedule.isNullOrBlank() && !countdown.isNullOrBlank() -> "$schedule • $countdown"
+            !countdown.isNullOrBlank() -> countdown
+            !schedule.isNullOrBlank() -> schedule
+            else -> null
+        }
+    }
+
     companion object {
+        fun parseBroadcastToNextEpoch(broadcastStr: String, now: Long = System.currentTimeMillis()): Long? {
+            if (broadcastStr.isBlank() || broadcastStr.equals("Unknown", ignoreCase = true)) return null
+            val regex = Regex("""([A-Za-z]+)\s+at\s+(\d{1,2}):(\d{2})""", RegexOption.IGNORE_CASE)
+            val match = regex.find(broadcastStr) ?: return null
+            val dayStr = match.groupValues[1].lowercase(Locale.ROOT)
+            val hour = match.groupValues[2].toIntOrNull() ?: return null
+            val min = match.groupValues[3].toIntOrNull() ?: return null
+
+            val dayOfWeek = when {
+                dayStr.startsWith("sun") -> Calendar.SUNDAY
+                dayStr.startsWith("mon") -> Calendar.MONDAY
+                dayStr.startsWith("tue") -> Calendar.TUESDAY
+                dayStr.startsWith("wed") -> Calendar.WEDNESDAY
+                dayStr.startsWith("thu") -> Calendar.THURSDAY
+                dayStr.startsWith("fri") -> Calendar.FRIDAY
+                dayStr.startsWith("sat") -> Calendar.SATURDAY
+                else -> return null
+            }
+
+            val tz = if (broadcastStr.contains("JST", ignoreCase = true) || broadcastStr.contains("Tokyo", ignoreCase = true)) {
+                TimeZone.getTimeZone("Asia/Tokyo")
+            } else {
+                TimeZone.getTimeZone("Asia/Tokyo")
+            }
+
+            val cal = Calendar.getInstance(tz)
+            cal.timeInMillis = now
+            cal.set(Calendar.HOUR_OF_DAY, hour)
+            cal.set(Calendar.MINUTE, min)
+            cal.set(Calendar.SECOND, 0)
+            cal.set(Calendar.MILLISECOND, 0)
+
+            var attempts = 0
+            while ((cal.get(Calendar.DAY_OF_WEEK) != dayOfWeek || cal.timeInMillis <= now) && attempts < 14) {
+                cal.add(Calendar.DAY_OF_YEAR, 1)
+                attempts++
+            }
+            return cal.timeInMillis
+        }
         fun formatAlternateTitles(titles: List<String>): String? {
             val cleaned = titles.map { it.trim() }.filter { it.isNotBlank() }
             return if (cleaned.isEmpty()) null else cleaned.joinToString("\n")

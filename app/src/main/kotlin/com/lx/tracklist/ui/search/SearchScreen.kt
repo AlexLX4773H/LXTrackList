@@ -545,11 +545,12 @@ fun SearchScreen(
                             modifier = Modifier.size(56.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
+                        val cleanErrorMessage = state.errorMessage?.takeIf { !it.contains("cancel", ignoreCase = true) }
                         Text(
                             text = if (state.query.isBlank()) {
                                 "Search ${state.selectedCategory.displayName} on ${state.selectedCategory.sourceName}"
                             } else {
-                                state.errorMessage ?: "No results found for '${state.query}'"
+                                cleanErrorMessage ?: "No results found for '${state.query}'"
                             },
                             color = LXTextSecondary,
                             style = MaterialTheme.typography.titleMedium,

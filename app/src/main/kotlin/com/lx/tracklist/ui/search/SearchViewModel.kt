@@ -1,6 +1,7 @@
 package com.lx.tracklist.ui.search
 
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -18,10 +19,10 @@ import com.lx.tracklist.data.remote.MangaDexApiClient
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.TmdbSearchResult
 import com.lx.tracklist.data.repository.MediaRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -30,7 +31,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 
 enum class SearchCategory(val displayName: String, val sourceName: String) {
@@ -86,6 +89,7 @@ class SearchViewModel(
 
     private val _uiState = MutableStateFlow(SearchUiState())
     private var searchJob: Job? = null
+    private var activeSearchKey: String? = null
 
     val uiState: StateFlow<SearchUiState> = combine(
         _uiState,
@@ -130,23 +134,38 @@ class SearchViewModel(
     )
 
     fun onQueryChanged(newQuery: String, context: Context? = null) {
+        val oldQuery = _uiState.value.query
         _uiState.update { it.copy(query = newQuery) }
-        searchJob?.cancel()
-        if (newQuery.trim().length >= 2) {
-            searchJob = viewModelScope.launch {
-                delay(300)
-                executeSearch(newQuery.trim(), _uiState.value.selectedCategory, context)
+        val trimmed = newQuery.trim()
+        if (trimmed.length < 2) {
+            searchJob?.cancel()
+            activeSearchKey = null
+            _uiState.update {
+                it.copy(
+                    results = emptyList(),
+                    isLoading = false,
+                    errorMessage = null
+                )
             }
-        } else if (newQuery.isBlank()) {
-            _uiState.update { it.copy(results = emptyList(), isLoading = false, errorMessage = null) }
+            return
+        }
+        if (trimmed == oldQuery.trim() && searchJob?.isActive == true) {
+            return
+        }
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            delay(300)
+            executeSearch(trimmed, _uiState.value.selectedCategory, context)
         }
     }
 
     fun onCategorySelected(category: SearchCategory, context: Context? = null) {
-        _uiState.update { it.copy(selectedCategory = category) }
+        if (_uiState.value.selectedCategory == category) return
+        searchJob?.cancel()
+        activeSearchKey = null
+        _uiState.update { it.copy(selectedCategory = category, results = emptyList(), errorMessage = null) }
         val currentQuery = _uiState.value.query.trim()
         if (currentQuery.length >= 2) {
-            searchJob?.cancel()
             searchJob = viewModelScope.launch {
                 executeSearch(currentQuery, category, context)
             }
@@ -155,10 +174,16 @@ class SearchViewModel(
 
     fun submitSearch(context: Context? = null) {
         val currentQuery = _uiState.value.query.trim()
-        if (currentQuery.isNotBlank()) {
+        val currentCategory = _uiState.value.selectedCategory
+        if (currentQuery.length >= 2) {
+            val searchKey = "$currentCategory:$currentQuery"
+            // If the exact same search is already actively executing, let it finish instead of cancelling & restarting
+            if (searchJob?.isActive == true && activeSearchKey == searchKey && _uiState.value.isLoading) {
+                return
+            }
             searchJob?.cancel()
             searchJob = viewModelScope.launch {
-                executeSearch(currentQuery, _uiState.value.selectedCategory, context)
+                executeSearch(currentQuery, currentCategory, context)
             }
         }
     }
@@ -168,18 +193,56 @@ class SearchViewModel(
         category: SearchCategory,
         context: Context?
     ) {
+        val searchKey = "$category:$query"
+        activeSearchKey = searchKey
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
         try {
             val results = withContext(Dispatchers.IO) {
                 when (category) {
                     SearchCategory.ANIME -> {
-                        coroutineScope {
-                            val jikanDeferred = async { JikanApiClient.searchJikanDirect(query, isManga = false, limit = 20) }
-                            val anilistDeferred = async { JikanApiClient.queryAniListMultiple(query, isManga = false, limit = 20) }
+                        supervisorScope {
+                            val jikanDeferred = async {
+                                try {
+                                    JikanApiClient.searchJikanDirect(query, isManga = false, limit = 20)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Result.failure(e)
+                                }
+                            }
+                            val anilistDeferred = async {
+                                try {
+                                    JikanApiClient.queryAniListMultiple(query, isManga = false, limit = 20)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Result.failure(e)
+                                }
+                            }
 
-                            val jikanRes = jikanDeferred.await()
-                            val anilistRes = anilistDeferred.await()
+                            // Wait up to 4.5s for Jikan; if Jikan hangs/slows down, fall back to AniList immediately
+                            val jikanRes = try {
+                                withTimeoutOrNull(4500L) {
+                                    jikanDeferred.await()
+                                } ?: run {
+                                    Log.w("SearchViewModel", "Jikan anime search for '$query' exceeded 4.5s; falling back to AniList")
+                                    jikanDeferred.cancel()
+                                    Result.failure(Exception("Jikan search timed out"))
+                                }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Result.failure(e)
+                            }
+
+                            val anilistRes = try {
+                                anilistDeferred.await()
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Result.failure(e)
+                            }
 
                             val jikanList = jikanRes.getOrDefault(emptyList())
                             val anilistList = anilistRes.getOrDefault(emptyList())
@@ -222,14 +285,63 @@ class SearchViewModel(
                         }
                     }
                     SearchCategory.MANGA -> {
-                        coroutineScope {
-                            val mangaDexDeferred = async { MangaDexApiClient.searchMangaMultiple(query, isManhwa = false, limit = 20) }
-                            val jikanDeferred = async { JikanApiClient.searchJikanDirect(query, isManga = true, limit = 20) }
-                            val anilistDeferred = async { JikanApiClient.queryAniListMultiple(query, isManga = true, limit = 20) }
+                        supervisorScope {
+                            val mangaDexDeferred = async {
+                                try {
+                                    MangaDexApiClient.searchMangaMultiple(query, isManhwa = false, limit = 20)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Result.failure(e)
+                                }
+                            }
+                            val jikanDeferred = async {
+                                try {
+                                    JikanApiClient.searchJikanDirect(query, isManga = true, limit = 20)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Result.failure(e)
+                                }
+                            }
+                            val anilistDeferred = async {
+                                try {
+                                    JikanApiClient.queryAniListMultiple(query, isManga = true, limit = 20)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Result.failure(e)
+                                }
+                            }
 
-                            val mangaDexRes = mangaDexDeferred.await()
-                            val jikanRes = jikanDeferred.await()
-                            val anilistRes = anilistDeferred.await()
+                            val mangaDexRes = try {
+                                mangaDexDeferred.await()
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Result.failure(e)
+                            }
+
+                            val jikanRes = try {
+                                withTimeoutOrNull(4500L) {
+                                    jikanDeferred.await()
+                                } ?: run {
+                                    jikanDeferred.cancel()
+                                    Result.failure(Exception("Jikan search timed out"))
+                                }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Result.failure(e)
+                            }
+
+                            val anilistRes = try {
+                                anilistDeferred.await()
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Result.failure(e)
+                            }
 
                             val mangaDexList = mangaDexRes.getOrDefault(emptyList())
                             val jikanList = jikanRes.getOrDefault(emptyList())
@@ -293,12 +405,41 @@ class SearchViewModel(
                         }
                     }
                     SearchCategory.MANHWA -> {
-                        coroutineScope {
-                            val mangaDexDeferred = async { MangaDexApiClient.searchMangaMultiple(query, isManhwa = true, limit = 20) }
-                            val anilistDeferred = async { JikanApiClient.queryAniListMultiple(query, isManga = true, subType = "manhwa", limit = 20) }
+                        supervisorScope {
+                            val mangaDexDeferred = async {
+                                try {
+                                    MangaDexApiClient.searchMangaMultiple(query, isManhwa = true, limit = 20)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Result.failure(e)
+                                }
+                            }
+                            val anilistDeferred = async {
+                                try {
+                                    JikanApiClient.queryAniListMultiple(query, isManga = true, subType = "manhwa", limit = 20)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Result.failure(e)
+                                }
+                            }
 
-                            val mangaDexRes = mangaDexDeferred.await()
-                            val anilistRes = anilistDeferred.await()
+                            val mangaDexRes = try {
+                                mangaDexDeferred.await()
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Result.failure(e)
+                            }
+
+                            val anilistRes = try {
+                                anilistDeferred.await()
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Result.failure(e)
+                            }
 
                             val mangaDexList = mangaDexRes.getOrDefault(emptyList())
                             val anilistList = anilistRes.getOrDefault(emptyList())
@@ -316,7 +457,15 @@ class SearchViewModel(
                             }
 
                             if (combined.isEmpty()) {
-                                val jikanRes = JikanApiClient.searchJikanDirect(query, isManga = true, subType = "manhwa", limit = 20)
+                                val jikanRes = try {
+                                    withTimeoutOrNull(4500L) {
+                                        JikanApiClient.searchJikanDirect(query, isManga = true, subType = "manhwa", limit = 20)
+                                    } ?: Result.failure(Exception("Jikan search timed out"))
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Result.failure(e)
+                                }
                                 combined.addAll(jikanRes.getOrDefault(emptyList()))
                             }
 
@@ -448,19 +597,36 @@ class SearchViewModel(
                 }
             }
 
-            _uiState.update {
-                it.copy(
-                    results = results,
-                    isLoading = false,
-                    errorMessage = if (results.isEmpty()) "No results found for '$query'" else null
-                )
+            // Guard against stale results: only update UI if query and category still match current state
+            if (_uiState.value.query.trim() == query && _uiState.value.selectedCategory == category) {
+                _uiState.update {
+                    it.copy(
+                        results = results,
+                        isLoading = false,
+                        errorMessage = if (results.isEmpty()) "No results found for '$query'" else null
+                    )
+                }
             }
+        } catch (e: CancellationException) {
+            // Rethrow so coroutine cancellation behaves properly.
+            // Do NOT overwrite UI state with cancellation errors or set isLoading = false.
+            throw e
         } catch (e: Exception) {
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    errorMessage = e.message ?: "An error occurred while searching."
-                )
+            if (_uiState.value.query.trim() == query && _uiState.value.selectedCategory == category) {
+                val cleanMsg = e.message?.takeIf { msg ->
+                    msg.isNotBlank() && !msg.contains("cancel", ignoreCase = true)
+                } ?: "An error occurred while searching."
+                _uiState.update {
+                    it.copy(
+                        results = emptyList(),
+                        isLoading = false,
+                        errorMessage = cleanMsg
+                    )
+                }
+            }
+        } finally {
+            if (activeSearchKey == searchKey) {
+                activeSearchKey = null
             }
         }
     }
@@ -473,99 +639,108 @@ class SearchViewModel(
         context: Context? = null
     ) {
         viewModelScope.launch(Dispatchers.IO) {
-            val targetUserId = repository.activeUser.value.id
-            val entry: MediaEntry = if (item.externalSource == "TMDB") {
-                val tmdbId = item.externalId.toLongOrNull() ?: 0L
-                if (item.mediaType == MediaType.MOVIE) {
-                    val fullDetails = TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()
-                    MediaEntry(
-                        userId = targetUserId,
-                        title = fullDetails?.title ?: item.title,
-                        alternateTitle = fullDetails?.alternateTitle ?: item.alternateTitle,
-                        mediaType = MediaType.MOVIE,
-                        status = status,
-                        customCategory = customCategory,
-                        subCategory = subCategory,
-                        externalId = item.externalId,
-                        externalSource = "TMDB",
-                        externalScore = fullDetails?.externalScore ?: item.score,
-                        externalScoreSource = "TMDB",
-                        coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
-                        durationMinutes = fullDetails?.durationMinutes ?: item.durationMinutes,
-                        tags = fullDetails?.tags,
-                        description = fullDetails?.synopsis ?: item.synopsis,
-                        airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate
-                    )
+            try {
+                val targetUserId = repository.activeUser.value.id
+                val entry: MediaEntry = if (item.externalSource == "TMDB") {
+                    val tmdbId = item.externalId.toLongOrNull() ?: 0L
+                    if (item.mediaType == MediaType.MOVIE) {
+                        val fullDetails = TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()
+                        MediaEntry(
+                            userId = targetUserId,
+                            title = fullDetails?.title ?: item.title,
+                            alternateTitle = fullDetails?.alternateTitle ?: item.alternateTitle,
+                            mediaType = MediaType.MOVIE,
+                            status = status,
+                            customCategory = customCategory,
+                            subCategory = subCategory,
+                            externalId = item.externalId,
+                            externalSource = "TMDB",
+                            externalScore = fullDetails?.externalScore ?: item.score,
+                            externalScoreSource = "TMDB",
+                            coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
+                            durationMinutes = fullDetails?.durationMinutes ?: item.durationMinutes,
+                            tags = fullDetails?.tags,
+                            description = fullDetails?.synopsis ?: item.synopsis,
+                            airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate
+                        )
+                    } else {
+                        val fullDetails = TmdbApiClient.fetchTvDetails(tmdbId, context).getOrNull()
+                        MediaEntry(
+                            userId = targetUserId,
+                            title = fullDetails?.title ?: item.title,
+                            alternateTitle = fullDetails?.alternateTitle ?: item.alternateTitle,
+                            mediaType = MediaType.SHOW,
+                            status = status,
+                            customCategory = customCategory,
+                            subCategory = subCategory,
+                            externalId = item.externalId,
+                            externalSource = "TMDB",
+                            externalScore = fullDetails?.externalScore ?: item.score,
+                            externalScoreSource = "TMDB",
+                            coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
+                            totalEpisodes = fullDetails?.totalEpisodes ?: 0,
+                            totalSeasons = fullDetails?.totalSeasons ?: 1,
+                            seasonEpisodesJson = fullDetails?.seasonEpisodes?.let { MediaEntry.formatSeasonEpisodes(it) },
+                            episodeLengthMinutes = fullDetails?.durationMinutes,
+                            tags = fullDetails?.tags,
+                            description = fullDetails?.synopsis ?: item.synopsis,
+                            airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate,
+                            isAiring = fullDetails?.isAiring ?: false
+                        )
+                    }
                 } else {
-                    val fullDetails = TmdbApiClient.fetchTvDetails(tmdbId, context).getOrNull()
+                    // MAL / Jikan / Book / Light Novel item
+                    val details = item.rawJikanDetails
+                    val isVideo = item.mediaType == MediaType.ANIME
+                    val isBook = item.mediaType == MediaType.BOOK
+                    val unit = when {
+                        (details?.totalPages ?: 0) > 0 -> TrackingUnit.PAGES
+                        (details?.totalVolumes ?: 0) > 0 -> TrackingUnit.VOLUMES
+                        (details?.totalChapters ?: 0) > 0 -> TrackingUnit.CHAPTERS
+                        isBook -> TrackingUnit.PAGES
+                        else -> TrackingUnit.CHAPTERS
+                    }
+                    val startEpoch = details?.airedStartDate
+                    val endEpoch = details?.airedEndDate ?: if (isBook) startEpoch else null
                     MediaEntry(
                         userId = targetUserId,
-                        title = fullDetails?.title ?: item.title,
-                        alternateTitle = fullDetails?.alternateTitle ?: item.alternateTitle,
-                        mediaType = MediaType.SHOW,
+                        title = details?.title ?: item.title,
+                        alternateTitle = details?.alternateTitle ?: item.alternateTitle,
+                        mediaType = item.mediaType,
                         status = status,
                         customCategory = customCategory,
                         subCategory = subCategory,
                         externalId = item.externalId,
-                        externalSource = "TMDB",
-                        externalScore = fullDetails?.externalScore ?: item.score,
-                        externalScoreSource = "TMDB",
-                        coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
-                        totalEpisodes = fullDetails?.totalEpisodes ?: 0,
-                        totalSeasons = fullDetails?.totalSeasons ?: 1,
-                        seasonEpisodesJson = fullDetails?.seasonEpisodes?.let { MediaEntry.formatSeasonEpisodes(it) },
-                        episodeLengthMinutes = fullDetails?.durationMinutes,
-                        tags = fullDetails?.tags,
-                        description = fullDetails?.synopsis ?: item.synopsis,
-                        airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate,
-                        isAiring = fullDetails?.isAiring ?: false
+                        externalSource = item.externalSource,
+                        externalScore = details?.externalScore ?: item.score,
+                        externalScoreSource = details?.externalScoreSource ?: item.externalSource,
+                        coverImageUri = details?.posterUrl ?: item.posterUrl,
+                        totalEpisodes = if (isVideo) (details?.totalEpisodes ?: item.totalUnits ?: 0) else 0,
+                        airedEpisodes = if (isVideo) (details?.airedEpisodes ?: 0) else 0,
+                        broadcastTime = if (isVideo) details?.broadcastTime else null,
+                        nextAiringEpoch = if (isVideo) details?.nextAiringEpoch else null,
+                        totalChapters = if (!isVideo && !isBook) (details?.totalChapters ?: item.totalUnits ?: 0) else (details?.totalChapters ?: 0),
+                        totalVolumes = if (!isVideo) (details?.totalVolumes ?: item.totalVolumes ?: 0) else 0,
+                        totalPages = if (isBook) (details?.totalPages ?: item.totalUnits ?: 0) else 0,
+                        trackingUnit = unit,
+                        durationMinutes = details?.durationMinutes,
+                        episodeLengthMinutes = details?.durationMinutes,
+                        tags = details?.tags,
+                        description = details?.synopsis ?: item.synopsis,
+                        airedStartDate = startEpoch,
+                        airedEndDate = endEpoch,
+                        isAiring = if (isBook) false else (details?.isAiring ?: false)
                     )
                 }
-            } else {
-                // MAL / Jikan / Book / Light Novel item
-                val details = item.rawJikanDetails
-                val isVideo = item.mediaType == MediaType.ANIME
-                val isBook = item.mediaType == MediaType.BOOK
-                val unit = when {
-                    (details?.totalPages ?: 0) > 0 -> TrackingUnit.PAGES
-                    (details?.totalVolumes ?: 0) > 0 -> TrackingUnit.VOLUMES
-                    (details?.totalChapters ?: 0) > 0 -> TrackingUnit.CHAPTERS
-                    isBook -> TrackingUnit.PAGES
-                    else -> TrackingUnit.CHAPTERS
-                }
-                val startEpoch = details?.airedStartDate
-                val endEpoch = details?.airedEndDate ?: if (isBook) startEpoch else null
-                MediaEntry(
-                    userId = targetUserId,
-                    title = details?.title ?: item.title,
-                    alternateTitle = details?.alternateTitle ?: item.alternateTitle,
-                    mediaType = item.mediaType,
-                    status = status,
-                    customCategory = customCategory,
-                    subCategory = subCategory,
-                    externalId = item.externalId,
-                    externalSource = item.externalSource,
-                    externalScore = details?.externalScore ?: item.score,
-                    externalScoreSource = details?.externalScoreSource ?: item.externalSource,
-                    coverImageUri = details?.posterUrl ?: item.posterUrl,
-                    totalEpisodes = if (isVideo) (details?.totalEpisodes ?: item.totalUnits ?: 0) else 0,
-                    totalChapters = if (!isVideo && !isBook) (details?.totalChapters ?: item.totalUnits ?: 0) else (details?.totalChapters ?: 0),
-                    totalVolumes = if (!isVideo) (details?.totalVolumes ?: item.totalVolumes ?: 0) else 0,
-                    totalPages = if (isBook) (details?.totalPages ?: item.totalUnits ?: 0) else 0,
-                    trackingUnit = unit,
-                    durationMinutes = details?.durationMinutes,
-                    episodeLengthMinutes = details?.durationMinutes,
-                    tags = details?.tags,
-                    description = details?.synopsis ?: item.synopsis,
-                    airedStartDate = startEpoch,
-                    airedEndDate = endEpoch,
-                    isAiring = if (isBook) false else (details?.isAiring ?: false)
-                )
-            }
 
-            repository.insert(entry)
-            withContext(Dispatchers.Main) {
-                _uiState.update { it.copy(userAddedMessage = "Added '${entry.title}' to library!") }
+                repository.insert(entry)
+                withContext(Dispatchers.Main) {
+                    _uiState.update { it.copy(userAddedMessage = "Added '${entry.title}' to library!") }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("SearchViewModel", "Failed to add '${item.title}' to library", e)
             }
         }
     }

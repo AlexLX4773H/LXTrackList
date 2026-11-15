@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Sync
@@ -1416,7 +1417,7 @@ private fun DetailProgressCard(
             // Airing / Release Status Panel
             if (entry.isAiring && (isVideo || isMangaOrBook)) {
                 val (readWatched, airedReleased, total) = if (isVideo) {
-                    Triple(entry.getTotalWatchedEpisodes(), entry.airedEpisodes, entry.getEffectiveTotalEpisodes())
+                    Triple(entry.getTotalWatchedEpisodes(), entry.getEffectiveAiredEpisodes(), entry.getEffectiveTotalEpisodes())
                 } else {
                     Triple(entry.currentChapters, entry.airedChapters, entry.totalChapters)
                 }
@@ -1489,6 +1490,41 @@ private fun DetailProgressCard(
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyLarge
                             )
+                        }
+                    }
+
+                    if (entry.mediaType == MediaType.ANIME) {
+                        val scheduleStr = entry.formatAiringSchedule(short = false)
+                        val countdownStr = entry.getTimeUntilNextEpisode(prefixIn = true)
+                        if (!scheduleStr.isNullOrBlank() || !countdownStr.isNullOrBlank()) {
+                            val bannerText = when {
+                                !scheduleStr.isNullOrBlank() && !countdownStr.isNullOrBlank() -> "$scheduleStr • $countdownStr"
+                                !countdownStr.isNullOrBlank() -> "Next episode $countdownStr"
+                                else -> scheduleStr ?: ""
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(LXAiringBlue.copy(alpha = 0.12f))
+                                    .border(1.dp, LXAiringBlue.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Schedule,
+                                    contentDescription = null,
+                                    tint = LXAiringBlue,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = bannerText,
+                                    color = LXAiringBlue,
+                                    fontWeight = FontWeight.SemiBold,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
+                                )
+                            }
                         }
                     }
 
@@ -1713,6 +1749,62 @@ private fun DetailDatesCard(entry: MediaEntry) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("To", color = LXTextSecondary, style = MaterialTheme.typography.bodySmall)
                                 Text(airedEndStr ?: "-", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (entry.mediaType == MediaType.ANIME && entry.isAiring) {
+                            val localSchedule = entry.formatAiringSchedule(short = false)
+                            val countdown = entry.getTimeUntilNextEpisode(prefixIn = true)
+                            if (!localSchedule.isNullOrBlank() || !countdown.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(LXSurfaceElevated)
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = "Broadcast Schedule",
+                                            color = LXTextSecondary,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                        Text(
+                                            text = localSchedule ?: "-",
+                                            color = LXAiringBlue,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        if (!entry.broadcastTime.isNullOrBlank() && entry.broadcastTime != localSchedule) {
+                                            Text(
+                                                text = "MAL: ${entry.broadcastTime}",
+                                                color = LXTextSecondary.copy(alpha = 0.7f),
+                                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp)
+                                            )
+                                        }
+                                    }
+                                    if (!countdown.isNullOrBlank()) {
+                                        Column(
+                                            horizontalAlignment = Alignment.End,
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            Text(
+                                                text = "Next Episode",
+                                                color = LXTextSecondary,
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                            Text(
+                                                text = countdown,
+                                                color = LXPrimaryGreen,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

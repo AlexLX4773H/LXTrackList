@@ -759,6 +759,21 @@ class DetailViewModel(
                                     (details.malId ?: extId)?.toString() ?: cur.externalId
                                 }
                             }
+                            val newAiredEpisodes = if (details.airedEpisodes != null && details.airedEpisodes > 0) {
+                                details.airedEpisodes
+                            } else if (cur.mediaType == MediaType.ANIME && (details.isAiring ?: cur.isAiring)) {
+                                val effective = cur.copy(
+                                    airedStartDate = details.airedStartDate ?: cur.airedStartDate,
+                                    totalEpisodes = if (details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else cur.totalEpisodes,
+                                    isAiring = details.isAiring ?: cur.isAiring
+                                ).getEffectiveAiredEpisodes()
+                                if (effective > 0) effective else cur.airedEpisodes
+                            } else {
+                                cur.airedEpisodes
+                            }
+                            val newBroadcastTime = if (!details.broadcastTime.isNullOrBlank()) details.broadcastTime else cur.broadcastTime
+                            val newNextAiringEpoch = details.nextAiringEpoch ?: cur.nextAiringEpoch
+
                             val updated = cur.copy(
                                 externalId = newExtId,
                                 externalSource = resolvedSource,
@@ -767,6 +782,9 @@ class DetailViewModel(
                                 totalEpisodes = if (details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else cur.totalEpisodes,
                                 totalChapters = if (details.totalChapters != null && details.totalChapters > 0) details.totalChapters else cur.totalChapters,
                                 totalVolumes = if (details.totalVolumes != null && details.totalVolumes > 0) details.totalVolumes else cur.totalVolumes,
+                                airedEpisodes = newAiredEpisodes,
+                                broadcastTime = newBroadcastTime,
+                                nextAiringEpoch = newNextAiringEpoch,
                                 episodeLengthMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.episodeLengthMinutes,
                                 durationMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.durationMinutes,
                                 airedStartDate = details.airedStartDate ?: cur.airedStartDate,

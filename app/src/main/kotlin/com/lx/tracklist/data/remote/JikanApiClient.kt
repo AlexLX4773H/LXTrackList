@@ -51,7 +51,10 @@ data class JikanMediaDetails(
     val url: String? = null,
     val totalPages: Int? = null,
     val isbn: String? = null,
-    val authors: String? = null
+    val authors: String? = null,
+    val airedEpisodes: Int? = null,
+    val broadcastTime: String? = null,
+    val nextAiringEpoch: Long? = null
 ) {
     val webUrl: String?
         get() {
@@ -76,6 +79,12 @@ object JikanApiClient {
         .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
+        .build()
+
+    private val searchOkHttpClient = okHttpClient.newBuilder()
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(6, TimeUnit.SECONDS)
+        .callTimeout(8, TimeUnit.SECONDS)
         .build()
 
     fun JsonObject.getSafeJsonArray(key: String): JsonArray? =
@@ -208,7 +217,7 @@ object JikanApiClient {
                 .get()
                 .build()
 
-            val response = okHttpClient.newCall(request).execute()
+            val response = searchOkHttpClient.newCall(request).execute()
             val code = response.code
             val bodyString = response.body?.string() ?: ""
 
@@ -290,6 +299,7 @@ object JikanApiClient {
                 genres
                 countryOfOrigin
                 tags { name }
+                nextAiringEpisode { id airingAt timeUntilAiring episode }
               }
             }
         """.trimIndent()
@@ -315,7 +325,7 @@ object JikanApiClient {
             .build()
 
         return try {
-            val response = okHttpClient.newCall(request).execute()
+            val response = searchOkHttpClient.newCall(request).execute()
             val code = response.code
             val bodyString = response.body?.string() ?: ""
 
@@ -543,7 +553,7 @@ object JikanApiClient {
                 .get()
                 .build()
 
-            val response = okHttpClient.newCall(request).execute()
+            val response = searchOkHttpClient.newCall(request).execute()
             val code = response.code
             val bodyString = response.body?.string() ?: ""
 
@@ -604,7 +614,7 @@ object JikanApiClient {
                 .get()
                 .build()
 
-            var response = okHttpClient.newCall(request).execute()
+            var response = searchOkHttpClient.newCall(request).execute()
             var code = response.code
 
             // If rate limited (429), wait 1s and retry once
@@ -613,7 +623,7 @@ object JikanApiClient {
                 try {
                     Thread.sleep(1000)
                 } catch (_: InterruptedException) {}
-                response = okHttpClient.newCall(request.newBuilder().build()).execute()
+                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
                 code = response.code
             }
 
@@ -727,6 +737,7 @@ object JikanApiClient {
                   endDate { year month day }
                   genres
                   tags { name }
+                  nextAiringEpisode { id airingAt timeUntilAiring episode }
                 }
               }
             }
@@ -755,6 +766,7 @@ object JikanApiClient {
                   endDate { year month day }
                   genres
                   tags { name }
+                  nextAiringEpisode { id airingAt timeUntilAiring episode }
                 }
               }
             }
@@ -785,7 +797,7 @@ object JikanApiClient {
             .build()
 
         return try {
-            val response = okHttpClient.newCall(request).execute()
+            val response = searchOkHttpClient.newCall(request).execute()
             val code = response.code
             val bodyString = response.body?.string() ?: ""
 
@@ -839,7 +851,7 @@ object JikanApiClient {
                 .get()
                 .build()
 
-            val response = okHttpClient.newCall(request).execute()
+            val response = searchOkHttpClient.newCall(request).execute()
             val code = response.code
             val bodyString = response.body?.string() ?: ""
 
@@ -904,6 +916,7 @@ object JikanApiClient {
                 genres
                 countryOfOrigin
                 tags { name }
+                nextAiringEpisode { id airingAt timeUntilAiring episode }
               }
             }
             """.trimIndent()
@@ -931,6 +944,7 @@ object JikanApiClient {
                 genres
                 countryOfOrigin
                 tags { name }
+                nextAiringEpisode { id airingAt timeUntilAiring episode }
               }
             }
             """.trimIndent()
@@ -959,7 +973,7 @@ object JikanApiClient {
             .build()
 
         return try {
-            val response = okHttpClient.newCall(request).execute()
+            val response = searchOkHttpClient.newCall(request).execute()
             val code = response.code
             val bodyString = response.body?.string() ?: ""
 
@@ -981,6 +995,30 @@ object JikanApiClient {
             Log.e(TAG, "Exception querying AniList title search for '$searchTitle'", e)
             Result.failure(e)
         }
+    }
+
+    fun calculateNextAiringEpochFromBroadcast(broadcastStr: String?, startDate: Long?): Long? {
+        val now = System.currentTimeMillis()
+        if (!broadcastStr.isNullOrBlank()) {
+            val parsed = MediaEntry.parseBroadcastToNextEpoch(broadcastStr, now)
+            if (parsed != null) return parsed
+        }
+        if (startDate != null && startDate > 0L) {
+            var epoch = startDate
+            while (epoch <= now) {
+                epoch += 7L * 24 * 60 * 60 * 1000L
+            }
+            return epoch
+        }
+        return null
+    }
+
+    fun calculateAiredEpisodes(startDate: Long?, totalEpisodes: Int?): Int? {
+        if (startDate == null || startDate <= 0L) return null
+        val now = System.currentTimeMillis()
+        if (now < startDate) return 0
+        val weeks = ((now - startDate) / (7L * 24 * 60 * 60 * 1000L)).toInt() + 1
+        return if (totalEpisodes != null && totalEpisodes > 0) minOf(weeks, totalEpisodes) else weeks
     }
 
     fun parseJikanData(dataObj: JsonObject, fallbackMalId: Long?): JikanMediaDetails {
@@ -1068,6 +1106,35 @@ object JikanApiClient {
         val externalScore = rawScore?.takeIf { it > 0f }
         val externalScoreSource = if (externalScore != null) "MAL" else null
 
+        // Broadcast schedule
+        val broadcastObj = dataObj.getSafeJsonObject("broadcast")
+        val broadcastString = broadcastObj?.get("string")?.takeIf { !it.isJsonNull }?.asString?.trim()
+        val broadcastDay = broadcastObj?.get("day")?.takeIf { !it.isJsonNull }?.asString?.trim()
+        val broadcastTimeVal = broadcastObj?.get("time")?.takeIf { !it.isJsonNull }?.asString?.trim()
+        val broadcastTz = broadcastObj?.get("timezone")?.takeIf { !it.isJsonNull }?.asString?.trim() ?: "Asia/Tokyo"
+
+        val broadcastTime = when {
+            !broadcastString.isNullOrBlank() && !broadcastString.equals("Unknown", ignoreCase = true) -> broadcastString
+            !broadcastDay.isNullOrBlank() && !broadcastTimeVal.isNullOrBlank() -> "$broadcastDay at $broadcastTimeVal ($broadcastTz)"
+            else -> null
+        }
+
+        val isAnimeMedia = mediaTypeStr?.equals("anime", ignoreCase = true) == true ||
+                mediaTypeStr?.equals("tv", ignoreCase = true) == true ||
+                mediaTypeStr?.equals("movie", ignoreCase = true) == true ||
+                mediaTypeStr?.equals("ova", ignoreCase = true) == true ||
+                mediaTypeStr?.equals("ona", ignoreCase = true) == true ||
+                mediaTypeStr?.equals("special", ignoreCase = true) == true ||
+                (totalEpisodes != null && totalEpisodes > 0)
+
+        val nextAiringEpoch = if (isAiring && isAnimeMedia) {
+            calculateNextAiringEpochFromBroadcast(broadcastTime, airedStartDate)
+        } else null
+
+        val airedEpisodes = if (isAiring && isAnimeMedia) {
+            calculateAiredEpisodes(airedStartDate, totalEpisodes)
+        } else null
+
         return JikanMediaDetails(
             malId = malId,
             title = title,
@@ -1087,7 +1154,10 @@ object JikanApiClient {
             externalScoreSource = externalScoreSource,
             type = mediaTypeStr,
             sourceProvider = "Jikan",
-            url = dataObj.get("url")?.takeIf { !it.isJsonNull }?.asString
+            url = dataObj.get("url")?.takeIf { !it.isJsonNull }?.asString,
+            airedEpisodes = airedEpisodes,
+            broadcastTime = broadcastTime,
+            nextAiringEpoch = nextAiringEpoch
         )
     }
 
@@ -1164,6 +1234,27 @@ object JikanApiClient {
             else -> format
         }
 
+        val nextAiringObj = mediaObj.getSafeJsonObject("nextAiringEpisode")
+        val nextAiringAtSec = nextAiringObj?.get("airingAt")?.takeIf { !it.isJsonNull }?.asLong
+        val nextAiringEpoch = nextAiringAtSec?.let { it * 1000L }
+        val nextEpisode = nextAiringObj?.get("episode")?.takeIf { !it.isJsonNull }?.asInt
+        val isAnimeMedia = format?.equals("MANGA", ignoreCase = true) != true &&
+                format?.equals("NOVEL", ignoreCase = true) != true &&
+                format?.equals("ONE_SHOT", ignoreCase = true) != true
+        val airedEpisodes = nextEpisode?.let { (it - 1).coerceAtLeast(0) }
+            ?: if (isAiring == true && isAnimeMedia) calculateAiredEpisodes(airedStartDate, totalEpisodes) else null
+
+        val broadcastTime = nextAiringEpoch?.let { epoch ->
+            try {
+                val jstSdf = SimpleDateFormat("EEEE's at' HH:mm '(JST)'", Locale.US).apply {
+                    timeZone = TimeZone.getTimeZone("Asia/Tokyo")
+                }
+                jstSdf.format(Date(epoch))
+            } catch (_: Exception) {
+                null
+            }
+        }
+
         return JikanMediaDetails(
             malId = resolvedId,
             title = title,
@@ -1183,7 +1274,10 @@ object JikanApiClient {
             externalScoreSource = externalScoreSource,
             type = resolvedType,
             sourceProvider = if (idMal != null && idMal > 0) "MAL (AniList)" else "AniList",
-            url = mediaObj.get("siteUrl")?.takeIf { !it.isJsonNull }?.asString
+            url = mediaObj.get("siteUrl")?.takeIf { !it.isJsonNull }?.asString,
+            airedEpisodes = airedEpisodes,
+            broadcastTime = broadcastTime,
+            nextAiringEpoch = nextAiringEpoch
         )
     }
 
@@ -1285,7 +1379,7 @@ object JikanApiClient {
                 .get()
                 .build()
 
-            val response = okHttpClient.newCall(request).execute()
+            val response = searchOkHttpClient.newCall(request).execute()
             val bodyString = response.body?.string() ?: ""
 
             if (!response.isSuccessful) {
@@ -1462,7 +1556,7 @@ object JikanApiClient {
             .build()
 
         return try {
-            val response = okHttpClient.newCall(request).execute()
+            val response = searchOkHttpClient.newCall(request).execute()
             val code = response.code
             val bodyString = response.body?.string() ?: ""
 
@@ -1540,7 +1634,7 @@ object JikanApiClient {
             .build()
 
         return try {
-            val response = okHttpClient.newCall(request).execute()
+            val response = searchOkHttpClient.newCall(request).execute()
             val code = response.code
             val bodyString = response.body?.string() ?: ""
 

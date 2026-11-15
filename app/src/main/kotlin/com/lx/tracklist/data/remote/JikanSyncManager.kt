@@ -785,6 +785,31 @@ object JikanSyncManager {
                     entry.relatedEntriesJson
                 }
 
+                val newAiredEpisodes = if (details.airedEpisodes != null && details.airedEpisodes > 0) {
+                    if (details.airedEpisodes != entry.airedEpisodes) hasChanges = true
+                    details.airedEpisodes
+                } else if (entry.mediaType == MediaType.ANIME && (details.isAiring ?: entry.isAiring)) {
+                    val effective = entry.copy(
+                        airedStartDate = newAiredStartDate,
+                        totalEpisodes = newTotalEpisodes,
+                        isAiring = newIsAiring
+                    ).getEffectiveAiredEpisodes()
+                    if (effective > 0 && effective != entry.airedEpisodes) {
+                        hasChanges = true
+                        effective
+                    } else entry.airedEpisodes
+                } else entry.airedEpisodes
+
+                val newBroadcastTime = if (!details.broadcastTime.isNullOrBlank()) {
+                    if (details.broadcastTime != entry.broadcastTime) hasChanges = true
+                    details.broadcastTime
+                } else entry.broadcastTime
+
+                val newNextAiringEpoch = if (details.nextAiringEpoch != null) {
+                    if (details.nextAiringEpoch != entry.nextAiringEpoch) hasChanges = true
+                    details.nextAiringEpoch
+                } else entry.nextAiringEpoch
+
                 if (hasChanges) {
                     val updatedEntry = entry.copy(
                         userId = profileId,
@@ -792,6 +817,9 @@ object JikanSyncManager {
                         episodeLengthMinutes = newEpisodeLength,
                         durationMinutes = newDurationMinutes,
                         totalEpisodes = newTotalEpisodes,
+                        airedEpisodes = newAiredEpisodes,
+                        broadcastTime = newBroadcastTime,
+                        nextAiringEpoch = newNextAiringEpoch,
                         totalChapters = newTotalChapters,
                         totalVolumes = newTotalVolumes,
                         airedStartDate = newAiredStartDate,

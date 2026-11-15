@@ -480,4 +480,121 @@ class MediaEntryTest {
         assertEquals("Detailed official synopsis and overview.", updated.notes)
         assertEquals("Updated thoughts after episode 5.", updated.userComments)
     }
+
+    @Test
+    fun testEffectiveAiredEpisodes() {
+        val now = System.currentTimeMillis()
+        val threeWeeksAgo = now - (21L * 24 * 60 * 60 * 1000L)
+
+        // 1. Airing anime with explicit airedEpisodes > 0 returns that number
+        val animeWithCount = MediaEntry(
+            title = "Airing Show",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.WATCHING,
+            isAiring = true,
+            airedEpisodes = 6,
+            totalEpisodes = 12
+        )
+        assertEquals(6, animeWithCount.getEffectiveAiredEpisodes())
+
+        // 2. Airing anime with airedEpisodes == 0 projects from airedStartDate
+        val animeProjected = MediaEntry(
+            title = "Projected Show",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.WATCHING,
+            isAiring = true,
+            airedEpisodes = 0,
+            airedStartDate = threeWeeksAgo,
+            totalEpisodes = 12
+        )
+        assertEquals(4, animeProjected.getEffectiveAiredEpisodes())
+
+        // 3. Non-airing anime does not project
+        val animeNotAiring = MediaEntry(
+            title = "Finished Show",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.PLAN_TO_WATCH,
+            isAiring = false,
+            airedEpisodes = 0,
+            airedStartDate = threeWeeksAgo,
+            totalEpisodes = 12
+        )
+        assertEquals(0, animeNotAiring.getEffectiveAiredEpisodes())
+    }
+
+    @Test
+    fun testParseBroadcastToNextEpoch() {
+        val now = System.currentTimeMillis()
+        val epochJst = MediaEntry.parseBroadcastToNextEpoch("Sundays at 00:00 (JST)", now)
+        org.junit.Assert.assertNotNull(epochJst)
+        org.junit.Assert.assertTrue(epochJst!! >= now)
+
+        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Tokyo"))
+        cal.timeInMillis = epochJst
+        assertEquals(java.util.Calendar.SUNDAY, cal.get(java.util.Calendar.DAY_OF_WEEK))
+        assertEquals(0, cal.get(java.util.Calendar.HOUR_OF_DAY))
+        assertEquals(0, cal.get(java.util.Calendar.MINUTE))
+
+        // Unknown or blank returns null
+        org.junit.Assert.assertNull(MediaEntry.parseBroadcastToNextEpoch("Unknown", now))
+        org.junit.Assert.assertNull(MediaEntry.parseBroadcastToNextEpoch("", now))
+    }
+
+    @Test
+    fun testFormatAiringScheduleInLocalTimezone() {
+        // Construct calendar for Sunday at 17:30 JST (which is Sunday 14:00 in Asia/Kolkata / IST)
+        val calJst = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Tokyo"))
+        calJst.set(2026, java.util.Calendar.OCTOBER, 4, 17, 30, 0)
+        calJst.set(java.util.Calendar.MILLISECOND, 0)
+        val testEpoch = calJst.timeInMillis
+
+        val entry = MediaEntry(
+            title = "Magical Explorer",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.WATCHING,
+            isAiring = true,
+            broadcastTime = "Sundays at 17:30 (JST)",
+            nextAiringEpoch = testEpoch
+        )
+
+        val istTz = java.util.TimeZone.getTimeZone("Asia/Kolkata")
+        val localScheduleFull = entry.formatAiringSchedule(short = false, timeZone = istTz)
+        val localScheduleShort = entry.formatAiringSchedule(short = true, timeZone = istTz)
+
+        // In IST, 17:30 JST is exactly 14:00 IST on Sunday
+        org.junit.Assert.assertTrue(localScheduleFull!!.startsWith("Sunday at 14:00"))
+        org.junit.Assert.assertTrue(localScheduleShort!!.startsWith("Sun 14:00"))
+
+        // JST timezone check
+        val jstTz = java.util.TimeZone.getTimeZone("Asia/Tokyo")
+        val jstSchedule = entry.formatAiringSchedule(short = false, timeZone = jstTz)
+        org.junit.Assert.assertTrue(jstSchedule!!.startsWith("Sunday at 17:30"))
+    }
+
+    @Test
+    fun testAiringApplicableOnlyToAiringAnime() {
+        val manga = MediaEntry(
+            title = "Sample Manga",
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.WATCHING,
+            isAiring = true,
+            broadcastTime = "Sundays at 00:00 (JST)"
+        )
+        org.junit.Assert.assertNull(manga.getComputedNextAiringEpoch())
+        org.junit.Assert.assertNull(manga.formatAiringSchedule())
+        org.junit.Assert.assertNull(manga.getTimeUntilNextEpisode())
+        org.junit.Assert.assertNull(manga.formatAiringCardText())
+
+        val finishedAnime = MediaEntry(
+            title = "Finished Anime",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.COMPLETED,
+            isAiring = false,
+            broadcastTime = "Sundays at 00:00 (JST)"
+        )
+        org.junit.Assert.assertNull(finishedAnime.getComputedNextAiringEpoch())
+        org.junit.Assert.assertNull(finishedAnime.formatAiringSchedule())
+        org.junit.Assert.assertNull(finishedAnime.getTimeUntilNextEpisode())
+        org.junit.Assert.assertNull(finishedAnime.formatAiringCardText())
+    }
 }
