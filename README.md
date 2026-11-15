@@ -6,11 +6,12 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26+)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
-  <img src="https://img.shields.io/badge/Language-Kotlin_17-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
+  <img src="https://img.shields.io/badge/Version-0.4.3-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26--36)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
+  <img src="https://img.shields.io/badge/Language-Kotlin_2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
   <img src="https://img.shields.io/badge/UI-Jetpack_Compose_&_Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" />
   <img src="https://img.shields.io/badge/Database-Room_(SQLite)-00599C?style=flat-square&logo=sqlite&logoColor=white" alt="Room" />
-  <img src="https://img.shields.io/badge/Theme-OLED_Dark_&_Neon_Lime-A7EF60?style=flat-square" alt="Theme" />
+  <img src="https://img.shields.io/badge/Theme-OLED_Dark_&_Neon_Lime_/_Custom_Themes-A7EF60?style=flat-square" alt="Theme" />
   <img src="https://img.shields.io/badge/Privacy-100%25_Local_&_Offline_First-success?style=flat-square" alt="Privacy" />
 </p>
 
@@ -20,11 +21,58 @@
 
 **LX Track List** is an open-source, all-in-one personal media tracking app designed for Android. Instead of fragmenting your watchlist across separate platforms (MyAnimeList, AniList, Letterboxd, TV Time, MangaDex, Tachiyomi, Goodreads), LX Track List consolidates all your entertainment into a single, cohesive, and private database.
 
-Built from the ground up with **Kotlin**, **Jetpack Compose (Material 3)**, and **Room (SQLite)**, the app emphasizes lightning-fast performance, elegant aesthetics (OLED pure black paired with `#A7EF60` electric neon accents), and total data sovereignty.
+Built from the ground up with **Kotlin**, **Jetpack Compose (Material 3)**, and **Room (SQLite)**, the app emphasizes lightning-fast performance, elegant aesthetics (OLED pure black paired with `#A7EF60` electric neon accents, plus custom theme packs and user-defined accent colors), and total data sovereignty.
 
 ---
 
 ## ✨ Features at a Glance
+
+### 🌟 Seasonal Anime & Media Discovery Engine
+Discover what's airing, trending, and premiering directly inside the **Search & Discover** tab via the top-right discovery menu:
+- **Seasonal Anime Browser**:
+  - Browse past, current, and upcoming anime seasons (**Winter**, **Spring**, **Summer**, **Fall**) with an intuitive 2×2 card selector, season emojis, and month ranges (e.g., *Jan – Mar*, *Apr – Jun*).
+  - High-performance **AniList GraphQL** query pipeline with automatic **Jikan API v4 (MAL)** fallback for instant, robust results.
+  - Sort by **Most Popular**, **Highest Rated**, **Release Date**, or **Title (A–Z)**.
+- **TMDB Movie & TV Show Discovery**:
+  - Filter movies and TV shows by release / first-air year.
+  - Supports extended year horizons up to **Current Year + 2** (e.g. 2027) with quick-access year chips and a complete dropdown (1960 to Current Year + 2).
+  - Sort by **Most Popular**, **Highest Rated**, **Release Date**, and **Box Office** (Movies) or **Premiere Date** (TV).
+- **Scoped Title Search**:
+  - When a seasonal or year filter is active, typing in the search bar scopes results strictly to that season or year (e.g. searching *"Frieren"* while filtered to *Fall 2023* searches within that season).
+  - Clearing the search query instantly restores the full seasonal/year catalog.
+- **On-Demand "Load More" Pagination**:
+  - Clean, dedicated load-more button at the bottom of discovery and search result lists to paginate through deep archives.
+- **Subtle 3-State 18+ Content Cycle**:
+  - Compact, unobtrusive checkbox with a 3-state click cycle:
+    1. **Off (Default)**: Strict family-safe content only (18+ excluded).
+    2. **Include 18+**: Returns standard and adult content together.
+    3. **18+ Only**: Strictly isolates and returns **only** 18+ entities (*Hentai* for Anime via AniList `$isAdult: true` / Jikan `Rx`, and verified adult entities for TMDB Movies/TV).
+    4. Next click cycles back to **Off**.
+- **Clean Discovery UI**:
+  - Automatically hides external provider attribution notices during discovery browsing to keep the catalog clean and immersive.
+
+### 🚀 In-App GitHub Releases & APK Auto-Updater
+Keep your app up to date effortlessly without opening a web browser:
+- **One-Tap Release Check**: Checks GitHub Releases API for new versions directly in **Settings**.
+- **Changelog & Notes Viewer**: Read release titles, notes, and published dates before updating.
+- **Built-in APK Downloader**: Downloads the latest release APK in the background with real-time download progress bar, downloaded bytes counter, and system notification.
+- **Direct Installer Prompt**: Automatically triggers Android's package installer via secure `FileProvider` upon download completion.
+
+### 🎨 Custom Themes & User Accent Color Picker
+Tailor the app's visual identity to your liking:
+- **Built-In Anime & Fantasy Theme Packs**: Preset aesthetic themes (*Beyond*, *Gate*, *Sky*, *Slime*) featuring custom header art, themed sprites, and stylized UI flourishes.
+- **User Custom Accent Color Picker**: Choose any accent color via hex code input or preset palette with instant live preview across tabs, progress bars, and buttons.
+- **OLED Pure Black Base**: Built on true `#000000` blacks for maximum contrast and battery savings on AMOLED/OLED displays.
+
+### 🔐 Profile Security & App Lock / Passkey
+- **Per-Profile PIN / Passkey Lock**: Set an optional passkey for any user profile.
+- Protect your personal libraries, reading/watching history, and adult content filters from unauthorized access.
+- Seamless unlock dialog with persistent local hashing.
+
+### 🔗 Related Media & Franchise Graph
+- When viewing entry details, LX Track List automatically catalogs and visualizes related media:
+  - **Sequels**, **Prequels**, **Parent Story**, **Side Stories**, **Spin-offs**, and **Adaptations**.
+- One-tap addition of related franchise entries directly to your library, or quick jump to existing entries.
 
 ### 🎬 Comprehensive Media Support
 Track each medium with metrics tailored to its natural progression:
@@ -36,9 +84,9 @@ Track each medium with metrics tailored to its natural progression:
 
 ### 🌐 Multi-Source External DB & Cascading Sync
 LX Track List integrates with 5 major metadata providers to enrich your library with covers, runtimes, episode counts, scores, and synopses:
-- **MyAnimeList (Jikan API)**: Fast, keyless search and metadata synchronization for Anime and Manga.
+- **MyAnimeList (Jikan API & AniList GraphQL)**: Fast, keyless search and metadata synchronization for Anime and Manga.
 - **Official MyAnimeList (MAL) 2-Way Sync**: Built-in OAuth2 authentication allows opt-in, live bi-directional sync of progress, scores, and watch/read statuses directly to your MyAnimeList account.
-- **The Movie Database (TMDB)**: Direct search, high-resolution poster retrieval, release dates, runtimes, and season/episode breakdowns for Movies and TV Shows.
+- **The Movie Database (TMDB)**: Direct search, seasonal discovery, high-resolution poster retrieval, release dates, runtimes, and season/episode breakdowns for Movies and TV Shows.
   - **ISP Block Bypass**: Built-in DNS-over-HTTPS (DoH via Cloudflare & Google DNS) and automatic fallback routing (`api.themoviedb.org` $\leftrightarrow$ `api.tmdb.org`) ensures uninterrupted connectivity even on restricted networks.
 - **MangaDex API**: Full native integration for Manga, Manhwa, and Manhua with direct UUID linking and alternate title matching.
 - **Intelligent Fallback Cascading**: For Manga & Manhwa, searches cascade seamlessly across **Jikan (MAL) $\rightarrow$ MangaDex $\rightarrow$ AniList $\rightarrow$ Kitsu** to discover and link obscure webtoons, manhwa, and scanlations that MyAnimeList does not index.
@@ -66,7 +114,7 @@ Never worry about duplicate entries when restoring backups after names or IDs ch
 
 ### 👥 Multi-User Profiles with Full Isolation
 - Switch seamlessly between different user profiles by tapping the avatar in the top navigation bar.
-- Individual libraries, progress, scores, external tracking credentials, and statistics remain completely isolated per profile.
+- Individual libraries, progress, scores, external tracking credentials, theme preferences, and statistics remain completely isolated per profile.
 
 ### 📑 Power Library & Batch Management
 - **Multi-Select Batch Actions**: Select multiple entries to perform bulk operations in seconds:
@@ -109,7 +157,7 @@ Your data belongs to you. You can export or import your collection at any time:
 
 LX Track List features a modern, distraction-free user interface optimized for OLED screens:
 - **True Black Background (`#000000`)**: Maximizes battery efficiency and contrast.
-- **Electric Neon Accent (`#A7EF60`)**: Vibrant visual feedback for active tabs, progress bars, and action buttons.
+- **Electric Neon Accent (`#A7EF60`)**: Vibrant visual feedback for active tabs, progress bars, and action buttons (customizable to any color).
 - **Card-Based Entry Layout**: Clean cards presenting cover art, titles, date ranges, progress bars, and status badges.
 - **Edge-to-Edge Experience**: Full immersive Android edge-to-edge support with dynamic navigation bars.
 
@@ -128,10 +176,12 @@ app/src/main/kotlin/com/lx/tracklist/
 │   ├── model/             # MediaEntry, UserProfile, CustomCategory, Enums
 │   ├── remote/            # Jikan, TMDB, MangaDex, AniList, Kitsu, and MAL OAuth clients
 │   │   ├── mal/           # MyAnimeList OAuth2 token store & 2-way sync manager
-│   │   ├── JikanApiClient.kt
+│   │   ├── AppUpdateChecker.kt     # GitHub Releases API client
+│   │   ├── AppUpdateDownloader.kt  # In-app APK downloader & installer
+│   │   ├── JikanApiClient.kt       # Jikan v4 & AniList GraphQL seasonal client
 │   │   ├── MangaDexApiClient.kt
-│   │   ├── TmdbApiClient.kt (with DoH & ISP Block Bypass)
-│   │   └── TachiyomiResolverManager.kt (Universal ID Resolution Engine)
+│   │   ├── TmdbApiClient.kt        # TMDB API with DoH & ISP Block Bypass
+│   │   └── TachiyomiResolverManager.kt # Universal ID Resolution Engine
 │   └── repository/        # MediaRepository (Single source of truth & deduplication)
 ├── ui/
 │   ├── components/        # Reusable Compose widgets (MediaCard, Drawers, Sheets, FilterChips)
@@ -140,20 +190,24 @@ app/src/main/kotlin/com/lx/tracklist/
 │   ├── home/              # Main dashboard with status tabs
 │   ├── library/           # Searchable library with multi-sort, filters, and batch operations
 │   ├── navigation/        # Compose Navigation graph and destinations
-│   ├── search/            # Unified local & multi-database search interface
-│   ├── settings/          # Data import/export, profile management, conflict resolution & preferences
+│   ├── search/            # Unified local & multi-database search & Seasonal Discovery sheet
+│   │   ├── DiscoveryModels.kt      # Discovery filters, seasons, sort enums & 3-state adult modes
+│   │   ├── SearchDiscoverySheet.kt # Modal discovery sheet (Anime 2x2 grid, Movie/TV years, 18+ toggle)
+│   │   ├── SearchScreen.kt         # Search & Discover UI with scoped filters & Load More footer
+│   │   └── SearchViewModel.kt      # Paging, scoped seasonal search, and discovery state
+│   ├── settings/          # Data import/export, profile management, conflict resolution & updater
 │   ├── stats/             # Visualization charts and metrics
 │   └── theme/             # Material 3 colors, typography, and dark theme
 └── util/                  # Notification helpers and system utilities
 ```
 
 ### Key Libraries
-- **Language**: [Kotlin](https://kotlinlang.org/)
+- **Language**: [Kotlin](https://kotlinlang.org/) 2.x
 - **UI Framework**: [Jetpack Compose](https://developer.android.com/jetpack/compose) with [Material 3](https://m3.material.io/)
-- **Database**: [Room](https://developer.android.com/training/data-storage/room) with SQLite
+- **Database**: [Room](https://developer.android.com/training/data-storage/room) 2.8+ with SQLite
 - **Image Loading**: [Coil Compose](https://coil-kt.github.io/coil/compose/) with persistent disk cache
 - **Networking**: [OkHttp3](https://square.github.io/okhttp/) with DNS-over-HTTPS (DoH) & [Gson](https://github.com/google/gson)
-- **CI/CD**: GitHub Actions workflow for automated builds and APK artifact publishing.
+- **CI/CD**: GitHub Actions workflow for automated builds, testing, and APK artifact publishing.
 
 ---
 
@@ -183,7 +237,7 @@ app/src/main/kotlin/com/lx/tracklist/
    TMDB_READ_ACCESS_TOKEN=your_tmdb_read_access_token_here
    MAL_CLIENT_ID=your_mal_client_id_here
    ```
-   *(Note: Jikan, MangaDex, AniList, and Kitsu work out-of-the-box without requiring any API keys).*
+   *(Note: Jikan, AniList, MangaDex, and Kitsu work out-of-the-box without requiring any API keys).*
 
 3. **Build the APK**:
    ```bash
@@ -205,9 +259,10 @@ app/src/main/kotlin/com/lx/tracklist/
 - **Zero Telemetry**: No trackers, no ad networks, no analytics SDKs, and no external tracking servers.
 - **Local Storage**: All media records, notes, scores, and preferences reside solely on your device in local SQLite tables.
 - **Minimal Permissions**:
-  - `INTERNET`: Required solely for fetching metadata and cover art from Jikan, TMDB, MangaDex, AniList, and Kitsu, or syncing with your official MAL account.
-  - `POST_NOTIFICATIONS`: Optional for release/airing notifications and background sync progress on Android 13+.
+  - `INTERNET`: Required solely for fetching metadata and cover art from Jikan, AniList, TMDB, MangaDex, and Kitsu, checking GitHub releases, or syncing with your official MAL account.
+  - `POST_NOTIFICATIONS`: Optional for release/airing notifications, download progress, and background sync progress on Android 13+.
   - `MANAGE_EXTERNAL_STORAGE`: Optional for accessing `/LXTrackList` input, output, and data directories directly.
+  - `REQUEST_INSTALL_PACKAGES`: Required solely for initiating direct in-app updates when a new APK is downloaded via the built-in update checker.
 
 ---
 
