@@ -31,7 +31,6 @@
     "searchIcon": "sprites/search_icon.png",
     "chipActive": "sprites/chip_active_border.png",
     "chipInactive": "sprites/chip_inactive.png",
-    "chipGold": "sprites/chip_gold.png",
     "cardFrame": "sprites/card_frame_ornate.png",
     "progressBarBg": "sprites/progress_bar_bg.png",
     "progressBarFill": "sprites/progress_bar_fill.png",
