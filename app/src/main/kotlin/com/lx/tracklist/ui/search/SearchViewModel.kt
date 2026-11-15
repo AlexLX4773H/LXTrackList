@@ -196,9 +196,9 @@ class SearchViewModel(
 
     private fun reloadDiscoveryFilter(filter: DiscoveryFilter, context: Context? = null) {
         when (filter) {
-            is DiscoveryFilter.Anime -> applyAnimeSeasonalFilter(filter.season, filter.year, filter.sortOrder, filter.includeAdult)
-            is DiscoveryFilter.Movie -> applyMovieDiscoveryFilter(filter.year, filter.sortOrder, filter.includeAdult, context)
-            is DiscoveryFilter.Tv -> applyTvDiscoveryFilter(filter.year, filter.sortOrder, filter.includeAdult, context)
+            is DiscoveryFilter.Anime -> applyAnimeSeasonalFilter(filter.season, filter.year, filter.sortOrder, filter.adultMode)
+            is DiscoveryFilter.Movie -> applyMovieDiscoveryFilter(filter.year, filter.sortOrder, filter.adultMode, context)
+            is DiscoveryFilter.Tv -> applyTvDiscoveryFilter(filter.year, filter.sortOrder, filter.adultMode, context)
         }
     }
 
@@ -206,11 +206,11 @@ class SearchViewModel(
         season: AnimeSeason,
         year: Int,
         sort: AnimeSortOrder,
-        includeAdult: Boolean = false
+        adultMode: AdultMode = AdultMode.OFF
     ) {
         searchJob?.cancel()
-        val filter = DiscoveryFilter.Anime(season, year, sort, includeAdult)
-        activeSearchKey = "DISCOVER:ANIME:$season:$year:$sort:$includeAdult"
+        val filter = DiscoveryFilter.Anime(season, year, sort, adultMode)
+        activeSearchKey = "DISCOVER:ANIME:$season:$year:$sort:$adultMode"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.ANIME,
@@ -231,7 +231,7 @@ class SearchViewModel(
                         season = season.apiValue,
                         sort = sort.apiValue,
                         search = null,
-                        includeAdult = includeAdult,
+                        adultMode = adultMode,
                         page = 1
                     ).getOrThrow()
                 }
@@ -258,12 +258,12 @@ class SearchViewModel(
     fun applyMovieDiscoveryFilter(
         year: Int,
         sort: TmdbMovieSort,
-        includeAdult: Boolean = false,
+        adultMode: AdultMode = AdultMode.OFF,
         context: Context? = null
     ) {
         searchJob?.cancel()
-        val filter = DiscoveryFilter.Movie(year, sort, includeAdult)
-        activeSearchKey = "DISCOVER:MOVIE:$year:$sort:$includeAdult"
+        val filter = DiscoveryFilter.Movie(year, sort, adultMode)
+        activeSearchKey = "DISCOVER:MOVIE:$year:$sort:$adultMode"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.MOVIES,
@@ -283,7 +283,7 @@ class SearchViewModel(
                         year = year,
                         sortBy = sort.apiValue,
                         page = 1,
-                        includeAdult = includeAdult,
+                        adultMode = adultMode,
                         context = context
                     ).getOrThrow()
                 }
@@ -310,12 +310,12 @@ class SearchViewModel(
     fun applyTvDiscoveryFilter(
         year: Int,
         sort: TmdbTvSort,
-        includeAdult: Boolean = false,
+        adultMode: AdultMode = AdultMode.OFF,
         context: Context? = null
     ) {
         searchJob?.cancel()
-        val filter = DiscoveryFilter.Tv(year, sort, includeAdult)
-        activeSearchKey = "DISCOVER:TV:$year:$sort:$includeAdult"
+        val filter = DiscoveryFilter.Tv(year, sort, adultMode)
+        activeSearchKey = "DISCOVER:TV:$year:$sort:$adultMode"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.TV_SHOWS,
@@ -335,7 +335,7 @@ class SearchViewModel(
                         year = year,
                         sortBy = sort.apiValue,
                         page = 1,
-                        includeAdult = includeAdult,
+                        adultMode = adultMode,
                         context = context
                     ).getOrThrow()
                 }
@@ -378,7 +378,7 @@ class SearchViewModel(
                                 season = filter.season.apiValue,
                                 sort = filter.sortOrder.apiValue,
                                 search = if (query.length >= 2) query else null,
-                                includeAdult = filter.includeAdult,
+                                adultMode = filter.adultMode,
                                 page = nextPage
                             ).getOrThrow()
                             detailsList.mapIndexed { idx, details ->
@@ -390,7 +390,7 @@ class SearchViewModel(
                                 TmdbApiClient.searchMoviesMultiple(
                                     title = query,
                                     year = filter.year,
-                                    includeAdult = filter.includeAdult,
+                                    adultMode = filter.adultMode,
                                     page = nextPage,
                                     context = context
                                 ).getOrThrow()
@@ -399,7 +399,7 @@ class SearchViewModel(
                                     year = filter.year,
                                     sortBy = filter.sortOrder.apiValue,
                                     page = nextPage,
-                                    includeAdult = filter.includeAdult,
+                                    adultMode = filter.adultMode,
                                     context = context
                                 ).getOrThrow()
                             }
@@ -410,7 +410,7 @@ class SearchViewModel(
                                 TmdbApiClient.searchTvMultiple(
                                     title = query,
                                     year = filter.year,
-                                    includeAdult = filter.includeAdult,
+                                    adultMode = filter.adultMode,
                                     page = nextPage,
                                     context = context
                                 ).getOrThrow()
@@ -419,7 +419,7 @@ class SearchViewModel(
                                     year = filter.year,
                                     sortBy = filter.sortOrder.apiValue,
                                     page = nextPage,
-                                    includeAdult = filter.includeAdult,
+                                    adultMode = filter.adultMode,
                                     context = context
                                 ).getOrThrow()
                             }
@@ -550,7 +550,7 @@ class SearchViewModel(
                                 season = activeFilter.season.apiValue,
                                 sort = activeFilter.sortOrder.apiValue,
                                 search = query,
-                                includeAdult = activeFilter.includeAdult,
+                                adultMode = activeFilter.adultMode,
                                 page = 1
                             ).getOrThrow()
                             return@withContext list.mapIndexed { idx, d -> mapJikanToSearchResult(d, idx) }
@@ -559,7 +559,7 @@ class SearchViewModel(
                             val list = TmdbApiClient.searchMoviesMultiple(
                                 title = query,
                                 year = activeFilter.year,
-                                includeAdult = activeFilter.includeAdult,
+                                adultMode = activeFilter.adultMode,
                                 page = 1,
                                 context = context
                             ).getOrThrow()
@@ -569,7 +569,7 @@ class SearchViewModel(
                             val list = TmdbApiClient.searchTvMultiple(
                                 title = query,
                                 year = activeFilter.year,
-                                includeAdult = activeFilter.includeAdult,
+                                adultMode = activeFilter.adultMode,
                                 page = 1,
                                 context = context
                             ).getOrThrow()

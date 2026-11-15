@@ -158,14 +158,14 @@ fun SearchScreen(
             category = state.selectedCategory,
             activeFilter = state.activeDiscoveryFilter,
             onDismiss = { showDiscoverySheet = false },
-            onApplyAnime = { season, year, sort, includeAdult ->
-                viewModel.applyAnimeSeasonalFilter(season, year, sort, includeAdult)
+            onApplyAnime = { season, year, sort, adultMode ->
+                viewModel.applyAnimeSeasonalFilter(season, year, sort, adultMode)
             },
-            onApplyMovie = { year, sort, includeAdult ->
-                viewModel.applyMovieDiscoveryFilter(year, sort, includeAdult, context)
+            onApplyMovie = { year, sort, adultMode ->
+                viewModel.applyMovieDiscoveryFilter(year, sort, adultMode, context)
             },
-            onApplyTv = { year, sort, includeAdult ->
-                viewModel.applyTvDiscoveryFilter(year, sort, includeAdult, context)
+            onApplyTv = { year, sort, adultMode ->
+                viewModel.applyTvDiscoveryFilter(year, sort, adultMode, context)
             },
             onResetFilter = {
                 viewModel.clearDiscoveryFilter()

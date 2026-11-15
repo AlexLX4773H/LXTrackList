@@ -64,19 +64,48 @@ enum class TmdbTvSort(val apiValue: String, val displayName: String) {
     RELEASE_DATE("first_air_date.desc", "Premiere Date")
 }
 
+enum class AdultMode(val displayName: String) {
+    OFF("Off"),
+    INCLUDE("18+"),
+    ONLY("18+ Only");
+
+    fun next(): AdultMode = when (this) {
+        OFF -> INCLUDE
+        INCLUDE -> ONLY
+        ONLY -> OFF
+    }
+}
+
 sealed class DiscoveryFilter {
     abstract val label: String
-    abstract val includeAdult: Boolean
+    abstract val adultMode: AdultMode
+    val includeAdult: Boolean get() = adultMode != AdultMode.OFF
 
     data class Anime(
         val season: AnimeSeason,
         val year: Int,
         val sortOrder: AnimeSortOrder,
-        override val includeAdult: Boolean = false
+        override val adultMode: AdultMode = AdultMode.OFF
     ) : DiscoveryFilter() {
+        constructor(
+            season: AnimeSeason,
+            year: Int,
+            sortOrder: AnimeSortOrder,
+            includeAdult: Boolean
+        ) : this(
+            season = season,
+            year = year,
+            sortOrder = sortOrder,
+            adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF
+        )
+
         override val label: String
             get() {
-                val adultTag = if (includeAdult) " • 18+" else ""
+                val adultTag = when (adultMode) {
+                    AdultMode.OFF -> ""
+                    AdultMode.INCLUDE -> " • 18+"
+                    AdultMode.ONLY -> " • 18+ Only"
+                }
                 return "${season.emoji} ${season.displayName} $year • ${sortOrder.displayName}$adultTag"
             }
     }
@@ -84,11 +113,25 @@ sealed class DiscoveryFilter {
     data class Movie(
         val year: Int,
         val sortOrder: TmdbMovieSort,
-        override val includeAdult: Boolean = false
+        override val adultMode: AdultMode = AdultMode.OFF
     ) : DiscoveryFilter() {
+        constructor(
+            year: Int,
+            sortOrder: TmdbMovieSort,
+            includeAdult: Boolean
+        ) : this(
+            year = year,
+            sortOrder = sortOrder,
+            adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF
+        )
+
         override val label: String
             get() {
-                val adultTag = if (includeAdult) " • 18+" else ""
+                val adultTag = when (adultMode) {
+                    AdultMode.OFF -> ""
+                    AdultMode.INCLUDE -> " • 18+"
+                    AdultMode.ONLY -> " • 18+ Only"
+                }
                 return "🎬 Movies $year • ${sortOrder.displayName}$adultTag"
             }
     }
@@ -96,11 +139,25 @@ sealed class DiscoveryFilter {
     data class Tv(
         val year: Int,
         val sortOrder: TmdbTvSort,
-        override val includeAdult: Boolean = false
+        override val adultMode: AdultMode = AdultMode.OFF
     ) : DiscoveryFilter() {
+        constructor(
+            year: Int,
+            sortOrder: TmdbTvSort,
+            includeAdult: Boolean
+        ) : this(
+            year = year,
+            sortOrder = sortOrder,
+            adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF
+        )
+
         override val label: String
             get() {
-                val adultTag = if (includeAdult) " • 18+" else ""
+                val adultTag = when (adultMode) {
+                    AdultMode.OFF -> ""
+                    AdultMode.INCLUDE -> " • 18+"
+                    AdultMode.ONLY -> " • 18+ Only"
+                }
                 return "📺 TV Shows $year • ${sortOrder.displayName}$adultTag"
             }
     }

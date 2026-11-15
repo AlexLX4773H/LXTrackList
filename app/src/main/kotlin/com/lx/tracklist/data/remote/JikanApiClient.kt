@@ -7,6 +7,7 @@ import com.google.gson.JsonObject
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
+import com.lx.tracklist.ui.search.AdultMode
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -56,7 +57,8 @@ data class JikanMediaDetails(
     val authors: String? = null,
     val airedEpisodes: Int? = null,
     val broadcastTime: String? = null,
-    val nextAiringEpoch: Long? = null
+    val nextAiringEpoch: Long? = null,
+    val isAdult: Boolean? = null
 ) {
     val webUrl: String?
         get() {
@@ -1137,6 +1139,9 @@ object JikanApiClient {
             calculateAiredEpisodes(airedStartDate, totalEpisodes)
         } else null
 
+        val ratingStr = dataObj.get("rating")?.takeIf { !it.isJsonNull }?.asString
+        val isAdult = ratingStr?.contains("Rx", ignoreCase = true) == true || tagList.any { it.equals("Hentai", ignoreCase = true) }
+
         return JikanMediaDetails(
             malId = malId,
             title = title,
@@ -1159,7 +1164,8 @@ object JikanApiClient {
             url = dataObj.get("url")?.takeIf { !it.isJsonNull }?.asString,
             airedEpisodes = airedEpisodes,
             broadcastTime = broadcastTime,
-            nextAiringEpoch = nextAiringEpoch
+            nextAiringEpoch = nextAiringEpoch,
+            isAdult = isAdult
         )
     }
 
@@ -1257,6 +1263,8 @@ object JikanApiClient {
             }
         }
 
+        val isAdult = mediaObj.get("isAdult")?.takeIf { !it.isJsonNull }?.asBoolean
+
         return JikanMediaDetails(
             malId = resolvedId,
             title = title,
@@ -1279,7 +1287,8 @@ object JikanApiClient {
             url = mediaObj.get("siteUrl")?.takeIf { !it.isJsonNull }?.asString,
             airedEpisodes = airedEpisodes,
             broadcastTime = broadcastTime,
-            nextAiringEpoch = nextAiringEpoch
+            nextAiringEpoch = nextAiringEpoch,
+            isAdult = isAdult
         )
     }
 
@@ -1757,12 +1766,17 @@ object JikanApiClient {
         season: String,
         sort: String = "POPULARITY_DESC",
         search: String? = null,
-        includeAdult: Boolean = false,
+        adultMode: AdultMode = AdultMode.OFF,
         page: Int = 1,
         perPage: Int = 25
     ): Result<List<JikanMediaDetails>> {
         val normalizedSeason = season.uppercase(Locale.ROOT)
         val hasSearch = !search.isNullOrBlank()
+        val adultParam = when (adultMode) {
+            AdultMode.OFF -> ", isAdult: false"
+            AdultMode.ONLY -> ", isAdult: true"
+            AdultMode.INCLUDE -> ""
+        }
         val query = if (hasSearch) {
             """
             query (${'$'}search: String, ${'$'}season: MediaSeason, ${'$'}seasonYear: Int, ${'$'}sort: [MediaSort], ${'$'}page: Int, ${'$'}perPage: Int) {
@@ -1771,9 +1785,10 @@ object JikanApiClient {
                   hasNextPage
                   total
                 }
-                media(search: ${'$'}search, season: ${'$'}season, seasonYear: ${'$'}seasonYear, type: ANIME, sort: ${'$'}sort${if (!includeAdult) ", isAdult: false" else ""}) {
+                media(search: ${'$'}search, season: ${'$'}season, seasonYear: ${'$'}seasonYear, type: ANIME, sort: ${'$'}sort$adultParam) {
                   id
                   idMal
+                  isAdult
                   siteUrl
                   title { romaji english native }
                   synonyms
@@ -1804,9 +1819,10 @@ object JikanApiClient {
                   hasNextPage
                   total
                 }
-                media(season: ${'$'}season, seasonYear: ${'$'}seasonYear, type: ANIME, sort: ${'$'}sort${if (!includeAdult) ", isAdult: false" else ""}) {
+                media(season: ${'$'}season, seasonYear: ${'$'}seasonYear, type: ANIME, sort: ${'$'}sort$adultParam) {
                   id
                   idMal
+                  isAdult
                   siteUrl
                   title { romaji english native }
                   synonyms
@@ -1862,7 +1878,7 @@ object JikanApiClient {
             val code = response.code
             val bodyString = response.body?.string() ?: ""
 
-            Log.d(TAG, "AniList seasonal HTTP $code for $normalizedSeason $year (sort=$sort, search=$search, 18+=$includeAdult)")
+            Log.d(TAG, "AniList seasonal HTTP $code for $normalizedSeason $year (sort=$sort, search=$search, adultMode=$adultMode)")
 
             if (!response.isSuccessful) {
                 return Result.failure(Exception("AniList HTTP $code: ${bodyString.take(200)}"))
@@ -1889,25 +1905,47 @@ object JikanApiClient {
                     }
                 }
             }
-            Result.success(list)
+
+            val filteredList = when (adultMode) {
+                AdultMode.ONLY -> list.filter { it.isAdult == true }
+                AdultMode.OFF -> list.filterNot { it.isAdult == true }
+                AdultMode.INCLUDE -> list
+            }
+            Result.success(filteredList)
         } catch (e: Exception) {
             Log.e(TAG, "Exception querying AniList seasonal for $normalizedSeason $year", e)
             Result.failure(e)
         }
     }
 
+    fun queryAniListSeasonal(
+        year: Int,
+        season: String,
+        sort: String = "POPULARITY_DESC",
+        search: String? = null,
+        includeAdult: Boolean,
+        page: Int = 1,
+        perPage: Int = 25
+    ): Result<List<JikanMediaDetails>> = queryAniListSeasonal(
+        year, season, sort, search, if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF, page, perPage
+    )
+
     fun queryJikanSeasonal(
         year: Int,
         season: String,
         search: String? = null,
-        includeAdult: Boolean = false,
+        adultMode: AdultMode = AdultMode.OFF,
         page: Int = 1,
         limit: Int = 25,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<JikanMediaDetails>> {
         val cleanSeason = season.lowercase(Locale.ROOT)
-        val sfwParam = if (!includeAdult) "&sfw=true" else ""
-        val endpoint = "${baseUrl.trimEnd('/')}/seasons/$year/$cleanSeason?page=$page&limit=$limit$sfwParam"
+        val adultParam = when (adultMode) {
+            AdultMode.OFF -> "&sfw=true"
+            AdultMode.ONLY -> "&genres=12&rating=rx"
+            AdultMode.INCLUDE -> ""
+        }
+        val endpoint = "${baseUrl.trimEnd('/')}/seasons/$year/$cleanSeason?page=$page&limit=$limit$adultParam"
 
         return try {
             val request = Request.Builder()
@@ -1956,14 +1994,20 @@ object JikanApiClient {
                 }
             }
 
+            val modeFilteredList = when (adultMode) {
+                AdultMode.ONLY -> list.filter { it.isAdult == true }
+                AdultMode.OFF -> list.filterNot { it.isAdult == true }
+                AdultMode.INCLUDE -> list
+            }
+
             val filteredList = if (!search.isNullOrBlank()) {
                 val q = search.trim().lowercase(Locale.ROOT)
-                list.filter { item ->
+                modeFilteredList.filter { item ->
                     item.title?.lowercase(Locale.ROOT)?.contains(q) == true ||
                     item.alternateTitle?.lowercase(Locale.ROOT)?.contains(q) == true
                 }
             } else {
-                list
+                modeFilteredList
             }
 
             Result.success(filteredList)
@@ -1973,28 +2017,40 @@ object JikanApiClient {
         }
     }
 
+    fun queryJikanSeasonal(
+        year: Int,
+        season: String,
+        search: String? = null,
+        includeAdult: Boolean,
+        page: Int = 1,
+        limit: Int = 25,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<JikanMediaDetails>> = queryJikanSeasonal(
+        year, season, search, if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF, page, limit, baseUrl
+    )
+
     fun fetchSeasonalAnime(
         year: Int,
         season: String,
         sort: String = "POPULARITY_DESC",
         search: String? = null,
-        includeAdult: Boolean = false,
+        adultMode: AdultMode = AdultMode.OFF,
         page: Int = 1,
         limit: Int = 25
     ): Result<List<JikanMediaDetails>> {
         // 1. Try AniList GraphQL first for fast, direct sorted response
-        val anilistRes = queryAniListSeasonal(year, season, sort, search, includeAdult, page, limit)
+        val anilistRes = queryAniListSeasonal(year, season, sort, search, adultMode, page, limit)
         if (anilistRes.isSuccess) {
             val list = anilistRes.getOrDefault(emptyList())
             if (list.isNotEmpty()) {
-                Log.d(TAG, "Successfully fetched ${list.size} seasonal anime from AniList for $season $year (search=$search, 18+=$includeAdult)")
+                Log.d(TAG, "Successfully fetched ${list.size} seasonal anime from AniList for $season $year (search=$search, adultMode=$adultMode)")
                 return anilistRes
             }
         }
 
         // 2. Fall back to Jikan API v4
         Log.w(TAG, "AniList seasonal lookup failed or empty. Falling back to Jikan for $season $year...")
-        val jikanRes = queryJikanSeasonal(year, season, search, includeAdult, page, limit)
+        val jikanRes = queryJikanSeasonal(year, season, search, adultMode, page, limit)
         if (jikanRes.isSuccess) {
             val list = jikanRes.getOrDefault(emptyList())
             val sortedList = when (sort) {
@@ -2008,6 +2064,18 @@ object JikanApiClient {
 
         return if (anilistRes.isFailure) anilistRes else jikanRes
     }
+
+    fun fetchSeasonalAnime(
+        year: Int,
+        season: String,
+        sort: String = "POPULARITY_DESC",
+        search: String? = null,
+        includeAdult: Boolean,
+        page: Int = 1,
+        limit: Int = 25
+    ): Result<List<JikanMediaDetails>> = fetchSeasonalAnime(
+        year, season, sort, search, if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF, page, limit
+    )
 }
 
 class RateLimitException(message: String) : Exception(message)

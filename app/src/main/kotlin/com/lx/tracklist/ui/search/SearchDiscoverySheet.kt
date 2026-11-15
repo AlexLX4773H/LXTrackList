@@ -38,6 +38,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -45,6 +46,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lx.tracklist.ui.theme.LXBorder
@@ -70,9 +73,9 @@ fun SearchDiscoverySheet(
     category: SearchCategory,
     activeFilter: DiscoveryFilter?,
     onDismiss: () -> Unit,
-    onApplyAnime: (AnimeSeason, Int, AnimeSortOrder, Boolean) -> Unit,
-    onApplyMovie: (Int, TmdbMovieSort, Boolean) -> Unit,
-    onApplyTv: (Int, TmdbTvSort, Boolean) -> Unit,
+    onApplyAnime: (AnimeSeason, Int, AnimeSortOrder, AdultMode) -> Unit,
+    onApplyMovie: (Int, TmdbMovieSort, AdultMode) -> Unit,
+    onApplyTv: (Int, TmdbTvSort, AdultMode) -> Unit,
     onResetFilter: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -120,8 +123,8 @@ fun SearchDiscoverySheet(
         )
     }
 
-    var includeAdult by remember {
-        mutableStateOf(activeFilter?.includeAdult ?: false)
+    var adultMode by remember {
+        mutableStateOf(activeFilter?.adultMode ?: AdultMode.OFF)
     }
 
     var yearDropdownExpanded by remember { mutableStateOf(false) }
@@ -372,20 +375,19 @@ fun SearchDiscoverySheet(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    // 18+ Checkbox
-                    AdultContentCheckbox(
-                        category = category,
-                        checked = includeAdult,
-                        onCheckedChange = { includeAdult = it }
+                    // 18+ Subtle Checkbox Toggle
+                    SubtleAdultFilterToggle(
+                        adultMode = adultMode,
+                        onModeChange = { adultMode = it }
                     )
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     Button(
                         onClick = {
-                            onApplyAnime(selectedSeason, selectedAnimeYear, selectedAnimeSort, includeAdult)
+                            onApplyAnime(selectedSeason, selectedAnimeYear, selectedAnimeSort, adultMode)
                             onDismiss()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen),
@@ -395,7 +397,11 @@ fun SearchDiscoverySheet(
                             .height(48.dp)
                     ) {
                         Text(
-                            text = "Explore ${selectedSeason.displayName} $selectedAnimeYear Anime",
+                            text = if (adultMode == AdultMode.ONLY) {
+                                "Explore ${selectedSeason.displayName} $selectedAnimeYear (18+ Only)"
+                            } else {
+                                "Explore ${selectedSeason.displayName} $selectedAnimeYear Anime"
+                            },
                             fontWeight = FontWeight.Bold,
                             color = Color.Black
                         )
@@ -501,20 +507,19 @@ fun SearchDiscoverySheet(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    // 18+ Checkbox
-                    AdultContentCheckbox(
-                        category = category,
-                        checked = includeAdult,
-                        onCheckedChange = { includeAdult = it }
+                    // 18+ Subtle Checkbox Toggle
+                    SubtleAdultFilterToggle(
+                        adultMode = adultMode,
+                        onModeChange = { adultMode = it }
                     )
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     Button(
                         onClick = {
-                            onApplyMovie(selectedMovieYear, selectedMovieSort, includeAdult)
+                            onApplyMovie(selectedMovieYear, selectedMovieSort, adultMode)
                             onDismiss()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen),
@@ -524,7 +529,11 @@ fun SearchDiscoverySheet(
                             .height(48.dp)
                     ) {
                         Text(
-                            text = "Discover $selectedMovieYear Movies",
+                            text = if (adultMode == AdultMode.ONLY) {
+                                "Discover $selectedMovieYear Movies (18+ Only)"
+                            } else {
+                                "Discover $selectedMovieYear Movies"
+                            },
                             fontWeight = FontWeight.Bold,
                             color = Color.Black
                         )
@@ -630,20 +639,19 @@ fun SearchDiscoverySheet(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                    // 18+ Checkbox
-                    AdultContentCheckbox(
-                        category = category,
-                        checked = includeAdult,
-                        onCheckedChange = { includeAdult = it }
+                    // 18+ Subtle Checkbox Toggle
+                    SubtleAdultFilterToggle(
+                        adultMode = adultMode,
+                        onModeChange = { adultMode = it }
                     )
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     Button(
                         onClick = {
-                            onApplyTv(selectedTvYear, selectedTvSort, includeAdult)
+                            onApplyTv(selectedTvYear, selectedTvSort, adultMode)
                             onDismiss()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen),
@@ -653,7 +661,11 @@ fun SearchDiscoverySheet(
                             .height(48.dp)
                     ) {
                         Text(
-                            text = "Discover $selectedTvYear TV Shows",
+                            text = if (adultMode == AdultMode.ONLY) {
+                                "Discover $selectedTvYear TV Shows (18+ Only)"
+                            } else {
+                                "Discover $selectedTvYear TV Shows"
+                            },
                             fontWeight = FontWeight.Bold,
                             color = Color.Black
                         )
@@ -721,51 +733,48 @@ private fun SeasonSelectorBox(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AdultContentCheckbox(
-    category: SearchCategory,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
+private fun SubtleAdultFilterToggle(
+    adultMode: AdultMode,
+    onModeChange: (AdultMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (checked) Color(0xFFEF4444).copy(alpha = 0.12f) else LXSurfaceElevated.copy(alpha = 0.5f))
-            .border(
-                width = 1.dp,
-                color = if (checked) Color(0xFFEF4444).copy(alpha = 0.4f) else LXBorder.copy(alpha = 0.3f),
-                shape = RoundedCornerShape(8.dp)
-            )
-            .clickable { onCheckedChange(!checked) }
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .clickable { onModeChange(adultMode.next()) }
+            .padding(vertical = 4.dp, horizontal = 2.dp)
     ) {
-        Checkbox(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = CheckboxDefaults.colors(
-                checkedColor = Color(0xFFEF4444),
-                uncheckedColor = LXTextSecondary
-            )
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = if (category == SearchCategory.ANIME) "Include 18+ (Hentai)" else "Include 18+ Content",
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = if (checked) Color(0xFFEF4444) else LXTextPrimary
-            )
-            Text(
-                text = if (category == SearchCategory.ANIME) {
-                    "Include adult 18+ anime and hentai titles (off by default)"
-                } else {
-                    "Include R-rated and adult 18+ content (off by default)"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = LXTextSecondary
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+            Checkbox(
+                checked = adultMode != AdultMode.OFF,
+                onCheckedChange = { onModeChange(adultMode.next()) },
+                colors = CheckboxDefaults.colors(
+                    checkedColor = if (adultMode == AdultMode.ONLY) Color(0xFFEF4444) else LXPrimaryGreen,
+                    uncheckedColor = LXTextSecondary.copy(alpha = 0.6f),
+                    checkmarkColor = Color.Black
+                ),
+                modifier = Modifier.size(20.dp)
             )
         }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = when (adultMode) {
+                AdultMode.OFF -> "18+"
+                AdultMode.INCLUDE -> "18+"
+                AdultMode.ONLY -> "18+ Only"
+            },
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = if (adultMode != AdultMode.OFF) FontWeight.SemiBold else FontWeight.Normal,
+                fontSize = 13.sp
+            ),
+            color = when (adultMode) {
+                AdultMode.OFF -> LXTextSecondary
+                AdultMode.INCLUDE -> LXPrimaryGreen
+                AdultMode.ONLY -> Color(0xFFEF4444)
+            }
+        )
     }
 }
