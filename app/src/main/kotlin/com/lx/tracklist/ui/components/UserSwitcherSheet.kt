@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -60,9 +61,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.lx.tracklist.data.local.StorageHelper
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.ui.settings.ColorWheelPicker
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXErrorRed
@@ -90,6 +93,8 @@ fun UserSwitcherSheet(
     var isAddingUser by remember { mutableStateOf(false) }
     var newUserName by remember { mutableStateOf("") }
     var selectedColor by remember { mutableStateOf(avatarColors.first()) }
+    var customAvatarColor by remember { mutableStateOf<String?>(null) }
+    var showCustomColorPicker by remember { mutableStateOf(false) }
     var newAvatarUri by remember { mutableStateOf<String?>(null) }
     var isProtectWithPasskey by remember { mutableStateOf(false) }
     var newPasskey by remember { mutableStateOf("") }
@@ -100,6 +105,8 @@ fun UserSwitcherSheet(
     var userToEdit by remember { mutableStateOf<UserProfile?>(null) }
     var editUserName by remember { mutableStateOf("") }
     var editAvatarColor by remember { mutableStateOf(avatarColors.first()) }
+    var editCustomAvatarColor by remember { mutableStateOf<String?>(null) }
+    var showEditCustomColorPicker by remember { mutableStateOf(false) }
     var editAvatarUri by remember { mutableStateOf<String?>(null) }
 
     var isPickingForEdit by remember { mutableStateOf(false) }
@@ -178,7 +185,7 @@ fun UserSwitcherSheet(
                                 .size(64.dp)
                                 .clip(CircleShape)
                                 .background(color)
-                                .border(2.dp, if (!editAvatarUri.isNullOrBlank()) LXPrimaryGreen else Color.Transparent, CircleShape)
+                                .border(2.dp, color, CircleShape)
                                 .clickable {
                                     isPickingForEdit = true
                                     photoPickerLauncher.launch("image/*")
@@ -190,14 +197,17 @@ fun UserSwitcherSheet(
                                     model = editAvatarUri,
                                     contentDescription = "Avatar",
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape)
+                                        .border(2.dp, color, CircleShape)
                                 )
                             } else {
                                 Text(
                                     text = editUserName.take(1).uppercase().ifBlank { "?" },
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 24.sp,
-                                    color = Color.Black
+                                    color = if (isColorDark(color)) Color.White else Color.Black
                                 )
                             }
                         }
@@ -240,11 +250,14 @@ fun UserSwitcherSheet(
                         )
                     )
 
-                    Text("Theme Accent Color", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Avatar Color", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         items(avatarColors) { hex ->
                             val color = parseHexColor(hex)
-                            val isChosen = editAvatarColor == hex
+                            val isChosen = editAvatarColor.equals(hex, ignoreCase = true)
                             Box(
                                 modifier = Modifier
                                     .size(34.dp)
@@ -259,8 +272,72 @@ fun UserSwitcherSheet(
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (isChosen) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = if (isColorDark(color)) Color.White else Color.Black,
+                                        modifier = Modifier.size(16.dp)
+                                    )
                                 }
+                            }
+                        }
+
+                        val currentEditCustomColor = editCustomAvatarColor
+                        if (currentEditCustomColor != null && !avatarColors.any { it.equals(currentEditCustomColor, ignoreCase = true) }) {
+                            item {
+                                val color = parseHexColor(currentEditCustomColor)
+                                val isChosen = editAvatarColor.equals(currentEditCustomColor, ignoreCase = true)
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(CircleShape)
+                                        .background(color)
+                                        .border(
+                                            width = if (isChosen) 3.dp else 1.dp,
+                                            color = if (isChosen) Color.White else Color.Transparent,
+                                            shape = CircleShape
+                                        )
+                                        .clickable {
+                                            if (isChosen) {
+                                                showEditCustomColorPicker = true
+                                            } else {
+                                                editAvatarColor = currentEditCustomColor
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isChosen) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = if (isColorDark(color)) Color.White else Color.Black,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(LXBackgroundBlack)
+                                    .border(
+                                        width = 1.dp,
+                                        color = LXBorder,
+                                        shape = CircleShape
+                                    )
+                                    .clickable { showEditCustomColorPicker = true },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Set Custom Avatar Color",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         }
                     }
@@ -280,6 +357,7 @@ fun UserSwitcherSheet(
                                 )
                             )
                             userToEdit = null
+                            editCustomAvatarColor = null
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
@@ -289,11 +367,38 @@ fun UserSwitcherSheet(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { userToEdit = null }) {
+                TextButton(onClick = {
+                    userToEdit = null
+                    editCustomAvatarColor = null
+                }) {
                     Text("Cancel", color = LXTextSecondary)
                 }
             },
             containerColor = LXSurfaceElevated
+        )
+    }
+
+    // Custom Avatar Color Dialog for Create Profile
+    if (showCustomColorPicker) {
+        CustomAvatarColorDialog(
+            initialColorHex = selectedColor,
+            onDismiss = { showCustomColorPicker = false },
+            onColorSelected = { chosenColor ->
+                customAvatarColor = chosenColor
+                selectedColor = chosenColor
+            }
+        )
+    }
+
+    // Custom Avatar Color Dialog for Edit Profile
+    if (showEditCustomColorPicker) {
+        CustomAvatarColorDialog(
+            initialColorHex = editAvatarColor,
+            onDismiss = { showEditCustomColorPicker = false },
+            onColorSelected = { chosenColor ->
+                editCustomAvatarColor = chosenColor
+                editAvatarColor = chosenColor
+            }
         )
     }
 
@@ -370,7 +475,7 @@ fun UserSwitcherSheet(
                                 .size(56.dp)
                                 .clip(CircleShape)
                                 .background(color)
-                                .border(2.dp, if (!newAvatarUri.isNullOrBlank()) LXPrimaryGreen else Color.Transparent, CircleShape)
+                                .border(2.dp, color, CircleShape)
                                 .clickable {
                                     isPickingForEdit = false
                                     photoPickerLauncher.launch("image/*")
@@ -382,14 +487,17 @@ fun UserSwitcherSheet(
                                     model = newAvatarUri,
                                     contentDescription = "Avatar Preview",
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape)
+                                        .border(2.dp, color, CircleShape)
                                 )
                             } else {
                                 Text(
                                     text = newUserName.take(1).uppercase().ifBlank { "?" },
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 22.sp,
-                                    color = Color.Black
+                                    color = if (isColorDark(color)) Color.White else Color.Black
                                 )
                             }
                         }
@@ -434,10 +542,13 @@ fun UserSwitcherSheet(
                     )
 
                     Text("Avatar Color", style = MaterialTheme.typography.labelMedium, color = LXTextPrimary)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         items(avatarColors) { hex ->
                             val color = parseHexColor(hex)
-                            val isChosen = selectedColor == hex
+                            val isChosen = selectedColor.equals(hex, ignoreCase = true)
                             Box(
                                 modifier = Modifier
                                     .size(34.dp)
@@ -452,8 +563,72 @@ fun UserSwitcherSheet(
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (isChosen) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = if (isColorDark(color)) Color.White else Color.Black,
+                                        modifier = Modifier.size(16.dp)
+                                    )
                                 }
+                            }
+                        }
+
+                        val currentCustom = customAvatarColor
+                        if (currentCustom != null && !avatarColors.any { it.equals(currentCustom, ignoreCase = true) }) {
+                            item {
+                                val color = parseHexColor(currentCustom)
+                                val isChosen = selectedColor.equals(currentCustom, ignoreCase = true)
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(CircleShape)
+                                        .background(color)
+                                        .border(
+                                            width = if (isChosen) 3.dp else 1.dp,
+                                            color = if (isChosen) Color.White else Color.Transparent,
+                                            shape = CircleShape
+                                        )
+                                        .clickable {
+                                            if (isChosen) {
+                                                showCustomColorPicker = true
+                                            } else {
+                                                selectedColor = currentCustom
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isChosen) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = if (isColorDark(color)) Color.White else Color.Black,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(LXBackgroundBlack)
+                                    .border(
+                                        width = 1.dp,
+                                        color = LXBorder,
+                                        shape = CircleShape
+                                    )
+                                    .clickable { showCustomColorPicker = true },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Set Custom Avatar Color",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         }
                     }
@@ -521,6 +696,8 @@ fun UserSwitcherSheet(
                         TextButton(onClick = {
                             isAddingUser = false
                             newUserName = ""
+                            selectedColor = avatarColors.first()
+                            customAvatarColor = null
                             newAvatarUri = null
                             isProtectWithPasskey = false
                             newPasskey = ""
@@ -537,6 +714,8 @@ fun UserSwitcherSheet(
                                     onCreateUser(newUserName, selectedColor, newAvatarUri, finalPass)
                                     isAddingUser = false
                                     newUserName = ""
+                                    selectedColor = avatarColors.first()
+                                    customAvatarColor = null
                                     newAvatarUri = null
                                     isProtectWithPasskey = false
                                     newPasskey = ""
@@ -592,7 +771,7 @@ fun UserSwitcherSheet(
                                     .size(40.dp)
                                     .clip(CircleShape)
                                     .background(avatarColor)
-                                    .border(1.dp, if (!user.avatarImageUri.isNullOrBlank()) LXPrimaryGreen.copy(alpha = 0.6f) else Color.Transparent, CircleShape),
+                                    .border(1.5.dp, avatarColor, CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (!user.avatarImageUri.isNullOrBlank()) {
@@ -600,14 +779,17 @@ fun UserSwitcherSheet(
                                         model = user.avatarImageUri,
                                         contentDescription = user.name,
                                         contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(CircleShape)
+                                            .border(1.5.dp, avatarColor, CircleShape)
                                     )
                                 } else {
                                     Text(
                                         text = user.name.take(1).uppercase(),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp,
-                                        color = Color.Black
+                                        color = if (isColorDark(avatarColor)) Color.White else Color.Black
                                     )
                                 }
                             }
@@ -645,6 +827,7 @@ fun UserSwitcherSheet(
                                 userToEdit = user
                                 editUserName = user.name
                                 editAvatarColor = user.avatarColorHex
+                                editCustomAvatarColor = if (!avatarColors.any { it.equals(user.avatarColorHex, ignoreCase = true) }) user.avatarColorHex else null
                                 editAvatarUri = user.avatarImageUri
                             }) {
                                 Icon(
@@ -705,4 +888,83 @@ private fun parseHexColor(hex: String): Color {
     } catch (_: Exception) {
         LXPrimaryGreen
     }
+}
+
+private fun isColorDark(color: Color): Boolean {
+    val luminance = 0.299f * color.red + 0.587f * color.green + 0.114f * color.blue
+    return luminance < 0.5f
+}
+
+@Composable
+private fun CustomAvatarColorDialog(
+    initialColorHex: String,
+    onDismiss: () -> Unit,
+    onColorSelected: (String) -> Unit
+) {
+    var tempColorHex by remember(initialColorHex) {
+        val clean = initialColorHex.trim()
+        val hex = if (clean.startsWith("#")) clean else "#$clean"
+        mutableStateOf(hex)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier.fillMaxWidth(0.92f),
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Palette,
+                    contentDescription = null,
+                    tint = LXPrimaryGreen,
+                    modifier = Modifier.size(22.dp)
+                )
+                Text(
+                    text = "Custom Avatar Color",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = LXTextPrimary
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                ColorWheelPicker(
+                    selectedHex = tempColorHex,
+                    onColorChanged = { tempColorHex = it }
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    onColorSelected(tempColorHex)
+                    onDismiss()
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = LXPrimaryGreen,
+                    contentColor = LXBackgroundBlack
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Select Color", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = LXTextSecondary)
+            }
+        },
+        containerColor = LXSurfaceElevated,
+        shape = RoundedCornerShape(16.dp)
+    )
 }
