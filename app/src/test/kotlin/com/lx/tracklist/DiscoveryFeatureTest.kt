@@ -11,6 +11,8 @@ import com.lx.tracklist.ui.search.BookTagRegistry
 import com.lx.tracklist.ui.search.ContentDiscoveryMode
 import com.lx.tracklist.ui.search.DiscoveryFilter
 import com.lx.tracklist.ui.search.MangaSortOrder
+import com.lx.tracklist.ui.search.OriginalLanguageRegistry
+import com.lx.tracklist.ui.search.SearchCategory
 import com.lx.tracklist.ui.search.TmdbDiscoveryMode
 import com.lx.tracklist.ui.search.TmdbMovieSort
 import com.lx.tracklist.ui.search.TmdbTagRegistry
@@ -377,5 +379,119 @@ class DiscoveryFeatureTest {
         )
         assertEquals("2020–2024", rangeTv.yearText)
         assertEquals("📺 TV Shows 2020–2024 • Highest Rated", rangeTv.label)
+    }
+
+    @Test
+    fun testOriginalLanguageRegistryLookupAndMatching() {
+        // 1. Direct ISO 639-1
+        val thai = OriginalLanguageRegistry.findByCode("th")
+        assertNotNull(thai)
+        assertEquals("Thai", thai?.displayName)
+        assertEquals("🇹🇭", thai?.flagEmoji)
+        assertEquals("🇹🇭 Thai", thai?.displayWithFlag)
+
+        val japanese = OriginalLanguageRegistry.findByCode("ja")
+        assertNotNull(japanese)
+        assertEquals("Japanese", japanese?.displayName)
+        assertEquals("🇯🇵", japanese?.flagEmoji)
+
+        // 2. ISO 639-2 (OpenLibrary / ISO-3)
+        val jpn = OriginalLanguageRegistry.findByCode("jpn")
+        assertNotNull(jpn)
+        assertEquals("ja", jpn?.code)
+
+        val tha = OriginalLanguageRegistry.findByCode("tha")
+        assertNotNull(tha)
+        assertEquals("th", tha?.code)
+
+        // 3. Country Codes (AniList)
+        val kr = OriginalLanguageRegistry.findByCode("KR")
+        assertNotNull(kr)
+        assertEquals("ko", kr?.code)
+
+        val jp = OriginalLanguageRegistry.findByCode("JP")
+        assertNotNull(jp)
+        assertEquals("ja", jp?.code)
+
+        // 4. Cross-format Matching
+        assertTrue(OriginalLanguageRegistry.matches(null, "ja"))
+        assertTrue(OriginalLanguageRegistry.matches("", "ja"))
+        assertTrue(OriginalLanguageRegistry.matches("th", "tha"))
+        assertTrue(OriginalLanguageRegistry.matches("th", "TH"))
+        assertTrue(OriginalLanguageRegistry.matches("ja", "jpn"))
+        assertTrue(OriginalLanguageRegistry.matches("ja", "JP"))
+        assertTrue(OriginalLanguageRegistry.matches("ko", "kor"))
+        assertTrue(OriginalLanguageRegistry.matches("ko", "KR"))
+        assertFalse(OriginalLanguageRegistry.matches("th", "ja"))
+        assertFalse(OriginalLanguageRegistry.matches("th", null))
+
+        // 5. Code conversion helpers
+        assertEquals("TH", OriginalLanguageRegistry.toAniListCountryCode("th"))
+        assertEquals("JP", OriginalLanguageRegistry.toAniListCountryCode("ja"))
+        assertEquals("KR", OriginalLanguageRegistry.toAniListCountryCode("ko"))
+        assertEquals("tha", OriginalLanguageRegistry.toIso6392("th"))
+        assertEquals("jpn", OriginalLanguageRegistry.toIso6392("ja"))
+        assertEquals("kor", OriginalLanguageRegistry.toIso6392("ko"))
+
+        // 6. Category top languages
+        val animeLangs = OriginalLanguageRegistry.getTopLanguagesForCategory(SearchCategory.ANIME)
+        assertTrue(animeLangs.any { it.code == "ja" })
+        assertTrue(animeLangs.any { it.code == "ko" })
+
+        val tvLangs = OriginalLanguageRegistry.getTopLanguagesForCategory(SearchCategory.TV_SHOWS)
+        assertTrue(tvLangs.any { it.code == "th" })
+        assertTrue(tvLangs.any { it.code == "en" })
+    }
+
+    @Test
+    fun testOriginalLanguageInDiscoveryFilterLabels() {
+        val tvFilter = DiscoveryFilter.Tv(
+            mode = TmdbDiscoveryMode.MOST_POPULAR,
+            sortOrder = TmdbTvSort.POPULARITY,
+            originalLanguage = "th"
+        )
+        assertEquals("🔥 Most Popular TV • Most Popular • 🇹🇭 Thai", tvFilter.label)
+
+        val animeFilter = DiscoveryFilter.Anime(
+            mode = AnimeDiscoveryMode.MOST_POPULAR,
+            sortOrder = AnimeSortOrder.POPULARITY,
+            originalLanguage = "ja"
+        )
+        assertEquals("🔥 Most Popular • Most Popular • 🇯🇵 Japanese", animeFilter.label)
+
+        val movieFilter = DiscoveryFilter.Movie(
+            mode = TmdbDiscoveryMode.MOST_POPULAR,
+            sortOrder = TmdbMovieSort.POPULARITY,
+            originalLanguage = "fr"
+        )
+        assertEquals("🔥 Most Popular Movies • Most Popular • 🇫🇷 French", movieFilter.label)
+
+        val mangaFilter = DiscoveryFilter.Manga(
+            mode = ContentDiscoveryMode.MOST_POPULAR,
+            sortOrder = MangaSortOrder.POPULARITY,
+            originalLanguage = "zh"
+        )
+        assertEquals("🔥 Most Popular Manga • Most Popular • 🇨🇳 Chinese", mangaFilter.label)
+
+        val manhwaFilter = DiscoveryFilter.Manhwa(
+            mode = ContentDiscoveryMode.MOST_POPULAR,
+            sortOrder = MangaSortOrder.POPULARITY,
+            originalLanguage = "ko"
+        )
+        assertEquals("🔥 Most Popular Manhwa • Most Popular • 🇰🇷 Korean", manhwaFilter.label)
+
+        val lnFilter = DiscoveryFilter.LightNovel(
+            mode = ContentDiscoveryMode.MOST_POPULAR,
+            sortOrder = MangaSortOrder.POPULARITY,
+            originalLanguage = "ja"
+        )
+        assertEquals("🔥 Most Popular Light Novels • Most Popular • 🇯🇵 Japanese", lnFilter.label)
+
+        val bookFilter = DiscoveryFilter.Book(
+            mode = ContentDiscoveryMode.MOST_POPULAR,
+            sortOrder = BookSortOrder.POPULARITY,
+            originalLanguage = "en"
+        )
+        assertEquals("🔥 Most Popular Books • Most Popular • 🇺🇸 English", bookFilter.label)
     }
 }

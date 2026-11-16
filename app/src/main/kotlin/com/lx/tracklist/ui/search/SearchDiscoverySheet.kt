@@ -122,6 +122,9 @@ fun SearchDiscoverySheet(
     var selectedAnimeSort by remember {
         mutableStateOf(animeFilter?.sortOrder ?: AnimeSortOrder.POPULARITY)
     }
+    var selectedAnimeLanguage by remember {
+        mutableStateOf(animeFilter?.originalLanguage)
+    }
     var includedTags by remember {
         mutableStateOf(animeFilter?.includedTags ?: emptySet())
     }
@@ -145,6 +148,9 @@ fun SearchDiscoverySheet(
     }
     var selectedMovieSort by remember {
         mutableStateOf(movieFilter?.sortOrder ?: TmdbMovieSort.POPULARITY)
+    }
+    var selectedMovieLanguage by remember {
+        mutableStateOf(movieFilter?.originalLanguage)
     }
     var movieIncludedTags by remember {
         mutableStateOf(movieFilter?.includedTags ?: emptySet())
@@ -170,6 +176,9 @@ fun SearchDiscoverySheet(
     var selectedTvSort by remember {
         mutableStateOf(tvFilter?.sortOrder ?: TmdbTvSort.POPULARITY)
     }
+    var selectedTvLanguage by remember {
+        mutableStateOf(tvFilter?.originalLanguage)
+    }
     var tvIncludedTags by remember {
         mutableStateOf(tvFilter?.includedTags ?: emptySet())
     }
@@ -190,6 +199,9 @@ fun SearchDiscoverySheet(
     }
     var selectedMangaSort by remember {
         mutableStateOf(mangaFilter?.sortOrder ?: MangaSortOrder.POPULARITY)
+    }
+    var selectedMangaLanguage by remember {
+        mutableStateOf(mangaFilter?.originalLanguage)
     }
     var mangaIncludedTags by remember {
         mutableStateOf(mangaFilter?.includedTags ?: emptySet())
@@ -212,6 +224,9 @@ fun SearchDiscoverySheet(
     var selectedManhwaSort by remember {
         mutableStateOf(manhwaFilter?.sortOrder ?: MangaSortOrder.POPULARITY)
     }
+    var selectedManhwaLanguage by remember {
+        mutableStateOf(manhwaFilter?.originalLanguage)
+    }
     var manhwaIncludedTags by remember {
         mutableStateOf(manhwaFilter?.includedTags ?: emptySet())
     }
@@ -233,6 +248,9 @@ fun SearchDiscoverySheet(
     var selectedLightNovelSort by remember {
         mutableStateOf(lightNovelFilter?.sortOrder ?: MangaSortOrder.POPULARITY)
     }
+    var selectedLightNovelLanguage by remember {
+        mutableStateOf(lightNovelFilter?.originalLanguage)
+    }
     var lightNovelIncludedTags by remember {
         mutableStateOf(lightNovelFilter?.includedTags ?: emptySet())
     }
@@ -253,6 +271,9 @@ fun SearchDiscoverySheet(
     }
     var selectedBookSort by remember {
         mutableStateOf(bookFilter?.sortOrder ?: BookSortOrder.POPULARITY)
+    }
+    var selectedBookLanguage by remember {
+        mutableStateOf(bookFilter?.originalLanguage)
     }
     var bookIncludedTags by remember {
         mutableStateOf(bookFilter?.includedTags ?: emptySet())
@@ -1230,6 +1251,15 @@ fun SearchDiscoverySheet(
 
                             Spacer(modifier = Modifier.height(8.dp))
 
+                            // Original Language Filter
+                            OriginalLanguageSelector(
+                                category = SearchCategory.ANIME,
+                                selectedLanguage = selectedAnimeLanguage,
+                                onLanguageSelected = { selectedAnimeLanguage = it }
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
                             // 18+ Subtle Checkbox Toggle
                             SubtleAdultFilterToggle(
                                 adultMode = adultMode,
@@ -1248,7 +1278,8 @@ fun SearchDiscoverySheet(
                                         sortOrder = selectedAnimeSort,
                                         includedTags = includedTags,
                                         excludedTags = excludedTags,
-                                        adultMode = adultMode
+                                        adultMode = adultMode,
+                                        originalLanguage = selectedAnimeLanguage
                                     )
                                     onApplyAnime(filter)
                                     onDismiss()
@@ -1468,6 +1499,15 @@ fun SearchDiscoverySheet(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
+                        // Original Language Filter
+                        OriginalLanguageSelector(
+                            category = SearchCategory.MOVIES,
+                            selectedLanguage = selectedMovieLanguage,
+                            onLanguageSelected = { selectedMovieLanguage = it }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         // 18+ Subtle Checkbox Toggle
                         SubtleAdultFilterToggle(
                             adultMode = adultMode,
@@ -1486,7 +1526,8 @@ fun SearchDiscoverySheet(
                                     sortOrder = selectedMovieSort,
                                     includedTags = movieIncludedTags,
                                     excludedTags = movieExcludedTags,
-                                    adultMode = adultMode
+                                    adultMode = adultMode,
+                                    originalLanguage = selectedMovieLanguage
                                 )
                                 onApplyMovie(filter)
                                 onDismiss()
@@ -1713,6 +1754,15 @@ fun SearchDiscoverySheet(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
+                        // Original Language Filter
+                        OriginalLanguageSelector(
+                            category = SearchCategory.TV_SHOWS,
+                            selectedLanguage = selectedTvLanguage,
+                            onLanguageSelected = { selectedTvLanguage = it }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         // 18+ Subtle Checkbox Toggle
                         SubtleAdultFilterToggle(
                             adultMode = adultMode,
@@ -1731,7 +1781,8 @@ fun SearchDiscoverySheet(
                                     sortOrder = selectedTvSort,
                                     includedTags = tvIncludedTags,
                                     excludedTags = tvExcludedTags,
-                                    adultMode = adultMode
+                                    adultMode = adultMode,
+                                    originalLanguage = selectedTvLanguage
                                 )
                                 onApplyTv(filter)
                                 onDismiss()
@@ -1948,6 +1999,15 @@ fun SearchDiscoverySheet(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
+                        // Original Language Filter
+                        OriginalLanguageSelector(
+                            category = SearchCategory.MANGA,
+                            selectedLanguage = selectedMangaLanguage,
+                            onLanguageSelected = { selectedMangaLanguage = it }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         SubtleAdultFilterToggle(
                             adultMode = adultMode,
                             onModeChange = { adultMode = it }
@@ -1964,7 +2024,8 @@ fun SearchDiscoverySheet(
                                     sortOrder = selectedMangaSort,
                                     includedTags = mangaIncludedTags,
                                     excludedTags = mangaExcludedTags,
-                                    adultMode = adultMode
+                                    adultMode = adultMode,
+                                    originalLanguage = selectedMangaLanguage
                                 )
                                 onApplyManga(filter)
                                 onDismiss()
@@ -2181,6 +2242,15 @@ fun SearchDiscoverySheet(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
+                        // Original Language Filter
+                        OriginalLanguageSelector(
+                            category = SearchCategory.MANHWA,
+                            selectedLanguage = selectedManhwaLanguage,
+                            onLanguageSelected = { selectedManhwaLanguage = it }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         SubtleAdultFilterToggle(
                             adultMode = adultMode,
                             onModeChange = { adultMode = it }
@@ -2197,7 +2267,8 @@ fun SearchDiscoverySheet(
                                     sortOrder = selectedManhwaSort,
                                     includedTags = manhwaIncludedTags,
                                     excludedTags = manhwaExcludedTags,
-                                    adultMode = adultMode
+                                    adultMode = adultMode,
+                                    originalLanguage = selectedManhwaLanguage
                                 )
                                 onApplyManhwa(filter)
                                 onDismiss()
@@ -2414,6 +2485,15 @@ fun SearchDiscoverySheet(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
+                        // Original Language Filter
+                        OriginalLanguageSelector(
+                            category = SearchCategory.LIGHT_NOVELS,
+                            selectedLanguage = selectedLightNovelLanguage,
+                            onLanguageSelected = { selectedLightNovelLanguage = it }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         SubtleAdultFilterToggle(
                             adultMode = adultMode,
                             onModeChange = { adultMode = it }
@@ -2430,7 +2510,8 @@ fun SearchDiscoverySheet(
                                     sortOrder = selectedLightNovelSort,
                                     includedTags = lightNovelIncludedTags,
                                     excludedTags = lightNovelExcludedTags,
-                                    adultMode = adultMode
+                                    adultMode = adultMode,
+                                    originalLanguage = selectedLightNovelLanguage
                                 )
                                 onApplyLightNovel(filter)
                                 onDismiss()
@@ -2648,6 +2729,15 @@ fun SearchDiscoverySheet(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
+                        // Original Language Filter
+                        OriginalLanguageSelector(
+                            category = SearchCategory.BOOKS,
+                            selectedLanguage = selectedBookLanguage,
+                            onLanguageSelected = { selectedBookLanguage = it }
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         SubtleAdultFilterToggle(
                             adultMode = adultMode,
                             onModeChange = { adultMode = it }
@@ -2664,7 +2754,8 @@ fun SearchDiscoverySheet(
                                     sortOrder = selectedBookSort,
                                     includedTags = bookIncludedTags,
                                     excludedTags = bookExcludedTags,
-                                    adultMode = adultMode
+                                    adultMode = adultMode,
+                                    originalLanguage = selectedBookLanguage
                                 )
                                 onApplyBook(filter)
                                 onDismiss()
@@ -3031,6 +3122,144 @@ private fun TriStateTagCheckbox(
                     tint = Color.White,
                     modifier = Modifier.size(13.dp)
                 )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun OriginalLanguageSelector(
+    category: SearchCategory,
+    selectedLanguage: String?,
+    onLanguageSelected: (String?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var moreExpanded by remember { mutableStateOf(false) }
+    val topLanguages = remember(category) { OriginalLanguageRegistry.getTopLanguagesForCategory(category) }
+    val isTopSelected = topLanguages.any { OriginalLanguageRegistry.matches(selectedLanguage, it.code) }
+    val customSelectedLang = if (selectedLanguage != null && !isTopSelected) {
+        OriginalLanguageRegistry.findByCode(selectedLanguage)
+    } else null
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Original Language",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                color = LXTextSecondary
+            )
+            if (selectedLanguage != null) {
+                Text(
+                    text = OriginalLanguageRegistry.getDisplayWithFlag(selectedLanguage) ?: selectedLanguage,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = LXPrimaryGreen
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // "All" chip
+                FilterChip(
+                    selected = selectedLanguage == null,
+                    onClick = { onLanguageSelected(null) },
+                    label = { Text("All", fontSize = 11.sp) },
+                    modifier = Modifier.height(30.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                        selectedLabelColor = LXPrimaryGreen,
+                        containerColor = LXSurfaceElevated,
+                        labelColor = LXTextSecondary
+                    )
+                )
+
+                // Top category languages
+                topLanguages.forEach { lang ->
+                    val isSelected = OriginalLanguageRegistry.matches(selectedLanguage, lang.code)
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            if (isSelected) onLanguageSelected(null) else onLanguageSelected(lang.code)
+                        },
+                        label = { Text(lang.displayWithFlag, fontSize = 11.sp) },
+                        modifier = Modifier.height(30.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                            selectedLabelColor = LXPrimaryGreen,
+                            containerColor = LXSurfaceElevated,
+                            labelColor = LXTextSecondary
+                        )
+                    )
+                }
+
+                // If user selected a language via "More" dropdown that isn't in topLanguages, show it as an active chip
+                if (customSelectedLang != null) {
+                    FilterChip(
+                        selected = true,
+                        onClick = { onLanguageSelected(null) },
+                        label = { Text(customSelectedLang.displayWithFlag, fontSize = 11.sp) },
+                        modifier = Modifier.height(30.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                            selectedLabelColor = LXPrimaryGreen,
+                            containerColor = LXSurfaceElevated,
+                            labelColor = LXTextSecondary
+                        )
+                    )
+                }
+
+                // "More ▾" dropdown chip
+                Box {
+                    FilterChip(
+                        selected = false,
+                        onClick = { moreExpanded = true },
+                        modifier = Modifier.height(30.dp),
+                        label = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("More", fontSize = 11.sp)
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                            }
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = LXSurfaceElevated,
+                            labelColor = LXTextPrimary
+                        )
+                    )
+
+                    DropdownMenu(
+                        expanded = moreExpanded,
+                        onDismissRequest = { moreExpanded = false },
+                        modifier = Modifier.background(LXSurfaceElevated)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("All Languages", color = LXTextSecondary) },
+                            onClick = {
+                                onLanguageSelected(null)
+                                moreExpanded = false
+                            }
+                        )
+                        OriginalLanguageRegistry.ALL_LANGUAGES.forEach { lang ->
+                            DropdownMenuItem(
+                                text = { Text(lang.displayWithFlag, color = LXTextPrimary) },
+                                onClick = {
+                                    onLanguageSelected(lang.code)
+                                    moreExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
             }
         }
     }

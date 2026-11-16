@@ -948,12 +948,17 @@ private fun SearchResultCard(
                     item.durationMinutes?.takeIf { it > 0 }?.let {
                         metaParts.add("${it}m")
                     }
+                    item.originalLanguageWithFlag?.let {
+                        metaParts.add(it)
+                    }
 
                     if (metaParts.isNotEmpty()) {
                         Text(
                             text = metaParts.joinToString(" • "),
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                            color = LXTextSecondary
+                            color = LXTextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -1364,6 +1369,20 @@ private fun SearchResultDetailSheet(
                             ) {
                                 Text(
                                     text = item.releaseYear,
+                                    color = LXTextSecondary,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        item.originalLanguageWithFlag?.let { langText ->
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = LXSurfaceElevated
+                            ) {
+                                Text(
+                                    text = langText,
                                     color = LXTextSecondary,
                                     fontSize = 11.sp,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)

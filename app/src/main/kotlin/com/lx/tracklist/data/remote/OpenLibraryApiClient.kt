@@ -5,6 +5,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
+import com.lx.tracklist.ui.search.OriginalLanguageRegistry
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLEncoder
@@ -33,6 +34,7 @@ object OpenLibraryApiClient {
         sort: String = "editions",
         subject: String? = null,
         search: String? = null,
+        originalLanguage: String? = null,
         page: Int = 1,
         limit: Int = 20
     ): Result<List<BookDetails>> {
@@ -46,6 +48,12 @@ object OpenLibraryApiClient {
             queryParts.add("first_publish_year:[$startYear TO 2026]")
         } else if (endYear != null) {
             queryParts.add("first_publish_year:[1800 TO $endYear]")
+        }
+        if (!originalLanguage.isNullOrBlank()) {
+            val iso3 = com.lx.tracklist.ui.search.OriginalLanguageRegistry.toIso6392(originalLanguage)
+            if (!iso3.isNullOrBlank()) {
+                queryParts.add("language:$iso3")
+            }
         }
         val qVal = if (queryParts.isNotEmpty()) queryParts.joinToString(" AND ") else "*:*"
         val encodedQ = URLEncoder.encode(qVal, "UTF-8")
@@ -251,6 +259,7 @@ object OpenLibraryApiClient {
 
         val ratingAvg = docObj.get("ratings_average")?.takeIf { !it.isJsonNull }?.asFloat
         val scaledScore = ratingAvg?.let { it * 2f }
+        val lang = docObj.getAsJsonArray("language")?.firstOrNull()?.takeIf { !it.isJsonNull }?.asString?.trim()
 
         return BookDetails(
             id = id,
@@ -266,7 +275,8 @@ object OpenLibraryApiClient {
             categories = categories,
             averageScore = scaledScore,
             sourceProvider = "Open Library",
-            infoUrl = "https://openlibrary.org$key"
+            infoUrl = "https://openlibrary.org$key",
+            language = lang
         )
     }
 

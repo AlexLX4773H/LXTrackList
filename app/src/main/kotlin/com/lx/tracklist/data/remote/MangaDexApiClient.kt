@@ -41,7 +41,8 @@ object MangaDexApiClient {
     fun searchMangaMultiple(
         query: String,
         isManhwa: Boolean = false,
-        limit: Int = 20
+        limit: Int = 20,
+        originalLanguage: String? = null
     ): Result<List<JikanMediaDetails>> {
         val cleanQuery = query.trim()
         if (cleanQuery.isBlank()) return Result.success(emptyList())
@@ -49,10 +50,10 @@ object MangaDexApiClient {
         val encodedTitle = URLEncoder.encode(cleanQuery, "UTF-8")
         val limitClamped = limit.coerceIn(1, 50)
 
-        val languageFilter = if (isManhwa) {
-            "&originalLanguage[]=ko"
-        } else {
-            ""
+        val languageFilter = when {
+            !originalLanguage.isNullOrBlank() -> "&originalLanguage[]=${originalLanguage.lowercase(Locale.ROOT)}"
+            isManhwa -> "&originalLanguage[]=ko"
+            else -> ""
         }
 
         val endpoint = "$BASE_URL/manga?title=$encodedTitle&limit=$limitClamped" +
@@ -312,7 +313,8 @@ object MangaDexApiClient {
             externalScoreSource = null,
             type = inferredType,
             sourceProvider = "MangaDex",
-            url = webUrl
+            url = webUrl,
+            originalLanguage = originalLanguage
         )
     }
 }

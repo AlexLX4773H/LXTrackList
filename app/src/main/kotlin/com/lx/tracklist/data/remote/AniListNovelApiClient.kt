@@ -3,6 +3,7 @@ package com.lx.tracklist.data.remote
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.lx.tracklist.ui.search.OriginalLanguageRegistry
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -56,6 +57,7 @@ object AniListNovelApiClient {
                   tags {
                     name
                   }
+                  countryOfOrigin
                   staff {
                     edges {
                       role
@@ -215,6 +217,9 @@ object AniListNovelApiClient {
         val endDate = parseAniListDate(mediaObj.getAsJsonObject("endDate"))
         val resolvedEndDate = endDate ?: if (isAiring == false) startDate else null
 
+        val countryOfOrigin = mediaObj.get("countryOfOrigin")?.takeIf { !it.isJsonNull }?.asString
+        val resolvedLang = countryOfOrigin?.let { com.lx.tracklist.ui.search.OriginalLanguageRegistry.findByCode(it)?.code ?: it.lowercase(java.util.Locale.ROOT) } ?: "ja"
+
         return JikanMediaDetails(
             malId = resolvedId,
             title = primaryTitle,
@@ -238,7 +243,8 @@ object AniListNovelApiClient {
             url = siteUrl,
             totalPages = null,
             isbn = null,
-            authors = authors.joinToString(", ").takeIf { it.isNotBlank() }
+            authors = authors.joinToString(", ").takeIf { it.isNotBlank() },
+            originalLanguage = resolvedLang
         )
     }
 

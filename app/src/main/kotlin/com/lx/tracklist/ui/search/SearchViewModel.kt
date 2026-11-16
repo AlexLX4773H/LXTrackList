@@ -54,6 +54,7 @@ data class SearchResultItem(
     val alternateTitle: String? = null,
     val posterUrl: String? = null,
     val releaseYear: String? = null,
+    val originalLanguage: String? = null,
     val totalUnits: Int? = null,
     val totalVolumes: Int? = null,
     val totalSeasons: Int? = null,
@@ -70,7 +71,13 @@ data class SearchResultItem(
     val rawBookDetails: BookDetails? = null,
     val rawJikanDetails: JikanMediaDetails? = null,
     val rawTmdbResult: TmdbSearchResult? = null
-)
+) {
+    val originalLanguageDisplayName: String?
+        get() = OriginalLanguageRegistry.getDisplayName(originalLanguage)
+
+    val originalLanguageWithFlag: String?
+        get() = OriginalLanguageRegistry.getDisplayWithFlag(originalLanguage)
+}
 
 data class SearchUiState(
     val query: String = "",
@@ -208,7 +215,7 @@ class SearchViewModel(
 
     fun applyAnimeDiscoveryFilter(filter: DiscoveryFilter.Anime) {
         searchJob?.cancel()
-        activeSearchKey = "DISCOVER:ANIME:${filter.mode}:${filter.season}:${filter.year}:${filter.sortOrder}:${filter.includedTags}:${filter.excludedTags}:${filter.adultMode}"
+        activeSearchKey = "DISCOVER:ANIME:${filter.mode}:${filter.season}:${filter.year}:${filter.sortOrder}:${filter.includedTags}:${filter.excludedTags}:${filter.adultMode}:${filter.originalLanguage}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.ANIME,
@@ -233,6 +240,7 @@ class SearchViewModel(
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
                         adultMode = filter.adultMode,
+                        originalLanguage = filter.originalLanguage,
                         page = 1
                     ).getOrThrow()
                 }
@@ -376,7 +384,7 @@ class SearchViewModel(
 
     fun applyMangaDiscoveryFilter(filter: DiscoveryFilter.Manga, context: Context? = null) {
         searchJob?.cancel()
-        activeSearchKey = "DISCOVER:MANGA:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}"
+        activeSearchKey = "DISCOVER:MANGA:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguage}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.MANGA,
@@ -402,6 +410,7 @@ class SearchViewModel(
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
                         adultMode = filter.adultMode,
+                        originalLanguage = filter.originalLanguage,
                         page = 1
                     ).getOrThrow()
                 }
@@ -425,7 +434,7 @@ class SearchViewModel(
 
     fun applyManhwaDiscoveryFilter(filter: DiscoveryFilter.Manhwa, context: Context? = null) {
         searchJob?.cancel()
-        activeSearchKey = "DISCOVER:MANHWA:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}"
+        activeSearchKey = "DISCOVER:MANHWA:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguage}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.MANHWA,
@@ -451,6 +460,7 @@ class SearchViewModel(
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
                         adultMode = filter.adultMode,
+                        originalLanguage = filter.originalLanguage,
                         page = 1
                     ).getOrThrow()
                 }
@@ -474,7 +484,7 @@ class SearchViewModel(
 
     fun applyLightNovelDiscoveryFilter(filter: DiscoveryFilter.LightNovel, context: Context? = null) {
         searchJob?.cancel()
-        activeSearchKey = "DISCOVER:LN:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}"
+        activeSearchKey = "DISCOVER:LN:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguage}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.LIGHT_NOVELS,
@@ -500,6 +510,7 @@ class SearchViewModel(
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
                         adultMode = filter.adultMode,
+                        originalLanguage = filter.originalLanguage,
                         page = 1
                     ).getOrThrow()
                 }
@@ -523,7 +534,7 @@ class SearchViewModel(
 
     fun applyBookDiscoveryFilter(filter: DiscoveryFilter.Book, context: Context? = null) {
         searchJob?.cancel()
-        activeSearchKey = "DISCOVER:BOOK:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}"
+        activeSearchKey = "DISCOVER:BOOK:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguage}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.BOOKS,
@@ -547,6 +558,7 @@ class SearchViewModel(
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
                         adultMode = filter.adultMode,
+                        originalLanguage = filter.originalLanguage,
                         page = 1,
                         context = context
                     ).getOrThrow()
@@ -575,7 +587,7 @@ class SearchViewModel(
     ) {
         searchJob?.cancel()
         val yearPart = filter.year?.toString() ?: "ALL"
-        activeSearchKey = "DISCOVER:MOVIE:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}"
+        activeSearchKey = "DISCOVER:MOVIE:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguage}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.MOVIES,
@@ -600,6 +612,7 @@ class SearchViewModel(
                         adultMode = filter.adultMode,
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
+                        originalLanguage = filter.originalLanguage,
                         context = context
                     ).getOrThrow()
                 }
@@ -646,7 +659,7 @@ class SearchViewModel(
     ) {
         searchJob?.cancel()
         val yearPart = filter.year?.toString() ?: "ALL"
-        activeSearchKey = "DISCOVER:TV:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}"
+        activeSearchKey = "DISCOVER:TV:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguage}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.TV_SHOWS,
@@ -671,6 +684,7 @@ class SearchViewModel(
                         adultMode = filter.adultMode,
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
+                        originalLanguage = filter.originalLanguage,
                         context = context
                     ).getOrThrow()
                 }
@@ -734,6 +748,7 @@ class SearchViewModel(
                                 includedTags = filter.includedTags,
                                 excludedTags = filter.excludedTags,
                                 adultMode = filter.adultMode,
+                                originalLanguage = filter.originalLanguage,
                                 page = nextPage
                             ).getOrThrow()
                             detailsList.mapIndexed { idx, details ->
@@ -759,6 +774,7 @@ class SearchViewModel(
                                     adultMode = filter.adultMode,
                                     includedTags = filter.includedTags,
                                     excludedTags = filter.excludedTags,
+                                    originalLanguage = filter.originalLanguage,
                                     context = context
                                 ).getOrThrow()
                             }
@@ -783,6 +799,7 @@ class SearchViewModel(
                                     adultMode = filter.adultMode,
                                     includedTags = filter.includedTags,
                                     excludedTags = filter.excludedTags,
+                                    originalLanguage = filter.originalLanguage,
                                     context = context
                                 ).getOrThrow()
                             }
@@ -800,6 +817,7 @@ class SearchViewModel(
                                 includedTags = filter.includedTags,
                                 excludedTags = filter.excludedTags,
                                 adultMode = filter.adultMode,
+                                originalLanguage = filter.originalLanguage,
                                 page = nextPage
                             ).getOrThrow()
                             list.mapIndexed { idx, d -> mapJikanToSearchResult(d, currentState.results.size + idx, MediaType.MANGA) }
@@ -816,6 +834,7 @@ class SearchViewModel(
                                 includedTags = filter.includedTags,
                                 excludedTags = filter.excludedTags,
                                 adultMode = filter.adultMode,
+                                originalLanguage = filter.originalLanguage,
                                 page = nextPage
                             ).getOrThrow()
                             list.mapIndexed { idx, d -> mapJikanToSearchResult(d, currentState.results.size + idx, MediaType.MANHWA) }
@@ -832,6 +851,7 @@ class SearchViewModel(
                                 includedTags = filter.includedTags,
                                 excludedTags = filter.excludedTags,
                                 adultMode = filter.adultMode,
+                                originalLanguage = filter.originalLanguage,
                                 page = nextPage
                             ).getOrThrow()
                             list.mapIndexed { idx, d -> mapJikanToSearchResult(d, currentState.results.size + idx, MediaType.BOOK) }
@@ -846,6 +866,7 @@ class SearchViewModel(
                                 includedTags = filter.includedTags,
                                 excludedTags = filter.excludedTags,
                                 adultMode = filter.adultMode,
+                                originalLanguage = filter.originalLanguage,
                                 page = nextPage,
                                 context = context
                             ).getOrThrow()
@@ -925,6 +946,12 @@ class SearchViewModel(
             MediaType.BOOK -> "Light Novel"
             else -> if (details.isAiring == true) "Ongoing" else "Finished"
         }
+        val resolvedLang = details.originalLanguage ?: when (mediaType) {
+            MediaType.MANHWA -> "ko"
+            MediaType.ANIME, MediaType.MANGA -> "ja"
+            MediaType.BOOK -> if (status == "Light Novel") "ja" else null
+            else -> null
+        }
         return SearchResultItem(
             externalId = extId,
             externalSource = extSource,
@@ -933,6 +960,7 @@ class SearchViewModel(
             alternateTitle = details.alternateTitle,
             posterUrl = details.posterUrl,
             releaseYear = details.airedStartDate?.let { extractYear(it) },
+            originalLanguage = resolvedLang,
             totalUnits = if (mediaType == MediaType.ANIME) details.totalEpisodes else details.totalChapters,
             totalVolumes = details.totalVolumes,
             durationMinutes = details.durationMinutes,
@@ -956,6 +984,7 @@ class SearchViewModel(
             alternateTitle = book.subtitle,
             posterUrl = book.coverUrl,
             releaseYear = book.publishedDate?.take(4),
+            originalLanguage = book.language,
             totalUnits = book.pageCount,
             score = book.averageScore,
             statusText = "Book",
@@ -977,6 +1006,7 @@ class SearchViewModel(
             alternateTitle = tmdb.originalTitle,
             posterUrl = tmdb.posterUrl,
             releaseYear = tmdb.releaseYear,
+            originalLanguage = tmdb.originalLanguage,
             score = tmdb.voteAverage,
             statusText = if (isMovie) "Movie" else "TV Show",
             synopsis = tmdb.overview,
@@ -1023,28 +1053,35 @@ class SearchViewModel(
                                 sort = activeFilter.sortOrder.apiValue,
                                 search = query,
                                 adultMode = activeFilter.adultMode,
+                                originalLanguage = activeFilter.originalLanguage,
                                 page = 1
                             ).getOrThrow()
                             return@withContext list.mapIndexed { idx, d -> mapJikanToSearchResult(d, idx) }
                         }
                         is DiscoveryFilter.Movie -> {
-                            val list = TmdbApiClient.searchMoviesMultiple(
+                            val rawList = TmdbApiClient.searchMoviesMultiple(
                                 title = query,
                                 year = if (activeFilter.mode == TmdbDiscoveryMode.BY_YEAR) activeFilter.year else null,
                                 adultMode = activeFilter.adultMode,
                                 page = 1,
                                 context = context
                             ).getOrThrow()
+                            val list = if (!activeFilter.originalLanguage.isNullOrBlank()) {
+                                rawList.filter { OriginalLanguageRegistry.matches(activeFilter.originalLanguage, it.originalLanguage) }
+                            } else rawList
                             return@withContext list.map { mapTmdbToSearchResult(it, isMovie = true) }
                         }
                         is DiscoveryFilter.Tv -> {
-                            val list = TmdbApiClient.searchTvMultiple(
+                            val rawList = TmdbApiClient.searchTvMultiple(
                                 title = query,
                                 year = if (activeFilter.mode == TmdbDiscoveryMode.BY_YEAR) activeFilter.year else null,
                                 adultMode = activeFilter.adultMode,
                                 page = 1,
                                 context = context
                             ).getOrThrow()
+                            val list = if (!activeFilter.originalLanguage.isNullOrBlank()) {
+                                rawList.filter { OriginalLanguageRegistry.matches(activeFilter.originalLanguage, it.originalLanguage) }
+                            } else rawList
                             return@withContext list.map { mapTmdbToSearchResult(it, isMovie = false) }
                         }
                         is DiscoveryFilter.Manga -> {
@@ -1059,6 +1096,7 @@ class SearchViewModel(
                                 includedTags = activeFilter.includedTags,
                                 excludedTags = activeFilter.excludedTags,
                                 adultMode = activeFilter.adultMode,
+                                originalLanguage = activeFilter.originalLanguage,
                                 page = 1
                             ).getOrThrow()
                             return@withContext list.mapIndexed { idx, d -> mapJikanToSearchResult(d, idx, MediaType.MANGA) }
@@ -1075,6 +1113,7 @@ class SearchViewModel(
                                 includedTags = activeFilter.includedTags,
                                 excludedTags = activeFilter.excludedTags,
                                 adultMode = activeFilter.adultMode,
+                                originalLanguage = activeFilter.originalLanguage,
                                 page = 1
                             ).getOrThrow()
                             return@withContext list.mapIndexed { idx, d -> mapJikanToSearchResult(d, idx, MediaType.MANHWA) }
@@ -1091,6 +1130,7 @@ class SearchViewModel(
                                 includedTags = activeFilter.includedTags,
                                 excludedTags = activeFilter.excludedTags,
                                 adultMode = activeFilter.adultMode,
+                                originalLanguage = activeFilter.originalLanguage,
                                 page = 1
                             ).getOrThrow()
                             return@withContext list.mapIndexed { idx, d -> mapJikanToSearchResult(d, idx, MediaType.BOOK) }
@@ -1105,6 +1145,7 @@ class SearchViewModel(
                                 includedTags = activeFilter.includedTags,
                                 excludedTags = activeFilter.excludedTags,
                                 adultMode = activeFilter.adultMode,
+                                originalLanguage = activeFilter.originalLanguage,
                                 page = 1,
                                 context = context
                             ).getOrThrow()
@@ -1188,6 +1229,7 @@ class SearchViewModel(
                                     alternateTitle = details.alternateTitle,
                                     posterUrl = details.posterUrl,
                                     releaseYear = details.airedStartDate?.let { extractYear(it) },
+                                    originalLanguage = details.originalLanguage ?: "ja",
                                     totalUnits = details.totalEpisodes,
                                     durationMinutes = details.durationMinutes,
                                     score = details.externalScore,
@@ -1307,6 +1349,7 @@ class SearchViewModel(
                                     alternateTitle = details.alternateTitle,
                                     posterUrl = details.posterUrl,
                                     releaseYear = details.airedStartDate?.let { extractYear(it) },
+                                    originalLanguage = details.originalLanguage ?: "ja",
                                     totalUnits = details.totalChapters,
                                     totalVolumes = details.totalVolumes,
                                     score = details.externalScore,
@@ -1408,6 +1451,7 @@ class SearchViewModel(
                                     alternateTitle = details.alternateTitle,
                                     posterUrl = details.posterUrl,
                                     releaseYear = details.airedStartDate?.let { extractYear(it) },
+                                    originalLanguage = details.originalLanguage ?: "ko",
                                     totalUnits = details.totalChapters,
                                     totalVolumes = details.totalVolumes,
                                     score = details.externalScore,
@@ -1431,6 +1475,7 @@ class SearchViewModel(
                                 alternateTitle = tmdb.originalTitle,
                                 posterUrl = tmdb.posterUrl,
                                 releaseYear = tmdb.releaseYear,
+                                originalLanguage = tmdb.originalLanguage,
                                 score = tmdb.voteAverage,
                                 statusText = "Movie",
                                 synopsis = tmdb.overview,
@@ -1450,6 +1495,7 @@ class SearchViewModel(
                                 alternateTitle = tmdb.originalTitle,
                                 posterUrl = tmdb.posterUrl,
                                 releaseYear = tmdb.releaseYear,
+                                originalLanguage = tmdb.originalLanguage,
                                 score = tmdb.voteAverage,
                                 statusText = "TV Show",
                                 synopsis = tmdb.overview,
@@ -1472,6 +1518,7 @@ class SearchViewModel(
                                 alternateTitle = book.subtitle,
                                 posterUrl = book.coverUrl,
                                 releaseYear = book.publishedDate?.take(4),
+                                originalLanguage = book.language,
                                 totalUnits = book.pageCount,
                                 score = book.averageScore,
                                 statusText = "Book",
@@ -1498,6 +1545,7 @@ class SearchViewModel(
                                 alternateTitle = details.alternateTitle,
                                 posterUrl = details.posterUrl,
                                 releaseYear = details.airedStartDate?.let { extractYear(it) },
+                                originalLanguage = details.originalLanguage ?: "ja",
                                 totalUnits = details.totalChapters,
                                 totalVolumes = details.totalVolumes,
                                 score = details.externalScore,

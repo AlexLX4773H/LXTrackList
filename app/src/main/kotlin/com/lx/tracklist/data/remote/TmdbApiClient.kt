@@ -7,6 +7,7 @@ import com.google.gson.JsonObject
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.ui.search.AdultMode
+import com.lx.tracklist.ui.search.OriginalLanguageRegistry
 import com.lx.tracklist.ui.search.TmdbTagRegistry
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -43,7 +44,8 @@ data class TmdbMediaDetails(
     val externalScoreSource: String = "TMDB",
     val type: String? = null, // "Movie" or "TV"
     val imdbId: String? = null,
-    val sourceProvider: String = "TMDB"
+    val sourceProvider: String = "TMDB",
+    val originalLanguage: String? = null
 )
 
 data class TmdbSearchResult(
@@ -57,7 +59,8 @@ data class TmdbSearchResult(
     val releaseYear: String? = null,
     val voteAverage: Float? = null,
     val isMovie: Boolean,
-    val isAdult: Boolean = false
+    val isAdult: Boolean = false,
+    val originalLanguage: String? = null
 ) {
     val webUrl: String
         get() = if (isMovie) "https://www.themoviedb.org/movie/$tmdbId" else "https://www.themoviedb.org/tv/$tmdbId"
@@ -469,6 +472,7 @@ object TmdbApiClient {
                 val voteAvg = item.get("vote_average")?.takeIf { !it.isJsonNull }?.asFloat?.takeIf { it > 0f }
                 val overview = item.get("overview")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
                 val isAdult = item.get("adult")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
+                val origLang = item.get("original_language")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
 
                 list.add(
                     TmdbSearchResult(
@@ -482,7 +486,8 @@ object TmdbApiClient {
                         releaseYear = releaseYear,
                         voteAverage = voteAvg,
                         isMovie = true,
-                        isAdult = isAdult
+                        isAdult = isAdult,
+                        originalLanguage = origLang
                     )
                 )
             }
@@ -568,6 +573,7 @@ object TmdbApiClient {
                 val voteAvg = item.get("vote_average")?.takeIf { !it.isJsonNull }?.asFloat?.takeIf { it > 0f }
                 val overview = item.get("overview")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
                 val isAdult = item.get("adult")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
+                val origLang = item.get("original_language")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
 
                 list.add(
                     TmdbSearchResult(
@@ -581,7 +587,8 @@ object TmdbApiClient {
                         releaseYear = releaseYear,
                         voteAverage = voteAvg,
                         isMovie = false,
-                        isAdult = isAdult
+                        isAdult = isAdult,
+                        originalLanguage = origLang
                     )
                 )
             }
@@ -606,10 +613,11 @@ object TmdbApiClient {
         adultMode: AdultMode = AdultMode.OFF,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
+        originalLanguage: String? = null,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> = withFallback(baseUrl) { activeBaseUrl ->
-        discoverMoviesInternal(year, startYear, endYear, sortBy, page, adultMode, includedTags, excludedTags, context, activeBaseUrl)
+        discoverMoviesInternal(year, startYear, endYear, sortBy, page, adultMode, includedTags, excludedTags, originalLanguage, context, activeBaseUrl)
     }
 
     fun discoverMovies(
@@ -619,6 +627,7 @@ object TmdbApiClient {
         adultMode: AdultMode = AdultMode.OFF,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
+        originalLanguage: String? = null,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> = discoverMovies(
@@ -630,6 +639,7 @@ object TmdbApiClient {
         adultMode = adultMode,
         includedTags = includedTags,
         excludedTags = excludedTags,
+        originalLanguage = originalLanguage,
         context = context,
         baseUrl = baseUrl
     )
@@ -650,6 +660,7 @@ object TmdbApiClient {
         adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF,
         includedTags = emptySet(),
         excludedTags = emptySet(),
+        originalLanguage = null,
         context = context,
         baseUrl = baseUrl
     )
@@ -663,6 +674,7 @@ object TmdbApiClient {
         adultMode: AdultMode = AdultMode.OFF,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
+        originalLanguage: String? = null,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> {
@@ -690,7 +702,8 @@ object TmdbApiClient {
         val withoutGenres = excludedTags.mapNotNull { TmdbTagRegistry.getMovieGenreId(it) }
         val withGenresParam = if (withGenres.isNotEmpty()) "&with_genres=${withGenres.joinToString(",")}" else ""
         val withoutGenresParam = if (withoutGenres.isNotEmpty()) "&without_genres=${withoutGenres.joinToString(",")}" else ""
-        val endpoint = "${baseUrl.trimEnd('/')}/discover/movie?sort_by=$sortBy&page=$page&include_adult=$includeAdult$yearParam$voteGteParam$withGenresParam$withoutGenresParam"
+        val langParam = if (!originalLanguage.isNullOrBlank()) "&with_original_language=${URLEncoder.encode(originalLanguage.lowercase(), "UTF-8")}" else ""
+        val endpoint = "${baseUrl.trimEnd('/')}/discover/movie?sort_by=$sortBy&page=$page&include_adult=$includeAdult$yearParam$voteGteParam$withGenresParam$withoutGenresParam$langParam"
 
         return try {
             val request = buildRequest(endpoint, token)
@@ -722,6 +735,7 @@ object TmdbApiClient {
                 val voteAvg = item.get("vote_average")?.takeIf { !it.isJsonNull }?.asFloat?.takeIf { it > 0f }
                 val overview = item.get("overview")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
                 val isAdult = item.get("adult")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
+                val origLang = item.get("original_language")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
 
                 list.add(
                     TmdbSearchResult(
@@ -735,7 +749,8 @@ object TmdbApiClient {
                         releaseYear = releaseYear,
                         voteAverage = voteAvg,
                         isMovie = true,
-                        isAdult = isAdult
+                        isAdult = isAdult,
+                        originalLanguage = origLang
                     )
                 )
             }
@@ -744,7 +759,12 @@ object TmdbApiClient {
                 AdultMode.OFF -> list.filterNot { it.isAdult }
                 AdultMode.INCLUDE -> list
             }
-            if (adultMode == AdultMode.ONLY && filteredList.isEmpty() && page <= 2) {
+            val langFiltered = if (!originalLanguage.isNullOrBlank()) {
+                filteredList.filter { OriginalLanguageRegistry.matches(originalLanguage, it.originalLanguage) }
+            } else {
+                filteredList
+            }
+            if (adultMode == AdultMode.ONLY && langFiltered.isEmpty() && page <= 2) {
                 val nextRes = discoverMoviesInternal(
                     year = year,
                     startYear = startYear,
@@ -754,6 +774,7 @@ object TmdbApiClient {
                     adultMode = adultMode,
                     includedTags = includedTags,
                     excludedTags = excludedTags,
+                    originalLanguage = originalLanguage,
                     context = context,
                     baseUrl = baseUrl
                 )
@@ -761,7 +782,7 @@ object TmdbApiClient {
                     return nextRes
                 }
             }
-            Result.success(filteredList)
+            Result.success(langFiltered)
         } catch (e: Exception) {
             Log.e(TAG, "Exception discovering TMDB movies (year=$year, sort=$sortBy)", e)
             Result.failure(e)
@@ -777,10 +798,11 @@ object TmdbApiClient {
         adultMode: AdultMode = AdultMode.OFF,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
+        originalLanguage: String? = null,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> = withFallback(baseUrl) { activeBaseUrl ->
-        discoverTvShowsInternal(year, startYear, endYear, sortBy, page, adultMode, includedTags, excludedTags, context, activeBaseUrl)
+        discoverTvShowsInternal(year, startYear, endYear, sortBy, page, adultMode, includedTags, excludedTags, originalLanguage, context, activeBaseUrl)
     }
 
     fun discoverTvShows(
@@ -790,6 +812,7 @@ object TmdbApiClient {
         adultMode: AdultMode = AdultMode.OFF,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
+        originalLanguage: String? = null,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> = discoverTvShows(
@@ -801,6 +824,7 @@ object TmdbApiClient {
         adultMode = adultMode,
         includedTags = includedTags,
         excludedTags = excludedTags,
+        originalLanguage = originalLanguage,
         context = context,
         baseUrl = baseUrl
     )
@@ -821,6 +845,7 @@ object TmdbApiClient {
         adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF,
         includedTags = emptySet(),
         excludedTags = emptySet(),
+        originalLanguage = null,
         context = context,
         baseUrl = baseUrl
     )
@@ -834,6 +859,7 @@ object TmdbApiClient {
         adultMode: AdultMode = AdultMode.OFF,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
+        originalLanguage: String? = null,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> {
@@ -861,7 +887,8 @@ object TmdbApiClient {
         val withoutGenres = excludedTags.mapNotNull { TmdbTagRegistry.getTvGenreId(it) }
         val withGenresParam = if (withGenres.isNotEmpty()) "&with_genres=${withGenres.joinToString(",")}" else ""
         val withoutGenresParam = if (withoutGenres.isNotEmpty()) "&without_genres=${withoutGenres.joinToString(",")}" else ""
-        val endpoint = "${baseUrl.trimEnd('/')}/discover/tv?sort_by=$sortBy&page=$page&include_adult=$includeAdult$yearParam$voteGteParam$withGenresParam$withoutGenresParam"
+        val langParam = if (!originalLanguage.isNullOrBlank()) "&with_original_language=${URLEncoder.encode(originalLanguage.lowercase(), "UTF-8")}" else ""
+        val endpoint = "${baseUrl.trimEnd('/')}/discover/tv?sort_by=$sortBy&page=$page&include_adult=$includeAdult$yearParam$voteGteParam$withGenresParam$withoutGenresParam$langParam"
 
         return try {
             val request = buildRequest(endpoint, token)
@@ -893,6 +920,7 @@ object TmdbApiClient {
                 val voteAvg = item.get("vote_average")?.takeIf { !it.isJsonNull }?.asFloat?.takeIf { it > 0f }
                 val overview = item.get("overview")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
                 val isAdult = item.get("adult")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
+                val origLang = item.get("original_language")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
 
                 list.add(
                     TmdbSearchResult(
@@ -906,7 +934,8 @@ object TmdbApiClient {
                         releaseYear = releaseYear,
                         voteAverage = voteAvg,
                         isMovie = false,
-                        isAdult = isAdult
+                        isAdult = isAdult,
+                        originalLanguage = origLang
                     )
                 )
             }
@@ -915,7 +944,12 @@ object TmdbApiClient {
                 AdultMode.OFF -> list.filterNot { it.isAdult }
                 AdultMode.INCLUDE -> list
             }
-            if (adultMode == AdultMode.ONLY && filteredList.isEmpty() && page <= 2) {
+            val langFiltered = if (!originalLanguage.isNullOrBlank()) {
+                filteredList.filter { OriginalLanguageRegistry.matches(originalLanguage, it.originalLanguage) }
+            } else {
+                filteredList
+            }
+            if (adultMode == AdultMode.ONLY && langFiltered.isEmpty() && page <= 2) {
                 val nextRes = discoverTvShowsInternal(
                     year = year,
                     startYear = startYear,
@@ -925,6 +959,7 @@ object TmdbApiClient {
                     adultMode = adultMode,
                     includedTags = includedTags,
                     excludedTags = excludedTags,
+                    originalLanguage = originalLanguage,
                     context = context,
                     baseUrl = baseUrl
                 )
@@ -932,7 +967,7 @@ object TmdbApiClient {
                     return nextRes
                 }
             }
-            Result.success(filteredList)
+            Result.success(langFiltered)
         } catch (e: Exception) {
             Log.e(TAG, "Exception discovering TMDB TV (year=$year, sort=$sortBy)", e)
             Result.failure(e)

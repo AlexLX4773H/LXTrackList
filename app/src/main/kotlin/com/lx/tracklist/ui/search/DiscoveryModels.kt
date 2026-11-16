@@ -113,6 +113,7 @@ sealed class DiscoveryFilter {
     abstract val adultMode: AdultMode
     abstract val includedTags: Set<String>
     abstract val excludedTags: Set<String>
+    abstract val originalLanguage: String?
     val includeAdult: Boolean get() = adultMode != AdultMode.OFF
 
     data class Anime(
@@ -122,7 +123,8 @@ sealed class DiscoveryFilter {
         val sortOrder: AnimeSortOrder = AnimeSortOrder.POPULARITY,
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
-        override val adultMode: AdultMode = AdultMode.OFF
+        override val adultMode: AdultMode = AdultMode.OFF,
+        override val originalLanguage: String? = null
     ) : DiscoveryFilter() {
         constructor(
             season: AnimeSeason,
@@ -136,7 +138,8 @@ sealed class DiscoveryFilter {
             sortOrder = sortOrder,
             includedTags = emptySet(),
             excludedTags = emptySet(),
-            adultMode = adultMode
+            adultMode = adultMode,
+            originalLanguage = null
         )
 
         constructor(
@@ -151,7 +154,8 @@ sealed class DiscoveryFilter {
             sortOrder = sortOrder,
             includedTags = emptySet(),
             excludedTags = emptySet(),
-            adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF
+            adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF,
+            originalLanguage = null
         )
 
         override val label: String
@@ -172,7 +176,8 @@ sealed class DiscoveryFilter {
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
                     else -> ""
                 }
-                return "$base$sortText$tagSummary$adultTag"
+                val langTag = originalLanguage?.let { " • ${OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it}" } ?: ""
+                return "$base$sortText$tagSummary$langTag$adultTag"
             }
     }
 
@@ -184,7 +189,8 @@ sealed class DiscoveryFilter {
         val sortOrder: TmdbMovieSort = TmdbMovieSort.POPULARITY,
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
-        override val adultMode: AdultMode = AdultMode.OFF
+        override val adultMode: AdultMode = AdultMode.OFF,
+        override val originalLanguage: String? = null
     ) : DiscoveryFilter() {
         constructor(
             year: Int,
@@ -198,7 +204,8 @@ sealed class DiscoveryFilter {
             sortOrder = sortOrder,
             includedTags = emptySet(),
             excludedTags = emptySet(),
-            adultMode = adultMode
+            adultMode = adultMode,
+            originalLanguage = null
         )
 
         constructor(
@@ -213,7 +220,8 @@ sealed class DiscoveryFilter {
             sortOrder = sortOrder,
             includedTags = emptySet(),
             excludedTags = emptySet(),
-            adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF
+            adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF,
+            originalLanguage = null
         )
 
         val yearText: String
@@ -243,7 +251,8 @@ sealed class DiscoveryFilter {
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
                     else -> ""
                 }
-                return "$base$sortText$tagSummary$adultTag"
+                val langTag = originalLanguage?.let { " • ${OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it}" } ?: ""
+                return "$base$sortText$tagSummary$langTag$adultTag"
             }
     }
 
@@ -255,7 +264,8 @@ sealed class DiscoveryFilter {
         val sortOrder: TmdbTvSort = TmdbTvSort.POPULARITY,
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
-        override val adultMode: AdultMode = AdultMode.OFF
+        override val adultMode: AdultMode = AdultMode.OFF,
+        override val originalLanguage: String? = null
     ) : DiscoveryFilter() {
         constructor(
             year: Int,
@@ -269,7 +279,8 @@ sealed class DiscoveryFilter {
             sortOrder = sortOrder,
             includedTags = emptySet(),
             excludedTags = emptySet(),
-            adultMode = adultMode
+            adultMode = adultMode,
+            originalLanguage = null
         )
 
         constructor(
@@ -284,7 +295,8 @@ sealed class DiscoveryFilter {
             sortOrder = sortOrder,
             includedTags = emptySet(),
             excludedTags = emptySet(),
-            adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF
+            adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF,
+            originalLanguage = null
         )
 
         val yearText: String
@@ -314,7 +326,8 @@ sealed class DiscoveryFilter {
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
                     else -> ""
                 }
-                return "$base$sortText$tagSummary$adultTag"
+                val langTag = originalLanguage?.let { " • ${OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it}" } ?: ""
+                return "$base$sortText$tagSummary$langTag$adultTag"
             }
     }
 
@@ -325,7 +338,8 @@ sealed class DiscoveryFilter {
         val sortOrder: MangaSortOrder = MangaSortOrder.POPULARITY,
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
-        override val adultMode: AdultMode = AdultMode.OFF
+        override val adultMode: AdultMode = AdultMode.OFF,
+        override val originalLanguage: String? = null
     ) : DiscoveryFilter() {
         val yearText: String
             get() = when {
@@ -354,7 +368,8 @@ sealed class DiscoveryFilter {
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
                     else -> ""
                 }
-                return "$base$sortText$tagSummary$adultTag"
+                val langTag = originalLanguage?.let { " • ${OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it}" } ?: ""
+                return "$base$sortText$tagSummary$langTag$adultTag"
             }
     }
 
@@ -365,7 +380,8 @@ sealed class DiscoveryFilter {
         val sortOrder: MangaSortOrder = MangaSortOrder.POPULARITY,
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
-        override val adultMode: AdultMode = AdultMode.OFF
+        override val adultMode: AdultMode = AdultMode.OFF,
+        override val originalLanguage: String? = null
     ) : DiscoveryFilter() {
         val yearText: String
             get() = when {
@@ -394,7 +410,8 @@ sealed class DiscoveryFilter {
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
                     else -> ""
                 }
-                return "$base$sortText$tagSummary$adultTag"
+                val langTag = originalLanguage?.let { " • ${OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it}" } ?: ""
+                return "$base$sortText$tagSummary$langTag$adultTag"
             }
     }
 
@@ -405,7 +422,8 @@ sealed class DiscoveryFilter {
         val sortOrder: MangaSortOrder = MangaSortOrder.POPULARITY,
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
-        override val adultMode: AdultMode = AdultMode.OFF
+        override val adultMode: AdultMode = AdultMode.OFF,
+        override val originalLanguage: String? = null
     ) : DiscoveryFilter() {
         val yearText: String
             get() = when {
@@ -434,7 +452,8 @@ sealed class DiscoveryFilter {
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
                     else -> ""
                 }
-                return "$base$sortText$tagSummary$adultTag"
+                val langTag = originalLanguage?.let { " • ${OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it}" } ?: ""
+                return "$base$sortText$tagSummary$langTag$adultTag"
             }
     }
 
@@ -445,7 +464,8 @@ sealed class DiscoveryFilter {
         val sortOrder: BookSortOrder = BookSortOrder.POPULARITY,
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
-        override val adultMode: AdultMode = AdultMode.OFF
+        override val adultMode: AdultMode = AdultMode.OFF,
+        override val originalLanguage: String? = null
     ) : DiscoveryFilter() {
         val yearText: String
             get() = when {
@@ -474,7 +494,8 @@ sealed class DiscoveryFilter {
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
                     else -> ""
                 }
-                return "$base$sortText$tagSummary$adultTag"
+                val langTag = originalLanguage?.let { " • ${OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it}" } ?: ""
+                return "$base$sortText$tagSummary$langTag$adultTag"
             }
     }
 }

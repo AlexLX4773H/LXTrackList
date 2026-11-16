@@ -84,7 +84,8 @@ data class BookDetails(
             url = infoUrl,
             totalPages = pageCount?.takeIf { it > 0 },
             isbn = primaryIsbn,
-            authors = authorString.takeIf { it.isNotBlank() }
+            authors = authorString.takeIf { it.isNotBlank() },
+            originalLanguage = language
         )
     }
 

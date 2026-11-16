@@ -8,6 +8,7 @@ import com.lx.tracklist.ui.search.AdultMode
 import com.lx.tracklist.ui.search.BookSortOrder
 import com.lx.tracklist.ui.search.BookTagRegistry
 import com.lx.tracklist.ui.search.ContentDiscoveryMode
+import com.lx.tracklist.ui.search.OriginalLanguageRegistry
 import java.util.Calendar
 import java.util.TimeZone
 
@@ -24,6 +25,7 @@ object BookMetadataManager {
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
+        originalLanguage: String? = null,
         page: Int = 1,
         limit: Int = 20,
         context: Context? = null
@@ -42,6 +44,7 @@ object BookMetadataManager {
             sort = openLibSort,
             subject = subject,
             search = search,
+            originalLanguage = originalLanguage,
             page = page,
             limit = limit
         )
@@ -58,6 +61,7 @@ object BookMetadataManager {
                 orderBy = googleOrderBy,
                 startIndex = (page - 1) * limit,
                 limit = limit,
+                originalLanguage = originalLanguage,
                 context = context
             )
             googleRes.getOrDefault(emptyList())
@@ -74,7 +78,13 @@ object BookMetadataManager {
             rawList
         }
 
-        return Result.success(filtered)
+        val langFiltered = if (!originalLanguage.isNullOrBlank()) {
+            filtered.filter { com.lx.tracklist.ui.search.OriginalLanguageRegistry.matches(originalLanguage, it.language) }
+        } else {
+            filtered
+        }
+
+        return Result.success(langFiltered)
     }
 
     /**

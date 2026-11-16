@@ -36,6 +36,7 @@ object GoogleBooksApiClient {
         orderBy: String = "relevance",
         startIndex: Int = 0,
         limit: Int = 20,
+        originalLanguage: String? = null,
         context: Context? = null
     ): Result<List<BookDetails>> {
         val queryParts = mutableListOf<String>()
@@ -50,7 +51,8 @@ object GoogleBooksApiClient {
         val clampedLimit = limit.coerceIn(1, 40)
         val apiKey = GoogleBooksConfig.getApiKey(context)
         val keyParam = if (apiKey.isNotBlank()) "&key=$apiKey" else ""
-        val endpoint = "$BASE_URL?q=$encodedQuery&orderBy=$orderBy&startIndex=$startIndex&maxResults=$clampedLimit$keyParam"
+        val langParam = if (!originalLanguage.isNullOrBlank()) "&langRestrict=${originalLanguage.lowercase(java.util.Locale.ROOT)}" else ""
+        val endpoint = "$BASE_URL?q=$encodedQuery&orderBy=$orderBy&startIndex=$startIndex&maxResults=$clampedLimit$keyParam$langParam"
 
         return try {
             val request = Request.Builder()

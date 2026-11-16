@@ -12,6 +12,7 @@ import com.lx.tracklist.ui.search.AnimeDiscoveryMode
 import com.lx.tracklist.ui.search.AnimeTagCategory
 import com.lx.tracklist.ui.search.AnimeTagRegistry
 import com.lx.tracklist.ui.search.ContentDiscoveryMode
+import com.lx.tracklist.ui.search.OriginalLanguageRegistry
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -62,7 +63,8 @@ data class JikanMediaDetails(
     val airedEpisodes: Int? = null,
     val broadcastTime: String? = null,
     val nextAiringEpoch: Long? = null,
-    val isAdult: Boolean? = null
+    val isAdult: Boolean? = null,
+    val originalLanguage: String? = null
 ) {
     val webUrl: String?
         get() {
@@ -1146,6 +1148,12 @@ object JikanApiClient {
         val ratingStr = dataObj.get("rating")?.takeIf { !it.isJsonNull }?.asString
         val isAdult = ratingStr?.contains("Rx", ignoreCase = true) == true || tagList.any { it.equals("Hentai", ignoreCase = true) }
 
+        val inferredLang = when {
+            mediaTypeStr?.contains("manhwa", ignoreCase = true) == true -> "ko"
+            mediaTypeStr?.contains("manhua", ignoreCase = true) == true || mediaTypeStr?.contains("donghua", ignoreCase = true) == true -> "zh"
+            else -> "ja"
+        }
+
         return JikanMediaDetails(
             malId = malId,
             title = title,
@@ -1169,7 +1177,8 @@ object JikanApiClient {
             airedEpisodes = airedEpisodes,
             broadcastTime = broadcastTime,
             nextAiringEpoch = nextAiringEpoch,
-            isAdult = isAdult
+            isAdult = isAdult,
+            originalLanguage = inferredLang
         )
     }
 
@@ -1240,6 +1249,7 @@ object JikanApiClient {
         val externalScoreSource = if (externalScore != null) "AniList" else null
 
         val countryOfOrigin = mediaObj.get("countryOfOrigin")?.takeIf { !it.isJsonNull }?.asString
+        val resolvedLang = countryOfOrigin?.let { OriginalLanguageRegistry.findByCode(it)?.code ?: it.lowercase(Locale.ROOT) } ?: "ja"
         val resolvedType = when {
             countryOfOrigin == "KR" && (format?.equals("MANGA", ignoreCase = true) == true || format?.equals("ONE_SHOT", ignoreCase = true) == true || format.isNullOrBlank()) -> "Manhwa"
             (countryOfOrigin == "CN" || countryOfOrigin == "HK" || countryOfOrigin == "TW") && format?.equals("MANGA", ignoreCase = true) == true -> "Manhua"
@@ -1292,7 +1302,8 @@ object JikanApiClient {
             airedEpisodes = airedEpisodes,
             broadcastTime = broadcastTime,
             nextAiringEpoch = nextAiringEpoch,
-            isAdult = isAdult
+            isAdult = isAdult,
+            originalLanguage = resolvedLang
         )
     }
 
@@ -1793,6 +1804,7 @@ object JikanApiClient {
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
+        originalLanguage: String? = null,
         page: Int = 1,
         perPage: Int = 25
     ): Result<List<JikanMediaDetails>> {
@@ -1810,6 +1822,8 @@ object JikanApiClient {
 
         val isSeasonal = mode == AnimeDiscoveryMode.SEASONAL && year != null && !season.isNullOrBlank()
 
+        val aniCountry = originalLanguage?.let { OriginalLanguageRegistry.toAniListCountryCode(it) }
+
         val varDefs = mutableListOf<String>()
         varDefs.add("${'$'}page: Int")
         varDefs.add("${'$'}perPage: Int")
@@ -1819,6 +1833,7 @@ object JikanApiClient {
             varDefs.add("${'$'}season: MediaSeason")
             varDefs.add("${'$'}seasonYear: Int")
         }
+        if (!aniCountry.isNullOrBlank()) varDefs.add("${'$'}country: CountryCode")
         if (genreIn.isNotEmpty()) varDefs.add("${'$'}genreIn: [String]")
         if (genreNotIn.isNotEmpty()) varDefs.add("${'$'}genreNotIn: [String]")
         if (tagIn.isNotEmpty()) varDefs.add("${'$'}tagIn: [String]")
@@ -1832,6 +1847,7 @@ object JikanApiClient {
             mediaArgs.add("season: ${'$'}season")
             mediaArgs.add("seasonYear: ${'$'}seasonYear")
         }
+        if (!aniCountry.isNullOrBlank()) mediaArgs.add("countryOfOrigin: ${'$'}country")
         if (genreIn.isNotEmpty()) mediaArgs.add("genre_in: ${'$'}genreIn")
         if (genreNotIn.isNotEmpty()) mediaArgs.add("genre_not_in: ${'$'}genreNotIn")
         if (tagIn.isNotEmpty()) mediaArgs.add("tag_in: ${'$'}tagIn")
@@ -1865,6 +1881,7 @@ object JikanApiClient {
                   endDate { year month day }
                   genres
                   tags { name }
+                  countryOfOrigin
                   nextAiringEpisode { id airingAt timeUntilAiring episode }
                 }
               }
@@ -1882,6 +1899,9 @@ object JikanApiClient {
                 if (isSeasonal && season != null && year != null) {
                     addProperty("season", season.uppercase(Locale.ROOT))
                     addProperty("seasonYear", year)
+                }
+                if (!aniCountry.isNullOrBlank()) {
+                    addProperty("country", aniCountry)
                 }
                 if (genreIn.isNotEmpty()) {
                     val arr = JsonArray()
@@ -2189,6 +2209,7 @@ object JikanApiClient {
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
+        originalLanguage: String? = null,
         page: Int = 1,
         limit: Int = 25
     ): Result<List<JikanMediaDetails>> {
@@ -2202,14 +2223,19 @@ object JikanApiClient {
             includedTags = includedTags,
             excludedTags = excludedTags,
             adultMode = adultMode,
+            originalLanguage = originalLanguage,
             page = page,
             perPage = limit
         )
         if (anilistRes.isSuccess) {
-            val list = anilistRes.getOrDefault(emptyList())
+            val list = anilistRes.getOrDefault(emptyList()).let { items ->
+                if (!originalLanguage.isNullOrBlank()) {
+                    items.filter { OriginalLanguageRegistry.matches(originalLanguage, it.originalLanguage) }
+                } else items
+            }
             if (list.isNotEmpty()) {
-                Log.d(TAG, "Successfully fetched ${list.size} anime from AniList (mode=$mode, sort=$sort, tags=+${includedTags.size}/-${excludedTags.size})")
-                return anilistRes
+                Log.d(TAG, "Successfully fetched ${list.size} anime from AniList (mode=$mode, sort=$sort, lang=$originalLanguage, tags=+${includedTags.size}/-${excludedTags.size})")
+                return Result.success(list)
             }
         }
 
@@ -2228,7 +2254,11 @@ object JikanApiClient {
             limit = limit
         )
         if (jikanRes.isSuccess) {
-            val list = jikanRes.getOrDefault(emptyList())
+            val list = jikanRes.getOrDefault(emptyList()).let { items ->
+                if (!originalLanguage.isNullOrBlank()) {
+                    items.filter { OriginalLanguageRegistry.matches(originalLanguage, it.originalLanguage) }
+                } else items
+            }
             val sortedList = when (sort) {
                 "SCORE_DESC" -> list.sortedByDescending { it.externalScore ?: 0f }
                 "START_DATE_DESC" -> list.sortedByDescending { it.airedStartDate ?: 0L }
@@ -2252,6 +2282,7 @@ object JikanApiClient {
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
+        originalLanguage: String? = null,
         page: Int = 1,
         perPage: Int = 25
     ): Result<List<JikanMediaDetails>> {
@@ -2269,6 +2300,9 @@ object JikanApiClient {
 
         val isByYear = mode == ContentDiscoveryMode.BY_YEAR && (startYear != null || endYear != null)
 
+        val aniCountry = originalLanguage?.let { OriginalLanguageRegistry.toAniListCountryCode(it) }
+        val effectiveCountry = aniCountry ?: if (isManhwa) "KR" else null
+
         val varDefs = mutableListOf<String>()
         varDefs.add("${'$'}page: Int")
         varDefs.add("${'$'}perPage: Int")
@@ -2278,6 +2312,7 @@ object JikanApiClient {
             if (startYear != null) varDefs.add("${'$'}startDate_greater: FuzzyDateInt")
             if (endYear != null) varDefs.add("${'$'}startDate_lesser: FuzzyDateInt")
         }
+        if (!effectiveCountry.isNullOrBlank()) varDefs.add("${'$'}country: CountryCode")
         if (genreIn.isNotEmpty()) varDefs.add("${'$'}genreIn: [String]")
         if (genreNotIn.isNotEmpty()) varDefs.add("${'$'}genreNotIn: [String]")
         if (tagIn.isNotEmpty()) varDefs.add("${'$'}tagIn: [String]")
@@ -2287,8 +2322,9 @@ object JikanApiClient {
         mediaArgs.add("type: MANGA")
         if (isLightNovel) {
             mediaArgs.add("format: NOVEL")
-        } else if (isManhwa) {
-            mediaArgs.add("countryOfOrigin: \"KR\"")
+        }
+        if (!effectiveCountry.isNullOrBlank()) {
+            mediaArgs.add("countryOfOrigin: ${'$'}country")
         }
         mediaArgs.add("sort: ${'$'}sort")
         if (hasSearch) mediaArgs.add("search: ${'$'}search")
@@ -2329,6 +2365,7 @@ object JikanApiClient {
                   endDate { year month day }
                   genres
                   tags { name }
+                  countryOfOrigin
                 }
               }
             }
@@ -2345,6 +2382,9 @@ object JikanApiClient {
                 if (isByYear) {
                     if (startYear != null) addProperty("startDate_greater", startYear * 10000)
                     if (endYear != null) addProperty("startDate_lesser", endYear * 10000 + 1231)
+                }
+                if (!effectiveCountry.isNullOrBlank()) {
+                    addProperty("country", effectiveCountry)
                 }
                 if (genreIn.isNotEmpty()) {
                     add("genreIn", JsonArray().apply { genreIn.forEach { add(it) } })
@@ -2518,6 +2558,7 @@ object JikanApiClient {
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
+        originalLanguage: String? = null,
         page: Int = 1,
         limit: Int = 25
     ): Result<List<JikanMediaDetails>> {
@@ -2532,13 +2573,18 @@ object JikanApiClient {
             includedTags = includedTags,
             excludedTags = excludedTags,
             adultMode = adultMode,
+            originalLanguage = originalLanguage,
             page = page,
             perPage = limit
         )
         if (anilistRes.isSuccess) {
-            val list = anilistRes.getOrDefault(emptyList())
+            val list = anilistRes.getOrDefault(emptyList()).let { items ->
+                if (!originalLanguage.isNullOrBlank()) {
+                    items.filter { OriginalLanguageRegistry.matches(originalLanguage, it.originalLanguage) }
+                } else items
+            }
             if (list.isNotEmpty()) {
-                return anilistRes
+                return Result.success(list)
             }
         }
 
@@ -2559,8 +2605,15 @@ object JikanApiClient {
             page = page,
             limit = limit
         )
-        if (jikanRes.isSuccess && jikanRes.getOrDefault(emptyList()).isNotEmpty()) {
-            return jikanRes
+        if (jikanRes.isSuccess) {
+            val list = jikanRes.getOrDefault(emptyList()).let { items ->
+                if (!originalLanguage.isNullOrBlank()) {
+                    items.filter { OriginalLanguageRegistry.matches(originalLanguage, it.originalLanguage) }
+                } else items
+            }
+            if (list.isNotEmpty()) {
+                return Result.success(list)
+            }
         }
 
         return if (anilistRes.isFailure) anilistRes else jikanRes
@@ -2572,6 +2625,7 @@ object JikanApiClient {
         sort: String = "POPULARITY_DESC",
         search: String? = null,
         adultMode: AdultMode = AdultMode.OFF,
+        originalLanguage: String? = null,
         page: Int = 1,
         limit: Int = 25
     ): Result<List<JikanMediaDetails>> = fetchAnimeDiscovery(
@@ -2581,6 +2635,7 @@ object JikanApiClient {
         sort = sort,
         search = search,
         adultMode = adultMode,
+        originalLanguage = originalLanguage,
         page = page,
         limit = limit
     )
@@ -2594,7 +2649,14 @@ object JikanApiClient {
         page: Int = 1,
         limit: Int = 25
     ): Result<List<JikanMediaDetails>> = fetchSeasonalAnime(
-        year, season, sort, search, if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF, page, limit
+        year = year,
+        season = season,
+        sort = sort,
+        search = search,
+        adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF,
+        originalLanguage = null,
+        page = page,
+        limit = limit
     )
 }
 
