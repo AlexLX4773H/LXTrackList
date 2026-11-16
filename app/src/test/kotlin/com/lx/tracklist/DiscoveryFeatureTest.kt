@@ -48,6 +48,11 @@ class DiscoveryFeatureTest {
         // Tag search query
         val searchResults = AnimeTagRegistry.filterTags("ise")
         assertTrue(searchResults.any { it.name == "Isekai" })
+
+        // Alphabetical A to Z ordering
+        val allTagsList = AnimeTagRegistry.filterTags("")
+        val tagNames = allTagsList.map { it.name.lowercase() }
+        assertEquals(tagNames.sorted(), tagNames)
     }
 
     @Test

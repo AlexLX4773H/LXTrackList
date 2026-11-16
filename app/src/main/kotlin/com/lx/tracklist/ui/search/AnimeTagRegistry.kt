@@ -72,7 +72,7 @@ object AnimeTagRegistry {
         AnimeTagDefinition("Shoujo", AnimeTagCategory.DEMOGRAPHIC, 25),
         AnimeTagDefinition("Josei", AnimeTagCategory.DEMOGRAPHIC, 43),
         AnimeTagDefinition("Kids", AnimeTagCategory.DEMOGRAPHIC, 15)
-    )
+    ).sortedBy { it.name.lowercase() }
 
     private val malIdByName: Map<String, Int> = allTags.associate { it.name.lowercase() to it.malId }
 
@@ -86,10 +86,12 @@ object AnimeTagRegistry {
 
     fun filterTags(query: String, category: AnimeTagCategory? = null): List<AnimeTagDefinition> {
         val cleanQuery = query.trim().lowercase()
-        return allTags.filter { tag ->
-            val matchesCat = category == null || tag.category == category
-            val matchesQuery = cleanQuery.isEmpty() || tag.name.lowercase().contains(cleanQuery)
-            matchesCat && matchesQuery
-        }
+        return allTags
+            .filter { tag ->
+                val matchesCat = category == null || tag.category == category
+                val matchesQuery = cleanQuery.isEmpty() || tag.name.lowercase().contains(cleanQuery)
+                matchesCat && matchesQuery
+            }
+            .sortedBy { it.name.lowercase() }
     }
 }

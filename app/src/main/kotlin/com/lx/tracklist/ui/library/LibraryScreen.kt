@@ -2067,18 +2067,18 @@ private fun TriStateFilterRow(
                 shape = RoundedCornerShape(10.dp)
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.weight(1f)
         ) {
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(28.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .background(
                         when (state) {
@@ -2093,21 +2093,22 @@ private fun TriStateFilterRow(
                     imageVector = icon,
                     contentDescription = null,
                     tint = activeColor,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = if (state != InclusionFilterOption.ALL) FontWeight.Bold else FontWeight.Medium
+                        fontWeight = if (state != InclusionFilterOption.ALL) FontWeight.Bold else FontWeight.Medium,
+                        fontSize = 13.sp
                     ),
                     color = if (state != InclusionFilterOption.ALL) activeColor else LXTextPrimary
                 )
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
                     color = if (state != InclusionFilterOption.ALL) activeColor.copy(alpha = 0.85f) else LXTextSecondary
                 )
             }
@@ -2115,13 +2116,13 @@ private fun TriStateFilterRow(
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             when (state) {
                 InclusionFilterOption.ALL -> {
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(20.dp)
                             .border(BorderStroke(1.5.dp, LXTextSecondary.copy(alpha = 0.5f)), RoundedCornerShape(4.dp))
                             .clip(RoundedCornerShape(4.dp))
                     )
@@ -2135,13 +2136,13 @@ private fun TriStateFilterRow(
                     ) {
                         Text(
                             text = "Only",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
                             color = LXPrimaryGreen
                         )
                     }
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(20.dp)
                             .background(LXPrimaryGreen, RoundedCornerShape(4.dp))
                             .clip(RoundedCornerShape(4.dp)),
                         contentAlignment = Alignment.Center
@@ -2150,7 +2151,7 @@ private fun TriStateFilterRow(
                             imageVector = Icons.Default.Check,
                             contentDescription = "Included",
                             tint = LXBackgroundBlack,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                 }
@@ -2163,13 +2164,13 @@ private fun TriStateFilterRow(
                     ) {
                         Text(
                             text = "Excluded",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
                             color = LXErrorRed
                         )
                     }
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(20.dp)
                             .background(LXErrorRed, RoundedCornerShape(4.dp))
                             .clip(RoundedCornerShape(4.dp)),
                         contentAlignment = Alignment.Center
@@ -2178,7 +2179,7 @@ private fun TriStateFilterRow(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Excluded",
                             tint = Color.White,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                 }
@@ -2235,18 +2236,18 @@ private fun CoverImageFilterRow(
                 shape = RoundedCornerShape(10.dp)
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.weight(1f)
         ) {
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(28.dp)
                     .clip(RoundedCornerShape(6.dp))
                     .background(
                         when (state) {
@@ -2262,21 +2263,22 @@ private fun CoverImageFilterRow(
                     imageVector = icon,
                     contentDescription = null,
                     tint = activeColor,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 Text(
                     text = "Cover Image",
                     style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = if (state != CoverImageFilterOption.ALL) FontWeight.Bold else FontWeight.Medium
+                        fontWeight = if (state != CoverImageFilterOption.ALL) FontWeight.Bold else FontWeight.Medium,
+                        fontSize = 13.sp
                     ),
                     color = if (state != CoverImageFilterOption.ALL) activeColor else LXTextPrimary
                 )
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
                     color = if (state != CoverImageFilterOption.ALL) activeColor.copy(alpha = 0.85f) else LXTextSecondary
                 )
             }
@@ -2284,13 +2286,13 @@ private fun CoverImageFilterRow(
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             when (state) {
                 CoverImageFilterOption.ALL -> {
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(20.dp)
                             .border(BorderStroke(1.5.dp, LXTextSecondary.copy(alpha = 0.5f)), RoundedCornerShape(4.dp))
                             .clip(RoundedCornerShape(4.dp))
                     )
@@ -2304,13 +2306,13 @@ private fun CoverImageFilterRow(
                     ) {
                         Text(
                             text = "Has Cover",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
                             color = LXPrimaryGreen
                         )
                     }
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(20.dp)
                             .background(LXPrimaryGreen, RoundedCornerShape(4.dp))
                             .clip(RoundedCornerShape(4.dp)),
                         contentAlignment = Alignment.Center
@@ -2319,7 +2321,7 @@ private fun CoverImageFilterRow(
                             imageVector = Icons.Default.Check,
                             contentDescription = "Has Cover",
                             tint = LXBackgroundBlack,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                 }
@@ -2332,13 +2334,13 @@ private fun CoverImageFilterRow(
                     ) {
                         Text(
                             text = "Broken URL",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
                             color = LXErrorRed
                         )
                     }
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(20.dp)
                             .background(LXErrorRed, RoundedCornerShape(4.dp))
                             .clip(RoundedCornerShape(4.dp)),
                         contentAlignment = Alignment.Center
@@ -2347,7 +2349,7 @@ private fun CoverImageFilterRow(
                             imageVector = Icons.Default.BrokenImage,
                             contentDescription = "Broken URL",
                             tint = Color.White,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                 }
@@ -2360,13 +2362,13 @@ private fun CoverImageFilterRow(
                     ) {
                         Text(
                             text = "No Cover",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
                             color = Color(0xFFE67E22)
                         )
                     }
                     Box(
                         modifier = Modifier
-                            .size(22.dp)
+                            .size(20.dp)
                             .background(Color(0xFFE67E22), RoundedCornerShape(4.dp))
                             .clip(RoundedCornerShape(4.dp)),
                         contentAlignment = Alignment.Center
@@ -2375,7 +2377,7 @@ private fun CoverImageFilterRow(
                             imageVector = Icons.Default.Close,
                             contentDescription = "No Cover",
                             tint = Color.White,
-                            modifier = Modifier.size(15.dp)
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                 }
@@ -2725,7 +2727,7 @@ private fun AdvancedFilterSheet(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // Header
                 Row(
@@ -2734,7 +2736,7 @@ private fun AdvancedFilterSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Tune, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Default.Tune, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Advanced Filters",
@@ -2754,20 +2756,21 @@ private fun AdvancedFilterSheet(
 
                 // Status Filter Section
                 CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
                             text = "Status",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextPrimary
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextSecondary
                         )
                         FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             FilterChip(
                                 selected = state.selectedStatusFilter == null,
                                 onClick = { viewModel.setStatusFilter(null) },
-                                label = { Text("All Statuses") },
+                                label = { Text("All Statuses", fontSize = 11.sp) },
+                                modifier = Modifier.height(30.dp),
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = LXPrimaryGreen,
                                     selectedLabelColor = LXBackgroundBlack,
@@ -2781,7 +2784,8 @@ private fun AdvancedFilterSheet(
                                 FilterChip(
                                     selected = isSelected,
                                     onClick = { viewModel.setStatusFilter(if (isSelected) null else st) },
-                                    label = { Text(st.defaultLabel) },
+                                    label = { Text(st.defaultLabel, fontSize = 11.sp) },
+                                    modifier = Modifier.height(30.dp),
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = LXPrimaryGreen,
                                         selectedLabelColor = LXBackgroundBlack,
@@ -2807,24 +2811,25 @@ private fun AdvancedFilterSheet(
                     }
 
                     if (relevantSubCats.isNotEmpty()) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Style, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Style, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "Sub Category",
-                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = LXTextPrimary
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = LXTextSecondary
                                 )
                             }
                             FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 FilterChip(
                                     selected = state.selectedSubCategoryFilter == null,
                                     onClick = { viewModel.setSubCategoryFilter(null) },
-                                    label = { Text("All Sub Categories") },
+                                    label = { Text("All Sub Categories", fontSize = 11.sp) },
+                                    modifier = Modifier.height(30.dp),
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = LXPrimaryGreen,
                                         selectedLabelColor = LXBackgroundBlack,
@@ -2838,7 +2843,8 @@ private fun AdvancedFilterSheet(
                                     FilterChip(
                                         selected = isSelected,
                                         onClick = { viewModel.setSubCategoryFilter(if (isSelected) null else subCat.name) },
-                                        label = { Text(subCat.name) },
+                                        label = { Text(subCat.name, fontSize = 11.sp) },
+                                        modifier = Modifier.height(30.dp),
                                         colors = FilterChipDefaults.filterChipColors(
                                             selectedContainerColor = LXScoreGold,
                                             selectedLabelColor = LXBackgroundBlack,
@@ -2852,20 +2858,20 @@ private fun AdvancedFilterSheet(
                     }
 
                     // Score / Rating Section
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Star, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Star, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(15.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "Score / Rating",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = LXTextPrimary
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = LXTextSecondary
                             )
                         }
 
                         FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             FilterChip(
                                 selected = state.minScore == null && !state.onlyUnrated,
@@ -2873,7 +2879,8 @@ private fun AdvancedFilterSheet(
                                     viewModel.setMinScore(null)
                                     viewModel.setOnlyUnrated(false)
                                 },
-                                label = { Text("Any Score") },
+                                label = { Text("Any Score", fontSize = 11.sp) },
+                                modifier = Modifier.height(30.dp),
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = LXPrimaryGreen,
                                     selectedLabelColor = LXBackgroundBlack,
@@ -2887,7 +2894,8 @@ private fun AdvancedFilterSheet(
                                 FilterChip(
                                     selected = isSelected,
                                     onClick = { viewModel.setMinScore(if (isSelected) null else threshold) },
-                                    label = { Text("★ $threshold+") },
+                                    label = { Text("★ $threshold+", fontSize = 11.sp) },
+                                    modifier = Modifier.height(30.dp),
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = LXScoreGold,
                                         selectedLabelColor = LXBackgroundBlack,
@@ -2900,7 +2908,8 @@ private fun AdvancedFilterSheet(
                             FilterChip(
                                 selected = state.onlyUnrated,
                                 onClick = { viewModel.setOnlyUnrated(!state.onlyUnrated) },
-                                label = { Text("Unrated") },
+                                label = { Text("Unrated", fontSize = 11.sp) },
+                                modifier = Modifier.height(30.dp),
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = LXPrimaryGreen,
                                     selectedLabelColor = LXBackgroundBlack,
@@ -2913,19 +2922,19 @@ private fun AdvancedFilterSheet(
                 }
 
                 // Tags Filter Section (Replaced Priority)
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Style, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.Style, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(15.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "Tags Filter",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = LXTextPrimary
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = LXTextSecondary
                             )
                         }
 
@@ -2950,18 +2959,18 @@ private fun AdvancedFilterSheet(
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(
                                 modifier = Modifier.weight(1f),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(32.dp)
+                                        .size(28.dp)
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(LXPrimaryGreen.copy(alpha = 0.15f)),
                                     contentAlignment = Alignment.Center
@@ -2970,13 +2979,13 @@ private fun AdvancedFilterSheet(
                                         imageVector = Icons.Default.Checklist,
                                         contentDescription = null,
                                         tint = LXPrimaryGreen,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
                                 Column {
                                     Text(
                                         text = "Select & Exclude Tags",
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
                                         color = LXTextPrimary
                                     )
                                     Text(
@@ -2984,7 +2993,7 @@ private fun AdvancedFilterSheet(
                                             "1 tap: [✓] Include • 2 taps: [✕] Exclude • 3 taps: Clear"
                                         else
                                             "${state.includedTags.size} included (✓) • ${state.excludedTags.size} excluded (✕)",
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
                                         color = LXTextSecondary
                                     )
                                 }
@@ -2994,7 +3003,7 @@ private fun AdvancedFilterSheet(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
                                 contentDescription = "Open Tags Filter",
                                 tint = LXPrimaryGreen,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                         }
                     }
@@ -3003,7 +3012,7 @@ private fun AdvancedFilterSheet(
                     if (state.includedTags.isNotEmpty() || state.excludedTags.isNotEmpty()) {
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             state.includedTags.forEach { tag ->
@@ -3023,11 +3032,11 @@ private fun AdvancedFilterSheet(
                 }
 
                 // Quick Toggles Section (Extra Options with Tri-State Exclusion)
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = "Extra Options",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = LXTextPrimary
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextSecondary
                     )
 
                     // Ongoing Filter
@@ -3089,20 +3098,20 @@ private fun AdvancedFilterSheet(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
                 // Apply / Close Button
                 Button(
                     onClick = onDismiss,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
+                        .height(42.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(
                         text = "Show ${state.totalCount} ${if (state.totalCount == 1) "Result" else "Results"}",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     )
                 }
 
