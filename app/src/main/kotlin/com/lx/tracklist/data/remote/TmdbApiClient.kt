@@ -599,6 +599,8 @@ object TmdbApiClient {
 
     fun discoverMovies(
         year: Int? = null,
+        startYear: Int? = null,
+        endYear: Int? = null,
         sortBy: String = "popularity.desc",
         page: Int = 1,
         adultMode: AdultMode = AdultMode.OFF,
@@ -607,8 +609,30 @@ object TmdbApiClient {
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> = withFallback(baseUrl) { activeBaseUrl ->
-        discoverMoviesInternal(year, sortBy, page, adultMode, includedTags, excludedTags, context, activeBaseUrl)
+        discoverMoviesInternal(year, startYear, endYear, sortBy, page, adultMode, includedTags, excludedTags, context, activeBaseUrl)
     }
+
+    fun discoverMovies(
+        year: Int? = null,
+        sortBy: String = "popularity.desc",
+        page: Int = 1,
+        adultMode: AdultMode = AdultMode.OFF,
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet(),
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<TmdbSearchResult>> = discoverMovies(
+        year = year,
+        startYear = null,
+        endYear = year,
+        sortBy = sortBy,
+        page = page,
+        adultMode = adultMode,
+        includedTags = includedTags,
+        excludedTags = excludedTags,
+        context = context,
+        baseUrl = baseUrl
+    )
 
     fun discoverMovies(
         year: Int? = null,
@@ -618,11 +642,22 @@ object TmdbApiClient {
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> = discoverMovies(
-        year, sortBy, page, if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF, emptySet(), emptySet(), context, baseUrl
+        year = year,
+        startYear = null,
+        endYear = year,
+        sortBy = sortBy,
+        page = page,
+        adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF,
+        includedTags = emptySet(),
+        excludedTags = emptySet(),
+        context = context,
+        baseUrl = baseUrl
     )
 
     private fun discoverMoviesInternal(
         year: Int?,
+        startYear: Int? = null,
+        endYear: Int? = null,
         sortBy: String,
         page: Int,
         adultMode: AdultMode = AdultMode.OFF,
@@ -637,7 +672,19 @@ object TmdbApiClient {
         }
 
         val voteGteParam = if (sortBy.startsWith("vote_average")) "&vote_count.gte=50" else ""
-        val yearParam = if (year != null && year > 1900) "&primary_release_year=$year" else ""
+        val yearParam = when {
+            startYear != null && endYear != null && startYear != endYear ->
+                "&primary_release_date.gte=${startYear}-01-01&primary_release_date.lte=${endYear}-12-31"
+            startYear != null && endYear != null && startYear == endYear ->
+                "&primary_release_year=$startYear"
+            year != null && year > 1900 ->
+                "&primary_release_year=$year"
+            startYear != null ->
+                "&primary_release_date.gte=${startYear}-01-01"
+            endYear != null ->
+                "&primary_release_date.lte=${endYear}-12-31"
+            else -> ""
+        }
         val includeAdult = adultMode != AdultMode.OFF
         val withGenres = includedTags.mapNotNull { TmdbTagRegistry.getMovieGenreId(it) }
         val withoutGenres = excludedTags.mapNotNull { TmdbTagRegistry.getMovieGenreId(it) }
@@ -698,7 +745,18 @@ object TmdbApiClient {
                 AdultMode.INCLUDE -> list
             }
             if (adultMode == AdultMode.ONLY && filteredList.isEmpty() && page <= 2) {
-                val nextRes = discoverMoviesInternal(year, sortBy, page + 1, adultMode, includedTags, excludedTags, context, baseUrl)
+                val nextRes = discoverMoviesInternal(
+                    year = year,
+                    startYear = startYear,
+                    endYear = endYear,
+                    sortBy = sortBy,
+                    page = page + 1,
+                    adultMode = adultMode,
+                    includedTags = includedTags,
+                    excludedTags = excludedTags,
+                    context = context,
+                    baseUrl = baseUrl
+                )
                 if (nextRes.isSuccess && nextRes.getOrDefault(emptyList()).isNotEmpty()) {
                     return nextRes
                 }
@@ -712,6 +770,8 @@ object TmdbApiClient {
 
     fun discoverTvShows(
         year: Int? = null,
+        startYear: Int? = null,
+        endYear: Int? = null,
         sortBy: String = "popularity.desc",
         page: Int = 1,
         adultMode: AdultMode = AdultMode.OFF,
@@ -720,8 +780,30 @@ object TmdbApiClient {
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> = withFallback(baseUrl) { activeBaseUrl ->
-        discoverTvShowsInternal(year, sortBy, page, adultMode, includedTags, excludedTags, context, activeBaseUrl)
+        discoverTvShowsInternal(year, startYear, endYear, sortBy, page, adultMode, includedTags, excludedTags, context, activeBaseUrl)
     }
+
+    fun discoverTvShows(
+        year: Int? = null,
+        sortBy: String = "popularity.desc",
+        page: Int = 1,
+        adultMode: AdultMode = AdultMode.OFF,
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet(),
+        context: Context? = null,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<TmdbSearchResult>> = discoverTvShows(
+        year = year,
+        startYear = null,
+        endYear = year,
+        sortBy = sortBy,
+        page = page,
+        adultMode = adultMode,
+        includedTags = includedTags,
+        excludedTags = excludedTags,
+        context = context,
+        baseUrl = baseUrl
+    )
 
     fun discoverTvShows(
         year: Int? = null,
@@ -731,11 +813,22 @@ object TmdbApiClient {
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> = discoverTvShows(
-        year, sortBy, page, if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF, emptySet(), emptySet(), context, baseUrl
+        year = year,
+        startYear = null,
+        endYear = year,
+        sortBy = sortBy,
+        page = page,
+        adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF,
+        includedTags = emptySet(),
+        excludedTags = emptySet(),
+        context = context,
+        baseUrl = baseUrl
     )
 
     private fun discoverTvShowsInternal(
         year: Int?,
+        startYear: Int? = null,
+        endYear: Int? = null,
         sortBy: String,
         page: Int,
         adultMode: AdultMode = AdultMode.OFF,
@@ -750,7 +843,19 @@ object TmdbApiClient {
         }
 
         val voteGteParam = if (sortBy.startsWith("vote_average")) "&vote_count.gte=20" else ""
-        val yearParam = if (year != null && year > 1900) "&first_air_date_year=$year" else ""
+        val yearParam = when {
+            startYear != null && endYear != null && startYear != endYear ->
+                "&first_air_date.gte=${startYear}-01-01&first_air_date.lte=${endYear}-12-31"
+            startYear != null && endYear != null && startYear == endYear ->
+                "&first_air_date_year=$startYear"
+            year != null && year > 1900 ->
+                "&first_air_date_year=$year"
+            startYear != null ->
+                "&first_air_date.gte=${startYear}-01-01"
+            endYear != null ->
+                "&first_air_date.lte=${endYear}-12-31"
+            else -> ""
+        }
         val includeAdult = adultMode != AdultMode.OFF
         val withGenres = includedTags.mapNotNull { TmdbTagRegistry.getTvGenreId(it) }
         val withoutGenres = excludedTags.mapNotNull { TmdbTagRegistry.getTvGenreId(it) }
@@ -811,7 +916,18 @@ object TmdbApiClient {
                 AdultMode.INCLUDE -> list
             }
             if (adultMode == AdultMode.ONLY && filteredList.isEmpty() && page <= 2) {
-                val nextRes = discoverTvShowsInternal(year, sortBy, page + 1, adultMode, includedTags, excludedTags, context, baseUrl)
+                val nextRes = discoverTvShowsInternal(
+                    year = year,
+                    startYear = startYear,
+                    endYear = endYear,
+                    sortBy = sortBy,
+                    page = page + 1,
+                    adultMode = adultMode,
+                    includedTags = includedTags,
+                    excludedTags = excludedTags,
+                    context = context,
+                    baseUrl = baseUrl
+                )
                 if (nextRes.isSuccess && nextRes.getOrDefault(emptyList()).isNotEmpty()) {
                     return nextRes
                 }

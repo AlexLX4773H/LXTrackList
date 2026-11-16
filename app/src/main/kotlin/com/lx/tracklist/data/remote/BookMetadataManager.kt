@@ -4,12 +4,78 @@ import android.content.Context
 import android.util.Log
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.RelatedMediaItem
+import com.lx.tracklist.ui.search.AdultMode
+import com.lx.tracklist.ui.search.BookSortOrder
+import com.lx.tracklist.ui.search.BookTagRegistry
+import com.lx.tracklist.ui.search.ContentDiscoveryMode
 import java.util.Calendar
 import java.util.TimeZone
 
 object BookMetadataManager {
 
     private const val TAG = "BookMetadataManager"
+
+    fun discoverBooks(
+        mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
+        startYear: Int? = null,
+        endYear: Int? = null,
+        sort: BookSortOrder = BookSortOrder.POPULARITY,
+        search: String? = null,
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet(),
+        adultMode: AdultMode = AdultMode.OFF,
+        page: Int = 1,
+        limit: Int = 20,
+        context: Context? = null
+    ): Result<List<BookDetails>> {
+        val subject = includedTags.mapNotNull { BookTagRegistry.getSubject(it) }.firstOrNull()
+        val openLibSort = when (sort) {
+            BookSortOrder.POPULARITY -> "editions"
+            BookSortOrder.RATING -> "rating"
+            BookSortOrder.NEWEST -> "new"
+            BookSortOrder.TITLE -> "title"
+        }
+
+        val openLibRes = OpenLibraryApiClient.discoverBooks(
+            startYear = if (mode == ContentDiscoveryMode.BY_YEAR) startYear else null,
+            endYear = if (mode == ContentDiscoveryMode.BY_YEAR) endYear else null,
+            sort = openLibSort,
+            subject = subject,
+            search = search,
+            page = page,
+            limit = limit
+        )
+
+        val rawList = if (openLibRes.isSuccess && openLibRes.getOrDefault(emptyList()).isNotEmpty()) {
+            openLibRes.getOrDefault(emptyList())
+        } else {
+            val googleOrderBy = if (sort == BookSortOrder.NEWEST) "newest" else "relevance"
+            val googleRes = GoogleBooksApiClient.discoverBooks(
+                subject = subject ?: "fiction",
+                startYear = if (mode == ContentDiscoveryMode.BY_YEAR) startYear else null,
+                endYear = if (mode == ContentDiscoveryMode.BY_YEAR) endYear else null,
+                search = search,
+                orderBy = googleOrderBy,
+                startIndex = (page - 1) * limit,
+                limit = limit,
+                context = context
+            )
+            googleRes.getOrDefault(emptyList())
+        }
+
+        val filtered = if (excludedTags.isNotEmpty()) {
+            rawList.filterNot { book ->
+                val bookGenres = (book.categories ?: emptyList()) + listOfNotNull(book.description)
+                excludedTags.any { exc ->
+                    bookGenres.any { g -> g.contains(exc, ignoreCase = true) }
+                }
+            }
+        } else {
+            rawList
+        }
+
+        return Result.success(filtered)
+    }
 
     /**
      * Search standard books / novels using Google Books as primary, falling back to Open Library.

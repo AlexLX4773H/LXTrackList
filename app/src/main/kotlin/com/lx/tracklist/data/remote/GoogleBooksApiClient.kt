@@ -28,6 +28,69 @@ object GoogleBooksApiClient {
         .followSslRedirects(true)
         .build()
 
+    fun discoverBooks(
+        subject: String = "fiction",
+        startYear: Int? = null,
+        endYear: Int? = null,
+        search: String? = null,
+        orderBy: String = "relevance",
+        startIndex: Int = 0,
+        limit: Int = 20,
+        context: Context? = null
+    ): Result<List<BookDetails>> {
+        val queryParts = mutableListOf<String>()
+        if (!search.isNullOrBlank()) {
+            queryParts.add(search.trim())
+        }
+        if (subject.isNotBlank()) {
+            queryParts.add("subject:$subject")
+        }
+        val qVal = if (queryParts.isNotEmpty()) queryParts.joinToString(" ") else "subject:fiction"
+        val encodedQuery = URLEncoder.encode(qVal, "UTF-8")
+        val clampedLimit = limit.coerceIn(1, 40)
+        val apiKey = GoogleBooksConfig.getApiKey(context)
+        val keyParam = if (apiKey.isNotBlank()) "&key=$apiKey" else ""
+        val endpoint = "$BASE_URL?q=$encodedQuery&orderBy=$orderBy&startIndex=$startIndex&maxResults=$clampedLimit$keyParam"
+
+        return try {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json")
+                .get()
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string().orEmpty()
+
+            if (!response.isSuccessful) {
+                Log.w(TAG, "Google Books discover failed HTTP $code: ${bodyString.take(150)}")
+                return Result.failure(Exception("Google Books HTTP $code: ${bodyString.take(150)}"))
+            }
+
+            val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
+            val itemsArray = rootObj?.getAsJsonArray("items")
+                ?: return Result.success(emptyList())
+
+            val results = mutableListOf<BookDetails>()
+            for (i in 0 until itemsArray.size()) {
+                val itemElem = itemsArray.get(i)
+                if (itemElem.isJsonObject) {
+                    try {
+                        parseVolumeItem(itemElem.asJsonObject)?.let { results.add(it) }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error parsing Google Books item at $i", e)
+                    }
+                }
+            }
+            Result.success(results)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying Google Books discover", e)
+            Result.failure(e)
+        }
+    }
+
     fun searchBooks(
         query: String,
         context: Context? = null,

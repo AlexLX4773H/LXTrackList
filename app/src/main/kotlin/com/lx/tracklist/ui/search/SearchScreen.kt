@@ -168,6 +168,18 @@ fun SearchScreen(
             onApplyTv = { tvFilter ->
                 viewModel.applyTvDiscoveryFilter(tvFilter, context)
             },
+            onApplyManga = { mangaFilter ->
+                viewModel.applyMangaDiscoveryFilter(mangaFilter, context)
+            },
+            onApplyManhwa = { manhwaFilter ->
+                viewModel.applyManhwaDiscoveryFilter(manhwaFilter, context)
+            },
+            onApplyLightNovel = { lightNovelFilter ->
+                viewModel.applyLightNovelDiscoveryFilter(lightNovelFilter, context)
+            },
+            onApplyBook = { bookFilter ->
+                viewModel.applyBookDiscoveryFilter(bookFilter, context)
+            },
             onResetFilter = {
                 viewModel.clearDiscoveryFilter()
             }
@@ -229,11 +241,7 @@ fun SearchScreen(
                     )
                 },
                 actions = {
-                    val isDiscoverSupported = state.selectedCategory in listOf(
-                        SearchCategory.ANIME,
-                        SearchCategory.MOVIES,
-                        SearchCategory.TV_SHOWS
-                    )
+                    val isDiscoverSupported = true
                     if (isDiscoverSupported) {
                         IconButton(
                             onClick = { showDiscoverySheet = true }
@@ -590,12 +598,28 @@ fun SearchScreen(
                                         AnimeDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
                                     }
                                     is DiscoveryFilter.Movie -> when (filter.mode) {
-                                        TmdbDiscoveryMode.BY_YEAR -> Icons.Default.Movie
-                                        TmdbDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
+                                        ContentDiscoveryMode.BY_YEAR -> Icons.Default.Movie
+                                        ContentDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
                                     }
                                     is DiscoveryFilter.Tv -> when (filter.mode) {
-                                        TmdbDiscoveryMode.BY_YEAR -> Icons.Default.Tv
-                                        TmdbDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
+                                        ContentDiscoveryMode.BY_YEAR -> Icons.Default.Tv
+                                        ContentDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
+                                    }
+                                    is DiscoveryFilter.Manga -> when (filter.mode) {
+                                        ContentDiscoveryMode.BY_YEAR -> Icons.AutoMirrored.Filled.MenuBook
+                                        ContentDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
+                                    }
+                                    is DiscoveryFilter.Manhwa -> when (filter.mode) {
+                                        ContentDiscoveryMode.BY_YEAR -> Icons.AutoMirrored.Filled.MenuBook
+                                        ContentDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
+                                    }
+                                    is DiscoveryFilter.LightNovel -> when (filter.mode) {
+                                        ContentDiscoveryMode.BY_YEAR -> Icons.Default.Book
+                                        ContentDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
+                                    }
+                                    is DiscoveryFilter.Book -> when (filter.mode) {
+                                        ContentDiscoveryMode.BY_YEAR -> Icons.Default.Book
+                                        ContentDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
                                     }
                                 },
                                 contentDescription = null,
@@ -624,16 +648,8 @@ fun SearchScreen(
                         }
                     }
 
-                    val incTags = when (filter) {
-                        is DiscoveryFilter.Anime -> filter.includedTags
-                        is DiscoveryFilter.Movie -> filter.includedTags
-                        is DiscoveryFilter.Tv -> filter.includedTags
-                    }
-                    val excTags = when (filter) {
-                        is DiscoveryFilter.Anime -> filter.excludedTags
-                        is DiscoveryFilter.Movie -> filter.excludedTags
-                        is DiscoveryFilter.Tv -> filter.excludedTags
-                    }
+                    val incTags = filter.includedTags
+                    val excTags = filter.excludedTags
                     if (incTags.isNotEmpty() || excTags.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(6.dp))
                         LazyRow(

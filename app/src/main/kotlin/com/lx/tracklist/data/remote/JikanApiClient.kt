@@ -11,6 +11,7 @@ import com.lx.tracklist.ui.search.AdultMode
 import com.lx.tracklist.ui.search.AnimeDiscoveryMode
 import com.lx.tracklist.ui.search.AnimeTagCategory
 import com.lx.tracklist.ui.search.AnimeTagRegistry
+import com.lx.tracklist.ui.search.ContentDiscoveryMode
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -2235,6 +2236,331 @@ object JikanApiClient {
                 else -> list // Default Jikan MAL popularity
             }
             return Result.success(sortedList)
+        }
+
+        return if (anilistRes.isFailure) anilistRes else jikanRes
+    }
+
+    fun queryAniListMangaDiscovery(
+        isManhwa: Boolean = false,
+        isLightNovel: Boolean = false,
+        mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
+        startYear: Int? = null,
+        endYear: Int? = null,
+        sort: String = "POPULARITY_DESC",
+        search: String? = null,
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet(),
+        adultMode: AdultMode = AdultMode.OFF,
+        page: Int = 1,
+        perPage: Int = 25
+    ): Result<List<JikanMediaDetails>> {
+        val hasSearch = !search.isNullOrBlank()
+        val adultParam = when (adultMode) {
+            AdultMode.OFF -> ", isAdult: false"
+            AdultMode.ONLY -> ", isAdult: true"
+            AdultMode.INCLUDE -> ""
+        }
+
+        val genreIn = includedTags.filter { AnimeTagRegistry.getCategory(it) == AnimeTagCategory.GENRE }
+        val tagIn = includedTags.filter { AnimeTagRegistry.getCategory(it) != AnimeTagCategory.GENRE }
+        val genreNotIn = excludedTags.filter { AnimeTagRegistry.getCategory(it) == AnimeTagCategory.GENRE }
+        val tagNotIn = excludedTags.filter { AnimeTagRegistry.getCategory(it) != AnimeTagCategory.GENRE }
+
+        val isByYear = mode == ContentDiscoveryMode.BY_YEAR && (startYear != null || endYear != null)
+
+        val varDefs = mutableListOf<String>()
+        varDefs.add("${'$'}page: Int")
+        varDefs.add("${'$'}perPage: Int")
+        varDefs.add("${'$'}sort: [MediaSort]")
+        if (hasSearch) varDefs.add("${'$'}search: String")
+        if (isByYear) {
+            if (startYear != null) varDefs.add("${'$'}startDate_greater: FuzzyDateInt")
+            if (endYear != null) varDefs.add("${'$'}startDate_lesser: FuzzyDateInt")
+        }
+        if (genreIn.isNotEmpty()) varDefs.add("${'$'}genreIn: [String]")
+        if (genreNotIn.isNotEmpty()) varDefs.add("${'$'}genreNotIn: [String]")
+        if (tagIn.isNotEmpty()) varDefs.add("${'$'}tagIn: [String]")
+        if (tagNotIn.isNotEmpty()) varDefs.add("${'$'}tagNotIn: [String]")
+
+        val mediaArgs = mutableListOf<String>()
+        mediaArgs.add("type: MANGA")
+        if (isLightNovel) {
+            mediaArgs.add("format: NOVEL")
+        } else if (isManhwa) {
+            mediaArgs.add("countryOfOrigin: \"KR\"")
+        }
+        mediaArgs.add("sort: ${'$'}sort")
+        if (hasSearch) mediaArgs.add("search: ${'$'}search")
+        if (isByYear) {
+            if (startYear != null) mediaArgs.add("startDate_greater: ${'$'}startDate_greater")
+            if (endYear != null) mediaArgs.add("startDate_lesser: ${'$'}startDate_lesser")
+        }
+        if (genreIn.isNotEmpty()) mediaArgs.add("genre_in: ${'$'}genreIn")
+        if (genreNotIn.isNotEmpty()) mediaArgs.add("genre_not_in: ${'$'}genreNotIn")
+        if (tagIn.isNotEmpty()) mediaArgs.add("tag_in: ${'$'}tagIn")
+        if (tagNotIn.isNotEmpty()) mediaArgs.add("tag_not_in: ${'$'}tagNotIn")
+
+        val query = """
+            query (${varDefs.joinToString(", ")}) {
+              Page(page: ${'$'}page, perPage: ${'$'}perPage) {
+                pageInfo {
+                  hasNextPage
+                  total
+                }
+                media(${mediaArgs.joinToString(", ")}$adultParam) {
+                  id
+                  idMal
+                  isAdult
+                  siteUrl
+                  title { romaji english native }
+                  synonyms
+                  coverImage { extraLarge large }
+                  duration
+                  episodes
+                  chapters
+                  volumes
+                  format
+                  status
+                  averageScore
+                  meanScore
+                  description(asHtml: false)
+                  startDate { year month day }
+                  endDate { year month day }
+                  genres
+                  tags { name }
+                }
+              }
+            }
+        """.trimIndent()
+
+        val jsonBody = JsonObject().apply {
+            addProperty("query", query)
+            val vars = JsonObject().apply {
+                addProperty("page", page)
+                addProperty("perPage", perPage.coerceIn(1, 50))
+                val sortArray = JsonArray().apply { add(sort) }
+                add("sort", sortArray)
+                if (hasSearch && search != null) addProperty("search", search.trim())
+                if (isByYear) {
+                    if (startYear != null) addProperty("startDate_greater", startYear * 10000)
+                    if (endYear != null) addProperty("startDate_lesser", endYear * 10000 + 1231)
+                }
+                if (genreIn.isNotEmpty()) {
+                    add("genreIn", JsonArray().apply { genreIn.forEach { add(it) } })
+                }
+                if (genreNotIn.isNotEmpty()) {
+                    add("genreNotIn", JsonArray().apply { genreNotIn.forEach { add(it) } })
+                }
+                if (tagIn.isNotEmpty()) {
+                    add("tagIn", JsonArray().apply { tagIn.forEach { add(it) } })
+                }
+                if (tagNotIn.isNotEmpty()) {
+                    add("tagNotIn", JsonArray().apply { tagNotIn.forEach { add(it) } })
+                }
+            }
+            add("variables", vars)
+        }
+
+        return try {
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val requestBody = jsonBody.toString().toRequestBody(mediaType)
+            val request = Request.Builder()
+                .url("https://graphql.anilist.co")
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json")
+                .post(requestBody)
+                .build()
+
+            val response = searchOkHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string().orEmpty()
+
+            if (!response.isSuccessful) {
+                Log.w(TAG, "AniList Manga discovery HTTP $code: ${bodyString.take(150)}")
+                return Result.failure(Exception("AniList HTTP $code: ${bodyString.take(150)}"))
+            }
+
+            val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
+            val mediaArray = rootObj?.getAsJsonObject("data")
+                ?.getAsJsonObject("Page")
+                ?.getAsJsonArray("media")
+                ?: return Result.success(emptyList())
+
+            val list = mutableListOf<JikanMediaDetails>()
+            for (i in 0 until mediaArray.size()) {
+                val elem = mediaArray.get(i)
+                if (elem.isJsonObject) {
+                    val mediaObj = elem.asJsonObject
+                    val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong
+                    val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull }?.asLong
+                    val fallbackId = idMal ?: aniId
+                    try {
+                        list.add(parseAniListMedia(mediaObj, fallbackMalId = fallbackId))
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error parsing AniList manga discovery item at index $i", e)
+                    }
+                }
+            }
+
+            val filteredList = when (adultMode) {
+                AdultMode.ONLY -> list.filter { it.isAdult == true }
+                AdultMode.OFF -> list.filterNot { it.isAdult == true }
+                AdultMode.INCLUDE -> list
+            }
+            Result.success(filteredList)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying AniList manga discovery", e)
+            Result.failure(e)
+        }
+    }
+
+    fun queryJikanMangaDiscovery(
+        type: String = "manga",
+        startYear: Int? = null,
+        endYear: Int? = null,
+        sort: String = "POPULARITY_DESC",
+        search: String? = null,
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet(),
+        adultMode: AdultMode = AdultMode.OFF,
+        page: Int = 1,
+        limit: Int = 25,
+        baseUrl: String = DEFAULT_BASE_URL
+    ): Result<List<JikanMediaDetails>> {
+        val adultParam = when (adultMode) {
+            AdultMode.OFF -> "&sfw=true"
+            AdultMode.ONLY -> "&genres=12"
+            AdultMode.INCLUDE -> ""
+        }
+        val incIds = includedTags.mapNotNull { AnimeTagRegistry.getMalId(it) }
+        val excIds = excludedTags.mapNotNull { AnimeTagRegistry.getMalId(it) }
+        val genresParam = if (incIds.isNotEmpty()) "&genres=${incIds.joinToString(",")}" else ""
+        val genresExcParam = if (excIds.isNotEmpty()) "&genres_exclude=${excIds.joinToString(",")}" else ""
+        val orderParam = when (sort) {
+            "SCORE_DESC" -> "&order_by=score&sort=desc"
+            "START_DATE_DESC" -> "&order_by=start_date&sort=desc"
+            "TITLE_ROMAJI" -> "&order_by=title&sort=asc"
+            else -> "&order_by=popularity&sort=desc"
+        }
+        val searchParam = if (!search.isNullOrBlank()) "&q=${URLEncoder.encode(search.trim(), "UTF-8")}" else ""
+        val startDateParam = if (startYear != null) "&start_date=${startYear}-01-01" else ""
+        val endDateParam = if (endYear != null) "&end_date=${endYear}-12-31" else ""
+        val endpoint = "${baseUrl.trimEnd('/')}/manga?type=$type&page=$page&limit=$limit$orderParam$genresParam$genresExcParam$adultParam$searchParam$startDateParam$endDateParam"
+
+        return try {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json, text/plain, */*")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .get()
+                .build()
+
+            var response = searchOkHttpClient.newCall(request).execute()
+            var code = response.code
+
+            if (code == 429) {
+                Log.w(TAG, "Jikan manga discovery rate limited (429), waiting 1s...")
+                try {
+                    Thread.sleep(1000)
+                } catch (_: InterruptedException) {}
+                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+                code = response.code
+            }
+
+            val bodyString = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("Jikan manga discovery HTTP $code: ${bodyString.take(200)}"))
+            }
+
+            val jsonObject = gson.fromJson(bodyString, JsonObject::class.java)
+            val dataArray = jsonObject?.getSafeJsonArray("data")
+                ?: return Result.success(emptyList())
+
+            val list = mutableListOf<JikanMediaDetails>()
+            for (i in 0 until dataArray.size()) {
+                val elem = dataArray.get(i)
+                if (elem.isJsonObject) {
+                    val dataObj = elem.asJsonObject
+                    val malId = dataObj.get("mal_id")?.takeIf { !it.isJsonNull }?.asLong
+                    if (malId != null) {
+                        try {
+                            list.add(parseJikanData(dataObj, fallbackMalId = malId))
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error parsing Jikan manga discovery item at index $i", e)
+                        }
+                    }
+                }
+            }
+
+            val modeFilteredList = when (adultMode) {
+                AdultMode.ONLY -> list.filter { it.isAdult == true }
+                AdultMode.OFF -> list.filterNot { it.isAdult == true }
+                AdultMode.INCLUDE -> list
+            }
+            Result.success(modeFilteredList)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying Jikan manga discovery", e)
+            Result.failure(e)
+        }
+    }
+
+    fun fetchMangaDiscovery(
+        isManhwa: Boolean = false,
+        isLightNovel: Boolean = false,
+        mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
+        startYear: Int? = null,
+        endYear: Int? = null,
+        sort: String = "POPULARITY_DESC",
+        search: String? = null,
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet(),
+        adultMode: AdultMode = AdultMode.OFF,
+        page: Int = 1,
+        limit: Int = 25
+    ): Result<List<JikanMediaDetails>> {
+        val anilistRes = queryAniListMangaDiscovery(
+            isManhwa = isManhwa,
+            isLightNovel = isLightNovel,
+            mode = mode,
+            startYear = startYear,
+            endYear = endYear,
+            sort = sort,
+            search = search,
+            includedTags = includedTags,
+            excludedTags = excludedTags,
+            adultMode = adultMode,
+            page = page,
+            perPage = limit
+        )
+        if (anilistRes.isSuccess) {
+            val list = anilistRes.getOrDefault(emptyList())
+            if (list.isNotEmpty()) {
+                return anilistRes
+            }
+        }
+
+        val jikanType = when {
+            isLightNovel -> "lightnovel"
+            isManhwa -> "manhwa"
+            else -> "manga"
+        }
+        val jikanRes = queryJikanMangaDiscovery(
+            type = jikanType,
+            startYear = if (mode == ContentDiscoveryMode.BY_YEAR) startYear else null,
+            endYear = if (mode == ContentDiscoveryMode.BY_YEAR) endYear else null,
+            sort = sort,
+            search = search,
+            includedTags = includedTags,
+            excludedTags = excludedTags,
+            adultMode = adultMode,
+            page = page,
+            limit = limit
+        )
+        if (jikanRes.isSuccess && jikanRes.getOrDefault(emptyList()).isNotEmpty()) {
+            return jikanRes
         }
 
         return if (anilistRes.isFailure) anilistRes else jikanRes

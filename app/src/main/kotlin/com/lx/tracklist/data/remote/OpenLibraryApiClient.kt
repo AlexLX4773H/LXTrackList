@@ -27,6 +27,77 @@ object OpenLibraryApiClient {
         .followSslRedirects(true)
         .build()
 
+    fun discoverBooks(
+        startYear: Int? = null,
+        endYear: Int? = null,
+        sort: String = "editions",
+        subject: String? = null,
+        search: String? = null,
+        page: Int = 1,
+        limit: Int = 20
+    ): Result<List<BookDetails>> {
+        val queryParts = mutableListOf<String>()
+        if (!search.isNullOrBlank()) {
+            queryParts.add(search.trim())
+        }
+        if (startYear != null && endYear != null) {
+            queryParts.add("first_publish_year:[$startYear TO $endYear]")
+        } else if (startYear != null) {
+            queryParts.add("first_publish_year:[$startYear TO 2026]")
+        } else if (endYear != null) {
+            queryParts.add("first_publish_year:[1800 TO $endYear]")
+        }
+        val qVal = if (queryParts.isNotEmpty()) queryParts.joinToString(" AND ") else "*:*"
+        val encodedQ = URLEncoder.encode(qVal, "UTF-8")
+        val subjectParam = if (!subject.isNullOrBlank()) "&subject=${URLEncoder.encode(subject, "UTF-8")}" else ""
+        val sortParam = when (sort) {
+            "rating" -> "&sort=rating"
+            "new" -> "&sort=new"
+            "title" -> "&sort=title"
+            else -> "&sort=editions"
+        }
+        val clampedLimit = limit.coerceIn(1, 40)
+        val endpoint = "$BASE_SEARCH_URL?q=$encodedQ$subjectParam$sortParam&page=$page&limit=$clampedLimit"
+
+        return try {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json")
+                .get()
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string().orEmpty()
+
+            if (!response.isSuccessful) {
+                Log.w(TAG, "OpenLibrary discover failed HTTP $code: ${bodyString.take(150)}")
+                return Result.failure(Exception("OpenLibrary HTTP $code: ${bodyString.take(150)}"))
+            }
+
+            val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
+            val docsArray = rootObj?.getAsJsonArray("docs")
+                ?: return Result.success(emptyList())
+
+            val results = mutableListOf<BookDetails>()
+            for (i in 0 until docsArray.size()) {
+                val docElem = docsArray.get(i)
+                if (docElem.isJsonObject) {
+                    try {
+                        parseSearchDoc(docElem.asJsonObject)?.let { results.add(it) }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error parsing OpenLibrary doc at $i", e)
+                    }
+                }
+            }
+            Result.success(results)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception querying OpenLibrary discover", e)
+            Result.failure(e)
+        }
+    }
+
     fun searchBooks(
         query: String,
         limit: Int = 20

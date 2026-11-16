@@ -62,9 +62,25 @@ enum class AnimeSortOrder(val apiValue: String, val displayName: String) {
     TITLE("TITLE_ROMAJI", "Title (A–Z)")
 }
 
-enum class TmdbDiscoveryMode(val displayName: String, val iconEmoji: String) {
+enum class ContentDiscoveryMode(val displayName: String, val iconEmoji: String) {
     BY_YEAR("By Year", "🗓️"),
     MOST_POPULAR("Most Popular", "🔥")
+}
+
+typealias TmdbDiscoveryMode = ContentDiscoveryMode
+
+enum class MangaSortOrder(val apiValue: String, val displayName: String) {
+    POPULARITY("POPULARITY_DESC", "Most Popular"),
+    SCORE("SCORE_DESC", "Highest Rated"),
+    START_DATE("START_DATE_DESC", "Release Date"),
+    TITLE("TITLE_ROMAJI", "Title (A–Z)")
+}
+
+enum class BookSortOrder(val apiValue: String, val displayName: String) {
+    POPULARITY("editions", "Most Popular"),
+    RATING("rating", "Highest Rated"),
+    NEWEST("new", "Release Date"),
+    TITLE("title", "Title (A–Z)")
 }
 
 enum class TmdbMovieSort(val apiValue: String, val displayName: String) {
@@ -95,6 +111,8 @@ enum class AdultMode(val displayName: String) {
 sealed class DiscoveryFilter {
     abstract val label: String
     abstract val adultMode: AdultMode
+    abstract val includedTags: Set<String>
+    abstract val excludedTags: Set<String>
     val includeAdult: Boolean get() = adultMode != AdultMode.OFF
 
     data class Anime(
@@ -102,8 +120,8 @@ sealed class DiscoveryFilter {
         val season: AnimeSeason = AnimeSeason.current(),
         val year: Int = AnimeSeason.currentYear(),
         val sortOrder: AnimeSortOrder = AnimeSortOrder.POPULARITY,
-        val includedTags: Set<String> = emptySet(),
-        val excludedTags: Set<String> = emptySet(),
+        override val includedTags: Set<String> = emptySet(),
+        override val excludedTags: Set<String> = emptySet(),
         override val adultMode: AdultMode = AdultMode.OFF
     ) : DiscoveryFilter() {
         constructor(
@@ -159,11 +177,13 @@ sealed class DiscoveryFilter {
     }
 
     data class Movie(
-        val mode: TmdbDiscoveryMode = TmdbDiscoveryMode.BY_YEAR,
+        val mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
         val year: Int? = AnimeSeason.currentYear(),
+        val startYear: Int? = null,
+        val endYear: Int? = year,
         val sortOrder: TmdbMovieSort = TmdbMovieSort.POPULARITY,
-        val includedTags: Set<String> = emptySet(),
-        val excludedTags: Set<String> = emptySet(),
+        override val includedTags: Set<String> = emptySet(),
+        override val excludedTags: Set<String> = emptySet(),
         override val adultMode: AdultMode = AdultMode.OFF
     ) : DiscoveryFilter() {
         constructor(
@@ -171,8 +191,10 @@ sealed class DiscoveryFilter {
             sortOrder: TmdbMovieSort,
             adultMode: AdultMode = AdultMode.OFF
         ) : this(
-            mode = TmdbDiscoveryMode.BY_YEAR,
+            mode = ContentDiscoveryMode.BY_YEAR,
             year = year,
+            startYear = null,
+            endYear = year,
             sortOrder = sortOrder,
             includedTags = emptySet(),
             excludedTags = emptySet(),
@@ -184,13 +206,24 @@ sealed class DiscoveryFilter {
             sortOrder: TmdbMovieSort,
             includeAdult: Boolean
         ) : this(
-            mode = TmdbDiscoveryMode.BY_YEAR,
+            mode = ContentDiscoveryMode.BY_YEAR,
             year = year,
+            startYear = null,
+            endYear = year,
             sortOrder = sortOrder,
             includedTags = emptySet(),
             excludedTags = emptySet(),
             adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF
         )
+
+        val yearText: String
+            get() = when {
+                startYear != null && endYear != null && startYear != endYear -> "$startYear–$endYear"
+                endYear != null -> "$endYear"
+                year != null -> "$year"
+                startYear != null -> "$startYear"
+                else -> ""
+            }
 
         override val label: String
             get() {
@@ -200,8 +233,8 @@ sealed class DiscoveryFilter {
                     AdultMode.ONLY -> " • 18+ Only"
                 }
                 val base = when (mode) {
-                    TmdbDiscoveryMode.BY_YEAR -> "🎬 Movies ${year ?: ""}".trim()
-                    TmdbDiscoveryMode.MOST_POPULAR -> "🔥 Most Popular Movies"
+                    ContentDiscoveryMode.BY_YEAR -> "🎬 Movies $yearText".trim()
+                    ContentDiscoveryMode.MOST_POPULAR -> "🔥 Most Popular Movies"
                 }
                 val sortText = " • ${sortOrder.displayName}"
                 val tagSummary = when {
@@ -215,11 +248,13 @@ sealed class DiscoveryFilter {
     }
 
     data class Tv(
-        val mode: TmdbDiscoveryMode = TmdbDiscoveryMode.BY_YEAR,
+        val mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
         val year: Int? = AnimeSeason.currentYear(),
+        val startYear: Int? = null,
+        val endYear: Int? = year,
         val sortOrder: TmdbTvSort = TmdbTvSort.POPULARITY,
-        val includedTags: Set<String> = emptySet(),
-        val excludedTags: Set<String> = emptySet(),
+        override val includedTags: Set<String> = emptySet(),
+        override val excludedTags: Set<String> = emptySet(),
         override val adultMode: AdultMode = AdultMode.OFF
     ) : DiscoveryFilter() {
         constructor(
@@ -227,8 +262,10 @@ sealed class DiscoveryFilter {
             sortOrder: TmdbTvSort,
             adultMode: AdultMode = AdultMode.OFF
         ) : this(
-            mode = TmdbDiscoveryMode.BY_YEAR,
+            mode = ContentDiscoveryMode.BY_YEAR,
             year = year,
+            startYear = null,
+            endYear = year,
             sortOrder = sortOrder,
             includedTags = emptySet(),
             excludedTags = emptySet(),
@@ -240,13 +277,24 @@ sealed class DiscoveryFilter {
             sortOrder: TmdbTvSort,
             includeAdult: Boolean
         ) : this(
-            mode = TmdbDiscoveryMode.BY_YEAR,
+            mode = ContentDiscoveryMode.BY_YEAR,
             year = year,
+            startYear = null,
+            endYear = year,
             sortOrder = sortOrder,
             includedTags = emptySet(),
             excludedTags = emptySet(),
             adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF
         )
+
+        val yearText: String
+            get() = when {
+                startYear != null && endYear != null && startYear != endYear -> "$startYear–$endYear"
+                endYear != null -> "$endYear"
+                year != null -> "$year"
+                startYear != null -> "$startYear"
+                else -> ""
+            }
 
         override val label: String
             get() {
@@ -256,8 +304,168 @@ sealed class DiscoveryFilter {
                     AdultMode.ONLY -> " • 18+ Only"
                 }
                 val base = when (mode) {
-                    TmdbDiscoveryMode.BY_YEAR -> "📺 TV Shows ${year ?: ""}".trim()
-                    TmdbDiscoveryMode.MOST_POPULAR -> "🔥 Most Popular TV"
+                    ContentDiscoveryMode.BY_YEAR -> "📺 TV Shows $yearText".trim()
+                    ContentDiscoveryMode.MOST_POPULAR -> "🔥 Most Popular TV"
+                }
+                val sortText = " • ${sortOrder.displayName}"
+                val tagSummary = when {
+                    includedTags.isNotEmpty() && excludedTags.isNotEmpty() -> " • +${includedTags.size} / -${excludedTags.size} tags"
+                    includedTags.isNotEmpty() -> " • +${includedTags.size} tags"
+                    excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
+                    else -> ""
+                }
+                return "$base$sortText$tagSummary$adultTag"
+            }
+    }
+
+    data class Manga(
+        val mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
+        val startYear: Int? = AnimeSeason.currentYear() - 2,
+        val endYear: Int? = AnimeSeason.currentYear(),
+        val sortOrder: MangaSortOrder = MangaSortOrder.POPULARITY,
+        override val includedTags: Set<String> = emptySet(),
+        override val excludedTags: Set<String> = emptySet(),
+        override val adultMode: AdultMode = AdultMode.OFF
+    ) : DiscoveryFilter() {
+        val yearText: String
+            get() = when {
+                startYear == null && endYear == null -> ""
+                startYear == null -> "${endYear ?: ""}"
+                endYear == null -> "${startYear}"
+                startYear == endYear -> "$startYear"
+                else -> "$startYear–$endYear"
+            }
+
+        override val label: String
+            get() {
+                val adultTag = when (adultMode) {
+                    AdultMode.OFF -> ""
+                    AdultMode.INCLUDE -> " • 18+"
+                    AdultMode.ONLY -> " • 18+ Only"
+                }
+                val base = when (mode) {
+                    ContentDiscoveryMode.BY_YEAR -> "📖 Manga $yearText".trim()
+                    ContentDiscoveryMode.MOST_POPULAR -> "🔥 Most Popular Manga"
+                }
+                val sortText = " • ${sortOrder.displayName}"
+                val tagSummary = when {
+                    includedTags.isNotEmpty() && excludedTags.isNotEmpty() -> " • +${includedTags.size} / -${excludedTags.size} tags"
+                    includedTags.isNotEmpty() -> " • +${includedTags.size} tags"
+                    excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
+                    else -> ""
+                }
+                return "$base$sortText$tagSummary$adultTag"
+            }
+    }
+
+    data class Manhwa(
+        val mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
+        val startYear: Int? = AnimeSeason.currentYear() - 2,
+        val endYear: Int? = AnimeSeason.currentYear(),
+        val sortOrder: MangaSortOrder = MangaSortOrder.POPULARITY,
+        override val includedTags: Set<String> = emptySet(),
+        override val excludedTags: Set<String> = emptySet(),
+        override val adultMode: AdultMode = AdultMode.OFF
+    ) : DiscoveryFilter() {
+        val yearText: String
+            get() = when {
+                startYear == null && endYear == null -> ""
+                startYear == null -> "${endYear ?: ""}"
+                endYear == null -> "${startYear}"
+                startYear == endYear -> "$startYear"
+                else -> "$startYear–$endYear"
+            }
+
+        override val label: String
+            get() {
+                val adultTag = when (adultMode) {
+                    AdultMode.OFF -> ""
+                    AdultMode.INCLUDE -> " • 18+"
+                    AdultMode.ONLY -> " • 18+ Only"
+                }
+                val base = when (mode) {
+                    ContentDiscoveryMode.BY_YEAR -> "🇰🇷 Manhwa $yearText".trim()
+                    ContentDiscoveryMode.MOST_POPULAR -> "🔥 Most Popular Manhwa"
+                }
+                val sortText = " • ${sortOrder.displayName}"
+                val tagSummary = when {
+                    includedTags.isNotEmpty() && excludedTags.isNotEmpty() -> " • +${includedTags.size} / -${excludedTags.size} tags"
+                    includedTags.isNotEmpty() -> " • +${includedTags.size} tags"
+                    excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
+                    else -> ""
+                }
+                return "$base$sortText$tagSummary$adultTag"
+            }
+    }
+
+    data class LightNovel(
+        val mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
+        val startYear: Int? = AnimeSeason.currentYear() - 2,
+        val endYear: Int? = AnimeSeason.currentYear(),
+        val sortOrder: MangaSortOrder = MangaSortOrder.POPULARITY,
+        override val includedTags: Set<String> = emptySet(),
+        override val excludedTags: Set<String> = emptySet(),
+        override val adultMode: AdultMode = AdultMode.OFF
+    ) : DiscoveryFilter() {
+        val yearText: String
+            get() = when {
+                startYear == null && endYear == null -> ""
+                startYear == null -> "${endYear ?: ""}"
+                endYear == null -> "${startYear}"
+                startYear == endYear -> "$startYear"
+                else -> "$startYear–$endYear"
+            }
+
+        override val label: String
+            get() {
+                val adultTag = when (adultMode) {
+                    AdultMode.OFF -> ""
+                    AdultMode.INCLUDE -> " • 18+"
+                    AdultMode.ONLY -> " • 18+ Only"
+                }
+                val base = when (mode) {
+                    ContentDiscoveryMode.BY_YEAR -> "📜 Light Novels $yearText".trim()
+                    ContentDiscoveryMode.MOST_POPULAR -> "🔥 Most Popular Light Novels"
+                }
+                val sortText = " • ${sortOrder.displayName}"
+                val tagSummary = when {
+                    includedTags.isNotEmpty() && excludedTags.isNotEmpty() -> " • +${includedTags.size} / -${excludedTags.size} tags"
+                    includedTags.isNotEmpty() -> " • +${includedTags.size} tags"
+                    excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
+                    else -> ""
+                }
+                return "$base$sortText$tagSummary$adultTag"
+            }
+    }
+
+    data class Book(
+        val mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
+        val startYear: Int? = AnimeSeason.currentYear() - 5,
+        val endYear: Int? = AnimeSeason.currentYear(),
+        val sortOrder: BookSortOrder = BookSortOrder.POPULARITY,
+        override val includedTags: Set<String> = emptySet(),
+        override val excludedTags: Set<String> = emptySet(),
+        override val adultMode: AdultMode = AdultMode.OFF
+    ) : DiscoveryFilter() {
+        val yearText: String
+            get() = when {
+                startYear == null && endYear == null -> ""
+                startYear == null -> "${endYear ?: ""}"
+                endYear == null -> "${startYear}"
+                startYear == endYear -> "$startYear"
+                else -> "$startYear–$endYear"
+            }
+
+        override val label: String
+            get() {
+                val adultTag = when (adultMode) {
+                    AdultMode.OFF -> ""
+                    AdultMode.INCLUDE -> " • 18+"
+                    AdultMode.ONLY -> " • 18+ Only"
+                }
+                val base = when (mode) {
+                    ContentDiscoveryMode.BY_YEAR -> "📚 Books $yearText".trim()
+                    ContentDiscoveryMode.MOST_POPULAR -> "🔥 Most Popular Books"
                 }
                 val sortText = " • ${sortOrder.displayName}"
                 val tagSummary = when {

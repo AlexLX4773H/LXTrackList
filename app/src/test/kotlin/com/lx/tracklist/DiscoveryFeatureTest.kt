@@ -6,7 +6,11 @@ import com.lx.tracklist.ui.search.AnimeSeason
 import com.lx.tracklist.ui.search.AnimeSortOrder
 import com.lx.tracklist.ui.search.AnimeTagCategory
 import com.lx.tracklist.ui.search.AnimeTagRegistry
+import com.lx.tracklist.ui.search.BookSortOrder
+import com.lx.tracklist.ui.search.BookTagRegistry
+import com.lx.tracklist.ui.search.ContentDiscoveryMode
 import com.lx.tracklist.ui.search.DiscoveryFilter
+import com.lx.tracklist.ui.search.MangaSortOrder
 import com.lx.tracklist.ui.search.TmdbDiscoveryMode
 import com.lx.tracklist.ui.search.TmdbMovieSort
 import com.lx.tracklist.ui.search.TmdbTagRegistry
@@ -225,5 +229,153 @@ class DiscoveryFeatureTest {
             includedTags = setOf("Drama")
         )
         assertEquals("🔥 Most Popular TV • Most Popular • +1 tags", popTv.label)
+    }
+
+    @Test
+    fun testBookTagRegistry() {
+        val allGenres = BookTagRegistry.bookGenres
+        assertTrue(allGenres.isNotEmpty())
+
+        // Strictly sorted A to Z
+        val names = allGenres.map { it.name.lowercase() }
+        assertEquals(names.sorted(), names)
+
+        // Find by name
+        val fantasy = BookTagRegistry.findGenre("Fantasy")
+        assertNotNull(fantasy)
+        assertEquals("fantasy", fantasy?.subjectQuery)
+
+        val scifi = BookTagRegistry.findGenre("Science Fiction")
+        assertNotNull(scifi)
+        assertEquals("science_fiction", scifi?.subjectQuery)
+
+        // Filter search
+        val filtered = BookTagRegistry.filterBookGenres("mys")
+        assertTrue(filtered.any { it.name == "Crime & Mystery" })
+    }
+
+    @Test
+    fun testMangaAndBookSortOrders() {
+        assertEquals("POPULARITY_DESC", MangaSortOrder.POPULARITY.apiValue)
+        assertEquals("SCORE_DESC", MangaSortOrder.SCORE.apiValue)
+        assertEquals("START_DATE_DESC", MangaSortOrder.START_DATE.apiValue)
+        assertEquals("TITLE_ROMAJI", MangaSortOrder.TITLE.apiValue)
+
+        assertEquals("editions", BookSortOrder.POPULARITY.apiValue)
+        assertEquals("rating", BookSortOrder.RATING.apiValue)
+        assertEquals("new", BookSortOrder.NEWEST.apiValue)
+        assertEquals("title", BookSortOrder.TITLE.apiValue)
+    }
+
+    @Test
+    fun testMangaDiscoveryFilterLabelsAndYearRange() {
+        // Year range
+        val rangeManga = DiscoveryFilter.Manga(
+            mode = ContentDiscoveryMode.BY_YEAR,
+            startYear = 2020,
+            endYear = 2024,
+            sortOrder = MangaSortOrder.POPULARITY,
+            includedTags = setOf("Action", "Fantasy"),
+            excludedTags = setOf("Romance")
+        )
+        assertEquals("2020–2024", rangeManga.yearText)
+        assertEquals("📖 Manga 2020–2024 • Most Popular • +2 / -1 tags", rangeManga.label)
+
+        // Single year
+        val singleYearManga = DiscoveryFilter.Manga(
+            mode = ContentDiscoveryMode.BY_YEAR,
+            startYear = 2025,
+            endYear = 2025,
+            sortOrder = MangaSortOrder.SCORE,
+            adultMode = AdultMode.INCLUDE
+        )
+        assertEquals("2025", singleYearManga.yearText)
+        assertEquals("📖 Manga 2025 • Highest Rated • 18+", singleYearManga.label)
+
+        // Most Popular
+        val popManga = DiscoveryFilter.Manga(
+            mode = ContentDiscoveryMode.MOST_POPULAR,
+            sortOrder = MangaSortOrder.POPULARITY
+        )
+        assertEquals("🔥 Most Popular Manga • Most Popular", popManga.label)
+    }
+
+    @Test
+    fun testManhwaDiscoveryFilterLabelsAndYearRange() {
+        val rangeManhwa = DiscoveryFilter.Manhwa(
+            mode = ContentDiscoveryMode.BY_YEAR,
+            startYear = 2021,
+            endYear = 2023,
+            sortOrder = MangaSortOrder.POPULARITY,
+            includedTags = setOf("Reincarnation")
+        )
+        assertEquals("2021–2023", rangeManhwa.yearText)
+        assertEquals("🇰🇷 Manhwa 2021–2023 • Most Popular • +1 tags", rangeManhwa.label)
+
+        val popManhwa = DiscoveryFilter.Manhwa(
+            mode = ContentDiscoveryMode.MOST_POPULAR,
+            sortOrder = MangaSortOrder.SCORE
+        )
+        assertEquals("🔥 Most Popular Manhwa • Highest Rated", popManhwa.label)
+    }
+
+    @Test
+    fun testLightNovelDiscoveryFilterLabelsAndYearRange() {
+        val rangeLN = DiscoveryFilter.LightNovel(
+            mode = ContentDiscoveryMode.BY_YEAR,
+            startYear = 2018,
+            endYear = 2022,
+            sortOrder = MangaSortOrder.POPULARITY,
+            includedTags = setOf("Isekai", "Magic")
+        )
+        assertEquals("2018–2022", rangeLN.yearText)
+        assertEquals("📜 Light Novels 2018–2022 • Most Popular • +2 tags", rangeLN.label)
+
+        val popLN = DiscoveryFilter.LightNovel(
+            mode = ContentDiscoveryMode.MOST_POPULAR,
+            sortOrder = MangaSortOrder.POPULARITY
+        )
+        assertEquals("🔥 Most Popular Light Novels • Most Popular", popLN.label)
+    }
+
+    @Test
+    fun testBookDiscoveryFilterLabelsAndYearRange() {
+        val rangeBook = DiscoveryFilter.Book(
+            mode = ContentDiscoveryMode.BY_YEAR,
+            startYear = 2015,
+            endYear = 2020,
+            sortOrder = BookSortOrder.RATING,
+            includedTags = setOf("Science Fiction"),
+            excludedTags = setOf("Horror")
+        )
+        assertEquals("2015–2020", rangeBook.yearText)
+        assertEquals("📚 Books 2015–2020 • Highest Rated • +1 / -1 tags", rangeBook.label)
+
+        val popBook = DiscoveryFilter.Book(
+            mode = ContentDiscoveryMode.MOST_POPULAR,
+            sortOrder = BookSortOrder.POPULARITY
+        )
+        assertEquals("🔥 Most Popular Books • Most Popular", popBook.label)
+    }
+
+    @Test
+    fun testMovieAndTvYearRangeLabels() {
+        val rangeMovie = DiscoveryFilter.Movie(
+            mode = ContentDiscoveryMode.BY_YEAR,
+            startYear = 2010,
+            endYear = 2019,
+            sortOrder = TmdbMovieSort.POPULARITY
+        )
+        assertEquals("2010–2019", rangeMovie.yearText)
+        assertEquals("🎬 Movies 2010–2019 • Most Popular", rangeMovie.label)
+
+        val rangeTv = DiscoveryFilter.Tv(
+            mode = ContentDiscoveryMode.BY_YEAR,
+            startYear = 2020,
+            endYear = 2024,
+            sortOrder = TmdbTvSort.RATING
+        )
+        assertEquals("2020–2024", rangeTv.yearText)
+        assertEquals("📺 TV Shows 2020–2024 • Highest Rated", rangeTv.label)
     }
 }

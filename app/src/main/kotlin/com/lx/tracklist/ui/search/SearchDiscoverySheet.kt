@@ -98,6 +98,10 @@ fun SearchDiscoverySheet(
     onApplyAnime: (DiscoveryFilter.Anime) -> Unit,
     onApplyMovie: (DiscoveryFilter.Movie) -> Unit,
     onApplyTv: (DiscoveryFilter.Tv) -> Unit,
+    onApplyManga: (DiscoveryFilter.Manga) -> Unit,
+    onApplyManhwa: (DiscoveryFilter.Manhwa) -> Unit,
+    onApplyLightNovel: (DiscoveryFilter.LightNovel) -> Unit,
+    onApplyBook: (DiscoveryFilter.Book) -> Unit,
     onResetFilter: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -133,6 +137,12 @@ fun SearchDiscoverySheet(
     var selectedMovieYear by remember {
         mutableIntStateOf(movieFilter?.year ?: currentYear)
     }
+    var selectedMovieStartYear by remember {
+        mutableStateOf<Int?>(movieFilter?.startYear)
+    }
+    var selectedMovieEndYear by remember {
+        mutableStateOf<Int?>(movieFilter?.endYear ?: movieFilter?.year ?: currentYear)
+    }
     var selectedMovieSort by remember {
         mutableStateOf(movieFilter?.sortOrder ?: TmdbMovieSort.POPULARITY)
     }
@@ -151,6 +161,12 @@ fun SearchDiscoverySheet(
     var selectedTvYear by remember {
         mutableIntStateOf(tvFilter?.year ?: currentYear)
     }
+    var selectedTvStartYear by remember {
+        mutableStateOf<Int?>(tvFilter?.startYear)
+    }
+    var selectedTvEndYear by remember {
+        mutableStateOf<Int?>(tvFilter?.endYear ?: tvFilter?.year ?: currentYear)
+    }
     var selectedTvSort by remember {
         mutableStateOf(tvFilter?.sortOrder ?: TmdbTvSort.POPULARITY)
     }
@@ -159,6 +175,90 @@ fun SearchDiscoverySheet(
     }
     var tvExcludedTags by remember {
         mutableStateOf(tvFilter?.excludedTags ?: emptySet())
+    }
+
+    // Manga state
+    val mangaFilter = activeFilter as? DiscoveryFilter.Manga
+    var selectedMangaMode by remember {
+        mutableStateOf(mangaFilter?.mode)
+    }
+    var selectedMangaStartYear by remember {
+        mutableStateOf<Int?>(mangaFilter?.startYear ?: (currentYear - 2))
+    }
+    var selectedMangaEndYear by remember {
+        mutableStateOf<Int?>(mangaFilter?.endYear ?: currentYear)
+    }
+    var selectedMangaSort by remember {
+        mutableStateOf(mangaFilter?.sortOrder ?: MangaSortOrder.POPULARITY)
+    }
+    var mangaIncludedTags by remember {
+        mutableStateOf(mangaFilter?.includedTags ?: emptySet())
+    }
+    var mangaExcludedTags by remember {
+        mutableStateOf(mangaFilter?.excludedTags ?: emptySet())
+    }
+
+    // Manhwa state
+    val manhwaFilter = activeFilter as? DiscoveryFilter.Manhwa
+    var selectedManhwaMode by remember {
+        mutableStateOf(manhwaFilter?.mode)
+    }
+    var selectedManhwaStartYear by remember {
+        mutableStateOf<Int?>(manhwaFilter?.startYear ?: (currentYear - 2))
+    }
+    var selectedManhwaEndYear by remember {
+        mutableStateOf<Int?>(manhwaFilter?.endYear ?: currentYear)
+    }
+    var selectedManhwaSort by remember {
+        mutableStateOf(manhwaFilter?.sortOrder ?: MangaSortOrder.POPULARITY)
+    }
+    var manhwaIncludedTags by remember {
+        mutableStateOf(manhwaFilter?.includedTags ?: emptySet())
+    }
+    var manhwaExcludedTags by remember {
+        mutableStateOf(manhwaFilter?.excludedTags ?: emptySet())
+    }
+
+    // Light Novel state
+    val lightNovelFilter = activeFilter as? DiscoveryFilter.LightNovel
+    var selectedLightNovelMode by remember {
+        mutableStateOf(lightNovelFilter?.mode)
+    }
+    var selectedLightNovelStartYear by remember {
+        mutableStateOf<Int?>(lightNovelFilter?.startYear ?: (currentYear - 2))
+    }
+    var selectedLightNovelEndYear by remember {
+        mutableStateOf<Int?>(lightNovelFilter?.endYear ?: currentYear)
+    }
+    var selectedLightNovelSort by remember {
+        mutableStateOf(lightNovelFilter?.sortOrder ?: MangaSortOrder.POPULARITY)
+    }
+    var lightNovelIncludedTags by remember {
+        mutableStateOf(lightNovelFilter?.includedTags ?: emptySet())
+    }
+    var lightNovelExcludedTags by remember {
+        mutableStateOf(lightNovelFilter?.excludedTags ?: emptySet())
+    }
+
+    // Book state
+    val bookFilter = activeFilter as? DiscoveryFilter.Book
+    var selectedBookMode by remember {
+        mutableStateOf(bookFilter?.mode)
+    }
+    var selectedBookStartYear by remember {
+        mutableStateOf<Int?>(bookFilter?.startYear ?: (currentYear - 5))
+    }
+    var selectedBookEndYear by remember {
+        mutableStateOf<Int?>(bookFilter?.endYear ?: currentYear)
+    }
+    var selectedBookSort by remember {
+        mutableStateOf(bookFilter?.sortOrder ?: BookSortOrder.POPULARITY)
+    }
+    var bookIncludedTags by remember {
+        mutableStateOf(bookFilter?.includedTags ?: emptySet())
+    }
+    var bookExcludedTags by remember {
+        mutableStateOf(bookFilter?.excludedTags ?: emptySet())
     }
 
     var adultMode by remember {
@@ -174,14 +274,20 @@ fun SearchDiscoverySheet(
         SearchCategory.ANIME -> includedTags
         SearchCategory.MOVIES -> movieIncludedTags
         SearchCategory.TV_SHOWS -> tvIncludedTags
-        else -> emptySet()
+        SearchCategory.MANGA -> mangaIncludedTags
+        SearchCategory.MANHWA -> manhwaIncludedTags
+        SearchCategory.LIGHT_NOVELS -> lightNovelIncludedTags
+        SearchCategory.BOOKS -> bookIncludedTags
     }
 
     val activeExcludedTags: Set<String> = when (category) {
         SearchCategory.ANIME -> excludedTags
         SearchCategory.MOVIES -> movieExcludedTags
         SearchCategory.TV_SHOWS -> tvExcludedTags
-        else -> emptySet()
+        SearchCategory.MANGA -> mangaExcludedTags
+        SearchCategory.MANHWA -> manhwaExcludedTags
+        SearchCategory.LIGHT_NOVELS -> lightNovelExcludedTags
+        SearchCategory.BOOKS -> bookExcludedTags
     }
 
     BackHandler(enabled = showTagsSubMenu) {
@@ -245,7 +351,78 @@ fun SearchDiscoverySheet(
                     }
                 }
             }
-            else -> {}
+            SearchCategory.MANGA -> {
+                val isInc = mangaIncludedTags.any { it.equals(clean, ignoreCase = true) }
+                val isExc = mangaExcludedTags.any { it.equals(clean, ignoreCase = true) }
+                when {
+                    !isInc && !isExc -> {
+                        mangaIncludedTags = mangaIncludedTags + clean
+                        mangaExcludedTags = mangaExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                    isInc -> {
+                        mangaIncludedTags = mangaIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        mangaExcludedTags = mangaExcludedTags + clean
+                    }
+                    else -> {
+                        mangaIncludedTags = mangaIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        mangaExcludedTags = mangaExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                }
+            }
+            SearchCategory.MANHWA -> {
+                val isInc = manhwaIncludedTags.any { it.equals(clean, ignoreCase = true) }
+                val isExc = manhwaExcludedTags.any { it.equals(clean, ignoreCase = true) }
+                when {
+                    !isInc && !isExc -> {
+                        manhwaIncludedTags = manhwaIncludedTags + clean
+                        manhwaExcludedTags = manhwaExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                    isInc -> {
+                        manhwaIncludedTags = manhwaIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        manhwaExcludedTags = manhwaExcludedTags + clean
+                    }
+                    else -> {
+                        manhwaIncludedTags = manhwaIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        manhwaExcludedTags = manhwaExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                }
+            }
+            SearchCategory.LIGHT_NOVELS -> {
+                val isInc = lightNovelIncludedTags.any { it.equals(clean, ignoreCase = true) }
+                val isExc = lightNovelExcludedTags.any { it.equals(clean, ignoreCase = true) }
+                when {
+                    !isInc && !isExc -> {
+                        lightNovelIncludedTags = lightNovelIncludedTags + clean
+                        lightNovelExcludedTags = lightNovelExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                    isInc -> {
+                        lightNovelIncludedTags = lightNovelIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        lightNovelExcludedTags = lightNovelExcludedTags + clean
+                    }
+                    else -> {
+                        lightNovelIncludedTags = lightNovelIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        lightNovelExcludedTags = lightNovelExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                }
+            }
+            SearchCategory.BOOKS -> {
+                val isInc = bookIncludedTags.any { it.equals(clean, ignoreCase = true) }
+                val isExc = bookExcludedTags.any { it.equals(clean, ignoreCase = true) }
+                when {
+                    !isInc && !isExc -> {
+                        bookIncludedTags = bookIncludedTags + clean
+                        bookExcludedTags = bookExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                    isInc -> {
+                        bookIncludedTags = bookIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        bookExcludedTags = bookExcludedTags + clean
+                    }
+                    else -> {
+                        bookIncludedTags = bookIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        bookExcludedTags = bookExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                }
+            }
         }
     }
 
@@ -272,7 +449,22 @@ fun SearchDiscoverySheet(
                 tvIncludedTags = emptySet()
                 tvExcludedTags = emptySet()
             }
-            else -> {}
+            SearchCategory.MANGA -> {
+                mangaIncludedTags = emptySet()
+                mangaExcludedTags = emptySet()
+            }
+            SearchCategory.MANHWA -> {
+                manhwaIncludedTags = emptySet()
+                manhwaExcludedTags = emptySet()
+            }
+            SearchCategory.LIGHT_NOVELS -> {
+                lightNovelIncludedTags = emptySet()
+                lightNovelExcludedTags = emptySet()
+            }
+            SearchCategory.BOOKS -> {
+                bookIncludedTags = emptySet()
+                bookExcludedTags = emptySet()
+            }
         }
     }
 
@@ -326,7 +518,10 @@ fun SearchDiscoverySheet(
                                 SearchCategory.ANIME -> "Tags & Genres"
                                 SearchCategory.MOVIES -> "Movie Genres"
                                 SearchCategory.TV_SHOWS -> "TV Show Genres"
-                                else -> "Tags & Genres"
+                                SearchCategory.MANGA -> "Manga Tags & Genres"
+                                SearchCategory.MANHWA -> "Manhwa Tags & Genres"
+                                SearchCategory.LIGHT_NOVELS -> "Light Novel Tags & Genres"
+                                SearchCategory.BOOKS -> "Book Genres & Subjects"
                             },
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             color = LXTextPrimary
@@ -391,7 +586,11 @@ fun SearchDiscoverySheet(
                     onValueChange = { tagSearchQuery = it },
                     placeholder = {
                         Text(
-                            text = if (category == SearchCategory.ANIME) "Search tags, genres, themes..." else "Search genres...",
+                            text = when (category) {
+                                SearchCategory.ANIME, SearchCategory.MANGA, SearchCategory.MANHWA, SearchCategory.LIGHT_NOVELS -> "Search tags, genres, themes..."
+                                SearchCategory.BOOKS -> "Search genres, subjects..."
+                                else -> "Search genres..."
+                            },
                             color = LXTextSecondary,
                             fontSize = 13.sp
                         )
@@ -420,8 +619,8 @@ fun SearchDiscoverySheet(
                     )
                 )
 
-                // Category filter chips (All, Genres, Themes, Demographics) - Anime only
-                if (category == SearchCategory.ANIME) {
+                // Category filter chips (All, Genres, Themes, Demographics)
+                if (category in listOf(SearchCategory.ANIME, SearchCategory.MANGA, SearchCategory.MANHWA, SearchCategory.LIGHT_NOVELS)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -449,16 +648,19 @@ fun SearchDiscoverySheet(
                 // Tag list with tri-state selection (Matching Library Advanced Filter)
                 val visibleItems = remember(category, tagSearchQuery, selectedTagCategory) {
                     when (category) {
-                        SearchCategory.ANIME -> AnimeTagRegistry.filterTags(tagSearchQuery, selectedTagCategory).map {
-                            TagDisplayItem(it.name, it.category.displayName)
-                        }
+                        SearchCategory.ANIME, SearchCategory.MANGA, SearchCategory.MANHWA, SearchCategory.LIGHT_NOVELS ->
+                            AnimeTagRegistry.filterTags(tagSearchQuery, selectedTagCategory).map {
+                                TagDisplayItem(it.name, it.category.displayName)
+                            }
                         SearchCategory.MOVIES -> TmdbTagRegistry.filterMovieGenres(tagSearchQuery).map {
                             TagDisplayItem(it.name, "Genre")
                         }
                         SearchCategory.TV_SHOWS -> TmdbTagRegistry.filterTvGenres(tagSearchQuery).map {
                             TagDisplayItem(it.name, "Genre")
                         }
-                        else -> emptyList()
+                        SearchCategory.BOOKS -> BookTagRegistry.filterBookGenres(tagSearchQuery).map {
+                            TagDisplayItem(it.name, "Genre")
+                        }
                     }
                 }
 
@@ -1130,79 +1332,17 @@ fun SearchDiscoverySheet(
                     if (selectedMovieMode != null) {
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Year Selector (only for BY_YEAR)
+                        // Year Range Selector (only for BY_YEAR)
                         if (selectedMovieMode == TmdbDiscoveryMode.BY_YEAR) {
-                            Text(
-                                text = "Release Year: $selectedMovieYear",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = LXTextSecondary
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            val quickMovieYears = listOf(maxYear, maxYear - 1, maxYear - 2, maxYear - 3)
-                            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    quickMovieYears.forEach { yr ->
-                                        val isSelected = selectedMovieYear == yr
-                                        FilterChip(
-                                            selected = isSelected,
-                                            onClick = { selectedMovieYear = yr },
-                                            label = { Text(yr.toString(), fontSize = 11.sp) },
-                                            modifier = Modifier.height(30.dp),
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                                                selectedLabelColor = LXPrimaryGreen,
-                                                containerColor = LXSurfaceElevated,
-                                                labelColor = LXTextSecondary
-                                            )
-                                        )
-                                    }
-
-                                    // Dropdown for more movie years
-                                    Box {
-                                        FilterChip(
-                                            selected = selectedMovieYear !in quickMovieYears,
-                                            onClick = { yearDropdownExpanded = true },
-                                            modifier = Modifier.height(30.dp),
-                                            label = {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Text(
-                                                        if (selectedMovieYear !in quickMovieYears) selectedMovieYear.toString() else "More",
-                                                        fontSize = 11.sp
-                                                    )
-                                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                }
-                                            },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                                                selectedLabelColor = LXPrimaryGreen,
-                                                containerColor = LXSurfaceElevated,
-                                                labelColor = LXTextSecondary
-                                            )
-                                        )
-
-                                        DropdownMenu(
-                                            expanded = yearDropdownExpanded,
-                                            onDismissRequest = { yearDropdownExpanded = false },
-                                            modifier = Modifier.background(LXSurfaceElevated)
-                                        ) {
-                                            (maxYear downTo 1970).forEach { yr ->
-                                                DropdownMenuItem(
-                                                    text = { Text(yr.toString(), color = LXTextPrimary) },
-                                                    onClick = {
-                                                        selectedMovieYear = yr
-                                                        yearDropdownExpanded = false
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
+                            YearRangeSelector(
+                                startYear = selectedMovieStartYear,
+                                endYear = selectedMovieEndYear,
+                                onRangeChange = { s, e ->
+                                    selectedMovieStartYear = s
+                                    selectedMovieEndYear = e
+                                    selectedMovieYear = e ?: (s ?: currentYear)
                                 }
-                            }
-
+                            )
                             Spacer(modifier = Modifier.height(10.dp))
                         }
 
@@ -1341,6 +1481,8 @@ fun SearchDiscoverySheet(
                                 val filter = DiscoveryFilter.Movie(
                                     mode = selectedMovieMode!!,
                                     year = if (selectedMovieMode == TmdbDiscoveryMode.BY_YEAR) selectedMovieYear else null,
+                                    startYear = if (selectedMovieMode == TmdbDiscoveryMode.BY_YEAR) selectedMovieStartYear else null,
+                                    endYear = if (selectedMovieMode == TmdbDiscoveryMode.BY_YEAR) selectedMovieEndYear else null,
                                     sortOrder = selectedMovieSort,
                                     includedTags = movieIncludedTags,
                                     excludedTags = movieExcludedTags,
@@ -1355,8 +1497,15 @@ fun SearchDiscoverySheet(
                                 .fillMaxWidth()
                                 .height(42.dp)
                         ) {
+                            val yearStr = when {
+                                selectedMovieStartYear != null && selectedMovieEndYear != null && selectedMovieStartYear == selectedMovieEndYear -> "$selectedMovieStartYear"
+                                selectedMovieStartYear != null && selectedMovieEndYear != null -> "$selectedMovieStartYear–$selectedMovieEndYear"
+                                selectedMovieStartYear != null -> "From $selectedMovieStartYear"
+                                selectedMovieEndYear != null -> "Up to $selectedMovieEndYear"
+                                else -> "$selectedMovieYear"
+                            }
                             val modeText = when (selectedMovieMode!!) {
-                                TmdbDiscoveryMode.BY_YEAR -> "Discover $selectedMovieYear Movies"
+                                TmdbDiscoveryMode.BY_YEAR -> "Discover Movies $yearStr".trim()
                                 TmdbDiscoveryMode.MOST_POPULAR -> "Discover Most Popular Movies"
                             }
                             val tagsText = when {
@@ -1430,77 +1579,15 @@ fun SearchDiscoverySheet(
 
                         // TV Air Year Selector (only for BY_YEAR)
                         if (selectedTvMode == TmdbDiscoveryMode.BY_YEAR) {
-                            Text(
-                                text = "First Air Year: $selectedTvYear",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = LXTextSecondary
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            val quickTvYears = listOf(maxYear, maxYear - 1, maxYear - 2, maxYear - 3)
-                            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    quickTvYears.forEach { yr ->
-                                        val isSelected = selectedTvYear == yr
-                                        FilterChip(
-                                            selected = isSelected,
-                                            onClick = { selectedTvYear = yr },
-                                            label = { Text(yr.toString(), fontSize = 11.sp) },
-                                            modifier = Modifier.height(30.dp),
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                                                selectedLabelColor = LXPrimaryGreen,
-                                                containerColor = LXSurfaceElevated,
-                                                labelColor = LXTextSecondary
-                                            )
-                                        )
-                                    }
-
-                                    // Dropdown for more TV years
-                                    Box {
-                                        FilterChip(
-                                            selected = selectedTvYear !in quickTvYears,
-                                            onClick = { yearDropdownExpanded = true },
-                                            modifier = Modifier.height(30.dp),
-                                            label = {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Text(
-                                                        if (selectedTvYear !in quickTvYears) selectedTvYear.toString() else "More",
-                                                        fontSize = 11.sp
-                                                    )
-                                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                }
-                                            },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                                                selectedLabelColor = LXPrimaryGreen,
-                                                containerColor = LXSurfaceElevated,
-                                                labelColor = LXTextSecondary
-                                            )
-                                        )
-
-                                        DropdownMenu(
-                                            expanded = yearDropdownExpanded,
-                                            onDismissRequest = { yearDropdownExpanded = false },
-                                            modifier = Modifier.background(LXSurfaceElevated)
-                                        ) {
-                                            (maxYear downTo 1970).forEach { yr ->
-                                                DropdownMenuItem(
-                                                    text = { Text(yr.toString(), color = LXTextPrimary) },
-                                                    onClick = {
-                                                        selectedTvYear = yr
-                                                        yearDropdownExpanded = false
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
+                            YearRangeSelector(
+                                startYear = selectedTvStartYear,
+                                endYear = selectedTvEndYear,
+                                onRangeChange = { s, e ->
+                                    selectedTvStartYear = s
+                                    selectedTvEndYear = e
+                                    selectedTvYear = e ?: (s ?: currentYear)
                                 }
-                            }
-
+                            )
                             Spacer(modifier = Modifier.height(10.dp))
                         }
 
@@ -1639,6 +1726,8 @@ fun SearchDiscoverySheet(
                                 val filter = DiscoveryFilter.Tv(
                                     mode = selectedTvMode!!,
                                     year = if (selectedTvMode == TmdbDiscoveryMode.BY_YEAR) selectedTvYear else null,
+                                    startYear = if (selectedTvMode == TmdbDiscoveryMode.BY_YEAR) selectedTvStartYear else null,
+                                    endYear = if (selectedTvMode == TmdbDiscoveryMode.BY_YEAR) selectedTvEndYear else null,
                                     sortOrder = selectedTvSort,
                                     includedTags = tvIncludedTags,
                                     excludedTags = tvExcludedTags,
@@ -1653,8 +1742,15 @@ fun SearchDiscoverySheet(
                                 .fillMaxWidth()
                                 .height(42.dp)
                         ) {
+                            val yearStr = when {
+                                selectedTvStartYear != null && selectedTvEndYear != null && selectedTvStartYear == selectedTvEndYear -> "$selectedTvStartYear"
+                                selectedTvStartYear != null && selectedTvEndYear != null -> "$selectedTvStartYear–$selectedTvEndYear"
+                                selectedTvStartYear != null -> "From $selectedTvStartYear"
+                                selectedTvEndYear != null -> "Up to $selectedTvEndYear"
+                                else -> "$selectedTvYear"
+                            }
                             val modeText = when (selectedTvMode!!) {
-                                TmdbDiscoveryMode.BY_YEAR -> "Discover $selectedTvYear TV Shows"
+                                TmdbDiscoveryMode.BY_YEAR -> "Discover TV Shows $yearStr".trim()
                                 TmdbDiscoveryMode.MOST_POPULAR -> "Discover Most Popular TV Shows"
                             }
                             val tagsText = when {
@@ -1671,12 +1767,937 @@ fun SearchDiscoverySheet(
                     }
                 }
 
-                else -> {
+                SearchCategory.MANGA -> {
                     Text(
-                        text = "Seasonal & discovery filters are available for Anime, Movies, and TV Shows.",
-                        color = LXTextSecondary,
-                        style = MaterialTheme.typography.bodyMedium
+                        text = "Discovery Mode",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextSecondary
                     )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ContentDiscoveryMode.entries.forEach { mode ->
+                            val isSelected = selectedMangaMode == mode
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { selectedMangaMode = mode },
+                                color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.2f) else LXSurfaceElevated,
+                                border = BorderStroke(
+                                    width = if (isSelected) 1.5.dp else 1.dp,
+                                    color = if (isSelected) LXPrimaryGreen else LXBorder
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp, horizontal = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Text(text = mode.iconEmoji, fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = mode.displayName,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            fontSize = 12.sp
+                                        ),
+                                        color = if (isSelected) LXPrimaryGreen else LXTextPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (selectedMangaMode != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (selectedMangaMode == ContentDiscoveryMode.BY_YEAR) {
+                            YearRangeSelector(
+                                startYear = selectedMangaStartYear,
+                                endYear = selectedMangaEndYear,
+                                onRangeChange = { s, e ->
+                                    selectedMangaStartYear = s
+                                    selectedMangaEndYear = e
+                                }
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+
+                        Text(
+                            text = "Sort By",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                MangaSortOrder.entries.forEach { sort ->
+                                    val isSelected = selectedMangaSort == sort
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { selectedMangaSort = sort },
+                                        label = { Text(sort.displayName, fontSize = 11.sp) },
+                                        modifier = Modifier.height(30.dp),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                                            selectedLabelColor = LXPrimaryGreen,
+                                            containerColor = LXSurfaceElevated,
+                                            labelColor = LXTextSecondary
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(LXSurfaceElevated)
+                                .border(1.dp, LXBorder, RoundedCornerShape(10.dp))
+                                .clickable { showTagsSubMenu = true }
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .background(LXPrimaryGreen.copy(alpha = 0.15f), RoundedCornerShape(6.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Tag,
+                                            contentDescription = null,
+                                            tint = LXPrimaryGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Select & Exclude Tags",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
+                                            color = LXTextPrimary
+                                        )
+                                        Text(
+                                            text = if (mangaIncludedTags.isEmpty() && mangaExcludedTags.isEmpty())
+                                                "Filter by manga genres & themes"
+                                            else
+                                                "${mangaIncludedTags.size} included (✓) • ${mangaExcludedTags.size} excluded (✕)",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                            color = if (mangaIncludedTags.isNotEmpty() || mangaExcludedTags.isNotEmpty()) LXPrimaryGreen else LXTextSecondary
+                                        )
+                                    }
+                                }
+
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                    contentDescription = "Open Tags Filter",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+
+                            if (mangaIncludedTags.isNotEmpty() || mangaExcludedTags.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    mangaIncludedTags.forEach { tag ->
+                                        SearchTagBadge(
+                                            label = "+$tag",
+                                            isIncluded = true,
+                                            onRemove = {
+                                                mangaIncludedTags = mangaIncludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+                                            }
+                                        )
+                                    }
+                                    mangaExcludedTags.forEach { tag ->
+                                        SearchTagBadge(
+                                            label = "-$tag",
+                                            isIncluded = false,
+                                            onRemove = {
+                                                mangaExcludedTags = mangaExcludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        SubtleAdultFilterToggle(
+                            adultMode = adultMode,
+                            onModeChange = { adultMode = it }
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = {
+                                val filter = DiscoveryFilter.Manga(
+                                    mode = selectedMangaMode!!,
+                                    startYear = if (selectedMangaMode == ContentDiscoveryMode.BY_YEAR) selectedMangaStartYear else null,
+                                    endYear = if (selectedMangaMode == ContentDiscoveryMode.BY_YEAR) selectedMangaEndYear else null,
+                                    sortOrder = selectedMangaSort,
+                                    includedTags = mangaIncludedTags,
+                                    excludedTags = mangaExcludedTags,
+                                    adultMode = adultMode
+                                )
+                                onApplyManga(filter)
+                                onDismiss()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                        ) {
+                            val yearStr = when {
+                                selectedMangaStartYear != null && selectedMangaEndYear != null && selectedMangaStartYear == selectedMangaEndYear -> "$selectedMangaStartYear"
+                                selectedMangaStartYear != null && selectedMangaEndYear != null -> "$selectedMangaStartYear–$selectedMangaEndYear"
+                                selectedMangaStartYear != null -> "From $selectedMangaStartYear"
+                                selectedMangaEndYear != null -> "Up to $selectedMangaEndYear"
+                                else -> ""
+                            }
+                            val modeText = when (selectedMangaMode!!) {
+                                ContentDiscoveryMode.BY_YEAR -> "Discover Manga $yearStr".trim()
+                                ContentDiscoveryMode.MOST_POPULAR -> "Discover Most Popular Manga"
+                            }
+                            val tagsText = when {
+                                mangaIncludedTags.isNotEmpty() || mangaExcludedTags.isNotEmpty() -> " (+${mangaIncludedTags.size}/-${mangaExcludedTags.size})"
+                                else -> ""
+                            }
+                            val adultText = if (adultMode == AdultMode.ONLY) " (18+ Only)" else ""
+                            Text(
+                                text = "$modeText$tagsText$adultText",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+
+                SearchCategory.MANHWA -> {
+                    Text(
+                        text = "Discovery Mode",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ContentDiscoveryMode.entries.forEach { mode ->
+                            val isSelected = selectedManhwaMode == mode
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { selectedManhwaMode = mode },
+                                color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.2f) else LXSurfaceElevated,
+                                border = BorderStroke(
+                                    width = if (isSelected) 1.5.dp else 1.dp,
+                                    color = if (isSelected) LXPrimaryGreen else LXBorder
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp, horizontal = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Text(text = mode.iconEmoji, fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = mode.displayName,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            fontSize = 12.sp
+                                        ),
+                                        color = if (isSelected) LXPrimaryGreen else LXTextPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (selectedManhwaMode != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (selectedManhwaMode == ContentDiscoveryMode.BY_YEAR) {
+                            YearRangeSelector(
+                                startYear = selectedManhwaStartYear,
+                                endYear = selectedManhwaEndYear,
+                                onRangeChange = { s, e ->
+                                    selectedManhwaStartYear = s
+                                    selectedManhwaEndYear = e
+                                }
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+
+                        Text(
+                            text = "Sort By",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                MangaSortOrder.entries.forEach { sort ->
+                                    val isSelected = selectedManhwaSort == sort
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { selectedManhwaSort = sort },
+                                        label = { Text(sort.displayName, fontSize = 11.sp) },
+                                        modifier = Modifier.height(30.dp),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                                            selectedLabelColor = LXPrimaryGreen,
+                                            containerColor = LXSurfaceElevated,
+                                            labelColor = LXTextSecondary
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(LXSurfaceElevated)
+                                .border(1.dp, LXBorder, RoundedCornerShape(10.dp))
+                                .clickable { showTagsSubMenu = true }
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .background(LXPrimaryGreen.copy(alpha = 0.15f), RoundedCornerShape(6.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Tag,
+                                            contentDescription = null,
+                                            tint = LXPrimaryGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Select & Exclude Tags",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
+                                            color = LXTextPrimary
+                                        )
+                                        Text(
+                                            text = if (manhwaIncludedTags.isEmpty() && manhwaExcludedTags.isEmpty())
+                                                "Filter by manhwa genres & themes"
+                                            else
+                                                "${manhwaIncludedTags.size} included (✓) • ${manhwaExcludedTags.size} excluded (✕)",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                            color = if (manhwaIncludedTags.isNotEmpty() || manhwaExcludedTags.isNotEmpty()) LXPrimaryGreen else LXTextSecondary
+                                        )
+                                    }
+                                }
+
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                    contentDescription = "Open Tags Filter",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+
+                            if (manhwaIncludedTags.isNotEmpty() || manhwaExcludedTags.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    manhwaIncludedTags.forEach { tag ->
+                                        SearchTagBadge(
+                                            label = "+$tag",
+                                            isIncluded = true,
+                                            onRemove = {
+                                                manhwaIncludedTags = manhwaIncludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+                                            }
+                                        )
+                                    }
+                                    manhwaExcludedTags.forEach { tag ->
+                                        SearchTagBadge(
+                                            label = "-$tag",
+                                            isIncluded = false,
+                                            onRemove = {
+                                                manhwaExcludedTags = manhwaExcludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        SubtleAdultFilterToggle(
+                            adultMode = adultMode,
+                            onModeChange = { adultMode = it }
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = {
+                                val filter = DiscoveryFilter.Manhwa(
+                                    mode = selectedManhwaMode!!,
+                                    startYear = if (selectedManhwaMode == ContentDiscoveryMode.BY_YEAR) selectedManhwaStartYear else null,
+                                    endYear = if (selectedManhwaMode == ContentDiscoveryMode.BY_YEAR) selectedManhwaEndYear else null,
+                                    sortOrder = selectedManhwaSort,
+                                    includedTags = manhwaIncludedTags,
+                                    excludedTags = manhwaExcludedTags,
+                                    adultMode = adultMode
+                                )
+                                onApplyManhwa(filter)
+                                onDismiss()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                        ) {
+                            val yearStr = when {
+                                selectedManhwaStartYear != null && selectedManhwaEndYear != null && selectedManhwaStartYear == selectedManhwaEndYear -> "$selectedManhwaStartYear"
+                                selectedManhwaStartYear != null && selectedManhwaEndYear != null -> "$selectedManhwaStartYear–$selectedManhwaEndYear"
+                                selectedManhwaStartYear != null -> "From $selectedManhwaStartYear"
+                                selectedManhwaEndYear != null -> "Up to $selectedManhwaEndYear"
+                                else -> ""
+                            }
+                            val modeText = when (selectedManhwaMode!!) {
+                                ContentDiscoveryMode.BY_YEAR -> "Discover Manhwa $yearStr".trim()
+                                ContentDiscoveryMode.MOST_POPULAR -> "Discover Most Popular Manhwa"
+                            }
+                            val tagsText = when {
+                                manhwaIncludedTags.isNotEmpty() || manhwaExcludedTags.isNotEmpty() -> " (+${manhwaIncludedTags.size}/-${manhwaExcludedTags.size})"
+                                else -> ""
+                            }
+                            val adultText = if (adultMode == AdultMode.ONLY) " (18+ Only)" else ""
+                            Text(
+                                text = "$modeText$tagsText$adultText",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+
+                SearchCategory.LIGHT_NOVELS -> {
+                    Text(
+                        text = "Discovery Mode",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ContentDiscoveryMode.entries.forEach { mode ->
+                            val isSelected = selectedLightNovelMode == mode
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { selectedLightNovelMode = mode },
+                                color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.2f) else LXSurfaceElevated,
+                                border = BorderStroke(
+                                    width = if (isSelected) 1.5.dp else 1.dp,
+                                    color = if (isSelected) LXPrimaryGreen else LXBorder
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp, horizontal = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Text(text = mode.iconEmoji, fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = mode.displayName,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            fontSize = 12.sp
+                                        ),
+                                        color = if (isSelected) LXPrimaryGreen else LXTextPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (selectedLightNovelMode != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (selectedLightNovelMode == ContentDiscoveryMode.BY_YEAR) {
+                            YearRangeSelector(
+                                startYear = selectedLightNovelStartYear,
+                                endYear = selectedLightNovelEndYear,
+                                onRangeChange = { s, e ->
+                                    selectedLightNovelStartYear = s
+                                    selectedLightNovelEndYear = e
+                                }
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+
+                        Text(
+                            text = "Sort By",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                MangaSortOrder.entries.forEach { sort ->
+                                    val isSelected = selectedLightNovelSort == sort
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { selectedLightNovelSort = sort },
+                                        label = { Text(sort.displayName, fontSize = 11.sp) },
+                                        modifier = Modifier.height(30.dp),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                                            selectedLabelColor = LXPrimaryGreen,
+                                            containerColor = LXSurfaceElevated,
+                                            labelColor = LXTextSecondary
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(LXSurfaceElevated)
+                                .border(1.dp, LXBorder, RoundedCornerShape(10.dp))
+                                .clickable { showTagsSubMenu = true }
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .background(LXPrimaryGreen.copy(alpha = 0.15f), RoundedCornerShape(6.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Tag,
+                                            contentDescription = null,
+                                            tint = LXPrimaryGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Select & Exclude Tags",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
+                                            color = LXTextPrimary
+                                        )
+                                        Text(
+                                            text = if (lightNovelIncludedTags.isEmpty() && lightNovelExcludedTags.isEmpty())
+                                                "Filter by light novel genres & themes"
+                                            else
+                                                "${lightNovelIncludedTags.size} included (✓) • ${lightNovelExcludedTags.size} excluded (✕)",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                            color = if (lightNovelIncludedTags.isNotEmpty() || lightNovelExcludedTags.isNotEmpty()) LXPrimaryGreen else LXTextSecondary
+                                        )
+                                    }
+                                }
+
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                    contentDescription = "Open Tags Filter",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+
+                            if (lightNovelIncludedTags.isNotEmpty() || lightNovelExcludedTags.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    lightNovelIncludedTags.forEach { tag ->
+                                        SearchTagBadge(
+                                            label = "+$tag",
+                                            isIncluded = true,
+                                            onRemove = {
+                                                lightNovelIncludedTags = lightNovelIncludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+                                            }
+                                        )
+                                    }
+                                    lightNovelExcludedTags.forEach { tag ->
+                                        SearchTagBadge(
+                                            label = "-$tag",
+                                            isIncluded = false,
+                                            onRemove = {
+                                                lightNovelExcludedTags = lightNovelExcludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        SubtleAdultFilterToggle(
+                            adultMode = adultMode,
+                            onModeChange = { adultMode = it }
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = {
+                                val filter = DiscoveryFilter.LightNovel(
+                                    mode = selectedLightNovelMode!!,
+                                    startYear = if (selectedLightNovelMode == ContentDiscoveryMode.BY_YEAR) selectedLightNovelStartYear else null,
+                                    endYear = if (selectedLightNovelMode == ContentDiscoveryMode.BY_YEAR) selectedLightNovelEndYear else null,
+                                    sortOrder = selectedLightNovelSort,
+                                    includedTags = lightNovelIncludedTags,
+                                    excludedTags = lightNovelExcludedTags,
+                                    adultMode = adultMode
+                                )
+                                onApplyLightNovel(filter)
+                                onDismiss()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                        ) {
+                            val yearStr = when {
+                                selectedLightNovelStartYear != null && selectedLightNovelEndYear != null && selectedLightNovelStartYear == selectedLightNovelEndYear -> "$selectedLightNovelStartYear"
+                                selectedLightNovelStartYear != null && selectedLightNovelEndYear != null -> "$selectedLightNovelStartYear–$selectedLightNovelEndYear"
+                                selectedLightNovelStartYear != null -> "From $selectedLightNovelStartYear"
+                                selectedLightNovelEndYear != null -> "Up to $selectedLightNovelEndYear"
+                                else -> ""
+                            }
+                            val modeText = when (selectedLightNovelMode!!) {
+                                ContentDiscoveryMode.BY_YEAR -> "Discover Light Novels $yearStr".trim()
+                                ContentDiscoveryMode.MOST_POPULAR -> "Discover Most Popular Light Novels"
+                            }
+                            val tagsText = when {
+                                lightNovelIncludedTags.isNotEmpty() || lightNovelExcludedTags.isNotEmpty() -> " (+${lightNovelIncludedTags.size}/-${lightNovelExcludedTags.size})"
+                                else -> ""
+                            }
+                            val adultText = if (adultMode == AdultMode.ONLY) " (18+ Only)" else ""
+                            Text(
+                                text = "$modeText$tagsText$adultText",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+
+                SearchCategory.BOOKS -> {
+                    Text(
+                        text = "Discovery Mode",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = LXTextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ContentDiscoveryMode.entries.forEach { mode ->
+                            val isSelected = selectedBookMode == mode
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { selectedBookMode = mode },
+                                color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.2f) else LXSurfaceElevated,
+                                border = BorderStroke(
+                                    width = if (isSelected) 1.5.dp else 1.dp,
+                                    color = if (isSelected) LXPrimaryGreen else LXBorder
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp, horizontal = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Text(text = mode.iconEmoji, fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = mode.displayName,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            fontSize = 12.sp
+                                        ),
+                                        color = if (isSelected) LXPrimaryGreen else LXTextPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (selectedBookMode != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (selectedBookMode == ContentDiscoveryMode.BY_YEAR) {
+                            YearRangeSelector(
+                                startYear = selectedBookStartYear,
+                                endYear = selectedBookEndYear,
+                                onRangeChange = { s, e ->
+                                    selectedBookStartYear = s
+                                    selectedBookEndYear = e
+                                },
+                                minYear = 1900
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+
+                        Text(
+                            text = "Sort By",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                BookSortOrder.entries.forEach { sort ->
+                                    val isSelected = selectedBookSort == sort
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { selectedBookSort = sort },
+                                        label = { Text(sort.displayName, fontSize = 11.sp) },
+                                        modifier = Modifier.height(30.dp),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                                            selectedLabelColor = LXPrimaryGreen,
+                                            containerColor = LXSurfaceElevated,
+                                            labelColor = LXTextSecondary
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(LXSurfaceElevated)
+                                .border(1.dp, LXBorder, RoundedCornerShape(10.dp))
+                                .clickable { showTagsSubMenu = true }
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .background(LXPrimaryGreen.copy(alpha = 0.15f), RoundedCornerShape(6.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Tag,
+                                            contentDescription = null,
+                                            tint = LXPrimaryGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Select & Exclude Tags",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
+                                            color = LXTextPrimary
+                                        )
+                                        Text(
+                                            text = if (bookIncludedTags.isEmpty() && bookExcludedTags.isEmpty())
+                                                "Filter by book genres & subjects"
+                                            else
+                                                "${bookIncludedTags.size} included (✓) • ${bookExcludedTags.size} excluded (✕)",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                            color = if (bookIncludedTags.isNotEmpty() || bookExcludedTags.isNotEmpty()) LXPrimaryGreen else LXTextSecondary
+                                        )
+                                    }
+                                }
+
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                    contentDescription = "Open Tags Filter",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+
+                            if (bookIncludedTags.isNotEmpty() || bookExcludedTags.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    bookIncludedTags.forEach { tag ->
+                                        SearchTagBadge(
+                                            label = "+$tag",
+                                            isIncluded = true,
+                                            onRemove = {
+                                                bookIncludedTags = bookIncludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+                                            }
+                                        )
+                                    }
+                                    bookExcludedTags.forEach { tag ->
+                                        SearchTagBadge(
+                                            label = "-$tag",
+                                            isIncluded = false,
+                                            onRemove = {
+                                                bookExcludedTags = bookExcludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        SubtleAdultFilterToggle(
+                            adultMode = adultMode,
+                            onModeChange = { adultMode = it }
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = {
+                                val filter = DiscoveryFilter.Book(
+                                    mode = selectedBookMode!!,
+                                    startYear = if (selectedBookMode == ContentDiscoveryMode.BY_YEAR) selectedBookStartYear else null,
+                                    endYear = if (selectedBookMode == ContentDiscoveryMode.BY_YEAR) selectedBookEndYear else null,
+                                    sortOrder = selectedBookSort,
+                                    includedTags = bookIncludedTags,
+                                    excludedTags = bookExcludedTags,
+                                    adultMode = adultMode
+                                )
+                                onApplyBook(filter)
+                                onDismiss()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                        ) {
+                            val yearStr = when {
+                                selectedBookStartYear != null && selectedBookEndYear != null && selectedBookStartYear == selectedBookEndYear -> "$selectedBookStartYear"
+                                selectedBookStartYear != null && selectedBookEndYear != null -> "$selectedBookStartYear–$selectedBookEndYear"
+                                selectedBookStartYear != null -> "From $selectedBookStartYear"
+                                selectedBookEndYear != null -> "Up to $selectedBookEndYear"
+                                else -> ""
+                            }
+                            val modeText = when (selectedBookMode!!) {
+                                ContentDiscoveryMode.BY_YEAR -> "Discover Books $yearStr".trim()
+                                ContentDiscoveryMode.MOST_POPULAR -> "Discover Most Popular Books"
+                            }
+                            val tagsText = when {
+                                bookIncludedTags.isNotEmpty() || bookExcludedTags.isNotEmpty() -> " (+${bookIncludedTags.size}/-${bookExcludedTags.size})"
+                                else -> ""
+                            }
+                            val adultText = if (adultMode == AdultMode.ONLY) " (18+ Only)" else ""
+                            Text(
+                                text = "$modeText$tagsText$adultText",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1823,6 +2844,146 @@ private fun SubtleAdultFilterToggle(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun YearRangeSelector(
+    startYear: Int?,
+    endYear: Int?,
+    onRangeChange: (Int?, Int?) -> Unit,
+    minYear: Int = 1970,
+    maxYear: Int = AnimeSeason.maxDiscoveryYear(),
+    modifier: Modifier = Modifier
+) {
+    var fromExpanded by remember { mutableStateOf(false) }
+    var toExpanded by remember { mutableStateOf(false) }
+    val currentYr = AnimeSeason.currentYear()
+
+    val labelText = when {
+        startYear == null && endYear == null -> "Year: All"
+        startYear != null && endYear != null && startYear == endYear -> "Year: $startYear"
+        startYear != null && endYear != null -> "Year Range: $startYear – $endYear"
+        startYear != null -> "Year: $startYear onwards"
+        endYear != null -> "Year: Up to $endYear"
+        else -> "Year Range"
+    }
+
+    Text(
+        text = labelText,
+        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+        color = LXTextSecondary
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+
+    // Quick range presets
+    val presets = listOf(
+        "Current ($currentYr)" to (currentYr to currentYr),
+        "${currentYr - 1}" to (currentYr - 1 to currentYr - 1),
+        "${currentYr - 4}–$currentYr" to (currentYr - 4 to currentYr),
+        "${currentYr - 9}–${currentYr - 5}" to (currentYr - 9 to currentYr - 5),
+        "2010–2019" to (2010 to 2019),
+        "2000–2009" to (2000 to 2009),
+        "Pre-2000" to (minYear to 1999)
+    )
+
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = modifier.fillMaxWidth()
+        ) {
+            presets.forEach { (presetLabel, range) ->
+                val isSelected = startYear == range.first && endYear == range.second
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { onRangeChange(range.first, range.second) },
+                    label = { Text(presetLabel, fontSize = 11.sp) },
+                    modifier = Modifier.height(30.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                        selectedLabelColor = LXPrimaryGreen,
+                        containerColor = LXSurfaceElevated,
+                        labelColor = LXTextSecondary
+                    )
+                )
+            }
+
+            // Custom "From: ..." dropdown chip
+            Box {
+                FilterChip(
+                    selected = false,
+                    onClick = { fromExpanded = true },
+                    modifier = Modifier.height(30.dp),
+                    label = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("From: ${startYear ?: minYear}", fontSize = 11.sp)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                        }
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = LXSurfaceElevated,
+                        labelColor = LXTextPrimary
+                    )
+                )
+
+                DropdownMenu(
+                    expanded = fromExpanded,
+                    onDismissRequest = { fromExpanded = false },
+                    modifier = Modifier.background(LXSurfaceElevated)
+                ) {
+                    (maxYear downTo minYear).forEach { yr ->
+                        DropdownMenuItem(
+                            text = { Text(yr.toString(), color = LXTextPrimary) },
+                            onClick = {
+                                val currentEnd = endYear ?: yr
+                                val newEnd = if (currentEnd < yr) yr else currentEnd
+                                onRangeChange(yr, newEnd)
+                                fromExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Custom "To: ..." dropdown chip
+            Box {
+                FilterChip(
+                    selected = false,
+                    onClick = { toExpanded = true },
+                    modifier = Modifier.height(30.dp),
+                    label = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("To: ${endYear ?: maxYear}", fontSize = 11.sp)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                        }
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        containerColor = LXSurfaceElevated,
+                        labelColor = LXTextPrimary
+                    )
+                )
+
+                DropdownMenu(
+                    expanded = toExpanded,
+                    onDismissRequest = { toExpanded = false },
+                    modifier = Modifier.background(LXSurfaceElevated)
+                ) {
+                    (maxYear downTo minYear).forEach { yr ->
+                        DropdownMenuItem(
+                            text = { Text(yr.toString(), color = LXTextPrimary) },
+                            onClick = {
+                                val currentStart = startYear ?: yr
+                                val newStart = if (currentStart > yr) yr else currentStart
+                                onRangeChange(newStart, yr)
+                                toExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun TriStateTagCheckbox(
     state: TagSelectionState,
@@ -1874,3 +3035,4 @@ private fun TriStateTagCheckbox(
         }
     }
 }
+

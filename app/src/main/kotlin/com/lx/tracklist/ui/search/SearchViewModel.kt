@@ -199,6 +199,10 @@ class SearchViewModel(
             is DiscoveryFilter.Anime -> applyAnimeDiscoveryFilter(filter)
             is DiscoveryFilter.Movie -> applyMovieDiscoveryFilter(filter, context)
             is DiscoveryFilter.Tv -> applyTvDiscoveryFilter(filter, context)
+            is DiscoveryFilter.Manga -> applyMangaDiscoveryFilter(filter, context)
+            is DiscoveryFilter.Manhwa -> applyManhwaDiscoveryFilter(filter, context)
+            is DiscoveryFilter.LightNovel -> applyLightNovelDiscoveryFilter(filter, context)
+            is DiscoveryFilter.Book -> applyBookDiscoveryFilter(filter, context)
         }
     }
 
@@ -317,12 +321,251 @@ class SearchViewModel(
         )
     }
 
+    fun removeMangaTagFilter(tag: String, context: Context? = null) {
+        val currentFilter = _uiState.value.activeDiscoveryFilter as? DiscoveryFilter.Manga ?: return
+        val newIncluded = currentFilter.includedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        val newExcluded = currentFilter.excludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        applyMangaDiscoveryFilter(
+            currentFilter.copy(includedTags = newIncluded, excludedTags = newExcluded),
+            context = context
+        )
+    }
+
+    fun removeManhwaTagFilter(tag: String, context: Context? = null) {
+        val currentFilter = _uiState.value.activeDiscoveryFilter as? DiscoveryFilter.Manhwa ?: return
+        val newIncluded = currentFilter.includedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        val newExcluded = currentFilter.excludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        applyManhwaDiscoveryFilter(
+            currentFilter.copy(includedTags = newIncluded, excludedTags = newExcluded),
+            context = context
+        )
+    }
+
+    fun removeLightNovelTagFilter(tag: String, context: Context? = null) {
+        val currentFilter = _uiState.value.activeDiscoveryFilter as? DiscoveryFilter.LightNovel ?: return
+        val newIncluded = currentFilter.includedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        val newExcluded = currentFilter.excludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        applyLightNovelDiscoveryFilter(
+            currentFilter.copy(includedTags = newIncluded, excludedTags = newExcluded),
+            context = context
+        )
+    }
+
+    fun removeBookTagFilter(tag: String, context: Context? = null) {
+        val currentFilter = _uiState.value.activeDiscoveryFilter as? DiscoveryFilter.Book ?: return
+        val newIncluded = currentFilter.includedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        val newExcluded = currentFilter.excludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        applyBookDiscoveryFilter(
+            currentFilter.copy(includedTags = newIncluded, excludedTags = newExcluded),
+            context = context
+        )
+    }
+
     fun removeTagFilter(tag: String, context: Context? = null) {
         when (_uiState.value.activeDiscoveryFilter) {
             is DiscoveryFilter.Anime -> removeAnimeTagFilter(tag)
             is DiscoveryFilter.Movie -> removeMovieTagFilter(tag, context)
             is DiscoveryFilter.Tv -> removeTvTagFilter(tag, context)
+            is DiscoveryFilter.Manga -> removeMangaTagFilter(tag, context)
+            is DiscoveryFilter.Manhwa -> removeManhwaTagFilter(tag, context)
+            is DiscoveryFilter.LightNovel -> removeLightNovelTagFilter(tag, context)
+            is DiscoveryFilter.Book -> removeBookTagFilter(tag, context)
             null -> {}
+        }
+    }
+
+    fun applyMangaDiscoveryFilter(filter: DiscoveryFilter.Manga, context: Context? = null) {
+        searchJob?.cancel()
+        activeSearchKey = "DISCOVER:MANGA:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}"
+        _uiState.update {
+            it.copy(
+                selectedCategory = SearchCategory.MANGA,
+                activeDiscoveryFilter = filter,
+                query = "",
+                isLoading = true,
+                currentPage = 1,
+                canLoadMore = false,
+                errorMessage = null,
+                results = emptyList()
+            )
+        }
+        searchJob = viewModelScope.launch {
+            try {
+                val list = withContext(Dispatchers.IO) {
+                    JikanApiClient.fetchMangaDiscovery(
+                        isManhwa = false,
+                        isLightNovel = false,
+                        mode = filter.mode,
+                        startYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.startYear else null,
+                        endYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.endYear else null,
+                        sort = filter.sortOrder.apiValue,
+                        includedTags = filter.includedTags,
+                        excludedTags = filter.excludedTags,
+                        adultMode = filter.adultMode,
+                        page = 1
+                    ).getOrThrow()
+                }
+                val mapped = list.mapIndexed { idx, d -> mapJikanToSearchResult(d, idx, MediaType.MANGA) }
+                _uiState.update {
+                    it.copy(
+                        results = mapped,
+                        isLoading = false,
+                        currentPage = 1,
+                        canLoadMore = mapped.size >= 15
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("SearchViewModel", "Error discovering manga", e)
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to discover manga") }
+            }
+        }
+    }
+
+    fun applyManhwaDiscoveryFilter(filter: DiscoveryFilter.Manhwa, context: Context? = null) {
+        searchJob?.cancel()
+        activeSearchKey = "DISCOVER:MANHWA:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}"
+        _uiState.update {
+            it.copy(
+                selectedCategory = SearchCategory.MANHWA,
+                activeDiscoveryFilter = filter,
+                query = "",
+                isLoading = true,
+                currentPage = 1,
+                canLoadMore = false,
+                errorMessage = null,
+                results = emptyList()
+            )
+        }
+        searchJob = viewModelScope.launch {
+            try {
+                val list = withContext(Dispatchers.IO) {
+                    JikanApiClient.fetchMangaDiscovery(
+                        isManhwa = true,
+                        isLightNovel = false,
+                        mode = filter.mode,
+                        startYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.startYear else null,
+                        endYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.endYear else null,
+                        sort = filter.sortOrder.apiValue,
+                        includedTags = filter.includedTags,
+                        excludedTags = filter.excludedTags,
+                        adultMode = filter.adultMode,
+                        page = 1
+                    ).getOrThrow()
+                }
+                val mapped = list.mapIndexed { idx, d -> mapJikanToSearchResult(d, idx, MediaType.MANHWA) }
+                _uiState.update {
+                    it.copy(
+                        results = mapped,
+                        isLoading = false,
+                        currentPage = 1,
+                        canLoadMore = mapped.size >= 15
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("SearchViewModel", "Error discovering manhwa", e)
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to discover manhwa") }
+            }
+        }
+    }
+
+    fun applyLightNovelDiscoveryFilter(filter: DiscoveryFilter.LightNovel, context: Context? = null) {
+        searchJob?.cancel()
+        activeSearchKey = "DISCOVER:LN:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}"
+        _uiState.update {
+            it.copy(
+                selectedCategory = SearchCategory.LIGHT_NOVELS,
+                activeDiscoveryFilter = filter,
+                query = "",
+                isLoading = true,
+                currentPage = 1,
+                canLoadMore = false,
+                errorMessage = null,
+                results = emptyList()
+            )
+        }
+        searchJob = viewModelScope.launch {
+            try {
+                val list = withContext(Dispatchers.IO) {
+                    JikanApiClient.fetchMangaDiscovery(
+                        isManhwa = false,
+                        isLightNovel = true,
+                        mode = filter.mode,
+                        startYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.startYear else null,
+                        endYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.endYear else null,
+                        sort = filter.sortOrder.apiValue,
+                        includedTags = filter.includedTags,
+                        excludedTags = filter.excludedTags,
+                        adultMode = filter.adultMode,
+                        page = 1
+                    ).getOrThrow()
+                }
+                val mapped = list.mapIndexed { idx, d -> mapJikanToSearchResult(d, idx, MediaType.BOOK) }
+                _uiState.update {
+                    it.copy(
+                        results = mapped,
+                        isLoading = false,
+                        currentPage = 1,
+                        canLoadMore = mapped.size >= 15
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("SearchViewModel", "Error discovering light novels", e)
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to discover light novels") }
+            }
+        }
+    }
+
+    fun applyBookDiscoveryFilter(filter: DiscoveryFilter.Book, context: Context? = null) {
+        searchJob?.cancel()
+        activeSearchKey = "DISCOVER:BOOK:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}"
+        _uiState.update {
+            it.copy(
+                selectedCategory = SearchCategory.BOOKS,
+                activeDiscoveryFilter = filter,
+                query = "",
+                isLoading = true,
+                currentPage = 1,
+                canLoadMore = false,
+                errorMessage = null,
+                results = emptyList()
+            )
+        }
+        searchJob = viewModelScope.launch {
+            try {
+                val list = withContext(Dispatchers.IO) {
+                    BookMetadataManager.discoverBooks(
+                        mode = filter.mode,
+                        startYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.startYear else null,
+                        endYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.endYear else null,
+                        sort = filter.sortOrder,
+                        includedTags = filter.includedTags,
+                        excludedTags = filter.excludedTags,
+                        adultMode = filter.adultMode,
+                        page = 1,
+                        context = context
+                    ).getOrThrow()
+                }
+                val mapped = list.mapIndexed { idx, b -> mapBookToSearchResult(b, idx) }
+                _uiState.update {
+                    it.copy(
+                        results = mapped,
+                        isLoading = false,
+                        currentPage = 1,
+                        canLoadMore = mapped.size >= 15
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("SearchViewModel", "Error discovering books", e)
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to discover books") }
+            }
         }
     }
 
@@ -350,6 +593,8 @@ class SearchViewModel(
                 val list = withContext(Dispatchers.IO) {
                     TmdbApiClient.discoverMovies(
                         year = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.year else null,
+                        startYear = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.startYear else null,
+                        endYear = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.endYear else null,
                         sortBy = filter.sortOrder.apiValue,
                         page = 1,
                         adultMode = filter.adultMode,
@@ -419,6 +664,8 @@ class SearchViewModel(
                 val list = withContext(Dispatchers.IO) {
                     TmdbApiClient.discoverTvShows(
                         year = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.year else null,
+                        startYear = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.startYear else null,
+                        endYear = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.endYear else null,
                         sortBy = filter.sortOrder.apiValue,
                         page = 1,
                         adultMode = filter.adultMode,
@@ -505,6 +752,8 @@ class SearchViewModel(
                             } else {
                                 TmdbApiClient.discoverMovies(
                                     year = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.year else null,
+                                    startYear = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.startYear else null,
+                                    endYear = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.endYear else null,
                                     sortBy = filter.sortOrder.apiValue,
                                     page = nextPage,
                                     adultMode = filter.adultMode,
@@ -527,6 +776,8 @@ class SearchViewModel(
                             } else {
                                 TmdbApiClient.discoverTvShows(
                                     year = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.year else null,
+                                    startYear = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.startYear else null,
+                                    endYear = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.endYear else null,
                                     sortBy = filter.sortOrder.apiValue,
                                     page = nextPage,
                                     adultMode = filter.adultMode,
@@ -536,6 +787,69 @@ class SearchViewModel(
                                 ).getOrThrow()
                             }
                             list.map { mapTmdbToSearchResult(it, isMovie = false) }
+                        }
+                        filter is DiscoveryFilter.Manga -> {
+                            val list = JikanApiClient.fetchMangaDiscovery(
+                                isManhwa = false,
+                                isLightNovel = false,
+                                mode = filter.mode,
+                                startYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.startYear else null,
+                                endYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.endYear else null,
+                                sort = filter.sortOrder.apiValue,
+                                search = if (query.length >= 2) query else null,
+                                includedTags = filter.includedTags,
+                                excludedTags = filter.excludedTags,
+                                adultMode = filter.adultMode,
+                                page = nextPage
+                            ).getOrThrow()
+                            list.mapIndexed { idx, d -> mapJikanToSearchResult(d, currentState.results.size + idx, MediaType.MANGA) }
+                        }
+                        filter is DiscoveryFilter.Manhwa -> {
+                            val list = JikanApiClient.fetchMangaDiscovery(
+                                isManhwa = true,
+                                isLightNovel = false,
+                                mode = filter.mode,
+                                startYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.startYear else null,
+                                endYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.endYear else null,
+                                sort = filter.sortOrder.apiValue,
+                                search = if (query.length >= 2) query else null,
+                                includedTags = filter.includedTags,
+                                excludedTags = filter.excludedTags,
+                                adultMode = filter.adultMode,
+                                page = nextPage
+                            ).getOrThrow()
+                            list.mapIndexed { idx, d -> mapJikanToSearchResult(d, currentState.results.size + idx, MediaType.MANHWA) }
+                        }
+                        filter is DiscoveryFilter.LightNovel -> {
+                            val list = JikanApiClient.fetchMangaDiscovery(
+                                isManhwa = false,
+                                isLightNovel = true,
+                                mode = filter.mode,
+                                startYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.startYear else null,
+                                endYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.endYear else null,
+                                sort = filter.sortOrder.apiValue,
+                                search = if (query.length >= 2) query else null,
+                                includedTags = filter.includedTags,
+                                excludedTags = filter.excludedTags,
+                                adultMode = filter.adultMode,
+                                page = nextPage
+                            ).getOrThrow()
+                            list.mapIndexed { idx, d -> mapJikanToSearchResult(d, currentState.results.size + idx, MediaType.BOOK) }
+                        }
+                        filter is DiscoveryFilter.Book -> {
+                            val list = BookMetadataManager.discoverBooks(
+                                mode = filter.mode,
+                                startYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.startYear else null,
+                                endYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.endYear else null,
+                                sort = filter.sortOrder,
+                                search = if (query.length >= 2) query else null,
+                                includedTags = filter.includedTags,
+                                excludedTags = filter.excludedTags,
+                                adultMode = filter.adultMode,
+                                page = nextPage,
+                                context = context
+                            ).getOrThrow()
+                            list.mapIndexed { idx, b -> mapBookToSearchResult(b, currentState.results.size + idx) }
                         }
                         currentState.selectedCategory == SearchCategory.MOVIES && query.length >= 2 -> {
                             val list = TmdbApiClient.searchMoviesMultiple(
@@ -588,23 +902,69 @@ class SearchViewModel(
         }
     }
 
-    private fun mapJikanToSearchResult(details: JikanMediaDetails, idx: Int): SearchResultItem {
-        val extId = details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
-        val extSource = if (details.sourceProvider == "AniList" && (details.malId == null || details.malId == 0L)) "AniList" else "MAL"
+    private fun mapJikanToSearchResult(
+        details: JikanMediaDetails,
+        idx: Int,
+        mediaType: MediaType = MediaType.ANIME
+    ): SearchResultItem {
+        val extSource = when (details.sourceProvider) {
+            "MangaDex" -> "MangaDex"
+            "Kitsu" -> "Kitsu"
+            "AniList" -> "AniList"
+            else -> if (details.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
+        }
+        val extId = if (details.sourceProvider == "MangaDex") {
+            details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                ?: "md_${details.title?.hashCode() ?: idx}_$idx"
+        } else {
+            details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+        }
+        val status = when (mediaType) {
+            MediaType.ANIME -> if (details.isAiring == true) "Airing" else "Finished"
+            MediaType.MANGA, MediaType.MANHWA -> if (details.isAiring == true) "Publishing" else "Finished"
+            MediaType.BOOK -> "Light Novel"
+            else -> if (details.isAiring == true) "Ongoing" else "Finished"
+        }
         return SearchResultItem(
             externalId = extId,
             externalSource = extSource,
-            mediaType = MediaType.ANIME,
+            mediaType = mediaType,
             title = details.title ?: "Unknown",
             alternateTitle = details.alternateTitle,
             posterUrl = details.posterUrl,
             releaseYear = details.airedStartDate?.let { extractYear(it) },
-            totalUnits = details.totalEpisodes,
+            totalUnits = if (mediaType == MediaType.ANIME) details.totalEpisodes else details.totalChapters,
+            totalVolumes = details.totalVolumes,
             durationMinutes = details.durationMinutes,
             score = details.externalScore,
-            statusText = if (details.isAiring == true) "Airing" else "Finished",
+            statusText = status,
             synopsis = details.synopsis,
+            author = details.authors,
             rawJikanDetails = details
+        )
+    }
+
+    private fun mapBookToSearchResult(book: BookDetails, idx: Int): SearchResultItem {
+        val jikanDetails = book.toJikanMediaDetails()
+        val extId = if (book.id.isNotBlank()) book.id else "book_${book.title.hashCode()}_$idx"
+        val synopsisText = book.description?.takeIf { it.isNotBlank() } ?: book.buildDescriptionWithMetadata()
+        return SearchResultItem(
+            externalId = extId,
+            externalSource = book.sourceProvider,
+            mediaType = MediaType.BOOK,
+            title = book.title,
+            alternateTitle = book.subtitle,
+            posterUrl = book.coverUrl,
+            releaseYear = book.publishedDate?.take(4),
+            totalUnits = book.pageCount,
+            score = book.averageScore,
+            statusText = "Book",
+            synopsis = synopsisText,
+            author = book.authorString.takeIf { it.isNotBlank() },
+            publisher = book.publisher,
+            isbn = book.primaryIsbn,
+            rawBookDetails = book,
+            rawJikanDetails = jikanDetails
         )
     }
 
@@ -686,6 +1046,69 @@ class SearchViewModel(
                                 context = context
                             ).getOrThrow()
                             return@withContext list.map { mapTmdbToSearchResult(it, isMovie = false) }
+                        }
+                        is DiscoveryFilter.Manga -> {
+                            val list = JikanApiClient.fetchMangaDiscovery(
+                                isManhwa = false,
+                                isLightNovel = false,
+                                mode = activeFilter.mode,
+                                startYear = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.startYear else null,
+                                endYear = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.endYear else null,
+                                sort = activeFilter.sortOrder.apiValue,
+                                search = query,
+                                includedTags = activeFilter.includedTags,
+                                excludedTags = activeFilter.excludedTags,
+                                adultMode = activeFilter.adultMode,
+                                page = 1
+                            ).getOrThrow()
+                            return@withContext list.mapIndexed { idx, d -> mapJikanToSearchResult(d, idx, MediaType.MANGA) }
+                        }
+                        is DiscoveryFilter.Manhwa -> {
+                            val list = JikanApiClient.fetchMangaDiscovery(
+                                isManhwa = true,
+                                isLightNovel = false,
+                                mode = activeFilter.mode,
+                                startYear = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.startYear else null,
+                                endYear = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.endYear else null,
+                                sort = activeFilter.sortOrder.apiValue,
+                                search = query,
+                                includedTags = activeFilter.includedTags,
+                                excludedTags = activeFilter.excludedTags,
+                                adultMode = activeFilter.adultMode,
+                                page = 1
+                            ).getOrThrow()
+                            return@withContext list.mapIndexed { idx, d -> mapJikanToSearchResult(d, idx, MediaType.MANHWA) }
+                        }
+                        is DiscoveryFilter.LightNovel -> {
+                            val list = JikanApiClient.fetchMangaDiscovery(
+                                isManhwa = false,
+                                isLightNovel = true,
+                                mode = activeFilter.mode,
+                                startYear = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.startYear else null,
+                                endYear = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.endYear else null,
+                                sort = activeFilter.sortOrder.apiValue,
+                                search = query,
+                                includedTags = activeFilter.includedTags,
+                                excludedTags = activeFilter.excludedTags,
+                                adultMode = activeFilter.adultMode,
+                                page = 1
+                            ).getOrThrow()
+                            return@withContext list.mapIndexed { idx, d -> mapJikanToSearchResult(d, idx, MediaType.BOOK) }
+                        }
+                        is DiscoveryFilter.Book -> {
+                            val list = BookMetadataManager.discoverBooks(
+                                mode = activeFilter.mode,
+                                startYear = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.startYear else null,
+                                endYear = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.endYear else null,
+                                sort = activeFilter.sortOrder,
+                                search = query,
+                                includedTags = activeFilter.includedTags,
+                                excludedTags = activeFilter.excludedTags,
+                                adultMode = activeFilter.adultMode,
+                                page = 1,
+                                context = context
+                            ).getOrThrow()
+                            return@withContext list.mapIndexed { idx, b -> mapBookToSearchResult(b, idx) }
                         }
                     }
                 }
