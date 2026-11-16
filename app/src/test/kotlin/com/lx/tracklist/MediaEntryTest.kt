@@ -563,12 +563,25 @@ class MediaEntryTest {
 
         // In IST, 17:30 JST is exactly 14:00 IST on Sunday
         org.junit.Assert.assertTrue(localScheduleFull!!.startsWith("Sunday at 14:00"))
-        org.junit.Assert.assertTrue(localScheduleShort!!.startsWith("Sun 14:00"))
+        // Short format for card display omits timezone offset (understood to be local time)
+        org.junit.Assert.assertEquals("Sun 14:00", localScheduleShort)
+        org.junit.Assert.assertFalse(localScheduleShort!!.contains("GMT"))
+        org.junit.Assert.assertFalse(localScheduleShort.contains("IST"))
+
+        // When includeTimeZone is explicitly true for short format
+        val localScheduleShortWithTz = entry.formatAiringSchedule(short = true, timeZone = istTz, includeTimeZone = true)
+        org.junit.Assert.assertTrue(localScheduleShortWithTz!!.startsWith("Sun 14:00"))
+        org.junit.Assert.assertTrue(localScheduleShortWithTz.contains("GMT") || localScheduleShortWithTz.contains("IST"))
 
         // JST timezone check
         val jstTz = java.util.TimeZone.getTimeZone("Asia/Tokyo")
         val jstSchedule = entry.formatAiringSchedule(short = false, timeZone = jstTz)
         org.junit.Assert.assertTrue(jstSchedule!!.startsWith("Sunday at 17:30"))
+
+        // Card text formatting omits timezone
+        val cardText = entry.formatAiringCardText()
+        org.junit.Assert.assertNotNull(cardText)
+        org.junit.Assert.assertFalse(cardText!!.contains("GMT"))
     }
 
     @Test

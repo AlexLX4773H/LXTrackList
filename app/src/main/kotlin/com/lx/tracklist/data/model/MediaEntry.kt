@@ -638,10 +638,19 @@ data class MediaEntry(
         return null
     }
 
-    fun formatAiringSchedule(short: Boolean = false, timeZone: TimeZone = TimeZone.getDefault()): String? {
+    fun formatAiringSchedule(
+        short: Boolean = false,
+        timeZone: TimeZone = TimeZone.getDefault(),
+        includeTimeZone: Boolean = !short
+    ): String? {
         if (mediaType != MediaType.ANIME || !isAiring) return null
         val nextEpoch = getComputedNextAiringEpoch() ?: return null
-        val pattern = if (short) "EEE HH:mm z" else "EEEE 'at' HH:mm z"
+        val pattern = when {
+            short && includeTimeZone -> "EEE HH:mm z"
+            short && !includeTimeZone -> "EEE HH:mm"
+            !short && includeTimeZone -> "EEEE 'at' HH:mm z"
+            else -> "EEEE 'at' HH:mm"
+        }
         val sdf = SimpleDateFormat(pattern, Locale.getDefault()).apply {
             this.timeZone = timeZone
         }
@@ -672,7 +681,7 @@ data class MediaEntry(
 
     fun formatAiringCardText(): String? {
         if (mediaType != MediaType.ANIME || !isAiring) return null
-        val schedule = formatAiringSchedule(short = true)
+        val schedule = formatAiringSchedule(short = true, includeTimeZone = false)
         val countdown = getTimeUntilNextEpisode(prefixIn = true)
         return when {
             !schedule.isNullOrBlank() && !countdown.isNullOrBlank() -> "$schedule • $countdown"
