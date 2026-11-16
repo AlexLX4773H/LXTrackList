@@ -84,6 +84,11 @@ import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
 
+private data class TagDisplayItem(
+    val name: String,
+    val categoryLabel: String
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SearchDiscoverySheet(
@@ -91,8 +96,8 @@ fun SearchDiscoverySheet(
     activeFilter: DiscoveryFilter?,
     onDismiss: () -> Unit,
     onApplyAnime: (DiscoveryFilter.Anime) -> Unit,
-    onApplyMovie: (Int, TmdbMovieSort, AdultMode) -> Unit,
-    onApplyTv: (Int, TmdbTvSort, AdultMode) -> Unit,
+    onApplyMovie: (DiscoveryFilter.Movie) -> Unit,
+    onApplyTv: (DiscoveryFilter.Tv) -> Unit,
     onResetFilter: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -119,65 +124,41 @@ fun SearchDiscoverySheet(
     var excludedTags by remember {
         mutableStateOf(animeFilter?.excludedTags ?: emptySet())
     }
-    var tagSearchQuery by remember { mutableStateOf("") }
-    var selectedTagCategory by remember { mutableStateOf<AnimeTagCategory?>(null) }
-    var showTagsSubMenu by remember { mutableStateOf(false) }
-
-    BackHandler(enabled = showTagsSubMenu) {
-        showTagsSubMenu = false
-    }
-
-    fun cycleTag(tagName: String) {
-        val clean = tagName.trim()
-        val isInc = includedTags.any { it.equals(clean, ignoreCase = true) }
-        val isExc = excludedTags.any { it.equals(clean, ignoreCase = true) }
-        when {
-            !isInc && !isExc -> {
-                includedTags = includedTags + clean
-                excludedTags = excludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
-            }
-            isInc -> {
-                includedTags = includedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
-                excludedTags = excludedTags + clean
-            }
-            else -> {
-                includedTags = includedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
-                excludedTags = excludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
-            }
-        }
-    }
-
-    fun getTagState(tagName: String): TagSelectionState {
-        val clean = tagName.trim()
-        return when {
-            includedTags.any { it.equals(clean, ignoreCase = true) } -> TagSelectionState.INCLUDED
-            excludedTags.any { it.equals(clean, ignoreCase = true) } -> TagSelectionState.EXCLUDED
-            else -> TagSelectionState.UNSELECTED
-        }
-    }
 
     // Movie state
+    val movieFilter = activeFilter as? DiscoveryFilter.Movie
+    var selectedMovieMode by remember {
+        mutableStateOf(movieFilter?.mode)
+    }
     var selectedMovieYear by remember {
-        mutableIntStateOf(
-            (activeFilter as? DiscoveryFilter.Movie)?.year ?: currentYear
-        )
+        mutableIntStateOf(movieFilter?.year ?: currentYear)
     }
     var selectedMovieSort by remember {
-        mutableStateOf(
-            (activeFilter as? DiscoveryFilter.Movie)?.sortOrder ?: TmdbMovieSort.POPULARITY
-        )
+        mutableStateOf(movieFilter?.sortOrder ?: TmdbMovieSort.POPULARITY)
+    }
+    var movieIncludedTags by remember {
+        mutableStateOf(movieFilter?.includedTags ?: emptySet())
+    }
+    var movieExcludedTags by remember {
+        mutableStateOf(movieFilter?.excludedTags ?: emptySet())
     }
 
     // TV state
+    val tvFilter = activeFilter as? DiscoveryFilter.Tv
+    var selectedTvMode by remember {
+        mutableStateOf(tvFilter?.mode)
+    }
     var selectedTvYear by remember {
-        mutableIntStateOf(
-            (activeFilter as? DiscoveryFilter.Tv)?.year ?: currentYear
-        )
+        mutableIntStateOf(tvFilter?.year ?: currentYear)
     }
     var selectedTvSort by remember {
-        mutableStateOf(
-            (activeFilter as? DiscoveryFilter.Tv)?.sortOrder ?: TmdbTvSort.POPULARITY
-        )
+        mutableStateOf(tvFilter?.sortOrder ?: TmdbTvSort.POPULARITY)
+    }
+    var tvIncludedTags by remember {
+        mutableStateOf(tvFilter?.includedTags ?: emptySet())
+    }
+    var tvExcludedTags by remember {
+        mutableStateOf(tvFilter?.excludedTags ?: emptySet())
     }
 
     var adultMode by remember {
@@ -185,6 +166,115 @@ fun SearchDiscoverySheet(
     }
 
     var yearDropdownExpanded by remember { mutableStateOf(false) }
+    var tagSearchQuery by remember { mutableStateOf("") }
+    var selectedTagCategory by remember { mutableStateOf<AnimeTagCategory?>(null) }
+    var showTagsSubMenu by remember { mutableStateOf(false) }
+
+    val activeIncludedTags: Set<String> = when (category) {
+        SearchCategory.ANIME -> includedTags
+        SearchCategory.MOVIES -> movieIncludedTags
+        SearchCategory.TV_SHOWS -> tvIncludedTags
+        else -> emptySet()
+    }
+
+    val activeExcludedTags: Set<String> = when (category) {
+        SearchCategory.ANIME -> excludedTags
+        SearchCategory.MOVIES -> movieExcludedTags
+        SearchCategory.TV_SHOWS -> tvExcludedTags
+        else -> emptySet()
+    }
+
+    BackHandler(enabled = showTagsSubMenu) {
+        showTagsSubMenu = false
+    }
+
+    fun cycleTag(tagName: String) {
+        val clean = tagName.trim()
+        when (category) {
+            SearchCategory.ANIME -> {
+                val isInc = includedTags.any { it.equals(clean, ignoreCase = true) }
+                val isExc = excludedTags.any { it.equals(clean, ignoreCase = true) }
+                when {
+                    !isInc && !isExc -> {
+                        includedTags = includedTags + clean
+                        excludedTags = excludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                    isInc -> {
+                        includedTags = includedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        excludedTags = excludedTags + clean
+                    }
+                    else -> {
+                        includedTags = includedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        excludedTags = excludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                }
+            }
+            SearchCategory.MOVIES -> {
+                val isInc = movieIncludedTags.any { it.equals(clean, ignoreCase = true) }
+                val isExc = movieExcludedTags.any { it.equals(clean, ignoreCase = true) }
+                when {
+                    !isInc && !isExc -> {
+                        movieIncludedTags = movieIncludedTags + clean
+                        movieExcludedTags = movieExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                    isInc -> {
+                        movieIncludedTags = movieIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        movieExcludedTags = movieExcludedTags + clean
+                    }
+                    else -> {
+                        movieIncludedTags = movieIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        movieExcludedTags = movieExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                }
+            }
+            SearchCategory.TV_SHOWS -> {
+                val isInc = tvIncludedTags.any { it.equals(clean, ignoreCase = true) }
+                val isExc = tvExcludedTags.any { it.equals(clean, ignoreCase = true) }
+                when {
+                    !isInc && !isExc -> {
+                        tvIncludedTags = tvIncludedTags + clean
+                        tvExcludedTags = tvExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                    isInc -> {
+                        tvIncludedTags = tvIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        tvExcludedTags = tvExcludedTags + clean
+                    }
+                    else -> {
+                        tvIncludedTags = tvIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        tvExcludedTags = tvExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                }
+            }
+            else -> {}
+        }
+    }
+
+    fun getTagState(tagName: String): TagSelectionState {
+        val clean = tagName.trim()
+        return when {
+            activeIncludedTags.any { it.equals(clean, ignoreCase = true) } -> TagSelectionState.INCLUDED
+            activeExcludedTags.any { it.equals(clean, ignoreCase = true) } -> TagSelectionState.EXCLUDED
+            else -> TagSelectionState.UNSELECTED
+        }
+    }
+
+    fun clearAllCurrentTags() {
+        when (category) {
+            SearchCategory.ANIME -> {
+                includedTags = emptySet()
+                excludedTags = emptySet()
+            }
+            SearchCategory.MOVIES -> {
+                movieIncludedTags = emptySet()
+                movieExcludedTags = emptySet()
+            }
+            SearchCategory.TV_SHOWS -> {
+                tvIncludedTags = emptySet()
+                tvExcludedTags = emptySet()
+            }
+            else -> {}
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -232,17 +322,19 @@ fun SearchDiscoverySheet(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Tags & Genres",
+                            text = when (category) {
+                                SearchCategory.ANIME -> "Tags & Genres"
+                                SearchCategory.MOVIES -> "Movie Genres"
+                                SearchCategory.TV_SHOWS -> "TV Show Genres"
+                                else -> "Tags & Genres"
+                            },
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             color = LXTextPrimary
                         )
                     }
 
-                    if (includedTags.isNotEmpty() || excludedTags.isNotEmpty()) {
-                        TextButton(onClick = {
-                            includedTags = emptySet()
-                            excludedTags = emptySet()
-                        }) {
+                    if (activeIncludedTags.isNotEmpty() || activeExcludedTags.isNotEmpty()) {
+                        TextButton(onClick = { clearAllCurrentTags() }) {
                             Text("Clear All", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                         }
                     }
@@ -287,9 +379,9 @@ fun SearchDiscoverySheet(
                     }
 
                     Text(
-                        text = "${includedTags.size} inc • ${excludedTags.size} exc",
+                        text = "${activeIncludedTags.size} inc • ${activeExcludedTags.size} exc",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = if (includedTags.isNotEmpty() || excludedTags.isNotEmpty()) LXPrimaryGreen else LXTextSecondary
+                        color = if (activeIncludedTags.isNotEmpty() || activeExcludedTags.isNotEmpty()) LXPrimaryGreen else LXTextSecondary
                     )
                 }
 
@@ -297,7 +389,13 @@ fun SearchDiscoverySheet(
                 OutlinedTextField(
                     value = tagSearchQuery,
                     onValueChange = { tagSearchQuery = it },
-                    placeholder = { Text("Search tags, genres, themes...", color = LXTextSecondary, fontSize = 13.sp) },
+                    placeholder = {
+                        Text(
+                            text = if (category == SearchCategory.ANIME) "Search tags, genres, themes..." else "Search genres...",
+                            color = LXTextSecondary,
+                            fontSize = 13.sp
+                        )
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
@@ -322,36 +420,49 @@ fun SearchDiscoverySheet(
                     )
                 )
 
-                // Category filter chips (All, Genres, Themes, Demographics)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    val categories = listOf<AnimeTagCategory?>(null, AnimeTagCategory.GENRE, AnimeTagCategory.THEME, AnimeTagCategory.DEMOGRAPHIC)
-                    categories.forEach { cat ->
-                        val label = cat?.displayName ?: "All"
-                        val isCatSelected = selectedTagCategory == cat
-                        FilterChip(
-                            selected = isCatSelected,
-                            onClick = { selectedTagCategory = cat },
-                            label = { Text(label, fontSize = 11.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                                selectedLabelColor = LXPrimaryGreen,
-                                containerColor = LXSurfaceElevated,
-                                labelColor = LXTextSecondary
-                            ),
-                            modifier = Modifier.height(30.dp)
-                        )
+                // Category filter chips (All, Genres, Themes, Demographics) - Anime only
+                if (category == SearchCategory.ANIME) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val categories = listOf<AnimeTagCategory?>(null, AnimeTagCategory.GENRE, AnimeTagCategory.THEME, AnimeTagCategory.DEMOGRAPHIC)
+                        categories.forEach { cat ->
+                            val label = cat?.displayName ?: "All"
+                            val isCatSelected = selectedTagCategory == cat
+                            FilterChip(
+                                selected = isCatSelected,
+                                onClick = { selectedTagCategory = cat },
+                                label = { Text(label, fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                                    selectedLabelColor = LXPrimaryGreen,
+                                    containerColor = LXSurfaceElevated,
+                                    labelColor = LXTextSecondary
+                                ),
+                                modifier = Modifier.height(30.dp)
+                            )
+                        }
                     }
                 }
 
                 // Tag list with tri-state selection (Matching Library Advanced Filter)
-                val visibleTags = remember(tagSearchQuery, selectedTagCategory) {
-                    AnimeTagRegistry.filterTags(tagSearchQuery, selectedTagCategory)
+                val visibleItems = remember(category, tagSearchQuery, selectedTagCategory) {
+                    when (category) {
+                        SearchCategory.ANIME -> AnimeTagRegistry.filterTags(tagSearchQuery, selectedTagCategory).map {
+                            TagDisplayItem(it.name, it.category.displayName)
+                        }
+                        SearchCategory.MOVIES -> TmdbTagRegistry.filterMovieGenres(tagSearchQuery).map {
+                            TagDisplayItem(it.name, "Genre")
+                        }
+                        SearchCategory.TV_SHOWS -> TmdbTagRegistry.filterTvGenres(tagSearchQuery).map {
+                            TagDisplayItem(it.name, "Genre")
+                        }
+                        else -> emptyList()
+                    }
                 }
 
-                if (visibleTags.isEmpty()) {
+                if (visibleItems.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -371,7 +482,7 @@ fun SearchDiscoverySheet(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        visibleTags.forEach { tagDef ->
+                        visibleItems.forEach { tagDef ->
                             val tagState = getTagState(tagDef.name)
                             Row(
                                 modifier = Modifier
@@ -453,7 +564,7 @@ fun SearchDiscoverySheet(
                                         }
                                         TagSelectionState.UNSELECTED -> {
                                             Text(
-                                                text = tagDef.category.displayName,
+                                                text = tagDef.categoryLabel,
                                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                                 color = LXTextSecondary.copy(alpha = 0.7f)
                                             )
@@ -476,7 +587,7 @@ fun SearchDiscoverySheet(
                         .height(48.dp)
                 ) {
                     Text(
-                        text = "Done (${includedTags.size} included • ${excludedTags.size} excluded)",
+                        text = "Done (${activeIncludedTags.size} included • ${activeExcludedTags.size} excluded)",
                         fontWeight = FontWeight.Bold,
                         color = Color.Black
                     )
@@ -507,8 +618,16 @@ fun SearchDiscoverySheet(
                                     AnimeDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
                                     null -> Icons.Default.Explore
                                 }
-                                SearchCategory.MOVIES -> Icons.Default.Movie
-                                SearchCategory.TV_SHOWS -> Icons.Default.Tv
+                                SearchCategory.MOVIES -> when (selectedMovieMode) {
+                                    TmdbDiscoveryMode.BY_YEAR -> Icons.Default.Movie
+                                    TmdbDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
+                                    null -> Icons.Default.Movie
+                                }
+                                SearchCategory.TV_SHOWS -> when (selectedTvMode) {
+                                    TmdbDiscoveryMode.BY_YEAR -> Icons.Default.Tv
+                                    TmdbDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
+                                    null -> Icons.Default.Tv
+                                }
                                 else -> Icons.Default.Explore
                             },
                             contentDescription = null,
@@ -523,8 +642,16 @@ fun SearchDiscoverySheet(
                                     AnimeDiscoveryMode.MOST_POPULAR -> "Most Popular Anime"
                                     null -> "Discover Anime"
                                 }
-                                SearchCategory.MOVIES -> "Discover Movies"
-                                SearchCategory.TV_SHOWS -> "Discover TV Shows"
+                                SearchCategory.MOVIES -> when (selectedMovieMode) {
+                                    TmdbDiscoveryMode.BY_YEAR -> "Discover Movies"
+                                    TmdbDiscoveryMode.MOST_POPULAR -> "Most Popular Movies"
+                                    null -> "Discover Movies"
+                                }
+                                SearchCategory.TV_SHOWS -> when (selectedTvMode) {
+                                    TmdbDiscoveryMode.BY_YEAR -> "Discover TV Shows"
+                                    TmdbDiscoveryMode.MOST_POPULAR -> "Most Popular TV Shows"
+                                    null -> "Discover TV Shows"
+                                }
                                 else -> "Discover"
                             },
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
@@ -949,280 +1076,598 @@ fun SearchDiscoverySheet(
                     }
 
                 SearchCategory.MOVIES -> {
-                    // Movie Year Selector (Up to currentYear + 2)
+                    // 1. Mode Selector: Small Icon Pills (By Year / Most Popular)
                     Text(
-                        text = "Release Year: $selectedMovieYear",
+                        text = "Discovery Mode",
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                         color = LXTextSecondary
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    val quickMovieYears = listOf(maxYear, maxYear - 1, maxYear - 2, maxYear - 3)
-                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            quickMovieYears.forEach { yr ->
-                                val isSelected = selectedMovieYear == yr
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { selectedMovieYear = yr },
-                                    label = { Text(yr.toString(), fontSize = 11.sp) },
-                                    modifier = Modifier.height(30.dp),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                                        selectedLabelColor = LXPrimaryGreen,
-                                        containerColor = LXSurfaceElevated,
-                                        labelColor = LXTextSecondary
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TmdbDiscoveryMode.entries.forEach { mode ->
+                            val isSelected = selectedMovieMode == mode
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { selectedMovieMode = mode },
+                                color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.2f) else LXSurfaceElevated,
+                                border = BorderStroke(
+                                    width = if (isSelected) 1.5.dp else 1.dp,
+                                    color = if (isSelected) LXPrimaryGreen else LXBorder
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp, horizontal = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = mode.iconEmoji,
+                                        fontSize = 14.sp
                                     )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = mode.displayName,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            fontSize = 12.sp
+                                        ),
+                                        color = if (isSelected) LXPrimaryGreen else LXTextPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Only load the rest once a mode is clicked!
+                    if (selectedMovieMode != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Year Selector (only for BY_YEAR)
+                        if (selectedMovieMode == TmdbDiscoveryMode.BY_YEAR) {
+                            Text(
+                                text = "Release Year: $selectedMovieYear",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = LXTextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            val quickMovieYears = listOf(maxYear, maxYear - 1, maxYear - 2, maxYear - 3)
+                            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    quickMovieYears.forEach { yr ->
+                                        val isSelected = selectedMovieYear == yr
+                                        FilterChip(
+                                            selected = isSelected,
+                                            onClick = { selectedMovieYear = yr },
+                                            label = { Text(yr.toString(), fontSize = 11.sp) },
+                                            modifier = Modifier.height(30.dp),
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                                                selectedLabelColor = LXPrimaryGreen,
+                                                containerColor = LXSurfaceElevated,
+                                                labelColor = LXTextSecondary
+                                            )
+                                        )
+                                    }
+
+                                    // Dropdown for more movie years
+                                    Box {
+                                        FilterChip(
+                                            selected = selectedMovieYear !in quickMovieYears,
+                                            onClick = { yearDropdownExpanded = true },
+                                            modifier = Modifier.height(30.dp),
+                                            label = {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        if (selectedMovieYear !in quickMovieYears) selectedMovieYear.toString() else "More",
+                                                        fontSize = 11.sp
+                                                    )
+                                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                }
+                                            },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                                                selectedLabelColor = LXPrimaryGreen,
+                                                containerColor = LXSurfaceElevated,
+                                                labelColor = LXTextSecondary
+                                            )
+                                        )
+
+                                        DropdownMenu(
+                                            expanded = yearDropdownExpanded,
+                                            onDismissRequest = { yearDropdownExpanded = false },
+                                            modifier = Modifier.background(LXSurfaceElevated)
+                                        ) {
+                                            (maxYear downTo 1970).forEach { yr ->
+                                                DropdownMenuItem(
+                                                    text = { Text(yr.toString(), color = LXTextPrimary) },
+                                                    onClick = {
+                                                        selectedMovieYear = yr
+                                                        yearDropdownExpanded = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+
+                        // Movie Sort Order
+                        Text(
+                            text = "Sort By",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                TmdbMovieSort.entries.forEach { sort ->
+                                    val isSelected = selectedMovieSort == sort
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { selectedMovieSort = sort },
+                                        label = { Text(sort.displayName, fontSize = 11.sp) },
+                                        modifier = Modifier.height(30.dp),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                                            selectedLabelColor = LXPrimaryGreen,
+                                            containerColor = LXSurfaceElevated,
+                                            labelColor = LXTextSecondary
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        // Tags Section Button (Sub-menu Navigation)
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(LXSurfaceElevated)
+                                .border(1.dp, LXBorder, RoundedCornerShape(10.dp))
+                                .clickable { showTagsSubMenu = true }
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .background(LXPrimaryGreen.copy(alpha = 0.15f), RoundedCornerShape(6.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Tag,
+                                            contentDescription = null,
+                                            tint = LXPrimaryGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Select & Exclude Tags",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
+                                            color = LXTextPrimary
+                                        )
+                                        Text(
+                                            text = if (movieIncludedTags.isEmpty() && movieExcludedTags.isEmpty())
+                                                "Filter by movie genres"
+                                            else
+                                                "${movieIncludedTags.size} included (✓) • ${movieExcludedTags.size} excluded (✕)",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                            color = if (movieIncludedTags.isNotEmpty() || movieExcludedTags.isNotEmpty()) LXPrimaryGreen else LXTextSecondary
+                                        )
+                                    }
+                                }
+
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                    contentDescription = "Open Tags Filter",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
 
-                            // Dropdown for more movie years
-                            Box {
-                                FilterChip(
-                                    selected = selectedMovieYear !in quickMovieYears,
-                                    onClick = { yearDropdownExpanded = true },
-                                    modifier = Modifier.height(30.dp),
-                                    label = {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                if (selectedMovieYear !in quickMovieYears) selectedMovieYear.toString() else "More",
-                                                fontSize = 11.sp
-                                            )
-                                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
-                                        }
-                                    },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                                        selectedLabelColor = LXPrimaryGreen,
-                                        containerColor = LXSurfaceElevated,
-                                        labelColor = LXTextSecondary
-                                    )
-                                )
-
-                                DropdownMenu(
-                                    expanded = yearDropdownExpanded,
-                                    onDismissRequest = { yearDropdownExpanded = false },
-                                    modifier = Modifier.background(LXSurfaceElevated)
+                            // Active Tag Chips inside Main Sheet with 1-tap delete
+                            if (movieIncludedTags.isNotEmpty() || movieExcludedTags.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    (maxYear downTo 1970).forEach { yr ->
-                                        DropdownMenuItem(
-                                            text = { Text(yr.toString(), color = LXTextPrimary) },
-                                            onClick = {
-                                                selectedMovieYear = yr
-                                                yearDropdownExpanded = false
+                                    movieIncludedTags.forEach { tag ->
+                                        SearchTagBadge(
+                                            label = "+$tag",
+                                            isIncluded = true,
+                                            onRemove = {
+                                                movieIncludedTags = movieIncludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+                                            }
+                                        )
+                                    }
+                                    movieExcludedTags.forEach { tag ->
+                                        SearchTagBadge(
+                                            label = "-$tag",
+                                            isIncluded = false,
+                                            onRemove = {
+                                                movieExcludedTags = movieExcludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
                                             }
                                         )
                                     }
                                 }
                             }
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                    // Movie Sort Order
-                    Text(
-                        text = "Sort By",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                        color = LXTextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            TmdbMovieSort.entries.forEach { sort ->
-                                val isSelected = selectedMovieSort == sort
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { selectedMovieSort = sort },
-                                    label = { Text(sort.displayName, fontSize = 11.sp) },
-                                    modifier = Modifier.height(30.dp),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                                        selectedLabelColor = LXPrimaryGreen,
-                                        containerColor = LXSurfaceElevated,
-                                        labelColor = LXTextSecondary
-                                    )
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // 18+ Subtle Checkbox Toggle
-                    SubtleAdultFilterToggle(
-                        adultMode = adultMode,
-                        onModeChange = { adultMode = it }
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Button(
-                        onClick = {
-                            onApplyMovie(selectedMovieYear, selectedMovieSort, adultMode)
-                            onDismiss()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(42.dp)
-                    ) {
-                        Text(
-                            text = if (adultMode == AdultMode.ONLY) {
-                                "Discover $selectedMovieYear Movies (18+ Only)"
-                            } else {
-                                "Discover $selectedMovieYear Movies"
-                            },
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
+                        // 18+ Subtle Checkbox Toggle
+                        SubtleAdultFilterToggle(
+                            adultMode = adultMode,
+                            onModeChange = { adultMode = it }
                         )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = {
+                                val filter = DiscoveryFilter.Movie(
+                                    mode = selectedMovieMode!!,
+                                    year = if (selectedMovieMode == TmdbDiscoveryMode.BY_YEAR) selectedMovieYear else null,
+                                    sortOrder = selectedMovieSort,
+                                    includedTags = movieIncludedTags,
+                                    excludedTags = movieExcludedTags,
+                                    adultMode = adultMode
+                                )
+                                onApplyMovie(filter)
+                                onDismiss()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                        ) {
+                            val modeText = when (selectedMovieMode!!) {
+                                TmdbDiscoveryMode.BY_YEAR -> "Discover $selectedMovieYear Movies"
+                                TmdbDiscoveryMode.MOST_POPULAR -> "Discover Most Popular Movies"
+                            }
+                            val tagsText = when {
+                                movieIncludedTags.isNotEmpty() || movieExcludedTags.isNotEmpty() -> " (+${movieIncludedTags.size}/-${movieExcludedTags.size})"
+                                else -> ""
+                            }
+                            val adultText = if (adultMode == AdultMode.ONLY) " (18+ Only)" else ""
+                            Text(
+                                text = "$modeText$tagsText$adultText",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
                     }
                 }
 
                 SearchCategory.TV_SHOWS -> {
-                    // TV Air Year Selector (Up to currentYear + 2)
+                    // 1. Mode Selector: Small Icon Pills (By Year / Most Popular)
                     Text(
-                        text = "First Air Year: $selectedTvYear",
+                        text = "Discovery Mode",
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                         color = LXTextSecondary
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    val quickTvYears = listOf(maxYear, maxYear - 1, maxYear - 2, maxYear - 3)
-                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            quickTvYears.forEach { yr ->
-                                val isSelected = selectedTvYear == yr
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { selectedTvYear = yr },
-                                    label = { Text(yr.toString(), fontSize = 11.sp) },
-                                    modifier = Modifier.height(30.dp),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                                        selectedLabelColor = LXPrimaryGreen,
-                                        containerColor = LXSurfaceElevated,
-                                        labelColor = LXTextSecondary
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TmdbDiscoveryMode.entries.forEach { mode ->
+                            val isSelected = selectedTvMode == mode
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { selectedTvMode = mode },
+                                color = if (isSelected) LXPrimaryGreen.copy(alpha = 0.2f) else LXSurfaceElevated,
+                                border = BorderStroke(
+                                    width = if (isSelected) 1.5.dp else 1.dp,
+                                    color = if (isSelected) LXPrimaryGreen else LXBorder
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp, horizontal = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = mode.iconEmoji,
+                                        fontSize = 14.sp
                                     )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = mode.displayName,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            fontSize = 12.sp
+                                        ),
+                                        color = if (isSelected) LXPrimaryGreen else LXTextPrimary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Only load the rest once a mode is clicked!
+                    if (selectedTvMode != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // TV Air Year Selector (only for BY_YEAR)
+                        if (selectedTvMode == TmdbDiscoveryMode.BY_YEAR) {
+                            Text(
+                                text = "First Air Year: $selectedTvYear",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = LXTextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            val quickTvYears = listOf(maxYear, maxYear - 1, maxYear - 2, maxYear - 3)
+                            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    quickTvYears.forEach { yr ->
+                                        val isSelected = selectedTvYear == yr
+                                        FilterChip(
+                                            selected = isSelected,
+                                            onClick = { selectedTvYear = yr },
+                                            label = { Text(yr.toString(), fontSize = 11.sp) },
+                                            modifier = Modifier.height(30.dp),
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                                                selectedLabelColor = LXPrimaryGreen,
+                                                containerColor = LXSurfaceElevated,
+                                                labelColor = LXTextSecondary
+                                            )
+                                        )
+                                    }
+
+                                    // Dropdown for more TV years
+                                    Box {
+                                        FilterChip(
+                                            selected = selectedTvYear !in quickTvYears,
+                                            onClick = { yearDropdownExpanded = true },
+                                            modifier = Modifier.height(30.dp),
+                                            label = {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        if (selectedTvYear !in quickTvYears) selectedTvYear.toString() else "More",
+                                                        fontSize = 11.sp
+                                                    )
+                                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                }
+                                            },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                                                selectedLabelColor = LXPrimaryGreen,
+                                                containerColor = LXSurfaceElevated,
+                                                labelColor = LXTextSecondary
+                                            )
+                                        )
+
+                                        DropdownMenu(
+                                            expanded = yearDropdownExpanded,
+                                            onDismissRequest = { yearDropdownExpanded = false },
+                                            modifier = Modifier.background(LXSurfaceElevated)
+                                        ) {
+                                            (maxYear downTo 1970).forEach { yr ->
+                                                DropdownMenuItem(
+                                                    text = { Text(yr.toString(), color = LXTextPrimary) },
+                                                    onClick = {
+                                                        selectedTvYear = yr
+                                                        yearDropdownExpanded = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+
+                        // TV Sort Order
+                        Text(
+                            text = "Sort By",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                TmdbTvSort.entries.forEach { sort ->
+                                    val isSelected = selectedTvSort == sort
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { selectedTvSort = sort },
+                                        label = { Text(sort.displayName, fontSize = 11.sp) },
+                                        modifier = Modifier.height(30.dp),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                                            selectedLabelColor = LXPrimaryGreen,
+                                            containerColor = LXSurfaceElevated,
+                                            labelColor = LXTextSecondary
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        // Tags Section Button (Sub-menu Navigation)
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(LXSurfaceElevated)
+                                .border(1.dp, LXBorder, RoundedCornerShape(10.dp))
+                                .clickable { showTagsSubMenu = true }
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .background(LXPrimaryGreen.copy(alpha = 0.15f), RoundedCornerShape(6.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Tag,
+                                            contentDescription = null,
+                                            tint = LXPrimaryGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Select & Exclude Tags",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
+                                            color = LXTextPrimary
+                                        )
+                                        Text(
+                                            text = if (tvIncludedTags.isEmpty() && tvExcludedTags.isEmpty())
+                                                "Filter by TV show genres"
+                                            else
+                                                "${tvIncludedTags.size} included (✓) • ${tvExcludedTags.size} excluded (✕)",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                            color = if (tvIncludedTags.isNotEmpty() || tvExcludedTags.isNotEmpty()) LXPrimaryGreen else LXTextSecondary
+                                        )
+                                    }
+                                }
+
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                    contentDescription = "Open Tags Filter",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
 
-                            // Dropdown for more TV years
-                            Box {
-                                FilterChip(
-                                    selected = selectedTvYear !in quickTvYears,
-                                    onClick = { yearDropdownExpanded = true },
-                                    modifier = Modifier.height(30.dp),
-                                    label = {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                if (selectedTvYear !in quickTvYears) selectedTvYear.toString() else "More",
-                                                fontSize = 11.sp
-                                            )
-                                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
-                                        }
-                                    },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                                        selectedLabelColor = LXPrimaryGreen,
-                                        containerColor = LXSurfaceElevated,
-                                        labelColor = LXTextSecondary
-                                    )
-                                )
-
-                                DropdownMenu(
-                                    expanded = yearDropdownExpanded,
-                                    onDismissRequest = { yearDropdownExpanded = false },
-                                    modifier = Modifier.background(LXSurfaceElevated)
+                            // Active Tag Chips inside Main Sheet with 1-tap delete
+                            if (tvIncludedTags.isNotEmpty() || tvExcludedTags.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    (maxYear downTo 1970).forEach { yr ->
-                                        DropdownMenuItem(
-                                            text = { Text(yr.toString(), color = LXTextPrimary) },
-                                            onClick = {
-                                                selectedTvYear = yr
-                                                yearDropdownExpanded = false
+                                    tvIncludedTags.forEach { tag ->
+                                        SearchTagBadge(
+                                            label = "+$tag",
+                                            isIncluded = true,
+                                            onRemove = {
+                                                tvIncludedTags = tvIncludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+                                            }
+                                        )
+                                    }
+                                    tvExcludedTags.forEach { tag ->
+                                        SearchTagBadge(
+                                            label = "-$tag",
+                                            isIncluded = false,
+                                            onRemove = {
+                                                tvExcludedTags = tvExcludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
                                             }
                                         )
                                     }
                                 }
                             }
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                    // TV Sort Order
-                    Text(
-                        text = "Sort By",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                        color = LXTextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            TmdbTvSort.entries.forEach { sort ->
-                                val isSelected = selectedTvSort == sort
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { selectedTvSort = sort },
-                                    label = { Text(sort.displayName, fontSize = 11.sp) },
-                                    modifier = Modifier.height(30.dp),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                                        selectedLabelColor = LXPrimaryGreen,
-                                        containerColor = LXSurfaceElevated,
-                                        labelColor = LXTextSecondary
-                                    )
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // 18+ Subtle Checkbox Toggle
-                    SubtleAdultFilterToggle(
-                        adultMode = adultMode,
-                        onModeChange = { adultMode = it }
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Button(
-                        onClick = {
-                            onApplyTv(selectedTvYear, selectedTvSort, adultMode)
-                            onDismiss()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(42.dp)
-                    ) {
-                        Text(
-                            text = if (adultMode == AdultMode.ONLY) {
-                                "Discover $selectedTvYear TV Shows (18+ Only)"
-                            } else {
-                                "Discover $selectedTvYear TV Shows"
-                            },
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
+                        // 18+ Subtle Checkbox Toggle
+                        SubtleAdultFilterToggle(
+                            adultMode = adultMode,
+                            onModeChange = { adultMode = it }
                         )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = {
+                                val filter = DiscoveryFilter.Tv(
+                                    mode = selectedTvMode!!,
+                                    year = if (selectedTvMode == TmdbDiscoveryMode.BY_YEAR) selectedTvYear else null,
+                                    sortOrder = selectedTvSort,
+                                    includedTags = tvIncludedTags,
+                                    excludedTags = tvExcludedTags,
+                                    adultMode = adultMode
+                                )
+                                onApplyTv(filter)
+                                onDismiss()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                        ) {
+                            val modeText = when (selectedTvMode!!) {
+                                TmdbDiscoveryMode.BY_YEAR -> "Discover $selectedTvYear TV Shows"
+                                TmdbDiscoveryMode.MOST_POPULAR -> "Discover Most Popular TV Shows"
+                            }
+                            val tagsText = when {
+                                tvIncludedTags.isNotEmpty() || tvExcludedTags.isNotEmpty() -> " (+${tvIncludedTags.size}/-${tvExcludedTags.size})"
+                                else -> ""
+                            }
+                            val adultText = if (adultMode == AdultMode.ONLY) " (18+ Only)" else ""
+                            Text(
+                                text = "$modeText$tagsText$adultText",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
                     }
                 }
 

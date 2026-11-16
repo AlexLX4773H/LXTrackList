@@ -62,6 +62,11 @@ enum class AnimeSortOrder(val apiValue: String, val displayName: String) {
     TITLE("TITLE_ROMAJI", "Title (A–Z)")
 }
 
+enum class TmdbDiscoveryMode(val displayName: String, val iconEmoji: String) {
+    BY_YEAR("By Year", "🗓️"),
+    MOST_POPULAR("Most Popular", "🔥")
+}
+
 enum class TmdbMovieSort(val apiValue: String, val displayName: String) {
     POPULARITY("popularity.desc", "Most Popular"),
     RATING("vote_average.desc", "Highest Rated"),
@@ -154,17 +159,36 @@ sealed class DiscoveryFilter {
     }
 
     data class Movie(
-        val year: Int,
-        val sortOrder: TmdbMovieSort,
+        val mode: TmdbDiscoveryMode = TmdbDiscoveryMode.BY_YEAR,
+        val year: Int? = AnimeSeason.currentYear(),
+        val sortOrder: TmdbMovieSort = TmdbMovieSort.POPULARITY,
+        val includedTags: Set<String> = emptySet(),
+        val excludedTags: Set<String> = emptySet(),
         override val adultMode: AdultMode = AdultMode.OFF
     ) : DiscoveryFilter() {
         constructor(
             year: Int,
             sortOrder: TmdbMovieSort,
-            includeAdult: Boolean
+            adultMode: AdultMode = AdultMode.OFF
         ) : this(
+            mode = TmdbDiscoveryMode.BY_YEAR,
             year = year,
             sortOrder = sortOrder,
+            includedTags = emptySet(),
+            excludedTags = emptySet(),
+            adultMode = adultMode
+        )
+
+        constructor(
+            year: Int,
+            sortOrder: TmdbMovieSort,
+            includeAdult: Boolean
+        ) : this(
+            mode = TmdbDiscoveryMode.BY_YEAR,
+            year = year,
+            sortOrder = sortOrder,
+            includedTags = emptySet(),
+            excludedTags = emptySet(),
             adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF
         )
 
@@ -175,22 +199,52 @@ sealed class DiscoveryFilter {
                     AdultMode.INCLUDE -> " • 18+"
                     AdultMode.ONLY -> " • 18+ Only"
                 }
-                return "🎬 Movies $year • ${sortOrder.displayName}$adultTag"
+                val base = when (mode) {
+                    TmdbDiscoveryMode.BY_YEAR -> "🎬 Movies ${year ?: ""}".trim()
+                    TmdbDiscoveryMode.MOST_POPULAR -> "🔥 Most Popular Movies"
+                }
+                val sortText = " • ${sortOrder.displayName}"
+                val tagSummary = when {
+                    includedTags.isNotEmpty() && excludedTags.isNotEmpty() -> " • +${includedTags.size} / -${excludedTags.size} tags"
+                    includedTags.isNotEmpty() -> " • +${includedTags.size} tags"
+                    excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
+                    else -> ""
+                }
+                return "$base$sortText$tagSummary$adultTag"
             }
     }
 
     data class Tv(
-        val year: Int,
-        val sortOrder: TmdbTvSort,
+        val mode: TmdbDiscoveryMode = TmdbDiscoveryMode.BY_YEAR,
+        val year: Int? = AnimeSeason.currentYear(),
+        val sortOrder: TmdbTvSort = TmdbTvSort.POPULARITY,
+        val includedTags: Set<String> = emptySet(),
+        val excludedTags: Set<String> = emptySet(),
         override val adultMode: AdultMode = AdultMode.OFF
     ) : DiscoveryFilter() {
         constructor(
             year: Int,
             sortOrder: TmdbTvSort,
-            includeAdult: Boolean
+            adultMode: AdultMode = AdultMode.OFF
         ) : this(
+            mode = TmdbDiscoveryMode.BY_YEAR,
             year = year,
             sortOrder = sortOrder,
+            includedTags = emptySet(),
+            excludedTags = emptySet(),
+            adultMode = adultMode
+        )
+
+        constructor(
+            year: Int,
+            sortOrder: TmdbTvSort,
+            includeAdult: Boolean
+        ) : this(
+            mode = TmdbDiscoveryMode.BY_YEAR,
+            year = year,
+            sortOrder = sortOrder,
+            includedTags = emptySet(),
+            excludedTags = emptySet(),
             adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF
         )
 
@@ -201,7 +255,18 @@ sealed class DiscoveryFilter {
                     AdultMode.INCLUDE -> " • 18+"
                     AdultMode.ONLY -> " • 18+ Only"
                 }
-                return "📺 TV Shows $year • ${sortOrder.displayName}$adultTag"
+                val base = when (mode) {
+                    TmdbDiscoveryMode.BY_YEAR -> "📺 TV Shows ${year ?: ""}".trim()
+                    TmdbDiscoveryMode.MOST_POPULAR -> "🔥 Most Popular TV"
+                }
+                val sortText = " • ${sortOrder.displayName}"
+                val tagSummary = when {
+                    includedTags.isNotEmpty() && excludedTags.isNotEmpty() -> " • +${includedTags.size} / -${excludedTags.size} tags"
+                    includedTags.isNotEmpty() -> " • +${includedTags.size} tags"
+                    excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
+                    else -> ""
+                }
+                return "$base$sortText$tagSummary$adultTag"
             }
     }
 }

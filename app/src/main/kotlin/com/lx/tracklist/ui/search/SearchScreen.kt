@@ -162,11 +162,11 @@ fun SearchScreen(
             onApplyAnime = { animeFilter ->
                 viewModel.applyAnimeDiscoveryFilter(animeFilter)
             },
-            onApplyMovie = { year, sort, adultMode ->
-                viewModel.applyMovieDiscoveryFilter(year, sort, adultMode, context)
+            onApplyMovie = { movieFilter ->
+                viewModel.applyMovieDiscoveryFilter(movieFilter, context)
             },
-            onApplyTv = { year, sort, adultMode ->
-                viewModel.applyTvDiscoveryFilter(year, sort, adultMode, context)
+            onApplyTv = { tvFilter ->
+                viewModel.applyTvDiscoveryFilter(tvFilter, context)
             },
             onResetFilter = {
                 viewModel.clearDiscoveryFilter()
@@ -589,8 +589,14 @@ fun SearchScreen(
                                         AnimeDiscoveryMode.SEASONAL -> Icons.Default.Explore
                                         AnimeDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
                                     }
-                                    is DiscoveryFilter.Movie -> Icons.Default.Movie
-                                    is DiscoveryFilter.Tv -> Icons.Default.Tv
+                                    is DiscoveryFilter.Movie -> when (filter.mode) {
+                                        TmdbDiscoveryMode.BY_YEAR -> Icons.Default.Movie
+                                        TmdbDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
+                                    }
+                                    is DiscoveryFilter.Tv -> when (filter.mode) {
+                                        TmdbDiscoveryMode.BY_YEAR -> Icons.Default.Tv
+                                        TmdbDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
+                                    }
                                 },
                                 contentDescription = null,
                                 tint = LXPrimaryGreen,
@@ -618,27 +624,37 @@ fun SearchScreen(
                         }
                     }
 
-                    if (filter is DiscoveryFilter.Anime && (filter.includedTags.isNotEmpty() || filter.excludedTags.isNotEmpty())) {
+                    val incTags = when (filter) {
+                        is DiscoveryFilter.Anime -> filter.includedTags
+                        is DiscoveryFilter.Movie -> filter.includedTags
+                        is DiscoveryFilter.Tv -> filter.includedTags
+                    }
+                    val excTags = when (filter) {
+                        is DiscoveryFilter.Anime -> filter.excludedTags
+                        is DiscoveryFilter.Movie -> filter.excludedTags
+                        is DiscoveryFilter.Tv -> filter.excludedTags
+                    }
+                    if (incTags.isNotEmpty() || excTags.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(6.dp))
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            filter.includedTags.forEach { tag ->
+                            incTags.forEach { tag ->
                                 item(key = "inc_$tag") {
                                     SearchFilterChipPill(
                                         label = "+$tag",
                                         isIncluded = true,
-                                        onRemove = { viewModel.removeAnimeTagFilter(tag) }
+                                        onRemove = { viewModel.removeTagFilter(tag, context) }
                                     )
                                 }
                             }
-                            filter.excludedTags.forEach { tag ->
+                            excTags.forEach { tag ->
                                 item(key = "exc_$tag") {
                                     SearchFilterChipPill(
                                         label = "-$tag",
                                         isIncluded = false,
-                                        onRemove = { viewModel.removeAnimeTagFilter(tag) }
+                                        onRemove = { viewModel.removeTagFilter(tag, context) }
                                     )
                                 }
                             }

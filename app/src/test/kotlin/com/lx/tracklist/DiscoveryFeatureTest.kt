@@ -7,7 +7,9 @@ import com.lx.tracklist.ui.search.AnimeSortOrder
 import com.lx.tracklist.ui.search.AnimeTagCategory
 import com.lx.tracklist.ui.search.AnimeTagRegistry
 import com.lx.tracklist.ui.search.DiscoveryFilter
+import com.lx.tracklist.ui.search.TmdbDiscoveryMode
 import com.lx.tracklist.ui.search.TmdbMovieSort
+import com.lx.tracklist.ui.search.TmdbTagRegistry
 import com.lx.tracklist.ui.search.TmdbTvSort
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -165,5 +167,63 @@ class DiscoveryFeatureTest {
         assertEquals("popularity.desc", TmdbTvSort.POPULARITY.apiValue)
         assertEquals("vote_average.desc", TmdbTvSort.RATING.apiValue)
         assertEquals("first_air_date.desc", TmdbTvSort.RELEASE_DATE.apiValue)
+    }
+
+    @Test
+    fun testTmdbDiscoveryModesAndRegistry() {
+        assertEquals("By Year", TmdbDiscoveryMode.BY_YEAR.displayName)
+        assertEquals("Most Popular", TmdbDiscoveryMode.MOST_POPULAR.displayName)
+        assertEquals("🗓️", TmdbDiscoveryMode.BY_YEAR.iconEmoji)
+        assertEquals("🔥", TmdbDiscoveryMode.MOST_POPULAR.iconEmoji)
+
+        // Movie genres
+        assertEquals(28, TmdbTagRegistry.getMovieGenreId("Action"))
+        assertEquals(35, TmdbTagRegistry.getMovieGenreId("Comedy"))
+        assertEquals(878, TmdbTagRegistry.getMovieGenreId("Science Fiction"))
+        assertEquals(27, TmdbTagRegistry.getMovieGenreId("Horror"))
+
+        // TV genres
+        assertEquals(10759, TmdbTagRegistry.getTvGenreId("Action & Adventure"))
+        assertEquals(16, TmdbTagRegistry.getTvGenreId("Animation"))
+        assertEquals(10765, TmdbTagRegistry.getTvGenreId("Sci-Fi & Fantasy"))
+
+        // Alphabetical A to Z ordering
+        val movieGenreNames = TmdbTagRegistry.movieGenres.map { it.name.lowercase() }
+        assertEquals(movieGenreNames.sorted(), movieGenreNames)
+
+        val tvGenreNames = TmdbTagRegistry.tvGenres.map { it.name.lowercase() }
+        assertEquals(tvGenreNames.sorted(), tvGenreNames)
+
+        // Filter search
+        val filtered = TmdbTagRegistry.filterMovieGenres("sci")
+        assertTrue(filtered.any { it.name == "Science Fiction" })
+    }
+
+    @Test
+    fun testTmdbDiscoveryFilterLabels() {
+        // Most Popular Movie
+        val popMovie = DiscoveryFilter.Movie(
+            mode = TmdbDiscoveryMode.MOST_POPULAR,
+            sortOrder = TmdbMovieSort.POPULARITY
+        )
+        assertEquals("🔥 Most Popular Movies • Most Popular", popMovie.label)
+
+        // By Year Movie with tags (+Action, -Horror)
+        val tagMovie = DiscoveryFilter.Movie(
+            mode = TmdbDiscoveryMode.BY_YEAR,
+            year = 2026,
+            sortOrder = TmdbMovieSort.POPULARITY,
+            includedTags = setOf("Action"),
+            excludedTags = setOf("Horror")
+        )
+        assertEquals("🎬 Movies 2026 • Most Popular • +1 / -1 tags", tagMovie.label)
+
+        // Most Popular TV with tags (+Drama)
+        val popTv = DiscoveryFilter.Tv(
+            mode = TmdbDiscoveryMode.MOST_POPULAR,
+            sortOrder = TmdbTvSort.POPULARITY,
+            includedTags = setOf("Drama")
+        )
+        assertEquals("🔥 Most Popular TV • Most Popular • +1 tags", popTv.label)
     }
 }

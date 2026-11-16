@@ -197,8 +197,8 @@ class SearchViewModel(
     private fun reloadDiscoveryFilter(filter: DiscoveryFilter, context: Context? = null) {
         when (filter) {
             is DiscoveryFilter.Anime -> applyAnimeDiscoveryFilter(filter)
-            is DiscoveryFilter.Movie -> applyMovieDiscoveryFilter(filter.year, filter.sortOrder, filter.adultMode, context)
-            is DiscoveryFilter.Tv -> applyTvDiscoveryFilter(filter.year, filter.sortOrder, filter.adultMode, context)
+            is DiscoveryFilter.Movie -> applyMovieDiscoveryFilter(filter, context)
+            is DiscoveryFilter.Tv -> applyTvDiscoveryFilter(filter, context)
         }
     }
 
@@ -291,15 +291,48 @@ class SearchViewModel(
         )
     }
 
+    fun removeMovieTagFilter(tag: String, context: Context? = null) {
+        val currentFilter = _uiState.value.activeDiscoveryFilter as? DiscoveryFilter.Movie ?: return
+        val newIncluded = currentFilter.includedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        val newExcluded = currentFilter.excludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        applyMovieDiscoveryFilter(
+            currentFilter.copy(
+                includedTags = newIncluded,
+                excludedTags = newExcluded
+            ),
+            context = context
+        )
+    }
+
+    fun removeTvTagFilter(tag: String, context: Context? = null) {
+        val currentFilter = _uiState.value.activeDiscoveryFilter as? DiscoveryFilter.Tv ?: return
+        val newIncluded = currentFilter.includedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        val newExcluded = currentFilter.excludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        applyTvDiscoveryFilter(
+            currentFilter.copy(
+                includedTags = newIncluded,
+                excludedTags = newExcluded
+            ),
+            context = context
+        )
+    }
+
+    fun removeTagFilter(tag: String, context: Context? = null) {
+        when (_uiState.value.activeDiscoveryFilter) {
+            is DiscoveryFilter.Anime -> removeAnimeTagFilter(tag)
+            is DiscoveryFilter.Movie -> removeMovieTagFilter(tag, context)
+            is DiscoveryFilter.Tv -> removeTvTagFilter(tag, context)
+            null -> {}
+        }
+    }
+
     fun applyMovieDiscoveryFilter(
-        year: Int,
-        sort: TmdbMovieSort,
-        adultMode: AdultMode = AdultMode.OFF,
+        filter: DiscoveryFilter.Movie,
         context: Context? = null
     ) {
         searchJob?.cancel()
-        val filter = DiscoveryFilter.Movie(year, sort, adultMode)
-        activeSearchKey = "DISCOVER:MOVIE:$year:$sort:$adultMode"
+        val yearPart = filter.year?.toString() ?: "ALL"
+        activeSearchKey = "DISCOVER:MOVIE:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.MOVIES,
@@ -316,10 +349,12 @@ class SearchViewModel(
             try {
                 val list = withContext(Dispatchers.IO) {
                     TmdbApiClient.discoverMovies(
-                        year = year,
-                        sortBy = sort.apiValue,
+                        year = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.year else null,
+                        sortBy = filter.sortOrder.apiValue,
                         page = 1,
-                        adultMode = adultMode,
+                        adultMode = filter.adultMode,
+                        includedTags = filter.includedTags,
+                        excludedTags = filter.excludedTags,
                         context = context
                     ).getOrThrow()
                 }
@@ -343,15 +378,30 @@ class SearchViewModel(
         }
     }
 
-    fun applyTvDiscoveryFilter(
+    fun applyMovieDiscoveryFilter(
         year: Int,
-        sort: TmdbTvSort,
+        sort: TmdbMovieSort,
         adultMode: AdultMode = AdultMode.OFF,
         context: Context? = null
     ) {
+        applyMovieDiscoveryFilter(
+            DiscoveryFilter.Movie(
+                mode = TmdbDiscoveryMode.BY_YEAR,
+                year = year,
+                sortOrder = sort,
+                adultMode = adultMode
+            ),
+            context = context
+        )
+    }
+
+    fun applyTvDiscoveryFilter(
+        filter: DiscoveryFilter.Tv,
+        context: Context? = null
+    ) {
         searchJob?.cancel()
-        val filter = DiscoveryFilter.Tv(year, sort, adultMode)
-        activeSearchKey = "DISCOVER:TV:$year:$sort:$adultMode"
+        val yearPart = filter.year?.toString() ?: "ALL"
+        activeSearchKey = "DISCOVER:TV:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.TV_SHOWS,
@@ -368,10 +418,12 @@ class SearchViewModel(
             try {
                 val list = withContext(Dispatchers.IO) {
                     TmdbApiClient.discoverTvShows(
-                        year = year,
-                        sortBy = sort.apiValue,
+                        year = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.year else null,
+                        sortBy = filter.sortOrder.apiValue,
                         page = 1,
-                        adultMode = adultMode,
+                        adultMode = filter.adultMode,
+                        includedTags = filter.includedTags,
+                        excludedTags = filter.excludedTags,
                         context = context
                     ).getOrThrow()
                 }
@@ -393,6 +445,23 @@ class SearchViewModel(
                 _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to discover TV shows") }
             }
         }
+    }
+
+    fun applyTvDiscoveryFilter(
+        year: Int,
+        sort: TmdbTvSort,
+        adultMode: AdultMode = AdultMode.OFF,
+        context: Context? = null
+    ) {
+        applyTvDiscoveryFilter(
+            DiscoveryFilter.Tv(
+                mode = TmdbDiscoveryMode.BY_YEAR,
+                year = year,
+                sortOrder = sort,
+                adultMode = adultMode
+            ),
+            context = context
+        )
     }
 
     fun loadMore(context: Context? = null) {
@@ -428,17 +497,19 @@ class SearchViewModel(
                             val list = if (query.length >= 2) {
                                 TmdbApiClient.searchMoviesMultiple(
                                     title = query,
-                                    year = filter.year,
+                                    year = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.year else null,
                                     adultMode = filter.adultMode,
                                     page = nextPage,
                                     context = context
                                 ).getOrThrow()
                             } else {
                                 TmdbApiClient.discoverMovies(
-                                    year = filter.year,
+                                    year = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.year else null,
                                     sortBy = filter.sortOrder.apiValue,
                                     page = nextPage,
                                     adultMode = filter.adultMode,
+                                    includedTags = filter.includedTags,
+                                    excludedTags = filter.excludedTags,
                                     context = context
                                 ).getOrThrow()
                             }
@@ -448,17 +519,19 @@ class SearchViewModel(
                             val list = if (query.length >= 2) {
                                 TmdbApiClient.searchTvMultiple(
                                     title = query,
-                                    year = filter.year,
+                                    year = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.year else null,
                                     adultMode = filter.adultMode,
                                     page = nextPage,
                                     context = context
                                 ).getOrThrow()
                             } else {
                                 TmdbApiClient.discoverTvShows(
-                                    year = filter.year,
+                                    year = if (filter.mode == TmdbDiscoveryMode.BY_YEAR) filter.year else null,
                                     sortBy = filter.sortOrder.apiValue,
                                     page = nextPage,
                                     adultMode = filter.adultMode,
+                                    includedTags = filter.includedTags,
+                                    excludedTags = filter.excludedTags,
                                     context = context
                                 ).getOrThrow()
                             }
@@ -597,7 +670,7 @@ class SearchViewModel(
                         is DiscoveryFilter.Movie -> {
                             val list = TmdbApiClient.searchMoviesMultiple(
                                 title = query,
-                                year = activeFilter.year,
+                                year = if (activeFilter.mode == TmdbDiscoveryMode.BY_YEAR) activeFilter.year else null,
                                 adultMode = activeFilter.adultMode,
                                 page = 1,
                                 context = context
@@ -607,7 +680,7 @@ class SearchViewModel(
                         is DiscoveryFilter.Tv -> {
                             val list = TmdbApiClient.searchTvMultiple(
                                 title = query,
-                                year = activeFilter.year,
+                                year = if (activeFilter.mode == TmdbDiscoveryMode.BY_YEAR) activeFilter.year else null,
                                 adultMode = activeFilter.adultMode,
                                 page = 1,
                                 context = context
