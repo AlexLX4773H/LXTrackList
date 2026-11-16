@@ -994,7 +994,7 @@ class ImporterExporterTest {
             externalScore = 7.18f,
             externalScoreSource = "MAL"
         )
-        assertEquals("7.2 (MAL)", entryWithScore.formatExternalScore())
+        assertEquals("7.18 (MAL)", entryWithScore.formatExternalScore())
         assertEquals(9, entryWithScore.score)
     }
 

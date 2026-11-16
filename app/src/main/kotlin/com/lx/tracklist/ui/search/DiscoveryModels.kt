@@ -44,6 +44,17 @@ enum class AnimeSeason(
     }
 }
 
+enum class AnimeDiscoveryMode(val displayName: String) {
+    SEASONAL("Seasonal"),
+    MOST_POPULAR("Most Popular");
+
+    val iconEmoji: String
+        get() = when (this) {
+            SEASONAL -> AnimeSeason.current().emoji
+            MOST_POPULAR -> "🔥"
+        }
+}
+
 enum class AnimeSortOrder(val apiValue: String, val displayName: String) {
     POPULARITY("POPULARITY_DESC", "Most Popular"),
     SCORE("SCORE_DESC", "Highest Rated"),
@@ -82,20 +93,41 @@ sealed class DiscoveryFilter {
     val includeAdult: Boolean get() = adultMode != AdultMode.OFF
 
     data class Anime(
-        val season: AnimeSeason,
-        val year: Int,
-        val sortOrder: AnimeSortOrder,
+        val mode: AnimeDiscoveryMode = AnimeDiscoveryMode.SEASONAL,
+        val season: AnimeSeason = AnimeSeason.current(),
+        val year: Int = AnimeSeason.currentYear(),
+        val sortOrder: AnimeSortOrder = AnimeSortOrder.POPULARITY,
+        val includedTags: Set<String> = emptySet(),
+        val excludedTags: Set<String> = emptySet(),
         override val adultMode: AdultMode = AdultMode.OFF
     ) : DiscoveryFilter() {
         constructor(
             season: AnimeSeason,
             year: Int,
             sortOrder: AnimeSortOrder,
-            includeAdult: Boolean
+            adultMode: AdultMode = AdultMode.OFF
         ) : this(
+            mode = AnimeDiscoveryMode.SEASONAL,
             season = season,
             year = year,
             sortOrder = sortOrder,
+            includedTags = emptySet(),
+            excludedTags = emptySet(),
+            adultMode = adultMode
+        )
+
+        constructor(
+            season: AnimeSeason,
+            year: Int,
+            sortOrder: AnimeSortOrder,
+            includeAdult: Boolean
+        ) : this(
+            mode = AnimeDiscoveryMode.SEASONAL,
+            season = season,
+            year = year,
+            sortOrder = sortOrder,
+            includedTags = emptySet(),
+            excludedTags = emptySet(),
             adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF
         )
 
@@ -106,7 +138,18 @@ sealed class DiscoveryFilter {
                     AdultMode.INCLUDE -> " • 18+"
                     AdultMode.ONLY -> " • 18+ Only"
                 }
-                return "${season.emoji} ${season.displayName} $year • ${sortOrder.displayName}$adultTag"
+                val base = when (mode) {
+                    AnimeDiscoveryMode.SEASONAL -> "${season.emoji} ${season.displayName} $year"
+                    AnimeDiscoveryMode.MOST_POPULAR -> "🔥 Most Popular"
+                }
+                val sortText = " • ${sortOrder.displayName}"
+                val tagSummary = when {
+                    includedTags.isNotEmpty() && excludedTags.isNotEmpty() -> " • +${includedTags.size} / -${excludedTags.size} tags"
+                    includedTags.isNotEmpty() -> " • +${includedTags.size} tags"
+                    excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
+                    else -> ""
+                }
+                return "$base$sortText$tagSummary$adultTag"
             }
     }
 

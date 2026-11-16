@@ -196,21 +196,15 @@ class SearchViewModel(
 
     private fun reloadDiscoveryFilter(filter: DiscoveryFilter, context: Context? = null) {
         when (filter) {
-            is DiscoveryFilter.Anime -> applyAnimeSeasonalFilter(filter.season, filter.year, filter.sortOrder, filter.adultMode)
+            is DiscoveryFilter.Anime -> applyAnimeDiscoveryFilter(filter)
             is DiscoveryFilter.Movie -> applyMovieDiscoveryFilter(filter.year, filter.sortOrder, filter.adultMode, context)
             is DiscoveryFilter.Tv -> applyTvDiscoveryFilter(filter.year, filter.sortOrder, filter.adultMode, context)
         }
     }
 
-    fun applyAnimeSeasonalFilter(
-        season: AnimeSeason,
-        year: Int,
-        sort: AnimeSortOrder,
-        adultMode: AdultMode = AdultMode.OFF
-    ) {
+    fun applyAnimeDiscoveryFilter(filter: DiscoveryFilter.Anime) {
         searchJob?.cancel()
-        val filter = DiscoveryFilter.Anime(season, year, sort, adultMode)
-        activeSearchKey = "DISCOVER:ANIME:$season:$year:$sort:$adultMode"
+        activeSearchKey = "DISCOVER:ANIME:${filter.mode}:${filter.season}:${filter.year}:${filter.sortOrder}:${filter.includedTags}:${filter.excludedTags}:${filter.adultMode}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.ANIME,
@@ -226,12 +220,15 @@ class SearchViewModel(
         searchJob = viewModelScope.launch {
             try {
                 val detailsList = withContext(Dispatchers.IO) {
-                    JikanApiClient.fetchSeasonalAnime(
-                        year = year,
-                        season = season.apiValue,
-                        sort = sort.apiValue,
+                    JikanApiClient.fetchAnimeDiscovery(
+                        mode = filter.mode,
+                        year = if (filter.mode == AnimeDiscoveryMode.SEASONAL) filter.year else null,
+                        season = if (filter.mode == AnimeDiscoveryMode.SEASONAL) filter.season.apiValue else null,
+                        sort = filter.sortOrder.apiValue,
                         search = null,
-                        adultMode = adultMode,
+                        includedTags = filter.includedTags,
+                        excludedTags = filter.excludedTags,
+                        adultMode = filter.adultMode,
                         page = 1
                     ).getOrThrow()
                 }
@@ -249,10 +246,49 @@ class SearchViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.e("SearchViewModel", "Error fetching seasonal anime", e)
-                _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to load seasonal anime") }
+                Log.e("SearchViewModel", "Error discovering anime", e)
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.message ?: "Failed to discover anime") }
             }
         }
+    }
+
+    fun applyAnimeSeasonalFilter(
+        season: AnimeSeason,
+        year: Int,
+        sort: AnimeSortOrder,
+        adultMode: AdultMode = AdultMode.OFF
+    ) {
+        applyAnimeDiscoveryFilter(
+            DiscoveryFilter.Anime(
+                mode = AnimeDiscoveryMode.SEASONAL,
+                season = season,
+                year = year,
+                sortOrder = sort,
+                adultMode = adultMode
+            )
+        )
+    }
+
+    fun removeAnimeTagFilter(tag: String) {
+        val currentFilter = _uiState.value.activeDiscoveryFilter as? DiscoveryFilter.Anime ?: return
+        val newIncluded = currentFilter.includedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        val newExcluded = currentFilter.excludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        applyAnimeDiscoveryFilter(
+            currentFilter.copy(
+                includedTags = newIncluded,
+                excludedTags = newExcluded
+            )
+        )
+    }
+
+    fun clearAnimeTagFilters() {
+        val currentFilter = _uiState.value.activeDiscoveryFilter as? DiscoveryFilter.Anime ?: return
+        applyAnimeDiscoveryFilter(
+            currentFilter.copy(
+                includedTags = emptySet(),
+                excludedTags = emptySet()
+            )
+        )
     }
 
     fun applyMovieDiscoveryFilter(
@@ -373,11 +409,14 @@ class SearchViewModel(
                     val query = currentState.query.trim()
                     when {
                         filter is DiscoveryFilter.Anime -> {
-                            val detailsList = JikanApiClient.fetchSeasonalAnime(
-                                year = filter.year,
-                                season = filter.season.apiValue,
+                            val detailsList = JikanApiClient.fetchAnimeDiscovery(
+                                mode = filter.mode,
+                                year = if (filter.mode == AnimeDiscoveryMode.SEASONAL) filter.year else null,
+                                season = if (filter.mode == AnimeDiscoveryMode.SEASONAL) filter.season.apiValue else null,
                                 sort = filter.sortOrder.apiValue,
                                 search = if (query.length >= 2) query else null,
+                                includedTags = filter.includedTags,
+                                excludedTags = filter.excludedTags,
                                 adultMode = filter.adultMode,
                                 page = nextPage
                             ).getOrThrow()

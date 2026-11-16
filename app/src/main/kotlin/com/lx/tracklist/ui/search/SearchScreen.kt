@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.OpenInNew
@@ -158,8 +159,8 @@ fun SearchScreen(
             category = state.selectedCategory,
             activeFilter = state.activeDiscoveryFilter,
             onDismiss = { showDiscoverySheet = false },
-            onApplyAnime = { season, year, sort, adultMode ->
-                viewModel.applyAnimeSeasonalFilter(season, year, sort, adultMode)
+            onApplyAnime = { animeFilter ->
+                viewModel.applyAnimeDiscoveryFilter(animeFilter)
             },
             onApplyMovie = { year, sort, adultMode ->
                 viewModel.applyMovieDiscoveryFilter(year, sort, adultMode, context)
@@ -563,46 +564,85 @@ fun SearchScreen(
 
             // Active Discovery Filter Banner
             state.activeDiscoveryFilter?.let { filter ->
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 4.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                        .border(1.dp, LXPrimaryGreen.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                            .border(1.dp, LXPrimaryGreen.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Explore,
-                            contentDescription = null,
-                            tint = LXPrimaryGreen,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = filter.label,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = LXPrimaryGreen,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = when (filter) {
+                                    is DiscoveryFilter.Anime -> when (filter.mode) {
+                                        AnimeDiscoveryMode.SEASONAL -> Icons.Default.Explore
+                                        AnimeDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
+                                    }
+                                    is DiscoveryFilter.Movie -> Icons.Default.Movie
+                                    is DiscoveryFilter.Tv -> Icons.Default.Tv
+                                },
+                                contentDescription = null,
+                                tint = LXPrimaryGreen,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = filter.label,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = LXPrimaryGreen,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        IconButton(
+                            onClick = { viewModel.clearDiscoveryFilter() },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Clear Filter",
+                                tint = LXPrimaryGreen,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
-                    IconButton(
-                        onClick = { viewModel.clearDiscoveryFilter() },
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Clear Filter",
-                            tint = LXPrimaryGreen,
-                            modifier = Modifier.size(16.dp)
-                        )
+
+                    if (filter is DiscoveryFilter.Anime && (filter.includedTags.isNotEmpty() || filter.excludedTags.isNotEmpty())) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            filter.includedTags.forEach { tag ->
+                                item(key = "inc_$tag") {
+                                    SearchFilterChipPill(
+                                        label = "+$tag",
+                                        isIncluded = true,
+                                        onRemove = { viewModel.removeAnimeTagFilter(tag) }
+                                    )
+                                }
+                            }
+                            filter.excludedTags.forEach { tag ->
+                                item(key = "exc_$tag") {
+                                    SearchFilterChipPill(
+                                        label = "-$tag",
+                                        isIncluded = false,
+                                        onRemove = { viewModel.removeAnimeTagFilter(tag) }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1620,4 +1660,40 @@ private fun SearchResultDetailSheet(
         }
     }
 }
+}
+
+@Composable
+private fun SearchFilterChipPill(
+    label: String,
+    isIncluded: Boolean,
+    onRemove: () -> Unit
+) {
+    val bgColor = if (isIncluded) LXPrimaryGreen.copy(alpha = 0.15f) else Color(0xFFEF4444).copy(alpha = 0.15f)
+    val borderColor = if (isIncluded) LXPrimaryGreen.copy(alpha = 0.5f) else Color(0xFFEF4444).copy(alpha = 0.5f)
+    val textColor = if (isIncluded) LXPrimaryGreen else Color(0xFFEF4444)
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(bgColor)
+            .border(1.dp, borderColor, RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = textColor
+        )
+        Icon(
+            imageVector = Icons.Default.Close,
+            contentDescription = "Remove $label",
+            tint = textColor,
+            modifier = Modifier
+                .size(12.dp)
+                .clickable(onClick = onRemove)
+        )
+    }
 }

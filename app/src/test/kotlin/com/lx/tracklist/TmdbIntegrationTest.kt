@@ -197,12 +197,14 @@ class TmdbIntegrationTest {
         assertEquals("External Sync Jobs", com.lx.tracklist.ui.settings.SettingsSubMenu.SYNC_JOBS.title)
 
         val categories = com.lx.tracklist.ui.search.SearchCategory.entries
-        assertEquals(5, categories.size)
+        assertEquals(7, categories.size)
         assertEquals("MAL", com.lx.tracklist.ui.search.SearchCategory.ANIME.sourceName)
         assertEquals("MAL / MangaDex", com.lx.tracklist.ui.search.SearchCategory.MANGA.sourceName)
-        assertEquals("MangaDex", com.lx.tracklist.ui.search.SearchCategory.MANHWA.sourceName)
+        assertEquals("MangaDex / AniList", com.lx.tracklist.ui.search.SearchCategory.MANHWA.sourceName)
         assertEquals("TMDB", com.lx.tracklist.ui.search.SearchCategory.MOVIES.sourceName)
         assertEquals("TMDB", com.lx.tracklist.ui.search.SearchCategory.TV_SHOWS.sourceName)
+        assertEquals("Google Books / Open Library", com.lx.tracklist.ui.search.SearchCategory.BOOKS.sourceName)
+        assertEquals("AniList / MAL", com.lx.tracklist.ui.search.SearchCategory.LIGHT_NOVELS.sourceName)
     }
 
     @Test
