@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.4.3-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-0.4.8-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26--36)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Kotlin_2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
   <img src="https://img.shields.io/badge/UI-Jetpack_Compose_&_Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" />
@@ -48,6 +48,19 @@ Discover what's airing, trending, and premiering directly inside the **Search & 
     2. **Include 18+**: Returns standard and adult content together.
     3. **18+ Only**: Strictly isolates and returns **only** 18+ entities (*Hentai* for Anime via AniList `$isAdult: true` / Jikan `Rx`, and verified adult entities for TMDB Movies/TV).
     4. Next click cycles back to **Off**.
+- **Original Language Multi-Select & Discovery**:
+  - Filter discoveries by original language with multi-select `OR` logic across Movies, TV Shows, and Books.
+  - Complete ISO 639-1 / 639-2 code mapping, localized native script names, and flag emojis (e.g., 🇯🇵 Japanese, 🇰🇷 Korean, 🇨🇳 Chinese, 🇪🇸 Spanish, 🇫🇷 French, 🇩🇪 German).
+  - Full support for Indian languages: **Malayalam** (`മലയാളം` • `ml`), **Tamil** (`தமிழ்` • `ta`), **Telugu** (`తెలుగు` • `te`), and **Hindi** (`हिन्दी` • `hi`).
+  - Category-aware placement: placed in **Top for Movies** for films; placed in **Other Languages** for TV Shows and Books; omitted from Anime, Manga, Manhwa, and Light Novels to keep catalogs authentic.
+- **Multilingual Book Discovery (Google Books & Open Library)**:
+  - Deep international book discovery across Google Books and Open Library without English category lockouts.
+  - Uses language-native query resolution, Solr `*:*` wildcard base queries, multi-code terminology matching (`(language:chi OR language:zho)`), and explicit field hydration.
+- **Dynamic Apply Action (`✓`) in Submenus**:
+  - Submenu headers in **Library (Tags Filter)** and **Search & Discover (Tags & Genres, Original Language)** dynamically morph the back arrow (`←`) into a prominent **Apply checkmark** (`✓`) whenever filters are selected.
+- **Rich TV Previews & Title Clipboard Copy**:
+  - TMDB TV show previews in Search automatically fetch authoritative season counts and total episodes (e.g. `3 Seasons • 24 Episodes • 57m/ep`), eliminating "Episodes unknown".
+  - Long-pressing the primary or alternate title in the expanded search bottom sheet copies it straight to the clipboard with instant toast confirmation.
 - **Clean Discovery UI**:
   - Automatically hides external provider attribution notices during discovery browsing to keep the catalog clean and immersive.
 
@@ -191,10 +204,11 @@ app/src/main/kotlin/com/lx/tracklist/
 │   ├── library/           # Searchable library with multi-sort, filters, and batch operations
 │   ├── navigation/        # Compose Navigation graph and destinations
 │   ├── search/            # Unified local & multi-database search & Seasonal Discovery sheet
-│   │   ├── DiscoveryModels.kt      # Discovery filters, seasons, sort enums & 3-state adult modes
-│   │   ├── SearchDiscoverySheet.kt # Modal discovery sheet (Anime 2x2 grid, Movie/TV years, 18+ toggle)
-│   │   ├── SearchScreen.kt         # Search & Discover UI with scoped filters & Load More footer
-│   │   └── SearchViewModel.kt      # Paging, scoped seasonal search, and discovery state
+│   │   ├── DiscoveryModels.kt          # Discovery filters, seasons, sort enums & 3-state adult modes
+│   │   ├── OriginalLanguageRegistry.kt # ISO 639 language registry, multi-select matching & category filtering
+│   │   ├── SearchDiscoverySheet.kt     # Modal discovery sheet (Anime 2x2 grid, Movie/TV years, 18+ toggle, language filter)
+│   │   ├── SearchScreen.kt             # Search & Discover UI with scoped filters, rich TV previews & Load More footer
+│   │   └── SearchViewModel.kt          # Paging, scoped seasonal search, and discovery state
 │   ├── settings/          # Data import/export, profile management, conflict resolution & updater
 │   ├── stats/             # Visualization charts and metrics
 │   └── theme/             # Material 3 colors, typography, and dark theme
