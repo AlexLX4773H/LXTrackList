@@ -26,6 +26,9 @@ object OriginalLanguageRegistry {
         LanguageOption("de", "German", "Deutsch", "🇩🇪", listOf("ger", "deu"), listOf("DE", "AT", "CH")),
         LanguageOption("it", "Italian", "Italiano", "🇮🇹", listOf("ita"), listOf("IT")),
         LanguageOption("hi", "Hindi", "हिन्दी", "🇮🇳", listOf("hin"), listOf("IN")),
+        LanguageOption("ml", "Malayalam", "മലയാളം", "🇮🇳", listOf("mal"), listOf("IN")),
+        LanguageOption("ta", "Tamil", "தமிழ்", "🇮🇳", listOf("tam"), listOf("IN", "LK", "SG")),
+        LanguageOption("te", "Telugu", "తెలుగు", "🇮🇳", listOf("tel"), listOf("IN")),
         LanguageOption("ru", "Russian", "Русский", "🇷🇺", listOf("rus"), listOf("RU")),
         LanguageOption("pt", "Portuguese", "Português", "🇵🇹", listOf("por"), listOf("PT", "BR")),
         LanguageOption("id", "Indonesian", "Bahasa Indonesia", "🇮🇩", listOf("ind"), listOf("ID")),
@@ -54,11 +57,40 @@ object OriginalLanguageRegistry {
             SearchCategory.MANGA -> listOf("ja", "ko", "zh", "en")
             SearchCategory.MANHWA -> listOf("ko", "ja", "zh", "en")
             SearchCategory.LIGHT_NOVELS -> listOf("ja", "zh", "ko", "en")
-            SearchCategory.MOVIES -> listOf("en", "ja", "ko", "th", "zh", "fr", "es", "de", "hi")
+            SearchCategory.MOVIES -> listOf("en", "ja", "ko", "th", "zh", "fr", "es", "de", "hi", "ml", "ta", "te")
             SearchCategory.TV_SHOWS -> listOf("en", "th", "ja", "ko", "zh", "es", "fr", "de", "hi")
             SearchCategory.BOOKS -> listOf("en", "ja", "fr", "es", "de", "zh", "it", "ru")
         }
         return codes.mapNotNull { findByCode(it) }
+    }
+
+    /**
+     * Returns all available languages for the given search category.
+     * Indian languages (Malayalam, Tamil, Telugu) are available for Movies, TV Shows, and Books,
+     * but excluded for Anime, Manga, Manhwa, and Light Novels.
+     */
+    fun getAllLanguagesForCategory(category: SearchCategory): List<LanguageOption> {
+        return when (category) {
+            SearchCategory.ANIME,
+            SearchCategory.MANGA,
+            SearchCategory.MANHWA,
+            SearchCategory.LIGHT_NOVELS -> {
+                ALL_LANGUAGES.filterNot { it.code in setOf("ml", "ta", "te") }
+            }
+            SearchCategory.MOVIES,
+            SearchCategory.TV_SHOWS,
+            SearchCategory.BOOKS -> {
+                ALL_LANGUAGES
+            }
+        }
+    }
+
+    /**
+     * Returns other (non-top) languages available for the given category.
+     */
+    fun getOtherLanguagesForCategory(category: SearchCategory): List<LanguageOption> {
+        val topCodes = getTopLanguagesForCategory(category).map { it.code }.toSet()
+        return getAllLanguagesForCategory(category).filter { it.code !in topCodes }
     }
 
     fun findByCode(code: String?): LanguageOption? {

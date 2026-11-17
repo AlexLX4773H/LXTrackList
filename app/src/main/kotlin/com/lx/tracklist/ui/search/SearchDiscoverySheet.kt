@@ -981,13 +981,13 @@ fun SearchDiscoverySheet(
                 // Filtered Languages
                 val filteredLanguages = remember(languageSearchQuery, category) {
                     val query = languageSearchQuery.trim()
+                    val available = OriginalLanguageRegistry.getAllLanguagesForCategory(category)
                     if (query.isEmpty()) {
                         val top = OriginalLanguageRegistry.getTopLanguagesForCategory(category)
-                        val topCodes = top.map { it.code }.toSet()
-                        val others = OriginalLanguageRegistry.ALL_LANGUAGES.filter { it.code !in topCodes }
+                        val others = OriginalLanguageRegistry.getOtherLanguagesForCategory(category)
                         top to others
                     } else {
-                        val matches = OriginalLanguageRegistry.ALL_LANGUAGES.filter { lang ->
+                        val matches = available.filter { lang ->
                             lang.displayName.contains(query, ignoreCase = true) ||
                             lang.nativeName.contains(query, ignoreCase = true) ||
                             lang.code.equals(query, ignoreCase = true) ||

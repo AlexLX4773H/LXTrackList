@@ -479,6 +479,28 @@ class DiscoveryFeatureTest {
         assertEquals("tha", OriginalLanguageRegistry.toIso6392("th"))
         assertEquals("jpn", OriginalLanguageRegistry.toIso6392("ja"))
         assertEquals("kor", OriginalLanguageRegistry.toIso6392("ko"))
+        assertEquals("mal", OriginalLanguageRegistry.toIso6392("ml"))
+        assertEquals("tam", OriginalLanguageRegistry.toIso6392("ta"))
+        assertEquals("tel", OriginalLanguageRegistry.toIso6392("te"))
+
+        // Indian languages lookup (Malayalam, Tamil, Telugu)
+        val malayalam = OriginalLanguageRegistry.findByCode("ml")
+        assertNotNull(malayalam)
+        assertEquals("Malayalam", malayalam?.displayName)
+        assertEquals("മലയാളം", malayalam?.nativeName)
+        assertEquals("🇮🇳", malayalam?.flagEmoji)
+
+        val tamil = OriginalLanguageRegistry.findByCode("ta")
+        assertNotNull(tamil)
+        assertEquals("Tamil", tamil?.displayName)
+        assertEquals("தமிழ்", tamil?.nativeName)
+        assertEquals("🇮🇳", tamil?.flagEmoji)
+
+        val telugu = OriginalLanguageRegistry.findByCode("te")
+        assertNotNull(telugu)
+        assertEquals("Telugu", telugu?.displayName)
+        assertEquals("తెలుగు", telugu?.nativeName)
+        assertEquals("🇮🇳", telugu?.flagEmoji)
 
         // 6. Category top languages
         val animeLangs = OriginalLanguageRegistry.getTopLanguagesForCategory(SearchCategory.ANIME)
@@ -488,6 +510,45 @@ class DiscoveryFeatureTest {
         val tvLangs = OriginalLanguageRegistry.getTopLanguagesForCategory(SearchCategory.TV_SHOWS)
         assertTrue(tvLangs.any { it.code == "th" })
         assertTrue(tvLangs.any { it.code == "en" })
+        assertFalse(tvLangs.any { it.code in setOf("ml", "ta", "te") })
+
+        val movieLangs = OriginalLanguageRegistry.getTopLanguagesForCategory(SearchCategory.MOVIES)
+        assertTrue(movieLangs.any { it.code == "ml" })
+        assertTrue(movieLangs.any { it.code == "ta" })
+        assertTrue(movieLangs.any { it.code == "te" })
+
+        val bookTopLangs = OriginalLanguageRegistry.getTopLanguagesForCategory(SearchCategory.BOOKS)
+        assertFalse(bookTopLangs.any { it.code in setOf("ml", "ta", "te") })
+
+        // 7. Other languages per category
+        val movieOtherLangs = OriginalLanguageRegistry.getOtherLanguagesForCategory(SearchCategory.MOVIES)
+        assertFalse(movieOtherLangs.any { it.code in setOf("ml", "ta", "te") })
+
+        val tvOtherLangs = OriginalLanguageRegistry.getOtherLanguagesForCategory(SearchCategory.TV_SHOWS)
+        assertTrue(tvOtherLangs.any { it.code == "ml" })
+        assertTrue(tvOtherLangs.any { it.code == "ta" })
+        assertTrue(tvOtherLangs.any { it.code == "te" })
+
+        val bookOtherLangs = OriginalLanguageRegistry.getOtherLanguagesForCategory(SearchCategory.BOOKS)
+        assertTrue(bookOtherLangs.any { it.code == "ml" })
+        assertTrue(bookOtherLangs.any { it.code == "ta" })
+        assertTrue(bookOtherLangs.any { it.code == "te" })
+
+        // 8. Excluded from Anime, Manga, Manhwa, Light Novel
+        listOf(
+            SearchCategory.ANIME,
+            SearchCategory.MANGA,
+            SearchCategory.MANHWA,
+            SearchCategory.LIGHT_NOVELS
+        ).forEach { cat ->
+            val allForCat = OriginalLanguageRegistry.getAllLanguagesForCategory(cat)
+            val topForCat = OriginalLanguageRegistry.getTopLanguagesForCategory(cat)
+            val otherForCat = OriginalLanguageRegistry.getOtherLanguagesForCategory(cat)
+
+            assertFalse(allForCat.any { it.code in setOf("ml", "ta", "te") })
+            assertFalse(topForCat.any { it.code in setOf("ml", "ta", "te") })
+            assertFalse(otherForCat.any { it.code in setOf("ml", "ta", "te") })
+        }
     }
 
     @Test
@@ -540,6 +601,27 @@ class DiscoveryFeatureTest {
             originalLanguage = "en"
         )
         assertEquals("🔥 Most Popular Books • Most Popular • 🇺🇸 English", bookFilter.label)
+
+        val movieMalayalam = DiscoveryFilter.Movie(
+            mode = TmdbDiscoveryMode.MOST_POPULAR,
+            sortOrder = TmdbMovieSort.POPULARITY,
+            originalLanguage = "ml"
+        )
+        assertEquals("🔥 Most Popular Movies • Most Popular • 🇮🇳 Malayalam", movieMalayalam.label)
+
+        val tvTamil = DiscoveryFilter.Tv(
+            mode = TmdbDiscoveryMode.MOST_POPULAR,
+            sortOrder = TmdbTvSort.POPULARITY,
+            originalLanguage = "ta"
+        )
+        assertEquals("🔥 Most Popular TV • Most Popular • 🇮🇳 Tamil", tvTamil.label)
+
+        val bookTelugu = DiscoveryFilter.Book(
+            mode = ContentDiscoveryMode.MOST_POPULAR,
+            sortOrder = BookSortOrder.POPULARITY,
+            originalLanguage = "te"
+        )
+        assertEquals("🔥 Most Popular Books • Most Popular • 🇮🇳 Telugu", bookTelugu.label)
     }
 
     @Test
