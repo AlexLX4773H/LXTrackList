@@ -108,12 +108,22 @@ enum class AdultMode(val displayName: String) {
     }
 }
 
+internal fun formatLanguageLabel(languages: Set<String>): String {
+    return when {
+        languages.isEmpty() -> ""
+        languages.size == 1 -> " • ${OriginalLanguageRegistry.getDisplayWithFlag(languages.first()) ?: languages.first()}"
+        languages.size in 2..3 -> " • ${languages.mapNotNull { OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it }.joinToString(", ")}"
+        else -> " • ${languages.take(2).mapNotNull { OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it }.joinToString(", ")} +${languages.size - 2}"
+    }
+}
+
 sealed class DiscoveryFilter {
     abstract val label: String
     abstract val adultMode: AdultMode
     abstract val includedTags: Set<String>
     abstract val excludedTags: Set<String>
-    abstract val originalLanguage: String?
+    abstract val originalLanguages: Set<String>
+    open val originalLanguage: String? get() = originalLanguages.firstOrNull()
     val includeAdult: Boolean get() = adultMode != AdultMode.OFF
 
     data class Anime(
@@ -124,8 +134,28 @@ sealed class DiscoveryFilter {
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
         override val adultMode: AdultMode = AdultMode.OFF,
-        override val originalLanguage: String? = null
+        override val originalLanguages: Set<String> = emptySet()
     ) : DiscoveryFilter() {
+        constructor(
+            mode: AnimeDiscoveryMode = AnimeDiscoveryMode.SEASONAL,
+            season: AnimeSeason = AnimeSeason.current(),
+            year: Int = AnimeSeason.currentYear(),
+            sortOrder: AnimeSortOrder = AnimeSortOrder.POPULARITY,
+            includedTags: Set<String> = emptySet(),
+            excludedTags: Set<String> = emptySet(),
+            adultMode: AdultMode = AdultMode.OFF,
+            originalLanguage: String?
+        ) : this(
+            mode = mode,
+            season = season,
+            year = year,
+            sortOrder = sortOrder,
+            includedTags = includedTags,
+            excludedTags = excludedTags,
+            adultMode = adultMode,
+            originalLanguages = originalLanguage?.let { setOf(it) } ?: emptySet()
+        )
+
         constructor(
             season: AnimeSeason,
             year: Int,
@@ -139,7 +169,7 @@ sealed class DiscoveryFilter {
             includedTags = emptySet(),
             excludedTags = emptySet(),
             adultMode = adultMode,
-            originalLanguage = null
+            originalLanguages = emptySet()
         )
 
         constructor(
@@ -155,7 +185,7 @@ sealed class DiscoveryFilter {
             includedTags = emptySet(),
             excludedTags = emptySet(),
             adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF,
-            originalLanguage = null
+            originalLanguages = emptySet()
         )
 
         override val label: String
@@ -176,7 +206,7 @@ sealed class DiscoveryFilter {
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
                     else -> ""
                 }
-                val langTag = originalLanguage?.let { " • ${OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it}" } ?: ""
+                val langTag = formatLanguageLabel(originalLanguages)
                 return "$base$sortText$tagSummary$langTag$adultTag"
             }
     }
@@ -190,8 +220,30 @@ sealed class DiscoveryFilter {
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
         override val adultMode: AdultMode = AdultMode.OFF,
-        override val originalLanguage: String? = null
+        override val originalLanguages: Set<String> = emptySet()
     ) : DiscoveryFilter() {
+        constructor(
+            mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
+            year: Int? = AnimeSeason.currentYear(),
+            startYear: Int? = null,
+            endYear: Int? = year,
+            sortOrder: TmdbMovieSort = TmdbMovieSort.POPULARITY,
+            includedTags: Set<String> = emptySet(),
+            excludedTags: Set<String> = emptySet(),
+            adultMode: AdultMode = AdultMode.OFF,
+            originalLanguage: String?
+        ) : this(
+            mode = mode,
+            year = year,
+            startYear = startYear,
+            endYear = endYear,
+            sortOrder = sortOrder,
+            includedTags = includedTags,
+            excludedTags = excludedTags,
+            adultMode = adultMode,
+            originalLanguages = originalLanguage?.let { setOf(it) } ?: emptySet()
+        )
+
         constructor(
             year: Int,
             sortOrder: TmdbMovieSort,
@@ -205,7 +257,7 @@ sealed class DiscoveryFilter {
             includedTags = emptySet(),
             excludedTags = emptySet(),
             adultMode = adultMode,
-            originalLanguage = null
+            originalLanguages = emptySet()
         )
 
         constructor(
@@ -221,7 +273,7 @@ sealed class DiscoveryFilter {
             includedTags = emptySet(),
             excludedTags = emptySet(),
             adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF,
-            originalLanguage = null
+            originalLanguages = emptySet()
         )
 
         val yearText: String
@@ -251,7 +303,7 @@ sealed class DiscoveryFilter {
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
                     else -> ""
                 }
-                val langTag = originalLanguage?.let { " • ${OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it}" } ?: ""
+                val langTag = formatLanguageLabel(originalLanguages)
                 return "$base$sortText$tagSummary$langTag$adultTag"
             }
     }
@@ -265,8 +317,30 @@ sealed class DiscoveryFilter {
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
         override val adultMode: AdultMode = AdultMode.OFF,
-        override val originalLanguage: String? = null
+        override val originalLanguages: Set<String> = emptySet()
     ) : DiscoveryFilter() {
+        constructor(
+            mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
+            year: Int? = AnimeSeason.currentYear(),
+            startYear: Int? = null,
+            endYear: Int? = year,
+            sortOrder: TmdbTvSort = TmdbTvSort.POPULARITY,
+            includedTags: Set<String> = emptySet(),
+            excludedTags: Set<String> = emptySet(),
+            adultMode: AdultMode = AdultMode.OFF,
+            originalLanguage: String?
+        ) : this(
+            mode = mode,
+            year = year,
+            startYear = startYear,
+            endYear = endYear,
+            sortOrder = sortOrder,
+            includedTags = includedTags,
+            excludedTags = excludedTags,
+            adultMode = adultMode,
+            originalLanguages = originalLanguage?.let { setOf(it) } ?: emptySet()
+        )
+
         constructor(
             year: Int,
             sortOrder: TmdbTvSort,
@@ -280,7 +354,7 @@ sealed class DiscoveryFilter {
             includedTags = emptySet(),
             excludedTags = emptySet(),
             adultMode = adultMode,
-            originalLanguage = null
+            originalLanguages = emptySet()
         )
 
         constructor(
@@ -296,7 +370,7 @@ sealed class DiscoveryFilter {
             includedTags = emptySet(),
             excludedTags = emptySet(),
             adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF,
-            originalLanguage = null
+            originalLanguages = emptySet()
         )
 
         val yearText: String
@@ -326,7 +400,7 @@ sealed class DiscoveryFilter {
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
                     else -> ""
                 }
-                val langTag = originalLanguage?.let { " • ${OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it}" } ?: ""
+                val langTag = formatLanguageLabel(originalLanguages)
                 return "$base$sortText$tagSummary$langTag$adultTag"
             }
     }
@@ -339,8 +413,28 @@ sealed class DiscoveryFilter {
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
         override val adultMode: AdultMode = AdultMode.OFF,
-        override val originalLanguage: String? = null
+        override val originalLanguages: Set<String> = emptySet()
     ) : DiscoveryFilter() {
+        constructor(
+            mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
+            startYear: Int? = AnimeSeason.currentYear() - 2,
+            endYear: Int? = AnimeSeason.currentYear(),
+            sortOrder: MangaSortOrder = MangaSortOrder.POPULARITY,
+            includedTags: Set<String> = emptySet(),
+            excludedTags: Set<String> = emptySet(),
+            adultMode: AdultMode = AdultMode.OFF,
+            originalLanguage: String?
+        ) : this(
+            mode = mode,
+            startYear = startYear,
+            endYear = endYear,
+            sortOrder = sortOrder,
+            includedTags = includedTags,
+            excludedTags = excludedTags,
+            adultMode = adultMode,
+            originalLanguages = originalLanguage?.let { setOf(it) } ?: emptySet()
+        )
+
         val yearText: String
             get() = when {
                 startYear == null && endYear == null -> ""
@@ -368,7 +462,7 @@ sealed class DiscoveryFilter {
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
                     else -> ""
                 }
-                val langTag = originalLanguage?.let { " • ${OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it}" } ?: ""
+                val langTag = formatLanguageLabel(originalLanguages)
                 return "$base$sortText$tagSummary$langTag$adultTag"
             }
     }
@@ -381,8 +475,28 @@ sealed class DiscoveryFilter {
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
         override val adultMode: AdultMode = AdultMode.OFF,
-        override val originalLanguage: String? = null
+        override val originalLanguages: Set<String> = emptySet()
     ) : DiscoveryFilter() {
+        constructor(
+            mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
+            startYear: Int? = AnimeSeason.currentYear() - 2,
+            endYear: Int? = AnimeSeason.currentYear(),
+            sortOrder: MangaSortOrder = MangaSortOrder.POPULARITY,
+            includedTags: Set<String> = emptySet(),
+            excludedTags: Set<String> = emptySet(),
+            adultMode: AdultMode = AdultMode.OFF,
+            originalLanguage: String?
+        ) : this(
+            mode = mode,
+            startYear = startYear,
+            endYear = endYear,
+            sortOrder = sortOrder,
+            includedTags = includedTags,
+            excludedTags = excludedTags,
+            adultMode = adultMode,
+            originalLanguages = originalLanguage?.let { setOf(it) } ?: emptySet()
+        )
+
         val yearText: String
             get() = when {
                 startYear == null && endYear == null -> ""
@@ -410,7 +524,7 @@ sealed class DiscoveryFilter {
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
                     else -> ""
                 }
-                val langTag = originalLanguage?.let { " • ${OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it}" } ?: ""
+                val langTag = formatLanguageLabel(originalLanguages)
                 return "$base$sortText$tagSummary$langTag$adultTag"
             }
     }
@@ -423,8 +537,28 @@ sealed class DiscoveryFilter {
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
         override val adultMode: AdultMode = AdultMode.OFF,
-        override val originalLanguage: String? = null
+        override val originalLanguages: Set<String> = emptySet()
     ) : DiscoveryFilter() {
+        constructor(
+            mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
+            startYear: Int? = AnimeSeason.currentYear() - 2,
+            endYear: Int? = AnimeSeason.currentYear(),
+            sortOrder: MangaSortOrder = MangaSortOrder.POPULARITY,
+            includedTags: Set<String> = emptySet(),
+            excludedTags: Set<String> = emptySet(),
+            adultMode: AdultMode = AdultMode.OFF,
+            originalLanguage: String?
+        ) : this(
+            mode = mode,
+            startYear = startYear,
+            endYear = endYear,
+            sortOrder = sortOrder,
+            includedTags = includedTags,
+            excludedTags = excludedTags,
+            adultMode = adultMode,
+            originalLanguages = originalLanguage?.let { setOf(it) } ?: emptySet()
+        )
+
         val yearText: String
             get() = when {
                 startYear == null && endYear == null -> ""
@@ -452,7 +586,7 @@ sealed class DiscoveryFilter {
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
                     else -> ""
                 }
-                val langTag = originalLanguage?.let { " • ${OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it}" } ?: ""
+                val langTag = formatLanguageLabel(originalLanguages)
                 return "$base$sortText$tagSummary$langTag$adultTag"
             }
     }
@@ -465,8 +599,28 @@ sealed class DiscoveryFilter {
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
         override val adultMode: AdultMode = AdultMode.OFF,
-        override val originalLanguage: String? = null
+        override val originalLanguages: Set<String> = emptySet()
     ) : DiscoveryFilter() {
+        constructor(
+            mode: ContentDiscoveryMode = ContentDiscoveryMode.BY_YEAR,
+            startYear: Int? = AnimeSeason.currentYear() - 5,
+            endYear: Int? = AnimeSeason.currentYear(),
+            sortOrder: BookSortOrder = BookSortOrder.POPULARITY,
+            includedTags: Set<String> = emptySet(),
+            excludedTags: Set<String> = emptySet(),
+            adultMode: AdultMode = AdultMode.OFF,
+            originalLanguage: String?
+        ) : this(
+            mode = mode,
+            startYear = startYear,
+            endYear = endYear,
+            sortOrder = sortOrder,
+            includedTags = includedTags,
+            excludedTags = excludedTags,
+            adultMode = adultMode,
+            originalLanguages = originalLanguage?.let { setOf(it) } ?: emptySet()
+        )
+
         val yearText: String
             get() = when {
                 startYear == null && endYear == null -> ""
@@ -494,7 +648,7 @@ sealed class DiscoveryFilter {
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
                     else -> ""
                 }
-                val langTag = originalLanguage?.let { " • ${OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it}" } ?: ""
+                val langTag = formatLanguageLabel(originalLanguages)
                 return "$base$sortText$tagSummary$langTag$adultTag"
             }
     }

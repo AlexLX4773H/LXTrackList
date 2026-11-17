@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -905,7 +906,7 @@ private fun SearchResultCard(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .height(110.dp),
+                    .defaultMinSize(minHeight = 110.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -948,9 +949,6 @@ private fun SearchResultCard(
                     item.durationMinutes?.takeIf { it > 0 }?.let {
                         metaParts.add("${it}m")
                     }
-                    item.originalLanguageWithFlag?.let {
-                        metaParts.add(it)
-                    }
 
                     if (metaParts.isNotEmpty()) {
                         Text(
@@ -961,7 +959,20 @@ private fun SearchResultCard(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+
+                    // Original language on its own row below metadata
+                    item.originalLanguageWithFlag?.let { langText ->
+                        Text(
+                            text = langText,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = LXTextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
+
+                Spacer(modifier = Modifier.height(6.dp))
 
                 // Action Row
                 Row(
@@ -1376,20 +1387,6 @@ private fun SearchResultDetailSheet(
                             }
                         }
 
-                        item.originalLanguageWithFlag?.let { langText ->
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = LXSurfaceElevated
-                            ) {
-                                Text(
-                                    text = langText,
-                                    color = LXTextSecondary,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-
                         if (item.score != null && item.score > 0f) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
@@ -1414,6 +1411,21 @@ private fun SearchResultDetailSheet(
                                     )
                                 }
                             }
+                        }
+                    }
+
+                    // Original Language on the next row
+                    item.originalLanguageWithFlag?.let { langText ->
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = LXSurfaceElevated
+                        ) {
+                            Text(
+                                text = langText,
+                                color = LXTextSecondary,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
                         }
                     }
 

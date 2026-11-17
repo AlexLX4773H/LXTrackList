@@ -1,5 +1,6 @@
 package com.lx.tracklist.ui.search
 
+import java.util.Locale
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -71,6 +72,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -122,8 +124,8 @@ fun SearchDiscoverySheet(
     var selectedAnimeSort by remember {
         mutableStateOf(animeFilter?.sortOrder ?: AnimeSortOrder.POPULARITY)
     }
-    var selectedAnimeLanguage by remember {
-        mutableStateOf(animeFilter?.originalLanguage)
+    var selectedAnimeLanguages by remember {
+        mutableStateOf(animeFilter?.originalLanguages?.takeIf { it.isNotEmpty() } ?: animeFilter?.originalLanguage?.let { setOf(it) } ?: emptySet())
     }
     var includedTags by remember {
         mutableStateOf(animeFilter?.includedTags ?: emptySet())
@@ -141,7 +143,7 @@ fun SearchDiscoverySheet(
         mutableIntStateOf(movieFilter?.year ?: currentYear)
     }
     var selectedMovieStartYear by remember {
-        mutableStateOf<Int?>(movieFilter?.startYear)
+        mutableStateOf<Int?>(movieFilter?.startYear ?: movieFilter?.year ?: currentYear)
     }
     var selectedMovieEndYear by remember {
         mutableStateOf<Int?>(movieFilter?.endYear ?: movieFilter?.year ?: currentYear)
@@ -149,8 +151,8 @@ fun SearchDiscoverySheet(
     var selectedMovieSort by remember {
         mutableStateOf(movieFilter?.sortOrder ?: TmdbMovieSort.POPULARITY)
     }
-    var selectedMovieLanguage by remember {
-        mutableStateOf(movieFilter?.originalLanguage)
+    var selectedMovieLanguages by remember {
+        mutableStateOf(movieFilter?.originalLanguages?.takeIf { it.isNotEmpty() } ?: movieFilter?.originalLanguage?.let { setOf(it) } ?: emptySet())
     }
     var movieIncludedTags by remember {
         mutableStateOf(movieFilter?.includedTags ?: emptySet())
@@ -168,7 +170,7 @@ fun SearchDiscoverySheet(
         mutableIntStateOf(tvFilter?.year ?: currentYear)
     }
     var selectedTvStartYear by remember {
-        mutableStateOf<Int?>(tvFilter?.startYear)
+        mutableStateOf<Int?>(tvFilter?.startYear ?: tvFilter?.year ?: currentYear)
     }
     var selectedTvEndYear by remember {
         mutableStateOf<Int?>(tvFilter?.endYear ?: tvFilter?.year ?: currentYear)
@@ -176,8 +178,8 @@ fun SearchDiscoverySheet(
     var selectedTvSort by remember {
         mutableStateOf(tvFilter?.sortOrder ?: TmdbTvSort.POPULARITY)
     }
-    var selectedTvLanguage by remember {
-        mutableStateOf(tvFilter?.originalLanguage)
+    var selectedTvLanguages by remember {
+        mutableStateOf(tvFilter?.originalLanguages?.takeIf { it.isNotEmpty() } ?: tvFilter?.originalLanguage?.let { setOf(it) } ?: emptySet())
     }
     var tvIncludedTags by remember {
         mutableStateOf(tvFilter?.includedTags ?: emptySet())
@@ -192,7 +194,7 @@ fun SearchDiscoverySheet(
         mutableStateOf(mangaFilter?.mode)
     }
     var selectedMangaStartYear by remember {
-        mutableStateOf<Int?>(mangaFilter?.startYear ?: (currentYear - 2))
+        mutableStateOf<Int?>(mangaFilter?.startYear ?: currentYear)
     }
     var selectedMangaEndYear by remember {
         mutableStateOf<Int?>(mangaFilter?.endYear ?: currentYear)
@@ -200,8 +202,8 @@ fun SearchDiscoverySheet(
     var selectedMangaSort by remember {
         mutableStateOf(mangaFilter?.sortOrder ?: MangaSortOrder.POPULARITY)
     }
-    var selectedMangaLanguage by remember {
-        mutableStateOf(mangaFilter?.originalLanguage)
+    var selectedMangaLanguages by remember {
+        mutableStateOf(mangaFilter?.originalLanguages?.takeIf { it.isNotEmpty() } ?: mangaFilter?.originalLanguage?.let { setOf(it) } ?: emptySet())
     }
     var mangaIncludedTags by remember {
         mutableStateOf(mangaFilter?.includedTags ?: emptySet())
@@ -216,7 +218,7 @@ fun SearchDiscoverySheet(
         mutableStateOf(manhwaFilter?.mode)
     }
     var selectedManhwaStartYear by remember {
-        mutableStateOf<Int?>(manhwaFilter?.startYear ?: (currentYear - 2))
+        mutableStateOf<Int?>(manhwaFilter?.startYear ?: currentYear)
     }
     var selectedManhwaEndYear by remember {
         mutableStateOf<Int?>(manhwaFilter?.endYear ?: currentYear)
@@ -224,8 +226,8 @@ fun SearchDiscoverySheet(
     var selectedManhwaSort by remember {
         mutableStateOf(manhwaFilter?.sortOrder ?: MangaSortOrder.POPULARITY)
     }
-    var selectedManhwaLanguage by remember {
-        mutableStateOf(manhwaFilter?.originalLanguage)
+    var selectedManhwaLanguages by remember {
+        mutableStateOf(manhwaFilter?.originalLanguages?.takeIf { it.isNotEmpty() } ?: manhwaFilter?.originalLanguage?.let { setOf(it) } ?: emptySet())
     }
     var manhwaIncludedTags by remember {
         mutableStateOf(manhwaFilter?.includedTags ?: emptySet())
@@ -240,7 +242,7 @@ fun SearchDiscoverySheet(
         mutableStateOf(lightNovelFilter?.mode)
     }
     var selectedLightNovelStartYear by remember {
-        mutableStateOf<Int?>(lightNovelFilter?.startYear ?: (currentYear - 2))
+        mutableStateOf<Int?>(lightNovelFilter?.startYear ?: currentYear)
     }
     var selectedLightNovelEndYear by remember {
         mutableStateOf<Int?>(lightNovelFilter?.endYear ?: currentYear)
@@ -248,8 +250,8 @@ fun SearchDiscoverySheet(
     var selectedLightNovelSort by remember {
         mutableStateOf(lightNovelFilter?.sortOrder ?: MangaSortOrder.POPULARITY)
     }
-    var selectedLightNovelLanguage by remember {
-        mutableStateOf(lightNovelFilter?.originalLanguage)
+    var selectedLightNovelLanguages by remember {
+        mutableStateOf(lightNovelFilter?.originalLanguages?.takeIf { it.isNotEmpty() } ?: lightNovelFilter?.originalLanguage?.let { setOf(it) } ?: emptySet())
     }
     var lightNovelIncludedTags by remember {
         mutableStateOf(lightNovelFilter?.includedTags ?: emptySet())
@@ -264,7 +266,7 @@ fun SearchDiscoverySheet(
         mutableStateOf(bookFilter?.mode)
     }
     var selectedBookStartYear by remember {
-        mutableStateOf<Int?>(bookFilter?.startYear ?: (currentYear - 5))
+        mutableStateOf<Int?>(bookFilter?.startYear ?: currentYear)
     }
     var selectedBookEndYear by remember {
         mutableStateOf<Int?>(bookFilter?.endYear ?: currentYear)
@@ -272,8 +274,8 @@ fun SearchDiscoverySheet(
     var selectedBookSort by remember {
         mutableStateOf(bookFilter?.sortOrder ?: BookSortOrder.POPULARITY)
     }
-    var selectedBookLanguage by remember {
-        mutableStateOf(bookFilter?.originalLanguage)
+    var selectedBookLanguages by remember {
+        mutableStateOf(bookFilter?.originalLanguages?.takeIf { it.isNotEmpty() } ?: bookFilter?.originalLanguage?.let { setOf(it) } ?: emptySet())
     }
     var bookIncludedTags by remember {
         mutableStateOf(bookFilter?.includedTags ?: emptySet())
@@ -290,6 +292,44 @@ fun SearchDiscoverySheet(
     var tagSearchQuery by remember { mutableStateOf("") }
     var selectedTagCategory by remember { mutableStateOf<AnimeTagCategory?>(null) }
     var showTagsSubMenu by remember { mutableStateOf(false) }
+    var showLanguageSubMenu by remember { mutableStateOf(false) }
+    var languageSearchQuery by remember { mutableStateOf("") }
+
+    val currentSelectedLanguages: Set<String> = when (category) {
+        SearchCategory.ANIME -> selectedAnimeLanguages
+        SearchCategory.MOVIES -> selectedMovieLanguages
+        SearchCategory.TV_SHOWS -> selectedTvLanguages
+        SearchCategory.MANGA -> selectedMangaLanguages
+        SearchCategory.MANHWA -> selectedManhwaLanguages
+        SearchCategory.LIGHT_NOVELS -> selectedLightNovelLanguages
+        SearchCategory.BOOKS -> selectedBookLanguages
+    }
+
+    fun setCategoryLanguages(languages: Set<String>) {
+        when (category) {
+            SearchCategory.ANIME -> selectedAnimeLanguages = languages
+            SearchCategory.MOVIES -> selectedMovieLanguages = languages
+            SearchCategory.TV_SHOWS -> selectedTvLanguages = languages
+            SearchCategory.MANGA -> selectedMangaLanguages = languages
+            SearchCategory.MANHWA -> selectedManhwaLanguages = languages
+            SearchCategory.LIGHT_NOVELS -> selectedLightNovelLanguages = languages
+            SearchCategory.BOOKS -> selectedBookLanguages = languages
+        }
+    }
+
+    fun toggleCategoryLanguage(langCode: String) {
+        val existing = currentSelectedLanguages.firstOrNull { OriginalLanguageRegistry.isSameLanguage(it, langCode) }
+        val newSet = if (existing != null) {
+            currentSelectedLanguages.filterNot { OriginalLanguageRegistry.isSameLanguage(it, langCode) }.toSet()
+        } else {
+            currentSelectedLanguages + langCode
+        }
+        setCategoryLanguages(newSet)
+    }
+
+    fun clearCategoryLanguages() {
+        setCategoryLanguages(emptySet())
+    }
 
     val activeIncludedTags: Set<String> = when (category) {
         SearchCategory.ANIME -> includedTags
@@ -311,8 +351,11 @@ fun SearchDiscoverySheet(
         SearchCategory.BOOKS -> bookExcludedTags
     }
 
-    BackHandler(enabled = showTagsSubMenu) {
-        showTagsSubMenu = false
+    BackHandler(enabled = showTagsSubMenu || showLanguageSubMenu) {
+        when {
+            showLanguageSubMenu -> showLanguageSubMenu = false
+            showTagsSubMenu -> showTagsSubMenu = false
+        }
     }
 
     fun cycleTag(tagName: String) {
@@ -818,6 +861,302 @@ fun SearchDiscoverySheet(
 
                 Spacer(modifier = Modifier.height(16.dp))
             }
+        } else if (showLanguageSubMenu) {
+            // ================= LANGUAGE SEPARATE PAGE =================
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Header Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showLanguageSubMenu = false }
+                            .padding(vertical = 4.dp, horizontal = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Original Language",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary
+                        )
+                    }
+
+                    if (currentSelectedLanguages.isNotEmpty()) {
+                        TextButton(onClick = { clearCategoryLanguages() }) {
+                            Text("Clear All", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = LXBorder, thickness = 1.dp)
+
+                // Sub-menu Instructions & active status
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp)
+                                .background(LXPrimaryGreen, RoundedCornerShape(3.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = LXBackgroundBlack, modifier = Modifier.size(12.dp))
+                        }
+                        Text("Tap to select • Multi-select (OR)", fontSize = 11.sp, color = LXPrimaryGreen, fontWeight = FontWeight.Bold)
+                    }
+
+                    Text(
+                        text = when {
+                            currentSelectedLanguages.isEmpty() -> "All languages"
+                            currentSelectedLanguages.size == 1 -> OriginalLanguageRegistry.getDisplayWithFlag(currentSelectedLanguages.first()) ?: "1 selected"
+                            else -> "${currentSelectedLanguages.size} selected (OR)"
+                        },
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = if (currentSelectedLanguages.isNotEmpty()) LXPrimaryGreen else LXTextSecondary
+                    )
+                }
+
+                // Search Bar for Languages
+                OutlinedTextField(
+                    value = languageSearchQuery,
+                    onValueChange = { languageSearchQuery = it },
+                    placeholder = {
+                        Text(
+                            text = "Search language by name, native name, or code...",
+                            color = LXTextSecondary,
+                            fontSize = 13.sp
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = LXTextSecondary, modifier = Modifier.size(18.dp))
+                    },
+                    trailingIcon = {
+                        if (languageSearchQuery.isNotBlank()) {
+                            IconButton(onClick = { languageSearchQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = LXTextSecondary, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = LXPrimaryGreen,
+                        unfocusedBorderColor = LXBorder,
+                        focusedTextColor = LXTextPrimary,
+                        unfocusedTextColor = LXTextPrimary,
+                        cursorColor = LXPrimaryGreen
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    singleLine = true
+                )
+
+                // Filtered Languages
+                val filteredLanguages = remember(languageSearchQuery, category) {
+                    val query = languageSearchQuery.trim()
+                    if (query.isEmpty()) {
+                        val top = OriginalLanguageRegistry.getTopLanguagesForCategory(category)
+                        val topCodes = top.map { it.code }.toSet()
+                        val others = OriginalLanguageRegistry.ALL_LANGUAGES.filter { it.code !in topCodes }
+                        top to others
+                    } else {
+                        val matches = OriginalLanguageRegistry.ALL_LANGUAGES.filter { lang ->
+                            lang.displayName.contains(query, ignoreCase = true) ||
+                            lang.nativeName.contains(query, ignoreCase = true) ||
+                            lang.code.equals(query, ignoreCase = true) ||
+                            lang.iso6392Codes.any { it.contains(query, ignoreCase = true) } ||
+                            lang.countryCodes.any { it.contains(query, ignoreCase = true) }
+                        }
+                        emptyList<LanguageOption>() to matches
+                    }
+                }
+
+                if (filteredLanguages.first.isEmpty() && filteredLanguages.second.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No languages matching \"$languageSearchQuery\"",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = LXTextSecondary
+                        )
+                    }
+                } else {
+                    // "All Languages" reset card at top if not searching
+                    if (languageSearchQuery.isBlank()) {
+                        val isAllSelected = currentSelectedLanguages.isEmpty()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (isAllSelected) LXPrimaryGreen.copy(alpha = 0.12f)
+                                    else LXSurfaceElevated
+                                )
+                                .border(
+                                    BorderStroke(
+                                        1.dp,
+                                        if (isAllSelected) LXPrimaryGreen.copy(alpha = 0.5f) else Color.Transparent
+                                    ),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .clickable { clearCategoryLanguages() }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(text = "🌐", fontSize = 22.sp)
+                                Column {
+                                    Text(
+                                        text = "All Languages",
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Medium
+                                        ),
+                                        color = if (isAllSelected) LXPrimaryGreen else LXTextPrimary
+                                    )
+                                    Text(
+                                        text = "Any country or origin",
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                        color = LXTextSecondary
+                                    )
+                                }
+                            }
+
+                            if (isAllSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .background(LXPrimaryGreen, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        tint = LXBackgroundBlack,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .border(BorderStroke(1.5.dp, LXTextSecondary.copy(alpha = 0.4f)), CircleShape)
+                                )
+                            }
+                        }
+                    }
+
+                    // Top for this category
+                    if (filteredLanguages.first.isNotEmpty()) {
+                        Text(
+                            text = "Top for ${category.displayName}",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextSecondary,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            filteredLanguages.first.forEach { lang ->
+                                LanguageSelectRow(
+                                    language = lang,
+                                    isSelected = currentSelectedLanguages.any { OriginalLanguageRegistry.isSameLanguage(it, lang.code) },
+                                    onSelect = {
+                                        toggleCategoryLanguage(lang.code)
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Other / All languages
+                    if (filteredLanguages.second.isNotEmpty()) {
+                        if (filteredLanguages.first.isNotEmpty()) {
+                            Text(
+                                text = "Other Languages",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = LXTextSecondary,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            filteredLanguages.second.forEach { lang ->
+                                LanguageSelectRow(
+                                    language = lang,
+                                    isSelected = currentSelectedLanguages.any { OriginalLanguageRegistry.isSameLanguage(it, lang.code) },
+                                    onSelect = {
+                                        toggleCategoryLanguage(lang.code)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Button(
+                    onClick = { showLanguageSubMenu = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
+                    val doneLabel = when {
+                        currentSelectedLanguages.isEmpty() -> "Done (All Languages)"
+                        currentSelectedLanguages.size == 1 -> "Done (${OriginalLanguageRegistry.getDisplayWithFlag(currentSelectedLanguages.first())})"
+                        else -> "Done (${currentSelectedLanguages.size} Languages - OR)"
+                    }
+                    Text(
+                        text = doneLabel,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
         } else {
             // ================= MAIN DISCOVERY SHEET =================
             Column(
@@ -1252,10 +1591,9 @@ fun SearchDiscoverySheet(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             // Original Language Filter
-                            OriginalLanguageSelector(
-                                category = SearchCategory.ANIME,
-                                selectedLanguage = selectedAnimeLanguage,
-                                onLanguageSelected = { selectedAnimeLanguage = it }
+                            LanguageFilterEntryCard(
+                                selectedLanguages = selectedAnimeLanguages,
+                                onClick = { showLanguageSubMenu = true }
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
@@ -1279,7 +1617,7 @@ fun SearchDiscoverySheet(
                                         includedTags = includedTags,
                                         excludedTags = excludedTags,
                                         adultMode = adultMode,
-                                        originalLanguage = selectedAnimeLanguage
+                                        originalLanguages = selectedAnimeLanguages
                                     )
                                     onApplyAnime(filter)
                                     onDismiss()
@@ -1500,10 +1838,9 @@ fun SearchDiscoverySheet(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         // Original Language Filter
-                        OriginalLanguageSelector(
-                            category = SearchCategory.MOVIES,
-                            selectedLanguage = selectedMovieLanguage,
-                            onLanguageSelected = { selectedMovieLanguage = it }
+                        LanguageFilterEntryCard(
+                            selectedLanguages = selectedMovieLanguages,
+                            onClick = { showLanguageSubMenu = true }
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1527,7 +1864,7 @@ fun SearchDiscoverySheet(
                                     includedTags = movieIncludedTags,
                                     excludedTags = movieExcludedTags,
                                     adultMode = adultMode,
-                                    originalLanguage = selectedMovieLanguage
+                                    originalLanguages = selectedMovieLanguages
                                 )
                                 onApplyMovie(filter)
                                 onDismiss()
@@ -1755,10 +2092,9 @@ fun SearchDiscoverySheet(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         // Original Language Filter
-                        OriginalLanguageSelector(
-                            category = SearchCategory.TV_SHOWS,
-                            selectedLanguage = selectedTvLanguage,
-                            onLanguageSelected = { selectedTvLanguage = it }
+                        LanguageFilterEntryCard(
+                            selectedLanguages = selectedTvLanguages,
+                            onClick = { showLanguageSubMenu = true }
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1782,7 +2118,7 @@ fun SearchDiscoverySheet(
                                     includedTags = tvIncludedTags,
                                     excludedTags = tvExcludedTags,
                                     adultMode = adultMode,
-                                    originalLanguage = selectedTvLanguage
+                                    originalLanguages = selectedTvLanguages
                                 )
                                 onApplyTv(filter)
                                 onDismiss()
@@ -2000,10 +2336,9 @@ fun SearchDiscoverySheet(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         // Original Language Filter
-                        OriginalLanguageSelector(
-                            category = SearchCategory.MANGA,
-                            selectedLanguage = selectedMangaLanguage,
-                            onLanguageSelected = { selectedMangaLanguage = it }
+                        LanguageFilterEntryCard(
+                            selectedLanguages = selectedMangaLanguages,
+                            onClick = { showLanguageSubMenu = true }
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -2025,7 +2360,7 @@ fun SearchDiscoverySheet(
                                     includedTags = mangaIncludedTags,
                                     excludedTags = mangaExcludedTags,
                                     adultMode = adultMode,
-                                    originalLanguage = selectedMangaLanguage
+                                    originalLanguages = selectedMangaLanguages
                                 )
                                 onApplyManga(filter)
                                 onDismiss()
@@ -2243,10 +2578,9 @@ fun SearchDiscoverySheet(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         // Original Language Filter
-                        OriginalLanguageSelector(
-                            category = SearchCategory.MANHWA,
-                            selectedLanguage = selectedManhwaLanguage,
-                            onLanguageSelected = { selectedManhwaLanguage = it }
+                        LanguageFilterEntryCard(
+                            selectedLanguages = selectedManhwaLanguages,
+                            onClick = { showLanguageSubMenu = true }
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -2268,7 +2602,7 @@ fun SearchDiscoverySheet(
                                     includedTags = manhwaIncludedTags,
                                     excludedTags = manhwaExcludedTags,
                                     adultMode = adultMode,
-                                    originalLanguage = selectedManhwaLanguage
+                                    originalLanguages = selectedManhwaLanguages
                                 )
                                 onApplyManhwa(filter)
                                 onDismiss()
@@ -2486,10 +2820,9 @@ fun SearchDiscoverySheet(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         // Original Language Filter
-                        OriginalLanguageSelector(
-                            category = SearchCategory.LIGHT_NOVELS,
-                            selectedLanguage = selectedLightNovelLanguage,
-                            onLanguageSelected = { selectedLightNovelLanguage = it }
+                        LanguageFilterEntryCard(
+                            selectedLanguages = selectedLightNovelLanguages,
+                            onClick = { showLanguageSubMenu = true }
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -2511,7 +2844,7 @@ fun SearchDiscoverySheet(
                                     includedTags = lightNovelIncludedTags,
                                     excludedTags = lightNovelExcludedTags,
                                     adultMode = adultMode,
-                                    originalLanguage = selectedLightNovelLanguage
+                                    originalLanguages = selectedLightNovelLanguages
                                 )
                                 onApplyLightNovel(filter)
                                 onDismiss()
@@ -2730,10 +3063,9 @@ fun SearchDiscoverySheet(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         // Original Language Filter
-                        OriginalLanguageSelector(
-                            category = SearchCategory.BOOKS,
-                            selectedLanguage = selectedBookLanguage,
-                            onLanguageSelected = { selectedBookLanguage = it }
+                        LanguageFilterEntryCard(
+                            selectedLanguages = selectedBookLanguages,
+                            onClick = { showLanguageSubMenu = true }
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -2755,7 +3087,7 @@ fun SearchDiscoverySheet(
                                     includedTags = bookIncludedTags,
                                     excludedTags = bookExcludedTags,
                                     adultMode = adultMode,
-                                    originalLanguage = selectedBookLanguage
+                                    originalLanguages = selectedBookLanguages
                                 )
                                 onApplyBook(filter)
                                 onDismiss()
@@ -2965,109 +3297,167 @@ private fun YearRangeSelector(
     )
     Spacer(modifier = Modifier.height(4.dp))
 
-    // Quick range presets
+    // Quick presets: Next year on left, Current year at center, Previous year on right
     val presets = listOf(
-        "Current ($currentYr)" to (currentYr to currentYr),
-        "${currentYr - 1}" to (currentYr - 1 to currentYr - 1),
-        "${currentYr - 4}–$currentYr" to (currentYr - 4 to currentYr),
-        "${currentYr - 9}–${currentYr - 5}" to (currentYr - 9 to currentYr - 5),
-        "2010–2019" to (2010 to 2019),
-        "2000–2009" to (2000 to 2009),
-        "Pre-2000" to (minYear to 1999)
+        "${currentYr + 1}" to (currentYr + 1 to currentYr + 1),
+        "$currentYr" to (currentYr to currentYr),
+        "${currentYr - 1}" to (currentYr - 1 to currentYr - 1)
     )
 
+    val isPresetSelected = presets.any { it.second.first == startYear && it.second.second == endYear }
+    val isCustomRange = !isPresetSelected && (startYear != null || endYear != null)
+
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = modifier.fillMaxWidth()
+        Column(
+            modifier = modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            presets.forEach { (presetLabel, range) ->
-                val isSelected = startYear == range.first && endYear == range.second
-                FilterChip(
-                    selected = isSelected,
-                    onClick = { onRangeChange(range.first, range.second) },
-                    label = { Text(presetLabel, fontSize = 11.sp) },
-                    modifier = Modifier.height(30.dp),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                        selectedLabelColor = LXPrimaryGreen,
-                        containerColor = LXSurfaceElevated,
-                        labelColor = LXTextSecondary
-                    )
-                )
-            }
-
-            // Custom "From: ..." dropdown chip
-            Box {
-                FilterChip(
-                    selected = false,
-                    onClick = { fromExpanded = true },
-                    modifier = Modifier.height(30.dp),
-                    label = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("From: ${startYear ?: minYear}", fontSize = 11.sp)
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
-                        }
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = LXSurfaceElevated,
-                        labelColor = LXTextPrimary
-                    )
-                )
-
-                DropdownMenu(
-                    expanded = fromExpanded,
-                    onDismissRequest = { fromExpanded = false },
-                    modifier = Modifier.background(LXSurfaceElevated)
-                ) {
-                    (maxYear downTo minYear).forEach { yr ->
-                        DropdownMenuItem(
-                            text = { Text(yr.toString(), color = LXTextPrimary) },
-                            onClick = {
-                                val currentEnd = endYear ?: yr
-                                val newEnd = if (currentEnd < yr) yr else currentEnd
-                                onRangeChange(yr, newEnd)
-                                fromExpanded = false
-                            }
+            // Row 1: Next (left), Current (center), Previous (right) years
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                presets.forEach { (presetLabel, range) ->
+                    val isSelected = startYear == range.first && endYear == range.second
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onRangeChange(range.first, range.second) },
+                        label = {
+                            Text(
+                                text = presetLabel,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(32.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                            selectedLabelColor = LXPrimaryGreen,
+                            containerColor = LXSurfaceElevated,
+                            labelColor = LXTextSecondary
                         )
-                    }
+                    )
                 }
             }
 
-            // Custom "To: ..." dropdown chip
-            Box {
-                FilterChip(
-                    selected = false,
-                    onClick = { toExpanded = true },
-                    modifier = Modifier.height(30.dp),
-                    label = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("To: ${endYear ?: maxYear}", fontSize = 11.sp)
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
-                        }
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = LXSurfaceElevated,
-                        labelColor = LXTextPrimary
-                    )
-                )
-
-                DropdownMenu(
-                    expanded = toExpanded,
-                    onDismissRequest = { toExpanded = false },
-                    modifier = Modifier.background(LXSurfaceElevated)
-                ) {
-                    (maxYear downTo minYear).forEach { yr ->
-                        DropdownMenuItem(
-                            text = { Text(yr.toString(), color = LXTextPrimary) },
-                            onClick = {
-                                val currentStart = startYear ?: yr
-                                val newStart = if (currentStart > yr) yr else currentStart
-                                onRangeChange(newStart, yr)
-                                toExpanded = false
+            // Row 2: Custom "From" and "To" years
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Custom "From: ..." dropdown chip
+                Box(modifier = Modifier.weight(1f)) {
+                    FilterChip(
+                        selected = isCustomRange,
+                        onClick = { fromExpanded = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(32.dp),
+                        label = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "From: ${startYear ?: minYear}",
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                            selectedLabelColor = LXPrimaryGreen,
+                            containerColor = LXSurfaceElevated,
+                            labelColor = LXTextPrimary
                         )
+                    )
+
+                    DropdownMenu(
+                        expanded = fromExpanded,
+                        onDismissRequest = { fromExpanded = false },
+                        modifier = Modifier.background(LXSurfaceElevated)
+                    ) {
+                        (maxYear downTo minYear).forEach { yr ->
+                            DropdownMenuItem(
+                                text = { Text(yr.toString(), color = LXTextPrimary) },
+                                onClick = {
+                                    val currentEnd = endYear ?: yr
+                                    val newEnd = if (currentEnd < yr) yr else currentEnd
+                                    onRangeChange(yr, newEnd)
+                                    fromExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Custom "To: ..." dropdown chip
+                Box(modifier = Modifier.weight(1f)) {
+                    FilterChip(
+                        selected = isCustomRange,
+                        onClick = { toExpanded = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(32.dp),
+                        label = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "To: ${endYear ?: maxYear}",
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
+                            selectedLabelColor = LXPrimaryGreen,
+                            containerColor = LXSurfaceElevated,
+                            labelColor = LXTextPrimary
+                        )
+                    )
+
+                    DropdownMenu(
+                        expanded = toExpanded,
+                        onDismissRequest = { toExpanded = false },
+                        modifier = Modifier.background(LXSurfaceElevated)
+                    ) {
+                        (maxYear downTo minYear).forEach { yr ->
+                            DropdownMenuItem(
+                                text = { Text(yr.toString(), color = LXTextPrimary) },
+                                onClick = {
+                                    val currentStart = startYear ?: yr
+                                    val newStart = if (currentStart > yr) yr else currentStart
+                                    onRangeChange(newStart, yr)
+                                    toExpanded = false
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -3127,140 +3517,174 @@ private fun TriStateTagCheckbox(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun OriginalLanguageSelector(
-    category: SearchCategory,
-    selectedLanguage: String?,
-    onLanguageSelected: (String?) -> Unit,
+private fun LanguageFilterEntryCard(
+    selectedLanguages: Set<String>,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var moreExpanded by remember { mutableStateOf(false) }
-    val topLanguages = remember(category) { OriginalLanguageRegistry.getTopLanguagesForCategory(category) }
-    val isTopSelected = topLanguages.any { OriginalLanguageRegistry.matches(selectedLanguage, it.code) }
-    val customSelectedLang = if (selectedLanguage != null && !isTopSelected) {
-        OriginalLanguageRegistry.findByCode(selectedLanguage)
-    } else null
-
-    Column(modifier = modifier.fillMaxWidth()) {
+    val hasSelection = selectedLanguages.isNotEmpty()
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(LXSurfaceElevated)
+            .border(
+                1.dp,
+                if (hasSelection) LXPrimaryGreen.copy(alpha = 0.5f) else LXBorder,
+                RoundedCornerShape(10.dp)
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Original Language",
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                color = LXTextSecondary
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .background(LXPrimaryGreen.copy(alpha = 0.15f), RoundedCornerShape(6.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val firstFlag = selectedLanguages.firstOrNull()?.let { OriginalLanguageRegistry.findByCode(it)?.flagEmoji }
+                    if (firstFlag != null) {
+                        Text(text = firstFlag, fontSize = 16.sp)
+                    } else {
+                        Text(text = "🌐", fontSize = 15.sp)
+                    }
+                }
+                Column {
+                    Text(
+                        text = "Original Language",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
+                        color = LXTextPrimary
+                    )
+                    val subtitle = when {
+                        selectedLanguages.isEmpty() -> "Filter by original language"
+                        selectedLanguages.size == 1 -> OriginalLanguageRegistry.getDisplayWithFlag(selectedLanguages.first()) ?: selectedLanguages.first()
+                        selectedLanguages.size in 2..3 -> selectedLanguages.mapNotNull { OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it }.joinToString(", ")
+                        else -> "${selectedLanguages.take(2).mapNotNull { OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it }.joinToString(", ")} +${selectedLanguages.size - 2}"
+                    }
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = if (hasSelection) LXPrimaryGreen else LXTextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (hasSelection) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = LXPrimaryGreen.copy(alpha = 0.15f)
+                    ) {
+                        val badgeText = if (selectedLanguages.size == 1) {
+                            OriginalLanguageRegistry.findByCode(selectedLanguages.first())?.displayName ?: selectedLanguages.first()
+                        } else {
+                            "${selectedLanguages.size} (OR)"
+                        }
+                        Text(
+                            text = badgeText,
+                            color = LXPrimaryGreen,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                    contentDescription = "Open Language Filter",
+                    tint = if (hasSelection) LXPrimaryGreen else LXTextSecondary,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LanguageSelectRow(
+    language: LanguageOption,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f)
+                else LXSurfaceElevated
             )
-            if (selectedLanguage != null) {
+            .border(
+                BorderStroke(
+                    1.dp,
+                    if (isSelected) LXPrimaryGreen.copy(alpha = 0.5f) else Color.Transparent
+                ),
+                RoundedCornerShape(8.dp)
+            )
+            .clickable { onSelect() }
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(text = language.flagEmoji, fontSize = 22.sp)
+            Column {
                 Text(
-                    text = OriginalLanguageRegistry.getDisplayWithFlag(selectedLanguage) ?: selectedLanguage,
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = LXPrimaryGreen
+                    text = language.displayName,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                    ),
+                    color = if (isSelected) LXPrimaryGreen else LXTextPrimary
+                )
+                Text(
+                    text = "${language.nativeName} • ${language.code.uppercase(Locale.ROOT)}",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = LXTextSecondary
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.fillMaxWidth()
+        if (isSelected) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .background(LXPrimaryGreen, CircleShape),
+                contentAlignment = Alignment.Center
             ) {
-                // "All" chip
-                FilterChip(
-                    selected = selectedLanguage == null,
-                    onClick = { onLanguageSelected(null) },
-                    label = { Text("All", fontSize = 11.sp) },
-                    modifier = Modifier.height(30.dp),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                        selectedLabelColor = LXPrimaryGreen,
-                        containerColor = LXSurfaceElevated,
-                        labelColor = LXTextSecondary
-                    )
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = "Selected",
+                    tint = LXBackgroundBlack,
+                    modifier = Modifier.size(15.dp)
                 )
-
-                // Top category languages
-                topLanguages.forEach { lang ->
-                    val isSelected = OriginalLanguageRegistry.matches(selectedLanguage, lang.code)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            if (isSelected) onLanguageSelected(null) else onLanguageSelected(lang.code)
-                        },
-                        label = { Text(lang.displayWithFlag, fontSize = 11.sp) },
-                        modifier = Modifier.height(30.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                            selectedLabelColor = LXPrimaryGreen,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
-                }
-
-                // If user selected a language via "More" dropdown that isn't in topLanguages, show it as an active chip
-                if (customSelectedLang != null) {
-                    FilterChip(
-                        selected = true,
-                        onClick = { onLanguageSelected(null) },
-                        label = { Text(customSelectedLang.displayWithFlag, fontSize = 11.sp) },
-                        modifier = Modifier.height(30.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                            selectedLabelColor = LXPrimaryGreen,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
-                }
-
-                // "More ▾" dropdown chip
-                Box {
-                    FilterChip(
-                        selected = false,
-                        onClick = { moreExpanded = true },
-                        modifier = Modifier.height(30.dp),
-                        label = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("More", fontSize = 11.sp)
-                                Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(14.dp))
-                            }
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextPrimary
-                        )
-                    )
-
-                    DropdownMenu(
-                        expanded = moreExpanded,
-                        onDismissRequest = { moreExpanded = false },
-                        modifier = Modifier.background(LXSurfaceElevated)
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("All Languages", color = LXTextSecondary) },
-                            onClick = {
-                                onLanguageSelected(null)
-                                moreExpanded = false
-                            }
-                        )
-                        OriginalLanguageRegistry.ALL_LANGUAGES.forEach { lang ->
-                            DropdownMenuItem(
-                                text = { Text(lang.displayWithFlag, color = LXTextPrimary) },
-                                onClick = {
-                                    onLanguageSelected(lang.code)
-                                    moreExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
             }
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .border(BorderStroke(1.5.dp, LXTextSecondary.copy(alpha = 0.4f)), CircleShape)
+            )
         }
     }
 }

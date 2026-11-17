@@ -215,7 +215,7 @@ class SearchViewModel(
 
     fun applyAnimeDiscoveryFilter(filter: DiscoveryFilter.Anime) {
         searchJob?.cancel()
-        activeSearchKey = "DISCOVER:ANIME:${filter.mode}:${filter.season}:${filter.year}:${filter.sortOrder}:${filter.includedTags}:${filter.excludedTags}:${filter.adultMode}:${filter.originalLanguage}"
+        activeSearchKey = "DISCOVER:ANIME:${filter.mode}:${filter.season}:${filter.year}:${filter.sortOrder}:${filter.includedTags}:${filter.excludedTags}:${filter.adultMode}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.ANIME,
@@ -240,6 +240,7 @@ class SearchViewModel(
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
                         adultMode = filter.adultMode,
+                        originalLanguages = filter.originalLanguages,
                         originalLanguage = filter.originalLanguage,
                         page = 1
                     ).getOrThrow()
@@ -384,7 +385,7 @@ class SearchViewModel(
 
     fun applyMangaDiscoveryFilter(filter: DiscoveryFilter.Manga, context: Context? = null) {
         searchJob?.cancel()
-        activeSearchKey = "DISCOVER:MANGA:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguage}"
+        activeSearchKey = "DISCOVER:MANGA:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.MANGA,
@@ -410,6 +411,7 @@ class SearchViewModel(
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
                         adultMode = filter.adultMode,
+                        originalLanguages = filter.originalLanguages,
                         originalLanguage = filter.originalLanguage,
                         page = 1
                     ).getOrThrow()
@@ -434,7 +436,7 @@ class SearchViewModel(
 
     fun applyManhwaDiscoveryFilter(filter: DiscoveryFilter.Manhwa, context: Context? = null) {
         searchJob?.cancel()
-        activeSearchKey = "DISCOVER:MANHWA:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguage}"
+        activeSearchKey = "DISCOVER:MANHWA:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.MANHWA,
@@ -460,6 +462,7 @@ class SearchViewModel(
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
                         adultMode = filter.adultMode,
+                        originalLanguages = filter.originalLanguages,
                         originalLanguage = filter.originalLanguage,
                         page = 1
                     ).getOrThrow()
@@ -484,7 +487,7 @@ class SearchViewModel(
 
     fun applyLightNovelDiscoveryFilter(filter: DiscoveryFilter.LightNovel, context: Context? = null) {
         searchJob?.cancel()
-        activeSearchKey = "DISCOVER:LN:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguage}"
+        activeSearchKey = "DISCOVER:LN:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.LIGHT_NOVELS,
@@ -510,6 +513,7 @@ class SearchViewModel(
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
                         adultMode = filter.adultMode,
+                        originalLanguages = filter.originalLanguages,
                         originalLanguage = filter.originalLanguage,
                         page = 1
                     ).getOrThrow()
@@ -534,7 +538,7 @@ class SearchViewModel(
 
     fun applyBookDiscoveryFilter(filter: DiscoveryFilter.Book, context: Context? = null) {
         searchJob?.cancel()
-        activeSearchKey = "DISCOVER:BOOK:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguage}"
+        activeSearchKey = "DISCOVER:BOOK:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.BOOKS,
@@ -558,6 +562,7 @@ class SearchViewModel(
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
                         adultMode = filter.adultMode,
+                        originalLanguages = filter.originalLanguages,
                         originalLanguage = filter.originalLanguage,
                         page = 1,
                         context = context
@@ -587,7 +592,7 @@ class SearchViewModel(
     ) {
         searchJob?.cancel()
         val yearPart = filter.year?.toString() ?: "ALL"
-        activeSearchKey = "DISCOVER:MOVIE:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguage}"
+        activeSearchKey = "DISCOVER:MOVIE:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.MOVIES,
@@ -612,6 +617,7 @@ class SearchViewModel(
                         adultMode = filter.adultMode,
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
+                        originalLanguages = filter.originalLanguages,
                         originalLanguage = filter.originalLanguage,
                         context = context
                     ).getOrThrow()
@@ -659,7 +665,7 @@ class SearchViewModel(
     ) {
         searchJob?.cancel()
         val yearPart = filter.year?.toString() ?: "ALL"
-        activeSearchKey = "DISCOVER:TV:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguage}"
+        activeSearchKey = "DISCOVER:TV:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.TV_SHOWS,
@@ -684,6 +690,7 @@ class SearchViewModel(
                         adultMode = filter.adultMode,
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
+                        originalLanguages = filter.originalLanguages,
                         originalLanguage = filter.originalLanguage,
                         context = context
                     ).getOrThrow()
@@ -748,6 +755,7 @@ class SearchViewModel(
                                 includedTags = filter.includedTags,
                                 excludedTags = filter.excludedTags,
                                 adultMode = filter.adultMode,
+                                originalLanguages = filter.originalLanguages,
                                 originalLanguage = filter.originalLanguage,
                                 page = nextPage
                             ).getOrThrow()
@@ -774,6 +782,7 @@ class SearchViewModel(
                                     adultMode = filter.adultMode,
                                     includedTags = filter.includedTags,
                                     excludedTags = filter.excludedTags,
+                                    originalLanguages = filter.originalLanguages,
                                     originalLanguage = filter.originalLanguage,
                                     context = context
                                 ).getOrThrow()
@@ -799,6 +808,7 @@ class SearchViewModel(
                                     adultMode = filter.adultMode,
                                     includedTags = filter.includedTags,
                                     excludedTags = filter.excludedTags,
+                                    originalLanguages = filter.originalLanguages,
                                     originalLanguage = filter.originalLanguage,
                                     context = context
                                 ).getOrThrow()
@@ -817,6 +827,7 @@ class SearchViewModel(
                                 includedTags = filter.includedTags,
                                 excludedTags = filter.excludedTags,
                                 adultMode = filter.adultMode,
+                                originalLanguages = filter.originalLanguages,
                                 originalLanguage = filter.originalLanguage,
                                 page = nextPage
                             ).getOrThrow()
@@ -834,6 +845,7 @@ class SearchViewModel(
                                 includedTags = filter.includedTags,
                                 excludedTags = filter.excludedTags,
                                 adultMode = filter.adultMode,
+                                originalLanguages = filter.originalLanguages,
                                 originalLanguage = filter.originalLanguage,
                                 page = nextPage
                             ).getOrThrow()
@@ -851,6 +863,7 @@ class SearchViewModel(
                                 includedTags = filter.includedTags,
                                 excludedTags = filter.excludedTags,
                                 adultMode = filter.adultMode,
+                                originalLanguages = filter.originalLanguages,
                                 originalLanguage = filter.originalLanguage,
                                 page = nextPage
                             ).getOrThrow()
@@ -866,6 +879,7 @@ class SearchViewModel(
                                 includedTags = filter.includedTags,
                                 excludedTags = filter.excludedTags,
                                 adultMode = filter.adultMode,
+                                originalLanguages = filter.originalLanguages,
                                 originalLanguage = filter.originalLanguage,
                                 page = nextPage,
                                 context = context
@@ -1053,6 +1067,7 @@ class SearchViewModel(
                                 sort = activeFilter.sortOrder.apiValue,
                                 search = query,
                                 adultMode = activeFilter.adultMode,
+                                originalLanguages = activeFilter.originalLanguages,
                                 originalLanguage = activeFilter.originalLanguage,
                                 page = 1
                             ).getOrThrow()
@@ -1066,8 +1081,8 @@ class SearchViewModel(
                                 page = 1,
                                 context = context
                             ).getOrThrow()
-                            val list = if (!activeFilter.originalLanguage.isNullOrBlank()) {
-                                rawList.filter { OriginalLanguageRegistry.matches(activeFilter.originalLanguage, it.originalLanguage) }
+                            val list = if (activeFilter.originalLanguages.isNotEmpty()) {
+                                rawList.filter { OriginalLanguageRegistry.matchesAny(activeFilter.originalLanguages, it.originalLanguage) }
                             } else rawList
                             return@withContext list.map { mapTmdbToSearchResult(it, isMovie = true) }
                         }
@@ -1079,8 +1094,8 @@ class SearchViewModel(
                                 page = 1,
                                 context = context
                             ).getOrThrow()
-                            val list = if (!activeFilter.originalLanguage.isNullOrBlank()) {
-                                rawList.filter { OriginalLanguageRegistry.matches(activeFilter.originalLanguage, it.originalLanguage) }
+                            val list = if (activeFilter.originalLanguages.isNotEmpty()) {
+                                rawList.filter { OriginalLanguageRegistry.matchesAny(activeFilter.originalLanguages, it.originalLanguage) }
                             } else rawList
                             return@withContext list.map { mapTmdbToSearchResult(it, isMovie = false) }
                         }
@@ -1096,6 +1111,7 @@ class SearchViewModel(
                                 includedTags = activeFilter.includedTags,
                                 excludedTags = activeFilter.excludedTags,
                                 adultMode = activeFilter.adultMode,
+                                originalLanguages = activeFilter.originalLanguages,
                                 originalLanguage = activeFilter.originalLanguage,
                                 page = 1
                             ).getOrThrow()
@@ -1113,6 +1129,7 @@ class SearchViewModel(
                                 includedTags = activeFilter.includedTags,
                                 excludedTags = activeFilter.excludedTags,
                                 adultMode = activeFilter.adultMode,
+                                originalLanguages = activeFilter.originalLanguages,
                                 originalLanguage = activeFilter.originalLanguage,
                                 page = 1
                             ).getOrThrow()
@@ -1130,6 +1147,7 @@ class SearchViewModel(
                                 includedTags = activeFilter.includedTags,
                                 excludedTags = activeFilter.excludedTags,
                                 adultMode = activeFilter.adultMode,
+                                originalLanguages = activeFilter.originalLanguages,
                                 originalLanguage = activeFilter.originalLanguage,
                                 page = 1
                             ).getOrThrow()
@@ -1145,6 +1163,7 @@ class SearchViewModel(
                                 includedTags = activeFilter.includedTags,
                                 excludedTags = activeFilter.excludedTags,
                                 adultMode = activeFilter.adultMode,
+                                originalLanguages = activeFilter.originalLanguages,
                                 originalLanguage = activeFilter.originalLanguage,
                                 page = 1,
                                 context = context

@@ -42,6 +42,7 @@ object MangaDexApiClient {
         query: String,
         isManhwa: Boolean = false,
         limit: Int = 20,
+        originalLanguages: Set<String> = emptySet(),
         originalLanguage: String? = null
     ): Result<List<JikanMediaDetails>> {
         val cleanQuery = query.trim()
@@ -50,8 +51,9 @@ object MangaDexApiClient {
         val encodedTitle = URLEncoder.encode(cleanQuery, "UTF-8")
         val limitClamped = limit.coerceIn(1, 50)
 
+        val effectiveLanguages = if (originalLanguages.isNotEmpty()) originalLanguages else originalLanguage?.let { setOf(it) } ?: emptySet()
         val languageFilter = when {
-            !originalLanguage.isNullOrBlank() -> "&originalLanguage[]=${originalLanguage.lowercase(Locale.ROOT)}"
+            effectiveLanguages.isNotEmpty() -> effectiveLanguages.joinToString("") { "&originalLanguage[]=${it.trim().lowercase(Locale.ROOT)}" }
             isManhwa -> "&originalLanguage[]=ko"
             else -> ""
         }

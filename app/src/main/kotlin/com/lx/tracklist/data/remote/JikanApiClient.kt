@@ -1804,10 +1804,12 @@ object JikanApiClient {
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
+        originalLanguages: Set<String> = emptySet(),
         originalLanguage: String? = null,
         page: Int = 1,
         perPage: Int = 25
     ): Result<List<JikanMediaDetails>> {
+        val effectiveLanguages = if (originalLanguages.isNotEmpty()) originalLanguages else originalLanguage?.let { setOf(it) } ?: emptySet()
         val hasSearch = !search.isNullOrBlank()
         val adultParam = when (adultMode) {
             AdultMode.OFF -> ", isAdult: false"
@@ -1822,7 +1824,9 @@ object JikanApiClient {
 
         val isSeasonal = mode == AnimeDiscoveryMode.SEASONAL && year != null && !season.isNullOrBlank()
 
-        val aniCountry = originalLanguage?.let { OriginalLanguageRegistry.toAniListCountryCode(it) }
+        val aniCountry = if (effectiveLanguages.size == 1) {
+            OriginalLanguageRegistry.toAniListCountryCode(effectiveLanguages.first())
+        } else null
 
         val varDefs = mutableListOf<String>()
         varDefs.add("${'$'}page: Int")
@@ -2209,10 +2213,12 @@ object JikanApiClient {
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
+        originalLanguages: Set<String> = emptySet(),
         originalLanguage: String? = null,
         page: Int = 1,
         limit: Int = 25
     ): Result<List<JikanMediaDetails>> {
+        val effectiveLanguages = if (originalLanguages.isNotEmpty()) originalLanguages else originalLanguage?.let { setOf(it) } ?: emptySet()
         // 1. Try AniList GraphQL first for fast, direct sorted response
         val anilistRes = queryAniListDiscovery(
             mode = mode,
@@ -2223,18 +2229,18 @@ object JikanApiClient {
             includedTags = includedTags,
             excludedTags = excludedTags,
             adultMode = adultMode,
-            originalLanguage = originalLanguage,
+            originalLanguages = effectiveLanguages,
             page = page,
             perPage = limit
         )
         if (anilistRes.isSuccess) {
             val list = anilistRes.getOrDefault(emptyList()).let { items ->
-                if (!originalLanguage.isNullOrBlank()) {
-                    items.filter { OriginalLanguageRegistry.matches(originalLanguage, it.originalLanguage) }
+                if (effectiveLanguages.isNotEmpty()) {
+                    items.filter { OriginalLanguageRegistry.matchesAny(effectiveLanguages, it.originalLanguage) }
                 } else items
             }
             if (list.isNotEmpty()) {
-                Log.d(TAG, "Successfully fetched ${list.size} anime from AniList (mode=$mode, sort=$sort, lang=$originalLanguage, tags=+${includedTags.size}/-${excludedTags.size})")
+                Log.d(TAG, "Successfully fetched ${list.size} anime from AniList (mode=$mode, sort=$sort, lang=$effectiveLanguages, tags=+${includedTags.size}/-${excludedTags.size})")
                 return Result.success(list)
             }
         }
@@ -2255,8 +2261,8 @@ object JikanApiClient {
         )
         if (jikanRes.isSuccess) {
             val list = jikanRes.getOrDefault(emptyList()).let { items ->
-                if (!originalLanguage.isNullOrBlank()) {
-                    items.filter { OriginalLanguageRegistry.matches(originalLanguage, it.originalLanguage) }
+                if (effectiveLanguages.isNotEmpty()) {
+                    items.filter { OriginalLanguageRegistry.matchesAny(effectiveLanguages, it.originalLanguage) }
                 } else items
             }
             val sortedList = when (sort) {
@@ -2282,10 +2288,12 @@ object JikanApiClient {
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
+        originalLanguages: Set<String> = emptySet(),
         originalLanguage: String? = null,
         page: Int = 1,
         perPage: Int = 25
     ): Result<List<JikanMediaDetails>> {
+        val effectiveLanguages = if (originalLanguages.isNotEmpty()) originalLanguages else originalLanguage?.let { setOf(it) } ?: emptySet()
         val hasSearch = !search.isNullOrBlank()
         val adultParam = when (adultMode) {
             AdultMode.OFF -> ", isAdult: false"
@@ -2300,7 +2308,9 @@ object JikanApiClient {
 
         val isByYear = mode == ContentDiscoveryMode.BY_YEAR && (startYear != null || endYear != null)
 
-        val aniCountry = originalLanguage?.let { OriginalLanguageRegistry.toAniListCountryCode(it) }
+        val aniCountry = if (effectiveLanguages.size == 1) {
+            OriginalLanguageRegistry.toAniListCountryCode(effectiveLanguages.first())
+        } else null
         val effectiveCountry = aniCountry ?: if (isManhwa) "KR" else null
 
         val varDefs = mutableListOf<String>()
@@ -2558,10 +2568,12 @@ object JikanApiClient {
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
+        originalLanguages: Set<String> = emptySet(),
         originalLanguage: String? = null,
         page: Int = 1,
         limit: Int = 25
     ): Result<List<JikanMediaDetails>> {
+        val effectiveLanguages = if (originalLanguages.isNotEmpty()) originalLanguages else originalLanguage?.let { setOf(it) } ?: emptySet()
         val anilistRes = queryAniListMangaDiscovery(
             isManhwa = isManhwa,
             isLightNovel = isLightNovel,
@@ -2573,14 +2585,14 @@ object JikanApiClient {
             includedTags = includedTags,
             excludedTags = excludedTags,
             adultMode = adultMode,
-            originalLanguage = originalLanguage,
+            originalLanguages = effectiveLanguages,
             page = page,
             perPage = limit
         )
         if (anilistRes.isSuccess) {
             val list = anilistRes.getOrDefault(emptyList()).let { items ->
-                if (!originalLanguage.isNullOrBlank()) {
-                    items.filter { OriginalLanguageRegistry.matches(originalLanguage, it.originalLanguage) }
+                if (effectiveLanguages.isNotEmpty()) {
+                    items.filter { OriginalLanguageRegistry.matchesAny(effectiveLanguages, it.originalLanguage) }
                 } else items
             }
             if (list.isNotEmpty()) {
@@ -2607,8 +2619,8 @@ object JikanApiClient {
         )
         if (jikanRes.isSuccess) {
             val list = jikanRes.getOrDefault(emptyList()).let { items ->
-                if (!originalLanguage.isNullOrBlank()) {
-                    items.filter { OriginalLanguageRegistry.matches(originalLanguage, it.originalLanguage) }
+                if (effectiveLanguages.isNotEmpty()) {
+                    items.filter { OriginalLanguageRegistry.matchesAny(effectiveLanguages, it.originalLanguage) }
                 } else items
             }
             if (list.isNotEmpty()) {
@@ -2625,6 +2637,7 @@ object JikanApiClient {
         sort: String = "POPULARITY_DESC",
         search: String? = null,
         adultMode: AdultMode = AdultMode.OFF,
+        originalLanguages: Set<String> = emptySet(),
         originalLanguage: String? = null,
         page: Int = 1,
         limit: Int = 25
@@ -2635,6 +2648,7 @@ object JikanApiClient {
         sort = sort,
         search = search,
         adultMode = adultMode,
+        originalLanguages = originalLanguages,
         originalLanguage = originalLanguage,
         page = page,
         limit = limit

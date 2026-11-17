@@ -613,11 +613,13 @@ object TmdbApiClient {
         adultMode: AdultMode = AdultMode.OFF,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
+        originalLanguages: Set<String> = emptySet(),
         originalLanguage: String? = null,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> = withFallback(baseUrl) { activeBaseUrl ->
-        discoverMoviesInternal(year, startYear, endYear, sortBy, page, adultMode, includedTags, excludedTags, originalLanguage, context, activeBaseUrl)
+        val effectiveLanguages = if (originalLanguages.isNotEmpty()) originalLanguages else originalLanguage?.let { setOf(it) } ?: emptySet()
+        discoverMoviesInternal(year, startYear, endYear, sortBy, page, adultMode, includedTags, excludedTags, effectiveLanguages, context, activeBaseUrl)
     }
 
     fun discoverMovies(
@@ -627,6 +629,7 @@ object TmdbApiClient {
         adultMode: AdultMode = AdultMode.OFF,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
+        originalLanguages: Set<String> = emptySet(),
         originalLanguage: String? = null,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
@@ -639,6 +642,7 @@ object TmdbApiClient {
         adultMode = adultMode,
         includedTags = includedTags,
         excludedTags = excludedTags,
+        originalLanguages = originalLanguages,
         originalLanguage = originalLanguage,
         context = context,
         baseUrl = baseUrl
@@ -674,7 +678,7 @@ object TmdbApiClient {
         adultMode: AdultMode = AdultMode.OFF,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
-        originalLanguage: String? = null,
+        originalLanguages: Set<String> = emptySet(),
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> {
@@ -702,7 +706,10 @@ object TmdbApiClient {
         val withoutGenres = excludedTags.mapNotNull { TmdbTagRegistry.getMovieGenreId(it) }
         val withGenresParam = if (withGenres.isNotEmpty()) "&with_genres=${withGenres.joinToString(",")}" else ""
         val withoutGenresParam = if (withoutGenres.isNotEmpty()) "&without_genres=${withoutGenres.joinToString(",")}" else ""
-        val langParam = if (!originalLanguage.isNullOrBlank()) "&with_original_language=${URLEncoder.encode(originalLanguage.lowercase(), "UTF-8")}" else ""
+        val langParam = if (originalLanguages.isNotEmpty()) {
+            val joined = originalLanguages.map { it.trim().lowercase() }.joinToString("|")
+            "&with_original_language=${URLEncoder.encode(joined, "UTF-8")}"
+        } else ""
         val endpoint = "${baseUrl.trimEnd('/')}/discover/movie?sort_by=$sortBy&page=$page&include_adult=$includeAdult$yearParam$voteGteParam$withGenresParam$withoutGenresParam$langParam"
 
         return try {
@@ -759,8 +766,8 @@ object TmdbApiClient {
                 AdultMode.OFF -> list.filterNot { it.isAdult }
                 AdultMode.INCLUDE -> list
             }
-            val langFiltered = if (!originalLanguage.isNullOrBlank()) {
-                filteredList.filter { OriginalLanguageRegistry.matches(originalLanguage, it.originalLanguage) }
+            val langFiltered = if (originalLanguages.isNotEmpty()) {
+                filteredList.filter { OriginalLanguageRegistry.matchesAny(originalLanguages, it.originalLanguage) }
             } else {
                 filteredList
             }
@@ -774,7 +781,7 @@ object TmdbApiClient {
                     adultMode = adultMode,
                     includedTags = includedTags,
                     excludedTags = excludedTags,
-                    originalLanguage = originalLanguage,
+                    originalLanguages = originalLanguages,
                     context = context,
                     baseUrl = baseUrl
                 )
@@ -798,11 +805,13 @@ object TmdbApiClient {
         adultMode: AdultMode = AdultMode.OFF,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
+        originalLanguages: Set<String> = emptySet(),
         originalLanguage: String? = null,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> = withFallback(baseUrl) { activeBaseUrl ->
-        discoverTvShowsInternal(year, startYear, endYear, sortBy, page, adultMode, includedTags, excludedTags, originalLanguage, context, activeBaseUrl)
+        val effectiveLanguages = if (originalLanguages.isNotEmpty()) originalLanguages else originalLanguage?.let { setOf(it) } ?: emptySet()
+        discoverTvShowsInternal(year, startYear, endYear, sortBy, page, adultMode, includedTags, excludedTags, effectiveLanguages, context, activeBaseUrl)
     }
 
     fun discoverTvShows(
@@ -812,6 +821,7 @@ object TmdbApiClient {
         adultMode: AdultMode = AdultMode.OFF,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
+        originalLanguages: Set<String> = emptySet(),
         originalLanguage: String? = null,
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
@@ -824,6 +834,7 @@ object TmdbApiClient {
         adultMode = adultMode,
         includedTags = includedTags,
         excludedTags = excludedTags,
+        originalLanguages = originalLanguages,
         originalLanguage = originalLanguage,
         context = context,
         baseUrl = baseUrl
@@ -845,6 +856,7 @@ object TmdbApiClient {
         adultMode = if (includeAdult) AdultMode.INCLUDE else AdultMode.OFF,
         includedTags = emptySet(),
         excludedTags = emptySet(),
+        originalLanguages = emptySet(),
         originalLanguage = null,
         context = context,
         baseUrl = baseUrl
@@ -859,7 +871,7 @@ object TmdbApiClient {
         adultMode: AdultMode = AdultMode.OFF,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
-        originalLanguage: String? = null,
+        originalLanguages: Set<String> = emptySet(),
         context: Context? = null,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<TmdbSearchResult>> {
@@ -887,7 +899,10 @@ object TmdbApiClient {
         val withoutGenres = excludedTags.mapNotNull { TmdbTagRegistry.getTvGenreId(it) }
         val withGenresParam = if (withGenres.isNotEmpty()) "&with_genres=${withGenres.joinToString(",")}" else ""
         val withoutGenresParam = if (withoutGenres.isNotEmpty()) "&without_genres=${withoutGenres.joinToString(",")}" else ""
-        val langParam = if (!originalLanguage.isNullOrBlank()) "&with_original_language=${URLEncoder.encode(originalLanguage.lowercase(), "UTF-8")}" else ""
+        val langParam = if (originalLanguages.isNotEmpty()) {
+            val joined = originalLanguages.map { it.trim().lowercase() }.joinToString("|")
+            "&with_original_language=${URLEncoder.encode(joined, "UTF-8")}"
+        } else ""
         val endpoint = "${baseUrl.trimEnd('/')}/discover/tv?sort_by=$sortBy&page=$page&include_adult=$includeAdult$yearParam$voteGteParam$withGenresParam$withoutGenresParam$langParam"
 
         return try {
@@ -944,8 +959,8 @@ object TmdbApiClient {
                 AdultMode.OFF -> list.filterNot { it.isAdult }
                 AdultMode.INCLUDE -> list
             }
-            val langFiltered = if (!originalLanguage.isNullOrBlank()) {
-                filteredList.filter { OriginalLanguageRegistry.matches(originalLanguage, it.originalLanguage) }
+            val langFiltered = if (originalLanguages.isNotEmpty()) {
+                filteredList.filter { OriginalLanguageRegistry.matchesAny(originalLanguages, it.originalLanguage) }
             } else {
                 filteredList
             }
@@ -959,7 +974,7 @@ object TmdbApiClient {
                     adultMode = adultMode,
                     includedTags = includedTags,
                     excludedTags = excludedTags,
-                    originalLanguage = originalLanguage,
+                    originalLanguages = originalLanguages,
                     context = context,
                     baseUrl = baseUrl
                 )

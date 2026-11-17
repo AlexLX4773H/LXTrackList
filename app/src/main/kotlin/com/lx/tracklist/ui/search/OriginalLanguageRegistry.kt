@@ -119,6 +119,17 @@ object OriginalLanguageRegistry {
         return opt.iso6392Codes.firstOrNull() ?: opt.code
     }
 
+    fun isSameLanguage(codeA: String?, codeB: String?): Boolean {
+        if (codeA.isNullOrBlank() || codeB.isNullOrBlank()) return false
+        val optA = findByCode(codeA)
+        val optB = findByCode(codeB)
+        return if (optA != null && optB != null) {
+            optA.code.equals(optB.code, ignoreCase = true)
+        } else {
+            codeA.trim().equals(codeB.trim(), ignoreCase = true)
+        }
+    }
+
     fun matches(filterLanguageCode: String?, candidateLanguageCode: String?): Boolean {
         if (filterLanguageCode.isNullOrBlank()) return true
         if (candidateLanguageCode.isNullOrBlank()) return false
@@ -131,5 +142,11 @@ object OriginalLanguageRegistry {
         } else {
             filterLanguageCode.trim().equals(candidateLanguageCode.trim(), ignoreCase = true)
         }
+    }
+
+    fun matchesAny(filterLanguageCodes: Collection<String>?, candidateLanguageCode: String?): Boolean {
+        if (filterLanguageCodes.isNullOrEmpty()) return true
+        if (candidateLanguageCode.isNullOrBlank()) return false
+        return filterLanguageCodes.any { matches(it, candidateLanguageCode) }
     }
 }

@@ -25,11 +25,14 @@ object BookMetadataManager {
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
+        originalLanguages: Set<String> = emptySet(),
         originalLanguage: String? = null,
         page: Int = 1,
         limit: Int = 20,
         context: Context? = null
     ): Result<List<BookDetails>> {
+        val effectiveLanguages = if (originalLanguages.isNotEmpty()) originalLanguages else originalLanguage?.let { setOf(it) } ?: emptySet()
+        val primaryLang = if (effectiveLanguages.size == 1) effectiveLanguages.first() else null
         val subject = includedTags.mapNotNull { BookTagRegistry.getSubject(it) }.firstOrNull()
         val openLibSort = when (sort) {
             BookSortOrder.POPULARITY -> "editions"
@@ -44,7 +47,7 @@ object BookMetadataManager {
             sort = openLibSort,
             subject = subject,
             search = search,
-            originalLanguage = originalLanguage,
+            originalLanguage = primaryLang,
             page = page,
             limit = limit
         )
@@ -61,7 +64,7 @@ object BookMetadataManager {
                 orderBy = googleOrderBy,
                 startIndex = (page - 1) * limit,
                 limit = limit,
-                originalLanguage = originalLanguage,
+                originalLanguage = primaryLang,
                 context = context
             )
             googleRes.getOrDefault(emptyList())
@@ -78,8 +81,8 @@ object BookMetadataManager {
             rawList
         }
 
-        val langFiltered = if (!originalLanguage.isNullOrBlank()) {
-            filtered.filter { com.lx.tracklist.ui.search.OriginalLanguageRegistry.matches(originalLanguage, it.language) }
+        val langFiltered = if (effectiveLanguages.isNotEmpty()) {
+            filtered.filter { com.lx.tracklist.ui.search.OriginalLanguageRegistry.matchesAny(effectiveLanguages, it.language) }
         } else {
             filtered
         }

@@ -382,6 +382,53 @@ class DiscoveryFeatureTest {
     }
 
     @Test
+    fun testYearRangePresetsAndLabels() {
+        val currentYr = AnimeSeason.currentYear()
+        val nextYr = currentYr + 1
+        val prevYr = currentYr - 1
+
+        // Current Year single year filter
+        val currentMovie = DiscoveryFilter.Movie(
+            mode = ContentDiscoveryMode.BY_YEAR,
+            startYear = currentYr,
+            endYear = currentYr,
+            sortOrder = TmdbMovieSort.POPULARITY
+        )
+        assertEquals("$currentYr", currentMovie.yearText)
+        assertEquals("🎬 Movies $currentYr • Most Popular", currentMovie.label)
+
+        // Next Year single year filter
+        val nextMovie = DiscoveryFilter.Movie(
+            mode = ContentDiscoveryMode.BY_YEAR,
+            startYear = nextYr,
+            endYear = nextYr,
+            sortOrder = TmdbMovieSort.POPULARITY
+        )
+        assertEquals("$nextYr", nextMovie.yearText)
+        assertEquals("🎬 Movies $nextYr • Most Popular", nextMovie.label)
+
+        // Previous Year single year filter
+        val prevMovie = DiscoveryFilter.Movie(
+            mode = ContentDiscoveryMode.BY_YEAR,
+            startYear = prevYr,
+            endYear = prevYr,
+            sortOrder = TmdbMovieSort.POPULARITY
+        )
+        assertEquals("$prevYr", prevMovie.yearText)
+        assertEquals("🎬 Movies $prevYr • Most Popular", prevMovie.label)
+
+        // Custom range
+        val customRange = DiscoveryFilter.Movie(
+            mode = ContentDiscoveryMode.BY_YEAR,
+            startYear = 1995,
+            endYear = 2010,
+            sortOrder = TmdbMovieSort.POPULARITY
+        )
+        assertEquals("1995–2010", customRange.yearText)
+        assertEquals("🎬 Movies 1995–2010 • Most Popular", customRange.label)
+    }
+
+    @Test
     fun testOriginalLanguageRegistryLookupAndMatching() {
         // 1. Direct ISO 639-1
         val thai = OriginalLanguageRegistry.findByCode("th")
@@ -493,5 +540,42 @@ class DiscoveryFeatureTest {
             originalLanguage = "en"
         )
         assertEquals("🔥 Most Popular Books • Most Popular • 🇺🇸 English", bookFilter.label)
+    }
+
+    @Test
+    fun testOriginalLanguageIdentityAndMatching() {
+        // Strict equality for UI selection state (fixes all-checked bug)
+        assertTrue(OriginalLanguageRegistry.isSameLanguage("en", "en"))
+        assertTrue(OriginalLanguageRegistry.isSameLanguage("en", "ENG"))
+        assertTrue(OriginalLanguageRegistry.isSameLanguage("ja", "jpn"))
+        assertTrue(OriginalLanguageRegistry.isSameLanguage("ko", "KR"))
+        assertFalse(OriginalLanguageRegistry.isSameLanguage("en", "ja"))
+        assertFalse(OriginalLanguageRegistry.isSameLanguage(null, "en"))
+        assertFalse(OriginalLanguageRegistry.isSameLanguage("en", null))
+        assertFalse(OriginalLanguageRegistry.isSameLanguage(null, null))
+        assertFalse(OriginalLanguageRegistry.isSameLanguage("", "en"))
+
+        // Multi-select OR condition matching
+        assertTrue(OriginalLanguageRegistry.matchesAny(emptySet(), "en"))
+        assertTrue(OriginalLanguageRegistry.matchesAny(null, "en"))
+        assertTrue(OriginalLanguageRegistry.matchesAny(setOf("th", "ko"), "th"))
+        assertTrue(OriginalLanguageRegistry.matchesAny(setOf("th", "ko"), "ko"))
+        assertTrue(OriginalLanguageRegistry.matchesAny(setOf("th", "ko"), "tha"))
+        assertTrue(OriginalLanguageRegistry.matchesAny(setOf("th", "ko"), "kor"))
+        assertFalse(OriginalLanguageRegistry.matchesAny(setOf("th", "ko"), "ja"))
+        assertFalse(OriginalLanguageRegistry.matchesAny(setOf("th", "ko"), "en"))
+        assertFalse(OriginalLanguageRegistry.matchesAny(setOf("th", "ko"), null))
+    }
+
+    @Test
+    fun testMultiSelectOriginalLanguageFilterLabels() {
+        val multiFilter = DiscoveryFilter.Movie(
+            mode = TmdbDiscoveryMode.MOST_POPULAR,
+            sortOrder = TmdbMovieSort.POPULARITY,
+            originalLanguages = setOf("th", "ko")
+        )
+        assertEquals("🔥 Most Popular Movies • Most Popular • 🇹🇭 Thai, 🇰🇷 Korean", multiFilter.label)
+        assertEquals("th", multiFilter.originalLanguage) // Backwards compatible first element getter
+        assertEquals(setOf("th", "ko"), multiFilter.originalLanguages)
     }
 }
