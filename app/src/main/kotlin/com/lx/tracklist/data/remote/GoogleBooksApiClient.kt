@@ -29,7 +29,7 @@ object GoogleBooksApiClient {
         .build()
 
     fun discoverBooks(
-        subject: String = "fiction",
+        subject: String? = null,
         startYear: Int? = null,
         endYear: Int? = null,
         search: String? = null,
@@ -43,10 +43,18 @@ object GoogleBooksApiClient {
         if (!search.isNullOrBlank()) {
             queryParts.add(search.trim())
         }
-        if (subject.isNotBlank()) {
+        if (!subject.isNullOrBlank()) {
             queryParts.add("subject:$subject")
         }
-        val qVal = if (queryParts.isNotEmpty()) queryParts.joinToString(" ") else "subject:fiction"
+        val qVal = when {
+            queryParts.isNotEmpty() -> queryParts.joinToString(" ")
+            !originalLanguage.isNullOrBlank() -> {
+                val opt = com.lx.tracklist.ui.search.OriginalLanguageRegistry.findByCode(originalLanguage)
+                val langQuery = listOfNotNull(opt?.displayName, opt?.nativeName).joinToString(" ").trim()
+                if (langQuery.isNotBlank()) langQuery else "books"
+            }
+            else -> "subject:fiction"
+        }
         val encodedQuery = URLEncoder.encode(qVal, "UTF-8")
         val clampedLimit = limit.coerceIn(1, 40)
         val apiKey = GoogleBooksConfig.getApiKey(context)
@@ -80,7 +88,7 @@ object GoogleBooksApiClient {
                 val itemElem = itemsArray.get(i)
                 if (itemElem.isJsonObject) {
                     try {
-                        parseVolumeItem(itemElem.asJsonObject)?.let { results.add(it) }
+                        parseVolumeItem(itemElem.asJsonObject, originalLanguage)?.let { results.add(it) }
                     } catch (e: Exception) {
                         Log.w(TAG, "Error parsing Google Books item at $i", e)
                     }
@@ -197,7 +205,7 @@ object GoogleBooksApiClient {
         }
     }
 
-    private fun parseVolumeItem(itemObj: JsonObject): BookDetails? {
+    private fun parseVolumeItem(itemObj: JsonObject, defaultLanguage: String? = null): BookDetails? {
         val id = itemObj.get("id")?.takeIf { !it.isJsonNull }?.asString ?: return null
         val volumeInfo = itemObj.getAsJsonObject("volumeInfo") ?: return null
 
@@ -257,7 +265,7 @@ object GoogleBooksApiClient {
         val imageLinks = volumeInfo.getAsJsonObject("imageLinks")
         val coverUrl = resolveBestCoverUrl(imageLinks)
 
-        val language = volumeInfo.get("language")?.takeIf { !it.isJsonNull }?.asString
+        val language = volumeInfo.get("language")?.takeIf { !it.isJsonNull }?.asString ?: defaultLanguage
         val infoUrl = volumeInfo.get("infoLink")?.takeIf { !it.isJsonNull }?.asString
 
         return BookDetails(

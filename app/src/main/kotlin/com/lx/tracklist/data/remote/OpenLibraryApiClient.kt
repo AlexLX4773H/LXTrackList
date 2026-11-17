@@ -35,9 +35,11 @@ object OpenLibraryApiClient {
         subject: String? = null,
         search: String? = null,
         originalLanguage: String? = null,
+        originalLanguages: Set<String> = emptySet(),
         page: Int = 1,
         limit: Int = 20
     ): Result<List<BookDetails>> {
+        val effectiveLangs = if (originalLanguages.isNotEmpty()) originalLanguages else originalLanguage?.let { setOf(it) } ?: emptySet()
         val queryParts = mutableListOf<String>()
         if (!search.isNullOrBlank()) {
             queryParts.add(search.trim())
@@ -49,15 +51,25 @@ object OpenLibraryApiClient {
         } else if (endYear != null) {
             queryParts.add("first_publish_year:[1800 TO $endYear]")
         }
-        if (!originalLanguage.isNullOrBlank()) {
-            val iso3 = com.lx.tracklist.ui.search.OriginalLanguageRegistry.toIso6392(originalLanguage)
-            if (!iso3.isNullOrBlank()) {
-                queryParts.add("language:$iso3")
+        if (effectiveLangs.isNotEmpty()) {
+            val allIso3Codes = effectiveLangs.flatMap { lang ->
+                val opt = com.lx.tracklist.ui.search.OriginalLanguageRegistry.findByCode(lang)
+                opt?.iso6392Codes?.takeIf { it.isNotEmpty() } ?: listOfNotNull(com.lx.tracklist.ui.search.OriginalLanguageRegistry.toIso6392(lang))
+            }.distinct()
+            if (allIso3Codes.isNotEmpty()) {
+                val langQuery = allIso3Codes.joinToString(" OR ") { "language:$it" }
+                queryParts.add("($langQuery)")
             }
         }
-        val qVal = if (queryParts.isNotEmpty()) queryParts.joinToString(" AND ") else "*:*"
+        val qVal = when {
+            queryParts.isEmpty() -> "*:*"
+            search.isNullOrBlank() -> "*:* AND " + queryParts.joinToString(" AND ")
+            else -> queryParts.joinToString(" AND ")
+        }
         val encodedQ = URLEncoder.encode(qVal, "UTF-8")
         val subjectParam = if (!subject.isNullOrBlank()) "&subject=${URLEncoder.encode(subject, "UTF-8")}" else ""
+        val langPreference = effectiveLangs.firstOrNull()?.let { "&lang=${it.lowercase(Locale.ROOT)}" } ?: ""
+        val fieldsParam = "&fields=key,title,subtitle,author_name,publisher,first_publish_year,number_of_pages_median,isbn,cover_i,subject,ratings_average,language"
         val sortParam = when (sort) {
             "rating" -> "&sort=rating"
             "new" -> "&sort=new"
@@ -65,7 +77,7 @@ object OpenLibraryApiClient {
             else -> "&sort=editions"
         }
         val clampedLimit = limit.coerceIn(1, 40)
-        val endpoint = "$BASE_SEARCH_URL?q=$encodedQ$subjectParam$sortParam&page=$page&limit=$clampedLimit"
+        val endpoint = "$BASE_SEARCH_URL?q=$encodedQ$subjectParam$sortParam$langPreference$fieldsParam&page=$page&limit=$clampedLimit"
 
         return try {
             val request = Request.Builder()
@@ -88,12 +100,13 @@ object OpenLibraryApiClient {
             val docsArray = rootObj?.getAsJsonArray("docs")
                 ?: return Result.success(emptyList())
 
+            val defaultLang = effectiveLangs.firstOrNull()
             val results = mutableListOf<BookDetails>()
             for (i in 0 until docsArray.size()) {
                 val docElem = docsArray.get(i)
                 if (docElem.isJsonObject) {
                     try {
-                        parseSearchDoc(docElem.asJsonObject)?.let { results.add(it) }
+                        parseSearchDoc(docElem.asJsonObject, defaultLang)?.let { results.add(it) }
                     } catch (e: Exception) {
                         Log.w(TAG, "Error parsing OpenLibrary doc at $i", e)
                     }
@@ -216,7 +229,7 @@ object OpenLibraryApiClient {
         }
     }
 
-    private fun parseSearchDoc(docObj: JsonObject): BookDetails? {
+    private fun parseSearchDoc(docObj: JsonObject, defaultLanguage: String? = null): BookDetails? {
         val key = docObj.get("key")?.takeIf { !it.isJsonNull }?.asString ?: return null
         val id = key.removePrefix("/works/").removePrefix("/")
 
@@ -259,7 +272,7 @@ object OpenLibraryApiClient {
 
         val ratingAvg = docObj.get("ratings_average")?.takeIf { !it.isJsonNull }?.asFloat
         val scaledScore = ratingAvg?.let { it * 2f }
-        val lang = docObj.getAsJsonArray("language")?.firstOrNull()?.takeIf { !it.isJsonNull }?.asString?.trim()
+        val lang = docObj.getAsJsonArray("language")?.firstOrNull()?.takeIf { !it.isJsonNull }?.asString?.trim() ?: defaultLanguage
 
         return BookDetails(
             id = id,

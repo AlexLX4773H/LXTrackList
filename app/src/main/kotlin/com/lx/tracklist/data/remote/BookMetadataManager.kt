@@ -48,6 +48,7 @@ object BookMetadataManager {
             subject = subject,
             search = search,
             originalLanguage = primaryLang,
+            originalLanguages = effectiveLanguages,
             page = page,
             limit = limit
         )
@@ -56,18 +57,34 @@ object BookMetadataManager {
             openLibRes.getOrDefault(emptyList())
         } else {
             val googleOrderBy = if (sort == BookSortOrder.NEWEST) "newest" else "relevance"
-            val googleRes = GoogleBooksApiClient.discoverBooks(
-                subject = subject ?: "fiction",
-                startYear = if (mode == ContentDiscoveryMode.BY_YEAR) startYear else null,
-                endYear = if (mode == ContentDiscoveryMode.BY_YEAR) endYear else null,
-                search = search,
-                orderBy = googleOrderBy,
-                startIndex = (page - 1) * limit,
-                limit = limit,
-                originalLanguage = primaryLang,
-                context = context
-            )
-            googleRes.getOrDefault(emptyList())
+            if (effectiveLanguages.size > 1) {
+                effectiveLanguages.flatMap { lang ->
+                    GoogleBooksApiClient.discoverBooks(
+                        subject = subject,
+                        startYear = if (mode == ContentDiscoveryMode.BY_YEAR) startYear else null,
+                        endYear = if (mode == ContentDiscoveryMode.BY_YEAR) endYear else null,
+                        search = search,
+                        orderBy = googleOrderBy,
+                        startIndex = (page - 1) * limit,
+                        limit = limit,
+                        originalLanguage = lang,
+                        context = context
+                    ).getOrDefault(emptyList())
+                }.distinctBy { it.id }
+            } else {
+                val googleRes = GoogleBooksApiClient.discoverBooks(
+                    subject = subject,
+                    startYear = if (mode == ContentDiscoveryMode.BY_YEAR) startYear else null,
+                    endYear = if (mode == ContentDiscoveryMode.BY_YEAR) endYear else null,
+                    search = search,
+                    orderBy = googleOrderBy,
+                    startIndex = (page - 1) * limit,
+                    limit = limit,
+                    originalLanguage = primaryLang,
+                    context = context
+                )
+                googleRes.getOrDefault(emptyList())
+            }
         }
 
         val filtered = if (excludedTags.isNotEmpty()) {
@@ -82,7 +99,10 @@ object BookMetadataManager {
         }
 
         val langFiltered = if (effectiveLanguages.isNotEmpty()) {
-            filtered.filter { com.lx.tracklist.ui.search.OriginalLanguageRegistry.matchesAny(effectiveLanguages, it.language) }
+            filtered.filter { book ->
+                com.lx.tracklist.ui.search.OriginalLanguageRegistry.matchesAny(effectiveLanguages, book.language) ||
+                (book.language.isNullOrBlank() && primaryLang != null)
+            }
         } else {
             filtered
         }

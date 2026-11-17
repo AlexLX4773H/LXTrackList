@@ -1,10 +1,13 @@
 package com.lx.tracklist.ui.search
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -95,11 +98,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -113,6 +118,7 @@ import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.GoogleBooksApiClient
 import com.lx.tracklist.data.remote.OpenLibraryApiClient
+import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.TmdbConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -1194,7 +1200,7 @@ private fun AddToLibraryDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun SearchResultDetailSheet(
     item: SearchResultItem,
@@ -1204,14 +1210,60 @@ private fun SearchResultDetailSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     var detailedSynopsis by remember(item.externalId) { mutableStateOf(item.synopsis) }
     var detailedAuthor by remember(item.externalId) { mutableStateOf(item.author) }
     var detailedPublisher by remember(item.externalId) { mutableStateOf(item.publisher) }
     var detailedIsbn by remember(item.externalId) { mutableStateOf(item.isbn) }
+    var detailedSeasons by remember(item.externalId) { mutableStateOf(item.totalVolumes) }
+    var detailedEpisodes by remember(item.externalId) { mutableStateOf(item.totalUnits) }
+    var detailedDuration by remember(item.externalId) { mutableStateOf(item.durationMinutes) }
     var isLoadingDetails by remember(item.externalId) { mutableStateOf(false) }
 
     LaunchedEffect(item.externalId) {
-        if (item.mediaType == MediaType.BOOK && (detailedSynopsis.isNullOrBlank() || detailedSynopsis == item.title || detailedSynopsis!!.startsWith("Author:"))) {
+        if (item.mediaType == MediaType.SHOW && item.externalSource.equals("TMDB", ignoreCase = true) && (detailedEpisodes == null || detailedSeasons == null)) {
+            val tmdbId = item.externalId.toLongOrNull()
+            if (tmdbId != null) {
+                isLoadingDetails = true
+                withContext(Dispatchers.IO) {
+                    try {
+                        val tvDetails = TmdbApiClient.fetchTvDetails(tmdbId, context).getOrNull()
+                        if (tvDetails != null) {
+                            if (tvDetails.totalSeasons != null && tvDetails.totalSeasons > 0) {
+                                detailedSeasons = tvDetails.totalSeasons
+                            }
+                            if (tvDetails.totalEpisodes != null && tvDetails.totalEpisodes > 0) {
+                                detailedEpisodes = tvDetails.totalEpisodes
+                            }
+                            if (tvDetails.durationMinutes != null && detailedDuration == null) {
+                                detailedDuration = tvDetails.durationMinutes
+                            }
+                            if (detailedSynopsis.isNullOrBlank() && !tvDetails.synopsis.isNullOrBlank()) {
+                                detailedSynopsis = tvDetails.synopsis
+                            }
+                        }
+                    } catch (_: Exception) {}
+                    isLoadingDetails = false
+                }
+            }
+        } else if (item.mediaType == MediaType.MOVIE && item.externalSource.equals("TMDB", ignoreCase = true) && detailedDuration == null) {
+            val tmdbId = item.externalId.toLongOrNull()
+            if (tmdbId != null) {
+                withContext(Dispatchers.IO) {
+                    try {
+                        val movieDetails = TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()
+                        if (movieDetails != null) {
+                            if (movieDetails.durationMinutes != null) {
+                                detailedDuration = movieDetails.durationMinutes
+                            }
+                            if (detailedSynopsis.isNullOrBlank() && !movieDetails.synopsis.isNullOrBlank()) {
+                                detailedSynopsis = movieDetails.synopsis
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+        } else if (item.mediaType == MediaType.BOOK && (detailedSynopsis.isNullOrBlank() || detailedSynopsis == item.title || detailedSynopsis!!.startsWith("Author:"))) {
             isLoadingDetails = true
             withContext(Dispatchers.IO) {
                 try {
@@ -1344,14 +1396,32 @@ private fun SearchResultDetailSheet(
                     Text(
                         text = item.title,
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = LXTextPrimary
+                        color = LXTextPrimary,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = {
+                                    clipboardManager.setText(AnnotatedString(item.title))
+                                    Toast.makeText(context, "Copied title to clipboard", Toast.LENGTH_SHORT).show()
+                                }
+                            )
                     )
 
                     if (!item.alternateTitle.isNullOrBlank() && !item.alternateTitle.equals(item.title, ignoreCase = true)) {
                         Text(
                             text = item.alternateTitle.replace("\n", " • "),
                             style = MaterialTheme.typography.bodySmall,
-                            color = LXTextSecondary.copy(alpha = 0.8f)
+                            color = LXTextSecondary.copy(alpha = 0.8f),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .combinedClickable(
+                                    onClick = {},
+                                    onLongClick = {
+                                        clipboardManager.setText(AnnotatedString(item.alternateTitle))
+                                        Toast.makeText(context, "Copied title to clipboard", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
                         )
                     }
 
@@ -1429,15 +1499,30 @@ private fun SearchResultDetailSheet(
                         }
                     }
 
+                    val seasons = detailedSeasons ?: item.totalVolumes
+                    val episodes = detailedEpisodes ?: item.totalUnits
+                    val duration = detailedDuration ?: item.durationMinutes
+
                     // Units/Episodes/Runtime
                     val unitsInfo = when (item.mediaType) {
-                        MediaType.ANIME, MediaType.SHOW -> {
-                            val eps = item.totalUnits?.takeIf { it > 0 }?.let { "$it Episodes" } ?: "Episodes unknown"
-                            val dur = item.durationMinutes?.takeIf { it > 0 }?.let { " • ${it}m/ep" } ?: ""
+                        MediaType.SHOW -> {
+                            val seasonText = seasons?.takeIf { it > 0 }?.let { if (it == 1) "1 Season" else "$it Seasons" }
+                            val epText = episodes?.takeIf { it > 0 }?.let { if (it == 1) "1 Episode" else "$it Episodes" }
+                            when {
+                                seasonText != null && epText != null -> "$seasonText • $epText"
+                                seasonText != null -> seasonText
+                                epText != null -> epText
+                                isLoadingDetails -> "Loading details..."
+                                else -> null
+                            }
+                        }
+                        MediaType.ANIME -> {
+                            val eps = episodes?.takeIf { it > 0 }?.let { "$it Episodes" } ?: "Episodes unknown"
+                            val dur = duration?.takeIf { it > 0 }?.let { " • ${it}m/ep" } ?: ""
                             eps + dur
                         }
                         MediaType.MOVIE -> {
-                            item.durationMinutes?.takeIf { it > 0 }?.let { "${it}m runtime" }
+                            duration?.takeIf { it > 0 }?.let { "${it}m runtime" }
                         }
                         MediaType.MANGA, MediaType.MANHWA -> {
                             val chs = item.totalUnits?.takeIf { it > 0 }?.let { "$it Chapters" } ?: "Ongoing"

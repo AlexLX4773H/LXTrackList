@@ -570,9 +570,10 @@ fun SearchDiscoverySheet(
                             .clickable { showTagsSubMenu = false }
                             .padding(vertical = 4.dp, horizontal = 4.dp)
                     ) {
+                        val hasSelectedTags = activeIncludedTags.isNotEmpty() || activeExcludedTags.isNotEmpty()
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            imageVector = if (hasSelectedTags) Icons.Default.Check else Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = if (hasSelectedTags) "Apply" else "Back",
                             tint = LXPrimaryGreen,
                             modifier = Modifier.size(22.dp)
                         )
@@ -883,9 +884,10 @@ fun SearchDiscoverySheet(
                             .clickable { showLanguageSubMenu = false }
                             .padding(vertical = 4.dp, horizontal = 4.dp)
                     ) {
+                        val hasSelectedLanguages = currentSelectedLanguages.isNotEmpty()
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            imageVector = if (hasSelectedLanguages) Icons.Default.Check else Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = if (hasSelectedLanguages) "Apply" else "Back",
                             tint = LXPrimaryGreen,
                             modifier = Modifier.size(22.dp)
                         )

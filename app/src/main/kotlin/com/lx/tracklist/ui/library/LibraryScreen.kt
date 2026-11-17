@@ -2465,9 +2465,10 @@ private fun AdvancedFilterSheet(
                             .clickable { showTagsSubMenu = false }
                             .padding(vertical = 4.dp, horizontal = 4.dp)
                     ) {
+                        val hasSelectedTags = state.includedTags.isNotEmpty() || state.excludedTags.isNotEmpty()
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            imageVector = if (hasSelectedTags) Icons.Default.Check else Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = if (hasSelectedTags) "Apply" else "Back",
                             tint = LXPrimaryGreen,
                             modifier = Modifier.size(22.dp)
                         )
