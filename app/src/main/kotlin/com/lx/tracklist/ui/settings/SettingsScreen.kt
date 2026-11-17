@@ -3253,6 +3253,55 @@ private fun ExternalTrackingContent(
                             }
                         }
                     } else {
+                        // Success / Error status banner after sync finishes
+                        if (malSyncState.isCompleted && !malSyncState.statusMessage.isNullOrBlank()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = malSyncState.statusMessage ?: "",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                    color = LXTextPrimary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        } else if (!malSyncState.errorMessage.isNullOrBlank()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(LXErrorRed.copy(alpha = 0.15f))
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.ErrorOutline,
+                                    contentDescription = null,
+                                    tint = LXErrorRed,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = malSyncState.errorMessage ?: "",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                    color = LXErrorRed,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
                         // Action buttons row
                         Row(
                             modifier = Modifier.fillMaxWidth(),

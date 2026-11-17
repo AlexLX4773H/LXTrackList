@@ -613,11 +613,21 @@ class MediaRepository(
             if (direct != null) return direct
         }
 
-        // 2. Exact externalId across any source
+        // 2. Exact externalId across matching source
         if (impExtId != null) {
             val byAnyId = dao.findByAnyExternalId(targetUserId, impExtId)
             if (byAnyId != null && isMediaTypeCompatible(byAnyId.mediaType, impType)) {
-                return byAnyId
+                // If byAnyId has an externalSource specified, it MUST match impExtSrc.
+                // Different external sources (e.g. MAL vs Tachiyomi/AniList) use different ID spaces.
+                val isSourceCompatible = byAnyId.externalSource == null ||
+                        (impExtSrc != null && byAnyId.externalSource.equals(impExtSrc, ignoreCase = true))
+                val isTitleCompatible = byAnyId.title.equals(impTitle, ignoreCase = true) ||
+                        com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(byAnyId.title) ==
+                        com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(impTitle)
+
+                if (isSourceCompatible && (byAnyId.externalSource != null || isTitleCompatible)) {
+                    return byAnyId
+                }
             }
         }
 
@@ -667,8 +677,13 @@ class MediaRepository(
             }
 
             // 5a. Preserved Tachiyomi ID match in description or user comments
-            if (impExtId != null && (((existing.description ?: existing.notes)?.contains(impExtId) == true) || existing.userComments?.contains(impExtId) == true)) {
-                return existing
+            // ONLY applies if the imported entry has a Tachiyomi ID marker, avoiding false substring matches on bare numbers
+            val isTachiImport = impExtSrc?.contains("TACHIYOMI", ignoreCase = true) == true || impExtId?.startsWith("/") == true
+            if (isTachiImport && impExtId != null) {
+                val tachiMarker = "[Tachiyomi ID: $impExtId]"
+                val hasMarker = ((existing.description ?: existing.notes)?.contains(tachiMarker) == true) ||
+                        existing.userComments?.contains(tachiMarker) == true
+                if (hasMarker) return existing
             }
 
             // 5b. Alternate Title match (either existing has imported title in its alternates, or imported has existing title)
