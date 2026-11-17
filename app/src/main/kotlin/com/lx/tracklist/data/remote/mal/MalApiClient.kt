@@ -203,7 +203,7 @@ object MalApiClient {
         val fields = "list_status{num_episodes_watched,score,status,is_rewatching,num_times_rewatched,updated_at}," +
                      "num_episodes,start_date,end_date,alternative_titles,genres,synopsis,mean"
 
-        var url = "$BASE_URL/users/@me/animelist?fields=$fields&limit=$limit&offset=$offset"
+        var url = "$BASE_URL/users/@me/animelist?fields=$fields&limit=$limit&offset=$offset&nsfw=true"
         if (!status.isNullOrBlank()) {
             url += "&status=$status"
         }
@@ -238,7 +238,7 @@ object MalApiClient {
         val fields = "list_status{num_volumes_read,num_chapters_read,score,status,is_rereading,num_times_reread,updated_at}," +
                      "num_volumes,num_chapters,start_date,end_date,alternative_titles,genres,synopsis,mean"
 
-        var url = "$BASE_URL/users/@me/mangalist?fields=$fields&limit=$limit&offset=$offset"
+        var url = "$BASE_URL/users/@me/mangalist?fields=$fields&limit=$limit&offset=$offset&nsfw=true"
         if (!status.isNullOrBlank()) {
             url += "&status=$status"
         }

@@ -249,7 +249,7 @@ object MalSyncManager {
                         pulledEntries.add(entry)
                     }
 
-                    if (items.size < limit || animeResponse.paging?.next == null) {
+                    if (items.isEmpty() || animeResponse.paging?.next.isNullOrBlank()) {
                         hasMore = false
                     } else {
                         offset += limit
@@ -301,7 +301,7 @@ object MalSyncManager {
                         pulledEntries.add(entry)
                     }
 
-                    if (items.size < limit || mangaResponse.paging?.next == null) {
+                    if (items.isEmpty() || mangaResponse.paging?.next.isNullOrBlank()) {
                         hasMore = false
                     } else {
                         offset += limit
