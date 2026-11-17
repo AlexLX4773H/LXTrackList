@@ -26,6 +26,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
 data class JikanAnimeDetails(
@@ -64,7 +65,8 @@ data class JikanMediaDetails(
     val broadcastTime: String? = null,
     val nextAiringEpoch: Long? = null,
     val isAdult: Boolean? = null,
-    val originalLanguage: String? = null
+    val originalLanguage: String? = null,
+    val popularity: Int? = null
 ) {
     val webUrl: String?
         get() {
@@ -102,6 +104,29 @@ object JikanApiClient {
 
     fun JsonObject.getSafeJsonObject(key: String): JsonObject? =
         get(key)?.takeIf { it.isJsonObject }?.asJsonObject
+
+    fun sortMediaList(list: List<JikanMediaDetails>, sort: String): List<JikanMediaDetails> {
+        return when (sort) {
+            "SCORE_DESC" -> list.sortedWith(
+                compareByDescending<JikanMediaDetails> { it.externalScore ?: 0f }
+                    .thenByDescending { it.popularity ?: 0 }
+            )
+            "START_DATE_DESC" -> list.sortedWith(
+                compareByDescending<JikanMediaDetails> { it.airedStartDate ?: 0L }
+                    .thenByDescending { it.popularity ?: 0 }
+            )
+            "TITLE_ROMAJI" -> list.sortedWith(
+                compareBy<JikanMediaDetails> { it.title?.lowercase(Locale.ROOT) ?: "" }
+                    .thenByDescending { it.popularity ?: 0 }
+            )
+            else -> { // Default POPULARITY_DESC
+                list.sortedWith(
+                    compareByDescending<JikanMediaDetails> { it.popularity ?: 0 }
+                        .thenByDescending { it.externalScore ?: 0f }
+                )
+            }
+        }
+    }
 
     fun fetchAnimeDetails(
         malId: Long,
@@ -742,6 +767,7 @@ object JikanApiClient {
                   status
                   averageScore
                   meanScore
+                  popularity
                   description(asHtml: false)
                   startDate { year month day }
                   endDate { year month day }
@@ -771,6 +797,7 @@ object JikanApiClient {
                   status
                   averageScore
                   meanScore
+                  popularity
                   description(asHtml: false)
                   startDate { year month day }
                   endDate { year month day }
@@ -1178,7 +1205,8 @@ object JikanApiClient {
             broadcastTime = broadcastTime,
             nextAiringEpoch = nextAiringEpoch,
             isAdult = isAdult,
-            originalLanguage = inferredLang
+            originalLanguage = inferredLang,
+            popularity = dataObj.get("members")?.takeIf { !it.isJsonNull }?.asInt
         )
     }
 
@@ -1303,7 +1331,8 @@ object JikanApiClient {
             broadcastTime = broadcastTime,
             nextAiringEpoch = nextAiringEpoch,
             isAdult = isAdult,
-            originalLanguage = resolvedLang
+            originalLanguage = resolvedLang,
+            popularity = mediaObj.get("popularity")?.takeIf { !it.isJsonNull }?.asInt
         )
     }
 
@@ -1810,6 +1839,43 @@ object JikanApiClient {
         perPage: Int = 25
     ): Result<List<JikanMediaDetails>> {
         val effectiveLanguages = if (originalLanguages.isNotEmpty()) originalLanguages else originalLanguage?.let { setOf(it) } ?: emptySet()
+        if (effectiveLanguages.size > 1) {
+            return try {
+                val futures = effectiveLanguages.map { lang ->
+                    CompletableFuture.supplyAsync {
+                        queryAniListDiscovery(
+                            mode = mode,
+                            year = year,
+                            season = season,
+                            sort = sort,
+                            search = search,
+                            includedTags = includedTags,
+                            excludedTags = excludedTags,
+                            adultMode = adultMode,
+                            originalLanguages = setOf(lang),
+                            originalLanguage = lang,
+                            page = page,
+                            perPage = perPage
+                        ).getOrDefault(emptyList()).filter {
+                            OriginalLanguageRegistry.matches(lang, it.originalLanguage)
+                        }
+                    }
+                }
+                val allResults = futures.flatMap { future ->
+                    try {
+                        future.join()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed sub-query for multi-language AniList discovery (lang)", e)
+                        emptyList()
+                    }
+                }
+                val distinct = allResults.distinctBy { it.malId ?: it.title ?: "" }
+                Result.success(sortMediaList(distinct, sort))
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception querying multi-language AniList discovery", e)
+                Result.failure(e)
+            }
+        }
         val hasSearch = !search.isNullOrBlank()
         val adultParam = when (adultMode) {
             AdultMode.OFF -> ", isAdult: false"
@@ -1880,6 +1946,7 @@ object JikanApiClient {
                   status
                   averageScore
                   meanScore
+                  popularity
                   description(asHtml: false)
                   startDate { year month day }
                   endDate { year month day }
@@ -2245,6 +2312,12 @@ object JikanApiClient {
             }
         }
 
+        // If AniList succeeded but returned no items for non-Japanese filters, don't fall back to Jikan
+        // because Jikan (MAL) does not support non-Japanese filtering and will only time out or return empty.
+        if (anilistRes.isSuccess && effectiveLanguages.isNotEmpty() && !effectiveLanguages.any { it.equals("ja", ignoreCase = true) }) {
+            return Result.success(emptyList())
+        }
+
         // 2. Fall back to Jikan API v4
         Log.w(TAG, "AniList discovery lookup failed or empty. Falling back to Jikan for mode=$mode...")
         val jikanRes = queryJikanDiscovery(
@@ -2265,16 +2338,11 @@ object JikanApiClient {
                     items.filter { OriginalLanguageRegistry.matchesAny(effectiveLanguages, it.originalLanguage) }
                 } else items
             }
-            val sortedList = when (sort) {
-                "SCORE_DESC" -> list.sortedByDescending { it.externalScore ?: 0f }
-                "START_DATE_DESC" -> list.sortedByDescending { it.airedStartDate ?: 0L }
-                "TITLE_ROMAJI" -> list.sortedBy { it.title?.lowercase(Locale.ROOT) ?: "" }
-                else -> list // Default Jikan MAL popularity
-            }
+            val sortedList = sortMediaList(list, sort)
             return Result.success(sortedList)
         }
 
-        return if (anilistRes.isFailure) anilistRes else jikanRes
+        return if (anilistRes.isSuccess) Result.success(emptyList()) else anilistRes
     }
 
     fun queryAniListMangaDiscovery(
@@ -2294,6 +2362,45 @@ object JikanApiClient {
         perPage: Int = 25
     ): Result<List<JikanMediaDetails>> {
         val effectiveLanguages = if (originalLanguages.isNotEmpty()) originalLanguages else originalLanguage?.let { setOf(it) } ?: emptySet()
+        if (effectiveLanguages.size > 1) {
+            return try {
+                val futures = effectiveLanguages.map { lang ->
+                    CompletableFuture.supplyAsync {
+                        queryAniListMangaDiscovery(
+                            isManhwa = isManhwa,
+                            isLightNovel = isLightNovel,
+                            mode = mode,
+                            startYear = startYear,
+                            endYear = endYear,
+                            sort = sort,
+                            search = search,
+                            includedTags = includedTags,
+                            excludedTags = excludedTags,
+                            adultMode = adultMode,
+                            originalLanguages = setOf(lang),
+                            originalLanguage = lang,
+                            page = page,
+                            perPage = perPage
+                        ).getOrDefault(emptyList()).filter {
+                            OriginalLanguageRegistry.matches(lang, it.originalLanguage)
+                        }
+                    }
+                }
+                val allResults = futures.flatMap { future ->
+                    try {
+                        future.join()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed sub-query for multi-language AniList manga discovery", e)
+                        emptyList()
+                    }
+                }
+                val distinct = allResults.distinctBy { it.malId ?: it.title ?: "" }
+                Result.success(sortMediaList(distinct, sort))
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception querying multi-language AniList manga discovery", e)
+                Result.failure(e)
+            }
+        }
         val hasSearch = !search.isNullOrBlank()
         val adultParam = when (adultMode) {
             AdultMode.OFF -> ", isAdult: false"
@@ -2370,6 +2477,7 @@ object JikanApiClient {
                   status
                   averageScore
                   meanScore
+                  popularity
                   description(asHtml: false)
                   startDate { year month day }
                   endDate { year month day }
@@ -2600,6 +2708,12 @@ object JikanApiClient {
             }
         }
 
+        // If AniList succeeded but returned no items for non-Japanese / Manhwa filters, don't fall back to Jikan
+        // because Jikan (MAL) does not support non-Japanese filtering and will only time out or return empty.
+        if (anilistRes.isSuccess && (isManhwa || (effectiveLanguages.isNotEmpty() && !effectiveLanguages.any { it.equals("ja", ignoreCase = true) }))) {
+            return Result.success(emptyList())
+        }
+
         val jikanType = when {
             isLightNovel -> "lightnovel"
             isManhwa -> "manhwa"
@@ -2624,11 +2738,12 @@ object JikanApiClient {
                 } else items
             }
             if (list.isNotEmpty()) {
-                return Result.success(list)
+                val sortedList = sortMediaList(list, sort)
+                return Result.success(sortedList)
             }
         }
 
-        return if (anilistRes.isFailure) anilistRes else jikanRes
+        return if (anilistRes.isSuccess) Result.success(emptyList()) else anilistRes
     }
 
     fun fetchSeasonalAnime(
