@@ -205,6 +205,8 @@ object MalSyncManager {
 
             try {
                 val pulledEntries = mutableListOf<MediaEntry>()
+                var animeCount = 0
+                var mangaCount = 0
 
                 // 1. Fetch Anime list
                 _syncState.update { it.copy(statusMessage = "Fetching anime list from MyAnimeList...") }
@@ -221,6 +223,7 @@ object MalSyncManager {
                     ).getOrThrow()
 
                     val items = animeResponse.data ?: emptyList()
+                    animeCount += items.size
                     for (item in items) {
                         val node = item.node
                         val listStatus = item.listStatus
@@ -249,10 +252,12 @@ object MalSyncManager {
                         pulledEntries.add(entry)
                     }
 
-                    if (items.isEmpty() || animeResponse.paging?.next.isNullOrBlank()) {
+                    val nextUrl = animeResponse.paging?.next
+                    if (items.isEmpty() || nextUrl.isNullOrBlank()) {
                         hasMore = false
                     } else {
-                        offset += limit
+                        val nextOffset = nextUrl.substringAfter("offset=", "").substringBefore("&").toIntOrNull()
+                        offset = nextOffset ?: (offset + limit)
                     }
                 }
 
@@ -270,6 +275,7 @@ object MalSyncManager {
                     ).getOrThrow()
 
                     val items = mangaResponse.data ?: emptyList()
+                    mangaCount += items.size
                     for (item in items) {
                         val node = item.node
                         val listStatus = item.listStatus
@@ -301,10 +307,12 @@ object MalSyncManager {
                         pulledEntries.add(entry)
                     }
 
-                    if (items.isEmpty() || mangaResponse.paging?.next.isNullOrBlank()) {
+                    val nextUrl = mangaResponse.paging?.next
+                    if (items.isEmpty() || nextUrl.isNullOrBlank()) {
                         hasMore = false
                     } else {
-                        offset += limit
+                        val nextOffset = nextUrl.substringAfter("offset=", "").substringBefore("&").toIntOrNull()
+                        offset = nextOffset ?: (offset + limit)
                     }
                 }
 
@@ -320,12 +328,24 @@ object MalSyncManager {
 
                 MalTokenStore(context).setLastSyncTimestamp(userId, System.currentTimeMillis())
 
+                val breakdown = buildString {
+                    append("Synced ${pulledEntries.size} titles")
+                    if (mangaCount > 0 && animeCount > 0) {
+                        append(" ($mangaCount manga, $animeCount anime)")
+                    } else if (mangaCount > 0) {
+                        append(" ($mangaCount manga)")
+                    } else if (animeCount > 0) {
+                        append(" ($animeCount anime)")
+                    }
+                    append(": $inserted added, $updated updated")
+                }
+
                 _syncState.value = MalSyncProgress(
                     isRunning = false,
                     isCompleted = true,
                     completedCount = pulledEntries.size,
                     totalCount = pulledEntries.size,
-                    statusMessage = "Synced ${pulledEntries.size} titles ($inserted added, $updated updated)"
+                    statusMessage = breakdown
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "MAL full sync failed", e)

@@ -623,13 +623,27 @@ class MediaRepository(
 
         // 3. Exact Title and Media Type
         val byTitle = dao.findByTitleAndType(targetUserId, impTitle, impType)
-        if (byTitle != null) return byTitle
+        if (byTitle != null) {
+            val isConflictingExtId = impExtSrc != null && impExtId != null &&
+                    byTitle.externalSource != null &&
+                    byTitle.externalSource.equals(impExtSrc, ignoreCase = true) &&
+                    !byTitle.externalId.isNullOrBlank() &&
+                    byTitle.externalId != impExtId
+            if (!isConflictingExtId) return byTitle
+        }
 
         // 4. Cross-reading type match (e.g. Manga vs Manhwa for the same title)
         if (impType.isReadType) {
             val altReadType = if (impType == MediaType.MANHWA) MediaType.MANGA else MediaType.MANHWA
             val byAltType = dao.findByTitleAndType(targetUserId, impTitle, altReadType)
-            if (byAltType != null) return byAltType
+            if (byAltType != null) {
+                val isConflictingExtId = impExtSrc != null && impExtId != null &&
+                        byAltType.externalSource != null &&
+                        byAltType.externalSource.equals(impExtSrc, ignoreCase = true) &&
+                        !byAltType.externalId.isNullOrBlank() &&
+                        byAltType.externalId != impExtId
+                if (!isConflictingExtId) return byAltType
+            }
         }
 
         // 5. Check against all existing user entries for Alternate Titles, Preserved Tachiyomi IDs, or Normalized Match
@@ -640,6 +654,17 @@ class MediaRepository(
 
         for (existing in userEntries) {
             if (!isMediaTypeCompatible(existing.mediaType, impType)) continue
+
+            // If both entries have an authoritative externalSource (e.g. "MAL"), but different external IDs,
+            // they are definitively two separate entries in that catalog. Never merge them!
+            if (impExtSrc != null && impExtId != null &&
+                existing.externalSource != null &&
+                existing.externalSource.equals(impExtSrc, ignoreCase = true) &&
+                !existing.externalId.isNullOrBlank() &&
+                existing.externalId != impExtId
+            ) {
+                continue
+            }
 
             // 5a. Preserved Tachiyomi ID match in description or user comments
             if (impExtId != null && (((existing.description ?: existing.notes)?.contains(impExtId) == true) || existing.userComments?.contains(impExtId) == true)) {
