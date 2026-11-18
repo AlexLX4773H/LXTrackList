@@ -558,19 +558,20 @@ fun SearchDiscoverySheet(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 // Header Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
                 ) {
+                    val hasSelectedTags = activeIncludedTags.isNotEmpty() || activeExcludedTags.isNotEmpty()
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
+                            .align(Alignment.CenterStart)
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { showTagsSubMenu = false }
                             .padding(vertical = 4.dp, horizontal = 4.dp)
                     ) {
-                        val hasSelectedTags = activeIncludedTags.isNotEmpty() || activeExcludedTags.isNotEmpty()
                         Icon(
                             imageVector = if (hasSelectedTags) Icons.Default.Check else Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = if (hasSelectedTags) "Apply" else "Back",
@@ -593,8 +594,12 @@ fun SearchDiscoverySheet(
                         )
                     }
 
-                    if (activeIncludedTags.isNotEmpty() || activeExcludedTags.isNotEmpty()) {
-                        TextButton(onClick = { clearAllCurrentTags() }) {
+                    if (hasSelectedTags) {
+                        TextButton(
+                            onClick = { clearAllCurrentTags() },
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
                             Text("Clear All", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                         }
                     }
@@ -872,19 +877,20 @@ fun SearchDiscoverySheet(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 // Header Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
                 ) {
+                    val hasSelectedLanguages = currentSelectedLanguages.isNotEmpty()
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
+                            .align(Alignment.CenterStart)
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { showLanguageSubMenu = false }
                             .padding(vertical = 4.dp, horizontal = 4.dp)
                     ) {
-                        val hasSelectedLanguages = currentSelectedLanguages.isNotEmpty()
                         Icon(
                             imageVector = if (hasSelectedLanguages) Icons.Default.Check else Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = if (hasSelectedLanguages) "Apply" else "Back",
@@ -899,8 +905,12 @@ fun SearchDiscoverySheet(
                         )
                     }
 
-                    if (currentSelectedLanguages.isNotEmpty()) {
-                        TextButton(onClick = { clearCategoryLanguages() }) {
+                    if (hasSelectedLanguages) {
+                        TextButton(
+                            onClick = { clearCategoryLanguages() },
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
                             Text("Clear All", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                         }
                     }

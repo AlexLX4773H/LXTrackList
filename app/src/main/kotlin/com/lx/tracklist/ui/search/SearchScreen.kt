@@ -320,7 +320,12 @@ fun SearchScreen(
                         keyboardActions = KeyboardActions(onSearch = { viewModel.submitSearch(context) }),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 58.dp, end = if (state.isLoading || state.query.isNotEmpty()) 42.dp else 20.dp, top = 8.dp, bottom = 18.dp)
+                            .padding(
+                                start = if (isTablet) 90.dp else 58.dp,
+                                end = if (state.isLoading || state.query.isNotEmpty()) 42.dp else 20.dp,
+                                top = if (isTablet) 12.dp else 8.dp,
+                                bottom = if (isTablet) 14.dp else 18.dp
+                            )
                             .align(Alignment.CenterStart),
                         decorationBox = { innerTextField ->
                             Box(contentAlignment = Alignment.CenterStart) {
@@ -405,7 +410,7 @@ fun SearchScreen(
                         leadingIcon = if (isGate || isBeyond || isSky) {
                             // theme_gate_search_bar, theme_beyond_search_bar, and theme_sky_search_bar already have the icon baked into the left side.
                             // We provide a spacer so the text starts after the baked-in icon without stacking a duplicate icon.
-                            { Spacer(modifier = Modifier.width(36.dp)) }
+                            { Spacer(modifier = Modifier.width(if (isTablet) 68.dp else 36.dp)) }
                         } else {
                             {
                                 Icon(

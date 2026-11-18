@@ -1406,7 +1406,12 @@ fun LibraryScreen(
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 58.dp, end = if (state.searchQuery.isNotEmpty()) 42.dp else 20.dp, top = 8.dp, bottom = 18.dp)
+                            .padding(
+                                start = if (isTablet) 90.dp else 58.dp,
+                                end = if (state.searchQuery.isNotEmpty()) 42.dp else 20.dp,
+                                top = if (isTablet) 12.dp else 8.dp,
+                                bottom = if (isTablet) 14.dp else 18.dp
+                            )
                             .align(Alignment.CenterStart),
                         decorationBox = { innerTextField ->
                             Box(contentAlignment = Alignment.CenterStart) {
@@ -1481,7 +1486,7 @@ fun LibraryScreen(
                         leadingIcon = if (isGate || isBeyond || isSky) {
                             // theme_gate_search_bar, theme_beyond_search_bar, and theme_sky_search_bar already have the icon baked into the left side.
                             // We provide a spacer so the text starts after the baked-in icon without stacking a duplicate icon.
-                            { Spacer(modifier = Modifier.width(36.dp)) }
+                            { Spacer(modifier = Modifier.width(if (isTablet) 68.dp else 36.dp)) }
                         } else {
                             {
                                 Icon(
@@ -2453,19 +2458,20 @@ private fun AdvancedFilterSheet(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
                 ) {
+                    val hasSelectedTags = state.includedTags.isNotEmpty() || state.excludedTags.isNotEmpty()
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
+                            .align(Alignment.CenterStart)
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { showTagsSubMenu = false }
                             .padding(vertical = 4.dp, horizontal = 4.dp)
                     ) {
-                        val hasSelectedTags = state.includedTags.isNotEmpty() || state.excludedTags.isNotEmpty()
                         Icon(
                             imageVector = if (hasSelectedTags) Icons.Default.Check else Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = if (hasSelectedTags) "Apply" else "Back",
@@ -2480,8 +2486,12 @@ private fun AdvancedFilterSheet(
                         )
                     }
 
-                    if (state.includedTags.isNotEmpty() || state.excludedTags.isNotEmpty()) {
-                        TextButton(onClick = { viewModel.clearTagFilters() }) {
+                    if (hasSelectedTags) {
+                        TextButton(
+                            onClick = { viewModel.clearTagFilters() },
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
                             Text("Clear All", color = LXErrorRed, fontWeight = FontWeight.Bold)
                         }
                     }

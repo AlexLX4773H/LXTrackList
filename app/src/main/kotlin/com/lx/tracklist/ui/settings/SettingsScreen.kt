@@ -1093,9 +1093,10 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Left Master Pane: Settings Navigation Menu
+                val masterPaneWidth = if (configuration.screenWidthDp >= 960) 360.dp else 340.dp
                 Card(
                     modifier = Modifier
-                        .width(290.dp)
+                        .width(masterPaneWidth)
                         .fillMaxHeight(),
                     colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
                     border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
@@ -1553,7 +1554,7 @@ private fun SettingsMainMenu(
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // Status Notification Banner (if any)
@@ -1794,7 +1795,7 @@ private fun SettingsMenuItem(
                 shape = RoundedCornerShape(12.dp)
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -1804,7 +1805,7 @@ private fun SettingsMenuItem(
         ) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(38.dp)
                     .clip(RoundedCornerShape(10.dp))
                     .background(iconBackgroundColor),
                 contentAlignment = Alignment.Center
@@ -1813,25 +1814,27 @@ private fun SettingsMenuItem(
                     imageVector = icon,
                     contentDescription = null,
                     tint = iconTintColor,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 15.sp
+                        fontSize = 14.sp
                     ),
-                    color = LXTextPrimary
+                    color = LXTextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                     color = LXTextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1839,7 +1842,7 @@ private fun SettingsMenuItem(
             }
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(6.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (badgeText != null) {
@@ -1847,25 +1850,30 @@ private fun SettingsMenuItem(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(badgeColor.copy(alpha = 0.15f))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = badgeText,
                         color = badgeColor,
+                        maxLines = 1,
+                        softWrap = false,
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp
+                            fontSize = 10.sp,
+                            lineHeight = 12.sp,
+                            letterSpacing = 0.3.sp
                         )
                     )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
             }
 
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
                 contentDescription = null,
                 tint = if (isSelected) LXPrimaryGreen else LXTextSecondary.copy(alpha = 0.6f),
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(12.dp)
             )
         }
     }
