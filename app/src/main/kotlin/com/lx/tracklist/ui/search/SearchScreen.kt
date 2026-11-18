@@ -1238,7 +1238,7 @@ private fun SearchResultDetailSheet(
                             if (tvDetails.durationMinutes != null && detailedDuration == null) {
                                 detailedDuration = tvDetails.durationMinutes
                             }
-                            if (detailedSynopsis.isNullOrBlank() && !tvDetails.alesynopsis.isNullOrBlank()) {
+                            if (detailedSynopsis.isNullOrBlank() && !tvDetails.synopsis.isNullOrBlank()) {
                                 detailedSynopsis = tvDetails.synopsis
                             }
                         }
