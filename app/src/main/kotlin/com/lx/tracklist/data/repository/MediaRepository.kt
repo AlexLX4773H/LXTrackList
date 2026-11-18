@@ -602,7 +602,7 @@ class MediaRepository(
         imported: MediaEntry,
         cachedEntries: List<MediaEntry>? = null
     ): MediaEntry? {
-        val impExtId = imported.externalId?.trim()?.takeIf { it.isNotBlank() }
+        val impExtId = imported.externalId?.trim()?.takeIf { it.isNotBlank() && it != "0" && it != "null" }
         val impExtSrc = imported.externalSource?.trim()?.takeIf { it.isNotBlank() }
         val impTitle = imported.title.trim()
         val impType = imported.mediaType

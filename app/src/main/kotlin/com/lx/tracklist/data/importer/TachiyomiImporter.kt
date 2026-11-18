@@ -29,6 +29,7 @@ data class TachiyomiTracking(
     val syncId: Int = 0,
     val libraryId: Long = 0L,
     val mediaIdInt: Int = 0,
+    val mediaId: Long = 0L,
     val trackingUrl: String? = null,
     val title: String? = null,
     val lastChapterRead: Float = 0f,
@@ -406,6 +407,7 @@ object TachiyomiImporter {
         var syncId = 0
         var libraryId = 0L
         var mediaIdInt = 0
+        var mediaId = 0L
         var trackingUrl: String? = null
         var title: String? = null
         var lastChapterRead = 0f
@@ -433,6 +435,7 @@ object TachiyomiImporter {
                 9 -> status = reader.readVarint32()
                 10 -> startedReadingDate = reader.readVarint64()
                 11 -> finishedReadingDate = reader.readVarint64()
+                100 -> mediaId = reader.readVarint64()
                 else -> reader.skipField(wire)
             }
         }
@@ -441,6 +444,7 @@ object TachiyomiImporter {
             syncId = syncId,
             libraryId = libraryId,
             mediaIdInt = mediaIdInt,
+            mediaId = mediaId,
             trackingUrl = trackingUrl,
             title = title,
             lastChapterRead = lastChapterRead,
@@ -630,17 +634,24 @@ object TachiyomiImporter {
         val coverImageUri = manga.thumbnailUrl?.takeIf { it.isNotBlank() }
 
         // 7. External Tracker mapping
-        val malTrack = manga.tracking.firstOrNull { it.syncId == 1 }
-        val aniTrack = manga.tracking.firstOrNull { it.syncId == 2 }
+        fun extractTrackerId(track: TachiyomiTracking): String? {
+            return when {
+                track.mediaId > 0L -> track.mediaId.toString()
+                track.mediaIdInt > 0 -> track.mediaIdInt.toString()
+                track.libraryId > 0L -> track.libraryId.toString()
+                !track.trackingUrl.isNullOrBlank() -> {
+                    val candidate = track.trackingUrl.trim().trimEnd('/').substringAfterLast('/')
+                    candidate.takeIf { it.toLongOrNull() != null && it != "0" }
+                }
+                else -> null
+            }
+        }
+
+        val malId = manga.tracking.firstOrNull { it.syncId == 1 }?.let { extractTrackerId(it) }
+        val aniId = manga.tracking.firstOrNull { it.syncId == 2 }?.let { extractTrackerId(it) }
         val (externalSource, externalId) = when {
-            malTrack != null -> {
-                val id = if (malTrack.mediaIdInt > 0) malTrack.mediaIdInt.toString() else malTrack.libraryId.toString()
-                Pair("MAL", id)
-            }
-            aniTrack != null -> {
-                val id = if (aniTrack.mediaIdInt > 0) aniTrack.mediaIdInt.toString() else aniTrack.libraryId.toString()
-                Pair("ANILIST", id)
-            }
+            !malId.isNullOrBlank() && malId != "0" -> Pair("MAL", malId)
+            !aniId.isNullOrBlank() && aniId != "0" -> Pair("ANILIST", aniId)
             else -> {
                 val id = if (manga.url.isNotBlank()) manga.url else manga.title
                 Pair("TACHIYOMI", id)
