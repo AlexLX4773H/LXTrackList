@@ -180,6 +180,7 @@ object TmdbSyncManager {
         }
 
         syncJob = scope.launch {
+            SyncForegroundService.start(context)
             NotificationHelper.initNotificationChannels(context)
 
             val allEntries = repository.getAllEntriesForUserSync(profileId)
@@ -247,6 +248,7 @@ object TmdbSyncManager {
                     isCancelled = false,
                     profileName = profileName
                 )
+                SyncForegroundService.checkAndStop(context)
                 return@launch
             }
 
@@ -406,6 +408,7 @@ object TmdbSyncManager {
                 isCancelled = (syncJob?.isCancelled == true),
                 profileName = profileName
             )
+            SyncForegroundService.checkAndStop(context)
         }
     }
 
@@ -727,6 +730,7 @@ object TmdbSyncManager {
                 isCancelled = true,
                 profileName = profileName
             )
+            SyncForegroundService.checkAndStop(ctx)
         }
     }
 }

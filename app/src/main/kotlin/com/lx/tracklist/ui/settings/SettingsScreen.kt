@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -51,7 +53,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -3441,6 +3445,184 @@ private fun SyncJobsContent(
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
+            }
+        }
+
+        // Background Execution & Battery Optimization Card
+        val context = LocalContext.current
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val powerManager = remember(context) { context.getSystemService(Context.POWER_SERVICE) as? PowerManager }
+
+        var isIgnoringBatteryOptimizations by remember {
+            mutableStateOf(
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+                } else {
+                    true
+                }
+            )
+        }
+
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        isIgnoringBatteryOptimizations = powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+                    }
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = BorderStroke(
+                1.dp,
+                if (isIgnoringBatteryOptimizations) LXBorder else LXScoreGold.copy(alpha = 0.5f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bolt,
+                            contentDescription = null,
+                            tint = if (isIgnoringBatteryOptimizations) LXPrimaryGreen else LXScoreGold,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Background Sync & Battery",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                if (isIgnoringBatteryOptimizations) LXPrimaryGreen.copy(alpha = 0.15f)
+                                else LXScoreGold.copy(alpha = 0.15f)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = if (isIgnoringBatteryOptimizations) "UNRESTRICTED" else "OPTIMIZED (RESTRICTED)",
+                            color = if (isIgnoringBatteryOptimizations) LXPrimaryGreen else LXScoreGold,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                Text(
+                    text = if (isIgnoringBatteryOptimizations) {
+                        "Foreground Service and Unrestricted battery mode are active. Sync jobs will run to completion in the background without being paused or killed by Android when you switch apps or lock your screen."
+                    } else {
+                        "Android battery optimization and OEM task killers (Samsung, Xiaomi, OnePlus, Oppo) can pause or freeze background sync when you lock your screen or switch apps. The app runs a Foreground Service during syncs, but setting battery usage to \"Unrestricted\" guarantees uninterrupted background syncing."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isIgnoringBatteryOptimizations) LXTextSecondary else LXTextPrimary
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (!isIgnoringBatteryOptimizations && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        Button(
+                            onClick = {
+                                try {
+                                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                        data = Uri.parse("package:${context.packageName}")
+                                    }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    try {
+                                        val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                        context.startActivity(fallback)
+                                    } catch (e2: Exception) {
+                                        val appSettings = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                            data = Uri.fromParts("package", context.packageName, null)
+                                        }
+                                        context.startActivity(appSettings)
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXScoreGold,
+                                contentColor = LXBackgroundBlack
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Disable Optimization",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Could not open App Settings", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = if (isIgnoringBatteryOptimizations) LXPrimaryGreen else LXScoreGold
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isIgnoringBatteryOptimizations) LXPrimaryGreen.copy(alpha = 0.5f) else LXScoreGold.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = if (isIgnoringBatteryOptimizations || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) Modifier.fillMaxWidth() else Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.OpenInNew,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "App Battery Settings",
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
 

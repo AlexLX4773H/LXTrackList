@@ -198,12 +198,13 @@ object MalSyncManager {
 
         pullJob?.cancel()
         pullJob = scope.launch {
-            _syncState.value = MalSyncProgress(
-                isRunning = true,
-                statusMessage = "Connecting to MyAnimeList..."
-            )
-
+            com.lx.tracklist.data.remote.SyncForegroundService.start(context)
             try {
+                _syncState.value = MalSyncProgress(
+                    isRunning = true,
+                    statusMessage = "Connecting to MyAnimeList..."
+                )
+
                 val pulledEntries = mutableListOf<MediaEntry>()
                 var animeCount = 0
                 var mangaCount = 0
@@ -353,14 +354,18 @@ object MalSyncManager {
                     isRunning = false,
                     errorMessage = e.message ?: "Failed to pull data from MyAnimeList"
                 )
+            } finally {
+                com.lx.tracklist.data.remote.SyncForegroundService.checkAndStop(context)
             }
         }
     }
 
-    fun cancelSync() {
+    fun cancelSync(context: Context? = null) {
         pullJob?.cancel()
         pullJob = null
         _syncState.value = MalSyncProgress(isRunning = false, statusMessage = "Sync canceled")
+        val ctx = context ?: com.lx.tracklist.LXApplication.instance
+        com.lx.tracklist.data.remote.SyncForegroundService.checkAndStop(ctx)
     }
 
     private fun parseMalDateToMillis(dateStr: String?): Long? {

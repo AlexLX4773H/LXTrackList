@@ -224,6 +224,7 @@ object JikanSyncManager {
         }
 
         syncJob = scope.launch {
+            SyncForegroundService.start(context)
             NotificationHelper.initNotificationChannels(context)
 
             // Find eligible entries strictly for this profile
@@ -292,6 +293,7 @@ object JikanSyncManager {
                     isCancelled = false,
                     profileName = profileName
                 )
+                SyncForegroundService.checkAndStop(context)
                 return@launch
             }
 
@@ -458,6 +460,7 @@ object JikanSyncManager {
                 isCancelled = (syncJob?.isCancelled == true),
                 profileName = profileName
             )
+            SyncForegroundService.checkAndStop(context)
         }
     }
 
@@ -890,6 +893,7 @@ object JikanSyncManager {
                 isCancelled = true,
                 profileName = profileName
             )
+            SyncForegroundService.checkAndStop(ctx)
         }
     }
 }

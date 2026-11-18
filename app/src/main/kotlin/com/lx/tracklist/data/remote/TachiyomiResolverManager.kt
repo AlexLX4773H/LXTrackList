@@ -428,6 +428,7 @@ object TachiyomiResolverManager {
         }
 
         resolveJob = scope.launch {
+            SyncForegroundService.start(context)
             NotificationHelper.initNotificationChannels(context)
 
             val allEntries = repository.getAllEntriesForUserSync(profileId)
@@ -470,6 +471,7 @@ object TachiyomiResolverManager {
                     isCancelled = false,
                     profileName = profileName
                 )
+                SyncForegroundService.checkAndStop(context)
                 return@launch
             }
 
@@ -633,6 +635,7 @@ object TachiyomiResolverManager {
                 isCancelled = isCancelled,
                 profileName = profileName
             )
+            SyncForegroundService.checkAndStop(context)
         }
     }
 
@@ -657,6 +660,7 @@ object TachiyomiResolverManager {
             isCancelled = true,
             profileName = cur.profileName
         )
+        SyncForegroundService.checkAndStop(context)
     }
 
     private data class ResolvedJikanMatch(

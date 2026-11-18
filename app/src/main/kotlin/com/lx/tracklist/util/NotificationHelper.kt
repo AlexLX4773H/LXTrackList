@@ -1,6 +1,7 @@
 package com.lx.tracklist.util
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -22,12 +23,14 @@ object NotificationHelper {
     const val CHANNEL_TMDB_SYNC = "tmdb_sync_channel"
     const val CHANNEL_BOOK_SYNC = "book_sync_channel"
     const val CHANNEL_TACHIYOMI_RESOLVE = "tachiyomi_resolve_channel"
+    const val CHANNEL_SYNC_SERVICE = "sync_service_channel"
 
     const val NOTIFICATION_ID_IMPORT = 47010
     const val NOTIFICATION_ID_JIKAN = 47007
     const val NOTIFICATION_ID_TMDB = 47008
     const val NOTIFICATION_ID_BOOK = 47011
     const val NOTIFICATION_ID_TACHIYOMI = 47009
+    const val NOTIFICATION_ID_SYNC_SERVICE = 47000
 
     fun initNotificationChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -74,11 +77,21 @@ object NotificationHelper {
                 description = "Shows real-time progress and report generation when resolving Tachiyomi imports to official external IDs"
             }
 
+            val syncServiceChannel = NotificationChannel(
+                CHANNEL_SYNC_SERVICE,
+                "Background Sync Service",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Keeps metadata, poster, and external tracking sync running in the background without being paused by Android"
+                setShowBadge(false)
+            }
+
             manager.createNotificationChannel(importChannel)
             manager.createNotificationChannel(jikanChannel)
             manager.createNotificationChannel(tmdbChannel)
             manager.createNotificationChannel(bookChannel)
             manager.createNotificationChannel(tachiyomiChannel)
+            manager.createNotificationChannel(syncServiceChannel)
         }
     }
 
@@ -194,6 +207,50 @@ object NotificationHelper {
         } catch (_: Exception) {}
     }
 
+    fun buildSyncServiceNotification(
+        context: Context,
+        title: String,
+        content: String,
+        progress: Int = 0,
+        maxProgress: Int = 0,
+        indeterminate: Boolean = false,
+        profileName: String? = null
+    ): Notification {
+        val pendingIntent = getMainActivityPendingIntent(context)
+        val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
+
+        val cancelIntent = Intent(context, com.lx.tracklist.data.remote.SyncForegroundService::class.java).apply {
+            action = com.lx.tracklist.data.remote.SyncForegroundService.ACTION_CANCEL_ALL
+        }
+        val cancelPendingIntent = PendingIntent.getService(
+            context,
+            47099,
+            cancelIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_SYNC_SERVICE)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("$prefix$title")
+            .setContentText(content)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(pendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .addAction(R.drawable.ic_notification, "Cancel Sync", cancelPendingIntent)
+
+        if (maxProgress > 0) {
+            builder.setProgress(maxProgress, progress, false)
+        } else if (indeterminate) {
+            builder.setProgress(0, 0, true)
+        }
+
+        getLargeIcon(context)?.let { builder.setLargeIcon(it) }
+
+        return builder.build()
+    }
+
     fun showJikanSyncProgress(
         context: Context,
         completed: Int,
@@ -202,6 +259,7 @@ object NotificationHelper {
         profileName: String? = null
     ) {
         if (!hasNotificationPermission(context)) return
+        if (com.lx.tracklist.data.remote.SyncForegroundService.isAnySyncRunning()) return
 
         try {
             val pendingIntent = getMainActivityPendingIntent(context)
@@ -286,6 +344,7 @@ object NotificationHelper {
         profileName: String? = null
     ) {
         if (!hasNotificationPermission(context)) return
+        if (com.lx.tracklist.data.remote.SyncForegroundService.isAnySyncRunning()) return
 
         try {
             val pendingIntent = getMainActivityPendingIntent(context)
@@ -370,6 +429,7 @@ object NotificationHelper {
         profileName: String? = null
     ) {
         if (!hasNotificationPermission(context)) return
+        if (com.lx.tracklist.data.remote.SyncForegroundService.isAnySyncRunning()) return
 
         try {
             val pendingIntent = getMainActivityPendingIntent(context)
@@ -454,6 +514,7 @@ object NotificationHelper {
         profileName: String? = null
     ) {
         if (!hasNotificationPermission(context)) return
+        if (com.lx.tracklist.data.remote.SyncForegroundService.isAnySyncRunning()) return
 
         try {
             val pendingIntent = getMainActivityPendingIntent(context)

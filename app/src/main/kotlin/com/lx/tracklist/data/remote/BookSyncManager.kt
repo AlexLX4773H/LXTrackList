@@ -144,6 +144,7 @@ object BookSyncManager {
         }
 
         syncJob = scope.launch {
+            SyncForegroundService.start(context)
             NotificationHelper.initNotificationChannels(context)
 
             val allEntries = repository.getAllEntriesForUserSync(profileId)
@@ -213,6 +214,7 @@ object BookSyncManager {
                     isCancelled = false,
                     profileName = profileName
                 )
+                SyncForegroundService.checkAndStop(context)
                 return@launch
             }
 
@@ -375,6 +377,7 @@ object BookSyncManager {
                 isCancelled = isCancelled,
                 profileName = profileName
             )
+            SyncForegroundService.checkAndStop(context)
         }
     }
 
@@ -630,19 +633,19 @@ object BookSyncManager {
                     statusMessage = "Sync cancelled by user"
                 )
             }
-            context?.let { ctx ->
-                val state = _syncState.value
-                NotificationHelper.showBookSyncComplete(
-                    context = ctx,
-                    completed = state.completedCount,
-                    total = state.totalCount,
-                    updated = state.updatedCount,
-                    failed = state.failedCount,
-                    lastError = "Cancelled by user",
-                    isCancelled = true,
-                    profileName = state.profileName
-                )
-            }
+            val ctx = context ?: LXApplication.instance
+            val state = _syncState.value
+            NotificationHelper.showBookSyncComplete(
+                context = ctx,
+                completed = state.completedCount,
+                total = state.totalCount,
+                updated = state.updatedCount,
+                failed = state.failedCount,
+                lastError = "Cancelled by user",
+                isCancelled = true,
+                profileName = state.profileName
+            )
+            SyncForegroundService.checkAndStop(ctx)
         }
     }
 }
