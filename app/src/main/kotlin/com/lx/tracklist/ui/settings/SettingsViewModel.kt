@@ -255,6 +255,7 @@ data class SettingsUiState(
     val reindexStatusText: String? = null,
     val updateStatus: AppUpdateStatus = AppUpdateStatus.Idle,
     val isMalConnected: Boolean = false,
+    val isMalConnecting: Boolean = false,
     val malUsername: String? = null,
     val malPictureUrl: String? = null,
     val isMalAutoSyncEnabled: Boolean = true,
@@ -294,6 +295,30 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                     )
                 }
                 refreshMalStatus()
+            }
+        }
+        viewModelScope.launch {
+            com.lx.tracklist.data.remote.mal.MalAuthManager.authEvents.collect { authResult ->
+                refreshMalStatus()
+                if (authResult.profileId == _uiState.value.activeUser.id) {
+                    if (authResult.success) {
+                        _uiState.update {
+                            it.copy(
+                                isMalConnecting = false,
+                                statusMessage = "Connected to MyAnimeList as @${authResult.username}",
+                                isErrorMessage = false
+                            )
+                        }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                isMalConnecting = false,
+                                statusMessage = authResult.errorMessage ?: "MAL connection failed",
+                                isErrorMessage = true
+                            )
+                        }
+                    }
+                }
             }
         }
         viewModelScope.launch {
@@ -385,6 +410,19 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun cancelIdResolution(context: Context) = cancelTachiyomiResolution(context)
 
+    fun onAppResumed(context: Context = LXApplication.instance.applicationContext) {
+        refreshMalStatus(context)
+        checkStorageStatus(context)
+        if (_uiState.value.isMalConnecting) {
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(2500L)
+                if (_uiState.value.isMalConnecting && !_uiState.value.isMalConnected) {
+                    _uiState.update { it.copy(isMalConnecting = false) }
+                }
+            }
+        }
+    }
+
     fun refreshMalStatus(context: Context = LXApplication.instance.applicationContext) {
         val user = _uiState.value.activeUser
         val store = com.lx.tracklist.data.remote.mal.MalTokenStore(context)
@@ -401,6 +439,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
         _uiState.update {
             it.copy(
+                isMalConnecting = if (isConn) false else it.isMalConnecting,
                 isMalConnected = isConn,
                 malUsername = username,
                 malPictureUrl = pic,
@@ -413,10 +452,12 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun startMalAuth(context: Context) {
         val user = _uiState.value.activeUser
+        _uiState.update { it.copy(isMalConnecting = true) }
         val result = com.lx.tracklist.data.remote.mal.MalAuthManager.startOAuth(context, user.id)
         result.onFailure { err ->
             _uiState.update {
                 it.copy(
+                    isMalConnecting = false,
                     statusMessage = err.message ?: "Failed to start MAL authorization",
                     isErrorMessage = true
                 )

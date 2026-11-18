@@ -14,6 +14,14 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.flow.MutableSharedFlow
+
+data class MalAuthResult(
+    val profileId: Long,
+    val success: Boolean,
+    val username: String? = null,
+    val errorMessage: String? = null
+)
 
 object MalAuthManager {
 
@@ -21,6 +29,8 @@ object MalAuthManager {
     const val REDIRECT_URI = "lxtracklist://mal-oauth"
     private const val AUTH_ENDPOINT = "https://myanimelist.net/v1/oauth2/authorize"
     private const val TOKEN_ENDPOINT = "https://myanimelist.net/v1/oauth2/token"
+
+    val authEvents = MutableSharedFlow<MalAuthResult>(extraBufferCapacity = 5)
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -98,7 +108,9 @@ object MalAuthManager {
             val userId = tokenStore.pendingAuthUserId
 
             if (codeVerifier.isNullOrBlank()) {
-                return@withContext Result.failure(IllegalStateException("No pending code verifier found"))
+                val err = "No pending code verifier found"
+                authEvents.tryEmit(MalAuthResult(profileId = userId, success = false, errorMessage = err))
+                return@withContext Result.failure(IllegalStateException(err))
             }
 
             val formBody = FormBody.Builder()
@@ -120,9 +132,9 @@ object MalAuthManager {
 
                 if (!response.isSuccessful || responseBody.isNullOrBlank()) {
                     Log.e(TAG, "Token exchange failed [${response.code}]: $responseBody")
-                    return@withContext Result.failure(
-                        Exception("MAL token exchange failed: HTTP ${response.code}")
-                    )
+                    val err = "MAL token exchange failed: HTTP ${response.code}"
+                    authEvents.tryEmit(MalAuthResult(profileId = userId, success = false, errorMessage = err))
+                    return@withContext Result.failure(Exception(err))
                 }
 
                 val tokenResponse = gson.fromJson(responseBody, MalTokenResponse::class.java)
@@ -137,9 +149,11 @@ object MalAuthManager {
                 fetchAndStoreUserInfo(context, userId, tokenResponse.accessToken)
 
                 val username = tokenStore.getMalUsername(userId) ?: "MAL User"
+                authEvents.tryEmit(MalAuthResult(profileId = userId, success = true, username = username))
                 Result.success(Pair(username, userId))
             } catch (e: Exception) {
                 Log.e(TAG, "Exception during token exchange", e)
+                authEvents.tryEmit(MalAuthResult(profileId = userId, success = false, errorMessage = e.message))
                 Result.failure(e)
             }
         }

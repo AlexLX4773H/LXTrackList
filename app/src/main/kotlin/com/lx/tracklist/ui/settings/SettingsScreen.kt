@@ -10,6 +10,9 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.lx.tracklist.data.remote.AppUpdateChecker
@@ -215,6 +218,19 @@ fun SettingsScreen(
     var newCategoryTrackingUnit by remember { mutableStateOf(TrackingUnit.CHAPTERS) }
     val colorOptions = listOf("#A7EF60", "#4DA8DA", "#BB86FC", "#FF7597", "#FFD700", "#00E5FF", "#FF8A65")
     var selectedColor by remember { mutableStateOf(colorOptions.first()) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.onAppResumed(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.checkStorageStatus(context)
@@ -1114,6 +1130,7 @@ fun SettingsScreen(
                             activeProfileAvatarColorHex = state.activeUser.avatarColorHex,
                             malSyncState = malSyncState,
                             isMalConnected = state.isMalConnected,
+                            isMalConnecting = state.isMalConnecting,
                             malUsername = state.malUsername,
                             malPictureUrl = state.malPictureUrl,
                             isMalAutoSyncEnabled = state.isMalAutoSyncEnabled,
@@ -1252,6 +1269,7 @@ fun SettingsScreen(
                             activeProfileAvatarColorHex = state.activeUser.avatarColorHex,
                             malSyncState = malSyncState,
                             isMalConnected = state.isMalConnected,
+                            isMalConnecting = state.isMalConnecting,
                             malUsername = state.malUsername,
                             malPictureUrl = state.malPictureUrl,
                             isMalAutoSyncEnabled = state.isMalAutoSyncEnabled,
@@ -2901,6 +2919,7 @@ private fun ExternalTrackingContent(
     activeProfileAvatarColorHex: String,
     malSyncState: com.lx.tracklist.data.remote.mal.MalSyncProgress,
     isMalConnected: Boolean,
+    isMalConnecting: Boolean = false,
     malUsername: String?,
     malPictureUrl: String?,
     isMalAutoSyncEnabled: Boolean,
@@ -3098,20 +3117,37 @@ private fun ExternalTrackingContent(
                 } else if (!isMalConnected) {
                     Button(
                         onClick = onStartMalAuth,
+                        enabled = !isMalConnecting,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = LXPrimaryGreen,
-                            contentColor = LXBackgroundBlack
+                            contentColor = LXBackgroundBlack,
+                            disabledContainerColor = LXPrimaryGreen.copy(alpha = 0.6f),
+                            disabledContentColor = LXBackgroundBlack.copy(alpha = 0.7f)
                         ),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Connect MAL for $activeProfileName",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
-                        )
+                        if (isMalConnecting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = LXBackgroundBlack,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Connecting...",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        } else {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Connect MAL for $activeProfileName",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
                     }
 
                     Text(

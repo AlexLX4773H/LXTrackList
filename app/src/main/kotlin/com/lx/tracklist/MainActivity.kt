@@ -63,6 +63,29 @@ class MainActivity : ComponentActivity() {
     private fun handleMalAuthIntent(intent: Intent?) {
         val uri = intent?.data ?: return
         if (uri.scheme == "lxtracklist" && uri.host == "mal-oauth") {
+            intent.data = null // Clear so re-creations or config changes don't re-process the code
+
+            val error = uri.getQueryParameter("error")
+            if (!error.isNullOrBlank()) {
+                val description = uri.getQueryParameter("error_description") ?: error
+                val store = com.lx.tracklist.data.remote.mal.MalTokenStore(this)
+                val userId = store.pendingAuthUserId
+                store.pendingCodeVerifier = null
+                MalAuthManager.authEvents.tryEmit(
+                    com.lx.tracklist.data.remote.mal.MalAuthResult(
+                        profileId = userId,
+                        success = false,
+                        errorMessage = "MAL authorization canceled: $description"
+                    )
+                )
+                Toast.makeText(
+                    this@MainActivity,
+                    "MAL authorization canceled: $description",
+                    Toast.LENGTH_LONG
+                ).show()
+                return
+            }
+
             val code = uri.getQueryParameter("code")
             if (!code.isNullOrBlank()) {
                 lifecycleScope.launch {
