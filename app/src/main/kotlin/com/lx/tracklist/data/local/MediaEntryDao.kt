@@ -67,11 +67,17 @@ interface MediaEntryDao {
     @Query("SELECT * FROM media_entries WHERE userId = :userId AND externalId = :externalId AND externalSource = :externalSource LIMIT 1")
     suspend fun findByExternalId(userId: Long, externalId: String, externalSource: String): MediaEntry?
 
+    @Query("SELECT * FROM media_entries WHERE userId = :userId AND externalId = :externalId AND externalSource = :externalSource")
+    suspend fun findAllByExternalId(userId: Long, externalId: String, externalSource: String): List<MediaEntry>
+
     @Query("SELECT * FROM media_entries WHERE externalId = :externalId AND externalSource = :externalSource LIMIT 1")
     suspend fun findByExternalId(externalId: String, externalSource: String): MediaEntry?
 
     @Query("SELECT * FROM media_entries WHERE userId = :userId AND externalId = :externalId LIMIT 1")
     suspend fun findByAnyExternalId(userId: Long, externalId: String): MediaEntry?
+
+    @Query("SELECT * FROM media_entries WHERE userId = :userId AND externalId = :externalId")
+    suspend fun findAllByAnyExternalId(userId: Long, externalId: String): List<MediaEntry>
 
     @Query("SELECT * FROM media_entries WHERE externalId = :externalId LIMIT 1")
     suspend fun findByAnyExternalId(externalId: String): MediaEntry?

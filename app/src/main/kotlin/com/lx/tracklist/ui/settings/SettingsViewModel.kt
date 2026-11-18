@@ -1053,7 +1053,11 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
             try {
                 val (inserted, updated) = withContext(Dispatchers.IO) {
-                    repository.importEntries(filteredEntries, _uiState.value.selectedConflictStrategy)
+                    repository.importEntries(
+                        entries = filteredEntries,
+                        strategy = _uiState.value.selectedConflictStrategy,
+                        targetUserId = activeUserId
+                    )
                 }
 
                 NotificationHelper.showImportComplete(
@@ -1496,7 +1500,11 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         NotificationHelper.showImportProgress(appContext, sourceName, profileName = activeProfileName)
         try {
             val (inserted, updated) = withContext(Dispatchers.IO) {
-                repository.importEntries(preparedEntries, _uiState.value.selectedConflictStrategy)
+                repository.importEntries(
+                    entries = preparedEntries,
+                    strategy = _uiState.value.selectedConflictStrategy,
+                    targetUserId = activeUserId
+                )
             }
 
             NotificationHelper.showImportComplete(

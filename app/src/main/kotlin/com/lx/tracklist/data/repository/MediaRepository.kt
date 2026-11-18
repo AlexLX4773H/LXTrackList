@@ -607,16 +607,18 @@ class MediaRepository(
         val impTitle = imported.title.trim()
         val impType = imported.mediaType
 
-        // 1. Authoritative externalId and externalSource
+        // 1. Authoritative externalId and externalSource (strictly scoped to compatible media type)
         if (impExtId != null && impExtSrc != null) {
-            val direct = dao.findByExternalId(targetUserId, impExtId, impExtSrc)
+            val direct = dao.findAllByExternalId(targetUserId, impExtId, impExtSrc)
+                .firstOrNull { isMediaTypeCompatible(it.mediaType, impType) }
             if (direct != null) return direct
         }
 
-        // 2. Exact externalId across matching source
+        // 2. Exact externalId across matching source (strictly scoped to compatible media type)
         if (impExtId != null) {
-            val byAnyId = dao.findByAnyExternalId(targetUserId, impExtId)
-            if (byAnyId != null && isMediaTypeCompatible(byAnyId.mediaType, impType)) {
+            val byAnyId = dao.findAllByAnyExternalId(targetUserId, impExtId)
+                .firstOrNull { isMediaTypeCompatible(it.mediaType, impType) }
+            if (byAnyId != null) {
                 // If byAnyId has an externalSource specified, it MUST match impExtSrc.
                 // Different external sources (e.g. MAL vs Tachiyomi/AniList) use different ID spaces.
                 val isSourceCompatible = byAnyId.externalSource == null ||
