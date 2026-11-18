@@ -45,7 +45,10 @@ data class TmdbMediaDetails(
     val type: String? = null, // "Movie" or "TV"
     val imdbId: String? = null,
     val sourceProvider: String = "TMDB",
-    val originalLanguage: String? = null
+    val originalLanguage: String? = null,
+    val relatedItems: List<RelatedMediaItem>? = null,
+    val movieSeriesName: String? = null,
+    val movieSeriesNumber: Int? = null
 )
 
 data class TmdbSearchResult(
@@ -203,7 +206,7 @@ object TmdbApiClient {
             return Result.failure(TmdbAuthException("TMDB Read Access Token is not configured."))
         }
 
-        val endpoint = "${baseUrl.trimEnd('/')}/movie/$tmdbId?append_to_response=alternative_titles,credits"
+        val endpoint = "${baseUrl.trimEnd('/')}/movie/$tmdbId?append_to_response=alternative_titles,credits,recommendations"
         return try {
             val request = buildRequest(endpoint, token)
             val response = okHttpClient.newCall(request).execute()
@@ -253,7 +256,7 @@ object TmdbApiClient {
             return Result.failure(TmdbAuthException("TMDB Read Access Token is not configured."))
         }
 
-        val endpoint = "${baseUrl.trimEnd('/')}/tv/$tmdbId?append_to_response=alternative_titles,credits"
+        val endpoint = "${baseUrl.trimEnd('/')}/tv/$tmdbId?append_to_response=alternative_titles,credits,recommendations"
         return try {
             val request = buildRequest(endpoint, token)
             val response = okHttpClient.newCall(request).execute()
@@ -1112,6 +1115,50 @@ object TmdbApiClient {
                 statusStr.equals("In Production", ignoreCase = true) ||
                 statusStr.equals("Planned", ignoreCase = true))
 
+        // Related recommendations and franchise collection (consolidated single-roundtrip)
+        val recList = mutableListOf<RelatedMediaItem>()
+        val seenIds = mutableSetOf<Long>()
+        seenIds.add(id)
+
+        val collectionObj = obj.getAsJsonObject("belongs_to_collection")
+        val movieSeriesName = collectionObj?.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+
+        val recResults = obj.getAsJsonObject("recommendations")?.getAsJsonArray("results")
+        if (recResults != null) {
+            val currentRelDate = releaseDateStr ?: ""
+            for (i in 0 until recResults.size().coerceAtMost(8)) {
+                val rec = recResults.get(i).asJsonObject
+                val recId = rec.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
+                if (seenIds.contains(recId)) continue
+                seenIds.add(recId)
+
+                val recTitle = rec.get("title")?.takeIf { !it.isJsonNull }?.asString ?: continue
+                val recDate = rec.get("release_date")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                val recPoster = buildImageUrl(rec.get("poster_path")?.takeIf { !it.isJsonNull }?.asString)
+                val recScore = rec.get("vote_average")?.takeIf { !it.isJsonNull }?.asFloat
+                val relYear = recDate.take(4).takeIf { it.length == 4 && it.all { c -> c.isDigit() } }
+
+                val relationship = if (recDate.isNotBlank() && currentRelDate.isNotBlank()) {
+                    if (recDate > currentRelDate) "Sequel" else "Prequel"
+                } else {
+                    "Related"
+                }
+
+                recList.add(
+                    RelatedMediaItem(
+                        title = recTitle,
+                        relationship = relationship,
+                        externalId = recId.toString(),
+                        externalSource = "TMDB",
+                        mediaType = MediaType.MOVIE,
+                        posterUrl = recPoster,
+                        releaseYear = relYear,
+                        score = recScore
+                    )
+                )
+            }
+        }
+
         return TmdbMediaDetails(
             tmdbId = id,
             title = title,
@@ -1130,7 +1177,9 @@ object TmdbApiClient {
             externalScoreSource = "TMDB",
             type = "Movie",
             imdbId = imdbId,
-            sourceProvider = "TMDB"
+            sourceProvider = "TMDB",
+            relatedItems = recList.takeIf { it.isNotEmpty() },
+            movieSeriesName = movieSeriesName
         )
     }
 
@@ -1252,6 +1301,41 @@ object TmdbApiClient {
                         statusStr.equals("Planned", ignoreCase = true)
                 )
 
+        // Related recommendations (consolidated single-roundtrip)
+        val recList = mutableListOf<RelatedMediaItem>()
+        val seenIds = mutableSetOf<Long>()
+        seenIds.add(id)
+
+        val recResults = obj.getAsJsonObject("recommendations")?.getAsJsonArray("results")
+        if (recResults != null) {
+            for (i in 0 until recResults.size().coerceAtMost(8)) {
+                val rec = recResults.get(i).asJsonObject
+                val recId = rec.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
+                if (seenIds.contains(recId)) continue
+                seenIds.add(recId)
+
+                val recTitle = rec.get("name")?.takeIf { !it.isJsonNull }?.asString
+                    ?: rec.get("original_name")?.takeIf { !it.isJsonNull }?.asString ?: continue
+                val recDate = rec.get("first_air_date")?.takeIf { !it.isJsonNull }?.asString ?: ""
+                val recPoster = buildImageUrl(rec.get("poster_path")?.takeIf { !it.isJsonNull }?.asString)
+                val recScore = rec.get("vote_average")?.takeIf { !it.isJsonNull }?.asFloat
+                val relYear = recDate.take(4).takeIf { it.length == 4 && it.all { c -> c.isDigit() } }
+
+                recList.add(
+                    RelatedMediaItem(
+                        title = recTitle,
+                        relationship = "Related",
+                        externalId = recId.toString(),
+                        externalSource = "TMDB",
+                        mediaType = MediaType.SHOW,
+                        posterUrl = recPoster,
+                        releaseYear = relYear,
+                        score = recScore
+                    )
+                )
+            }
+        }
+
         return TmdbMediaDetails(
             tmdbId = id,
             title = name,
@@ -1271,7 +1355,8 @@ object TmdbApiClient {
             externalScoreSource = "TMDB",
             type = "TV",
             imdbId = null,
-            sourceProvider = "TMDB"
+            sourceProvider = "TMDB",
+            relatedItems = recList.takeIf { it.isNotEmpty() }
         )
     }
 

@@ -322,10 +322,10 @@ object JikanSyncManager {
             var failed = 0
             var lastError: String? = null
 
-            var currentBatchSize = 2
+            var currentBatchSize = 3
             val minBatchSize = 1
-            val maxBatchSize = 3
-            var interBatchDelayMs = 350L
+            val maxBatchSize = 5
+            var interBatchDelayMs = 200L
             var consecutiveCleanBatches = 0
             val mutex = Mutex()
             val activeTitles = ConcurrentHashMap.newKeySet<String>()
@@ -351,7 +351,7 @@ object JikanSyncManager {
                     chunk.mapIndexed { chunkIdx, entry ->
                         async {
                             if (syncJob?.isCancelled == true) return@async
-                            if (chunkIdx > 0) delay(chunkIdx * 250L)
+                            if (chunkIdx > 0) delay(chunkIdx * 150L)
                             activeTitles.add(entry.title)
                             try {
                                 val outcome = syncSingleEntry(
@@ -482,6 +482,8 @@ object JikanSyncManager {
         suspend fun fetchPrimary(): Result<JikanMediaDetails> = when {
             !mangaDexIdToUse.isNullOrBlank() ->
                 MangaDexApiClient.fetchMangaDetails(mangaDexIdToUse)
+            isManhwa && !entry.title.isNullOrBlank() ->
+                MangaDexApiClient.searchMangaDetailsByTitle(entry.title, isManhwa = true)
             aniListId != null ->
                 JikanApiClient.queryAniListById(aniListId = aniListId, isManga = isManga)
             malId != null && malId > 0 ->
@@ -763,23 +765,33 @@ object JikanSyncManager {
 
                 // Extract related entries (prequels, sequels, side stories, etc.)
                 val newRelatedJson = if ((entry.relatedEntriesJson.isNullOrBlank() || forceRefresh) && finalExternalId != null) {
-                    val targetMalId = finalExternalId.toLongOrNull()
-                    if (targetMalId != null) {
-                        val relRes = JikanApiClient.fetchRelatedEntries(targetMalId, isMangaType(entry.mediaType), title = entry.title)
-                        val relList = relRes.getOrNull()
-                        if (!relList.isNullOrEmpty()) {
-                            val json = gson.toJson(relList)
-                            if (json != entry.relatedEntriesJson) {
-                                hasChanges = true
-                                json
+                    if (!details.relatedMedia.isNullOrEmpty()) {
+                        val json = gson.toJson(details.relatedMedia)
+                        if (json != entry.relatedEntriesJson) {
+                            hasChanges = true
+                            json
+                        } else {
+                            entry.relatedEntriesJson
+                        }
+                    } else {
+                        val targetMalId = finalExternalId.toLongOrNull()
+                        if (targetMalId != null) {
+                            val relRes = JikanApiClient.fetchRelatedEntries(targetMalId, isMangaType(entry.mediaType), title = entry.title)
+                            val relList = relRes.getOrNull()
+                            if (!relList.isNullOrEmpty()) {
+                                val json = gson.toJson(relList)
+                                if (json != entry.relatedEntriesJson) {
+                                    hasChanges = true
+                                    json
+                                } else {
+                                    entry.relatedEntriesJson
+                                }
                             } else {
                                 entry.relatedEntriesJson
                             }
                         } else {
                             entry.relatedEntriesJson
                         }
-                    } else {
-                        entry.relatedEntriesJson
                     }
                 } else {
                     entry.relatedEntriesJson

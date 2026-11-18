@@ -439,7 +439,11 @@ object BookSyncManager {
                     isbnRegex.find(it)?.groupValues?.get(1)?.replace("-", "")?.trim()
                 }
                 if (!isbn.isNullOrBlank()) {
-                    bookDetails = BookMetadataManager.searchBooks(isbn, context, limit = 1).getOrNull()?.firstOrNull()
+                    coroutineScope {
+                        val googleAsync = async { GoogleBooksApiClient.searchByIsbn(isbn, context).getOrNull() }
+                        val openLibAsync = async { OpenLibraryApiClient.searchByIsbn(isbn).getOrNull() }
+                        bookDetails = googleAsync.await() ?: openLibAsync.await()
+                    }
                 }
             }
 

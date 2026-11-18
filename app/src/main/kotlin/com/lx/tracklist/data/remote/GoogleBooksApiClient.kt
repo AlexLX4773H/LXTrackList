@@ -19,6 +19,8 @@ object GoogleBooksApiClient {
     private const val TAG = "GoogleBooksApiClient"
     private const val BASE_URL = "https://www.googleapis.com/books/v1/volumes"
     private const val USER_AGENT = "LXTrackList/1.0 (Android; Books Tracker)"
+    private const val FIELDS_PROJECTION = "&fields=items(id,volumeInfo(title,subtitle,authors,publisher,publishedDate,description,pageCount,printedPageCount,categories,imageLinks,industryIdentifiers,averageRating,language,infoLink))"
+    private const val SINGLE_VOLUME_FIELDS_PROJECTION = "id,volumeInfo(title,subtitle,authors,publisher,publishedDate,description,pageCount,printedPageCount,categories,imageLinks,industryIdentifiers,averageRating,language,infoLink)"
     private val gson = Gson()
 
     private val okHttpClient = OkHttpClient.Builder()
@@ -60,7 +62,7 @@ object GoogleBooksApiClient {
         val apiKey = GoogleBooksConfig.getApiKey(context)
         val keyParam = if (apiKey.isNotBlank()) "&key=$apiKey" else ""
         val langParam = if (!originalLanguage.isNullOrBlank()) "&langRestrict=${originalLanguage.lowercase(java.util.Locale.ROOT)}" else ""
-        val endpoint = "$BASE_URL?q=$encodedQuery&orderBy=$orderBy&startIndex=$startIndex&maxResults=$clampedLimit$keyParam$langParam"
+        val endpoint = "$BASE_URL?q=$encodedQuery&orderBy=$orderBy&startIndex=$startIndex&maxResults=$clampedLimit$keyParam$langParam$FIELDS_PROJECTION"
 
         return try {
             val request = Request.Builder()
@@ -116,7 +118,7 @@ object GoogleBooksApiClient {
 
         val apiKey = GoogleBooksConfig.getApiKey(context)
         val keyParam = if (apiKey.isNotBlank()) "&key=$apiKey" else ""
-        val endpoint = "$BASE_URL?q=$encodedQuery&maxResults=$clampedLimit$keyParam"
+        val endpoint = "$BASE_URL?q=$encodedQuery&maxResults=$clampedLimit$keyParam$FIELDS_PROJECTION"
 
         return try {
             val request = Request.Builder()
@@ -178,7 +180,8 @@ object GoogleBooksApiClient {
         val apiKey = GoogleBooksConfig.getApiKey(context)
         val keyParam = if (apiKey.isNotBlank()) "?key=$apiKey" else ""
         val cleanVolumeId = URLEncoder.encode(volumeId.trim(), "UTF-8")
-        val endpoint = "$BASE_URL/$cleanVolumeId$keyParam"
+        val fieldsParam = if (keyParam.isBlank()) "?fields=$SINGLE_VOLUME_FIELDS_PROJECTION" else "&fields=$SINGLE_VOLUME_FIELDS_PROJECTION"
+        val endpoint = "$BASE_URL/$cleanVolumeId$keyParam$fieldsParam"
 
         return try {
             val request = Request.Builder()

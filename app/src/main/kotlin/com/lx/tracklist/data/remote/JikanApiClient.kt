@@ -66,7 +66,8 @@ data class JikanMediaDetails(
     val nextAiringEpoch: Long? = null,
     val isAdult: Boolean? = null,
     val originalLanguage: String? = null,
-    val popularity: Int? = null
+    val popularity: Int? = null,
+    val relatedMedia: List<RelatedMediaItem>? = null
 ) {
     val webUrl: String?
         get() {
@@ -153,7 +154,61 @@ object JikanApiClient {
         val isMangaOrManhwa = isManga || isManhwa
         val primaryType = if (isMangaOrManhwa) "manga" else "anime"
 
-        // 1. Try Jikan API first (primary source for Anime, Manga, and Manhwa)
+        if (isManhwa) {
+            // 1. For Manhwa, MangaDex is the primary source (>94% Korean webtoon coverage)
+            if (!title.isNullOrBlank()) {
+                val mdRes = MangaDexApiClient.searchMangaDetailsByTitle(title, isManhwa = true)
+                if (mdRes.isSuccess && !mdRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully fetched Manhwa from MangaDex for '$title'")
+                    return mdRes
+                }
+            }
+            // 2. Fallback to AniList GraphQL
+            if (malId > 0) {
+                val res = queryAniList(malId, isManga = true)
+                if (res.isSuccess && !res.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully fetched Manhwa from AniList for MAL ID $malId")
+                    return res
+                }
+            }
+            if (!title.isNullOrBlank()) {
+                val aniTitleRes = queryAniListByTitle(title, isManga = true, isManhwa = true)
+                if (aniTitleRes.isSuccess && !aniTitleRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully fetched Manhwa from AniList by title for '$title'")
+                    return aniTitleRes
+                }
+            }
+            // 3. Fallback to Kitsu
+            if (!title.isNullOrBlank()) {
+                val kitsuRes = KitsuApiClient.searchMangaDetailsByTitle(title)
+                if (kitsuRes.isSuccess && !kitsuRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully fetched Manhwa from Kitsu for '$title'")
+                    return kitsuRes
+                }
+            }
+            // 4. Jikan as last resort only
+            if (malId > 0) {
+                val jikanRes = queryJikan(baseUrl, "manga", malId)
+                if (jikanRes.isSuccess && !jikanRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    return jikanRes
+                }
+            }
+            return Result.failure(Exception("All Manhwa lookups failed for '$title'"))
+        }
+
+        // 1. Fast Path for Anime & Japanese Manga: AniList GraphQL (Details + Airing + Relations in ~150ms)
+        if (malId > 0) {
+            val aniRes = queryAniList(malId, isManga)
+            if (aniRes.isSuccess) {
+                val details = aniRes.getOrNull()
+                if (details != null && !details.posterUrl.isNullOrBlank()) {
+                    Log.d(TAG, "Successfully fetched from AniList GraphQL for MAL ID $malId (${details.title})")
+                    return aniRes
+                }
+            }
+        }
+
+        // 2. Secondary Path: Jikan v4 REST Proxy
         val jikanResult = if (malId > 0) queryJikan(baseUrl, primaryType, malId) else Result.failure(Exception("No MAL ID"))
         if (jikanResult.isSuccess) {
             val details = jikanResult.getOrNull()
@@ -166,50 +221,36 @@ object JikanApiClient {
         val jikanErr = jikanResult.exceptionOrNull()
         Log.w(TAG, "Jikan lookup failed for MAL ID $malId: ${jikanErr?.message}. Checking fallback sources...")
 
-        // 2. Fallback 1: MangaDex by title (for Manga & Manhwa)
-        if (isMangaOrManhwa && !title.isNullOrBlank()) {
-            val mdRes = MangaDexApiClient.searchMangaDetailsByTitle(title, isManhwa = isManhwa)
+        // 3. Fallback: MangaDex by title (for Manga)
+        if (isManga && !title.isNullOrBlank()) {
+            val mdRes = MangaDexApiClient.searchMangaDetailsByTitle(title, isManhwa = false)
             if (mdRes.isSuccess && !mdRes.getOrNull()?.posterUrl.isNullOrBlank()) {
-                Log.d(TAG, "Successfully fetched ${(if (isManhwa) "Manhwa" else "Manga")} fallback from MangaDex for '$title'")
+                Log.d(TAG, "Successfully fetched Manga fallback from MangaDex for '$title'")
                 return mdRes
             }
         }
 
-        // 3. Fallback 2: AniList GraphQL API using idMal
-        var anilistResult: Result<JikanMediaDetails>? = null
-        if (malId > 0) {
-            val res = queryAniList(malId, isMangaOrManhwa)
-            anilistResult = res
-            if (res.isSuccess) {
-                val details = res.getOrNull()
-                if (details != null && !details.posterUrl.isNullOrBlank()) {
-                    Log.d(TAG, "Successfully fetched from AniList for MAL ID $malId (${details.title})")
-                    return res
-                }
-            }
-        }
-
-        // 4. Fallback 3: AniList by title if available
+        // 4. Fallback: AniList by title if available
         if (!title.isNullOrBlank()) {
-            val aniTitleRes = queryAniListByTitle(title, isManga = isMangaOrManhwa, isManhwa = isManhwa)
+            val aniTitleRes = queryAniListByTitle(title, isManga = isManga, isManhwa = false)
             if (aniTitleRes.isSuccess && !aniTitleRes.getOrNull()?.posterUrl.isNullOrBlank()) {
                 Log.d(TAG, "Successfully fetched from AniList by title for '$title'")
                 return aniTitleRes
             }
         }
 
-        // 5. Fallback 4: Kitsu by title (for Manga & Manhwa)
-        if (isMangaOrManhwa && !title.isNullOrBlank()) {
+        // 5. Fallback: Kitsu by title (for Manga)
+        if (isManga && !title.isNullOrBlank()) {
             val kitsuRes = KitsuApiClient.searchMangaDetailsByTitle(title)
             if (kitsuRes.isSuccess && !kitsuRes.getOrNull()?.posterUrl.isNullOrBlank()) {
-                Log.d(TAG, "Successfully fetched ${(if (isManhwa) "Manhwa" else "Manga")} fallback from Kitsu for '$title'")
+                Log.d(TAG, "Successfully fetched Manga fallback from Kitsu for '$title'")
                 return kitsuRes
             }
         }
 
-        // 6. Cross-fallback (try alternate media type on AniList in case media type is misclassified)
+        // 6. Cross-fallback on AniList (try alternate media type in case media type is misclassified)
         if (malId > 0) {
-            val anilistCrossResult = queryAniList(malId, !isMangaOrManhwa)
+            val anilistCrossResult = queryAniList(malId, !isManga)
             if (anilistCrossResult.isSuccess) {
                 val details = anilistCrossResult.getOrNull()
                 if (details != null && !details.posterUrl.isNullOrBlank()) {
@@ -221,7 +262,7 @@ object JikanApiClient {
 
         // 7. Cross-fallback on Jikan
         if (malId > 0) {
-            val fallbackType = if (isMangaOrManhwa) "anime" else "manga"
+            val fallbackType = if (isManga) "anime" else "manga"
             val jikanCrossResult = queryJikan(baseUrl, fallbackType, malId)
             if (jikanCrossResult.isSuccess) {
                 val details = jikanCrossResult.getOrNull()
@@ -232,7 +273,7 @@ object JikanApiClient {
             }
         }
 
-        val errorSummary = "Jikan: ${jikanErr?.message ?: "unknown"}, AniList: ${anilistResult?.exceptionOrNull()?.message ?: "unknown"}"
+        val errorSummary = "Jikan: ${jikanErr?.message ?: "unknown"}"
         Log.e(TAG, "All metadata lookups failed for MAL ID $malId. $errorSummary")
         return Result.failure(Exception(errorSummary))
     }
@@ -335,6 +376,21 @@ object JikanApiClient {
                 countryOfOrigin
                 tags { name }
                 nextAiringEpisode { id airingAt timeUntilAiring episode }
+                relations {
+                  edges {
+                    relationType
+                    node {
+                      id
+                      idMal
+                      title { romaji english native userPreferred }
+                      format
+                      type
+                      coverImage { medium large }
+                      startDate { year }
+                      averageScore
+                    }
+                  }
+                }
               }
             }
         """.trimIndent()
@@ -954,6 +1010,21 @@ object JikanApiClient {
                 countryOfOrigin
                 tags { name }
                 nextAiringEpisode { id airingAt timeUntilAiring episode }
+                relations {
+                  edges {
+                    relationType
+                    node {
+                      id
+                      idMal
+                      title { romaji english native userPreferred }
+                      format
+                      type
+                      coverImage { medium large }
+                      startDate { year }
+                      averageScore
+                    }
+                  }
+                }
               }
             }
             """.trimIndent()
@@ -982,6 +1053,21 @@ object JikanApiClient {
                 countryOfOrigin
                 tags { name }
                 nextAiringEpisode { id airingAt timeUntilAiring episode }
+                relations {
+                  edges {
+                    relationType
+                    node {
+                      id
+                      idMal
+                      title { romaji english native userPreferred }
+                      format
+                      type
+                      coverImage { medium large }
+                      startDate { year }
+                      averageScore
+                    }
+                  }
+                }
               }
             }
             """.trimIndent()
@@ -1306,6 +1392,7 @@ object JikanApiClient {
         }
 
         val isAdult = mediaObj.get("isAdult")?.takeIf { !it.isJsonNull }?.asBoolean
+        val relations = parseAniListRelations(mediaObj)
 
         return JikanMediaDetails(
             malId = resolvedId,
@@ -1332,7 +1419,8 @@ object JikanApiClient {
             nextAiringEpoch = nextAiringEpoch,
             isAdult = isAdult,
             originalLanguage = resolvedLang,
-            popularity = mediaObj.get("popularity")?.takeIf { !it.isJsonNull }?.asInt
+            popularity = mediaObj.get("popularity")?.takeIf { !it.isJsonNull }?.asInt,
+            relatedMedia = relations.takeIf { it.isNotEmpty() }
         )
     }
 

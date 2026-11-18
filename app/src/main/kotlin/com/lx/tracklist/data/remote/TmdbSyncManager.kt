@@ -630,23 +630,33 @@ object TmdbSyncManager {
 
                 // Extract related entries (collection parts, sequels, prequels, recommendations)
                 val newRelatedJson = if ((entry.relatedEntriesJson.isNullOrBlank() || forceRefresh) && finalExternalId != null) {
-                    val targetTmdbId = finalExternalId.toLongOrNull()
-                    if (targetTmdbId != null) {
-                        val relRes = TmdbApiClient.fetchRelatedEntries(targetTmdbId, isTv = isTv, context = context)
-                        val relList = relRes.getOrNull()
-                        if (!relList.isNullOrEmpty()) {
-                            val json = gson.toJson(relList)
-                            if (json != entry.relatedEntriesJson) {
-                                hasChanges = true
-                                json
+                    if (!details.relatedItems.isNullOrEmpty()) {
+                        val json = gson.toJson(details.relatedItems)
+                        if (json != entry.relatedEntriesJson) {
+                            hasChanges = true
+                            json
+                        } else {
+                            entry.relatedEntriesJson
+                        }
+                    } else {
+                        val targetTmdbId = finalExternalId.toLongOrNull()
+                        if (targetTmdbId != null) {
+                            val relRes = TmdbApiClient.fetchRelatedEntries(targetTmdbId, isTv = isTv, context = context)
+                            val relList = relRes.getOrNull()
+                            if (!relList.isNullOrEmpty()) {
+                                val json = gson.toJson(relList)
+                                if (json != entry.relatedEntriesJson) {
+                                    hasChanges = true
+                                    json
+                                } else {
+                                    entry.relatedEntriesJson
+                                }
                             } else {
                                 entry.relatedEntriesJson
                             }
                         } else {
                             entry.relatedEntriesJson
                         }
-                    } else {
-                        entry.relatedEntriesJson
                     }
                 } else {
                     entry.relatedEntriesJson
@@ -671,6 +681,7 @@ object TmdbSyncManager {
                         externalId = finalExternalId,
                         externalSource = finalExternalSource ?: entry.externalSource,
                         relatedEntriesJson = newRelatedJson,
+                        movieSeriesName = if (entry.mediaType == MediaType.MOVIE && !details.movieSeriesName.isNullOrBlank()) details.movieSeriesName else entry.movieSeriesName,
                         updatedAt = System.currentTimeMillis()
                     )
                     repository.update(updatedEntry.copy(userId = profileId))

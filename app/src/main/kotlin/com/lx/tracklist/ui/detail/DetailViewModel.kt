@@ -21,7 +21,9 @@ import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.mal.MalSyncManager
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -566,31 +568,66 @@ class DetailViewModel(
             _isRefreshingMetadata.value = true
             try {
                 if (cur.mediaType == MediaType.BOOK) {
-                    val isbnFromDesc = (cur.description ?: cur.notes)?.let { Regex("(?i)ISBN:\\s*([0-9Xx-]+)").find(it)?.groupValues?.get(1)?.replace("-", "")?.trim() }
-                    val cleanExtId = cur.externalId?.trim()
+                    val isLightNovel = cur.externalSource.equals("AniList", ignoreCase = true) ||
+                            cur.customCategory.equals("Light Novels", ignoreCase = true) ||
+                            cur.subCategory.equals("Light Novel", ignoreCase = true)
+
                     var bookDetails: com.lx.tracklist.data.remote.BookDetails? = null
 
-                    // 1. Direct ID lookup based on externalSource
-                    if (cur.externalSource.equals("Google Books", ignoreCase = true) && !cleanExtId.isNullOrBlank()) {
-                        bookDetails = GoogleBooksApiClient.fetchVolumeDetails(cleanExtId, context).getOrNull()
-                    } else if (cur.externalSource.equals("Open Library", ignoreCase = true) && !cleanExtId.isNullOrBlank()) {
-                        bookDetails = OpenLibraryApiClient.fetchWorkDetails(cleanExtId).getOrNull()
+                    if (isLightNovel) {
+                        val lnResult = BookMetadataManager.searchLightNovels(cur.title, limit = 5)
+                        val lnItem = lnResult.getOrNull()?.firstOrNull()
+                        if (lnItem != null) {
+                            bookDetails = com.lx.tracklist.data.remote.BookDetails(
+                                id = lnItem.malId?.toString() ?: cur.externalId.orEmpty(),
+                                title = lnItem.title ?: cur.title,
+                                subtitle = lnItem.alternateTitle,
+                                authors = lnItem.authors?.split(",")?.map { it.trim() } ?: emptyList(),
+                                publishedDate = lnItem.airedStartDate?.let {
+                                    SimpleDateFormat("yyyy-MM-dd", Locale.US).format(java.util.Date(it))
+                                },
+                                description = lnItem.synopsis,
+                                pageCount = lnItem.totalPages,
+                                totalChapters = lnItem.totalChapters,
+                                totalVolumes = lnItem.totalVolumes,
+                                coverUrl = lnItem.posterUrl,
+                                categories = lnItem.tags?.split(",")?.map { it.trim() } ?: emptyList(),
+                                averageScore = lnItem.externalScore,
+                                sourceProvider = lnItem.sourceProvider ?: "AniList"
+                            )
+                        }
                     }
 
-                    // 2. Direct ID fallback if externalSource was not matched or lookup returned null
-                    if (bookDetails == null && !cleanExtId.isNullOrBlank()) {
-                        bookDetails = GoogleBooksApiClient.fetchVolumeDetails(cleanExtId, context).getOrNull()
-                            ?: OpenLibraryApiClient.fetchWorkDetails(cleanExtId).getOrNull()
-                    }
+                    if (bookDetails == null) {
+                        val isbnFromDesc = (cur.description ?: cur.notes)?.let { Regex("(?i)ISBN:\\s*([0-9Xx-]+)").find(it)?.groupValues?.get(1)?.replace("-", "")?.trim() }
+                        val cleanExtId = cur.externalId?.trim()
 
-                    // 3. Fallback to ISBN search
-                    if (bookDetails == null && !isbnFromDesc.isNullOrBlank()) {
-                        bookDetails = BookMetadataManager.searchBooks(isbnFromDesc, context, limit = 1).getOrNull()?.firstOrNull()
-                    }
+                        // 1. Direct ID lookup based on externalSource
+                        if (cur.externalSource.equals("Google Books", ignoreCase = true) && !cleanExtId.isNullOrBlank()) {
+                            bookDetails = GoogleBooksApiClient.fetchVolumeDetails(cleanExtId, context).getOrNull()
+                        } else if (cur.externalSource.equals("Open Library", ignoreCase = true) && !cleanExtId.isNullOrBlank()) {
+                            bookDetails = OpenLibraryApiClient.fetchWorkDetails(cleanExtId).getOrNull()
+                        }
 
-                    // 4. Fallback to title search
-                    if (bookDetails == null && cur.title.isNotBlank()) {
-                        bookDetails = BookMetadataManager.searchBooks(cur.title, context, limit = 1).getOrNull()?.firstOrNull()
+                        // 2. Direct ID fallback if externalSource was not matched or lookup returned null
+                        if (bookDetails == null && !cleanExtId.isNullOrBlank()) {
+                            bookDetails = GoogleBooksApiClient.fetchVolumeDetails(cleanExtId, context).getOrNull()
+                                ?: OpenLibraryApiClient.fetchWorkDetails(cleanExtId).getOrNull()
+                        }
+
+                        // 3. Fallback to ISBN search (concurrent race)
+                        if (bookDetails == null && !isbnFromDesc.isNullOrBlank()) {
+                            coroutineScope {
+                                val googleAsync = async { GoogleBooksApiClient.searchByIsbn(isbnFromDesc, context).getOrNull() }
+                                val openLibAsync = async { OpenLibraryApiClient.searchByIsbn(isbnFromDesc).getOrNull() }
+                                bookDetails = googleAsync.await() ?: openLibAsync.await()
+                            }
+                        }
+
+                        // 4. Fallback to title search
+                        if (bookDetails == null && cur.title.isNotBlank()) {
+                            bookDetails = BookMetadataManager.searchBooks(cur.title, context, limit = 1).getOrNull()?.firstOrNull()
+                        }
                     }
 
                     if (bookDetails != null) {
@@ -723,13 +760,16 @@ class DetailViewModel(
                         attemptFallbackResolution("Failed to refresh from MangaDex: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}")
                     }
                 } else if (isMal) {
+                    val isManhwa = cur.mediaType == MediaType.MANHWA
                     val result = when {
+                        isManhwa && cur.title.isNotBlank() ->
+                            MangaDexApiClient.searchMangaDetailsByTitle(cur.title, isManhwa = true)
                         isAniList && extId != null && extId > 0 ->
                             JikanApiClient.queryAniListById(aniListId = extId, isManga = isManga)
                         extId != null && extId > 0 ->
-                            JikanApiClient.fetchMediaDetails(malId = extId, isManga = isManga, title = cur.title)
+                            JikanApiClient.fetchMediaDetails(malId = extId, isManga = isManga, title = cur.title, isManhwa = isManhwa)
                         else ->
-                            JikanApiClient.searchMediaDetailsByTitle(title = cur.title, isManga = isManga)
+                            JikanApiClient.searchMediaDetailsByTitle(title = cur.title, isManga = isManga, isManhwa = isManhwa)
                     }
 
                     if (result.isSuccess) {
@@ -774,6 +814,12 @@ class DetailViewModel(
                             val newBroadcastTime = if (!details.broadcastTime.isNullOrBlank()) details.broadcastTime else cur.broadcastTime
                             val newNextAiringEpoch = details.nextAiringEpoch ?: cur.nextAiringEpoch
 
+                            val relatedJson = if (!details.relatedMedia.isNullOrEmpty()) {
+                                com.google.gson.Gson().toJson(details.relatedMedia)
+                            } else {
+                                cur.relatedEntriesJson
+                            }
+
                             val updated = cur.copy(
                                 externalId = newExtId,
                                 externalSource = resolvedSource,
@@ -795,9 +841,13 @@ class DetailViewModel(
                                 description = if (!details.synopsis.isNullOrBlank()) details.synopsis else (cur.description ?: cur.notes),
                                 userComments = cur.userComments,
                                 isAiring = details.isAiring ?: cur.isAiring,
+                                relatedEntriesJson = relatedJson,
                                 updatedAt = now
                             )
                             repository.update(updated)
+                            if (!details.relatedMedia.isNullOrEmpty()) {
+                                _rawRelatedEntries.value = details.relatedMedia
+                            }
                             _metadataRefreshMessage.value = "Metadata refreshed from $resolvedSource (#$newExtId)"
                         } else {
                             attemptFallbackResolution("No metadata returned from external source")
@@ -819,6 +869,13 @@ class DetailViewModel(
                         val details = result.getOrNull()
                         if (details != null) {
                             val now = System.currentTimeMillis()
+                            val relatedJson = if (!details.relatedItems.isNullOrEmpty()) {
+                                com.google.gson.Gson().toJson(details.relatedItems)
+                            } else {
+                                cur.relatedEntriesJson
+                            }
+                            val seriesName = if (cur.mediaType == MediaType.MOVIE && !details.movieSeriesName.isNullOrBlank()) details.movieSeriesName else cur.movieSeriesName
+
                             val updated = cur.copy(
                                 externalId = details.tmdbId.toString(),
                                 externalSource = "TMDB",
@@ -841,9 +898,14 @@ class DetailViewModel(
                                 description = if (!details.synopsis.isNullOrBlank()) details.synopsis else (cur.description ?: cur.notes),
                                 userComments = cur.userComments,
                                 isAiring = details.isAiring ?: cur.isAiring,
+                                relatedEntriesJson = relatedJson,
+                                movieSeriesName = seriesName,
                                 updatedAt = now
                             )
                             repository.update(updated)
+                            if (!details.relatedItems.isNullOrEmpty()) {
+                                _rawRelatedEntries.value = details.relatedItems
+                            }
                             _metadataRefreshMessage.value = "Metadata refreshed from TMDB (TMDB #${details.tmdbId})"
                         } else {
                             attemptFallbackResolution("No metadata returned from The Movie Database")
