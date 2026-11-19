@@ -70,13 +70,63 @@ data class SearchResultItem(
     val isbn: String? = null,
     val rawBookDetails: BookDetails? = null,
     val rawJikanDetails: JikanMediaDetails? = null,
-    val rawTmdbResult: TmdbSearchResult? = null
+    val rawTmdbResult: TmdbSearchResult? = null,
+    val imdbId: String? = null
 ) {
     val originalLanguageDisplayName: String?
         get() = OriginalLanguageRegistry.getDisplayName(originalLanguage)
 
     val originalLanguageWithFlag: String?
         get() = OriginalLanguageRegistry.getDisplayWithFlag(originalLanguage)
+
+    val webUrl: String?
+        get() {
+            if (rawJikanDetails?.webUrl != null) return rawJikanDetails.webUrl
+            if (rawBookDetails?.infoUrl != null) return rawBookDetails.infoUrl
+            if (rawTmdbResult != null) return rawTmdbResult.webUrl
+            if (externalId.isBlank() || externalId == "0") return null
+
+            val isMangaType = mediaType == MediaType.MANGA || mediaType == MediaType.MANHWA || mediaType == MediaType.BOOK
+            return when {
+                externalSource.equals("TMDB", ignoreCase = true) -> {
+                    val type = if (mediaType == MediaType.MOVIE) "movie" else "tv"
+                    "https://www.themoviedb.org/$type/$externalId"
+                }
+                externalSource.equals("MangaDex", ignoreCase = true) -> {
+                    "https://mangadex.org/title/$externalId"
+                }
+                externalSource.startsWith("AniList", ignoreCase = true) -> {
+                    val type = if (isMangaType) "manga" else "anime"
+                    "https://anilist.co/$type/$externalId"
+                }
+                externalSource.equals("Kitsu", ignoreCase = true) -> {
+                    val type = if (isMangaType) "manga" else "anime"
+                    "https://kitsu.app/$type/$externalId"
+                }
+                externalSource.equals("Google Books", ignoreCase = true) -> {
+                    "https://books.google.com/books?id=$externalId"
+                }
+                externalSource.equals("Open Library", ignoreCase = true) -> {
+                    val cleanKey = externalId.removePrefix("/works/").removePrefix("/").trim()
+                    "https://openlibrary.org/works/$cleanKey"
+                }
+                else -> {
+                    val type = if (isMangaType) "manga" else "anime"
+                    "https://myanimelist.net/$type/$externalId"
+                }
+            }
+        }
+
+    val openWebLabel: String
+        get() = when {
+            externalSource.equals("TMDB", ignoreCase = true) -> "Open TMDB"
+            externalSource.equals("MangaDex", ignoreCase = true) -> "Open MangaDex"
+            externalSource.startsWith("AniList", ignoreCase = true) -> "Open AniList"
+            externalSource.equals("Kitsu", ignoreCase = true) -> "Open Kitsu"
+            externalSource.equals("Google Books", ignoreCase = true) -> "Open Books"
+            externalSource.equals("Open Library", ignoreCase = true) -> "Open Library"
+            else -> "Open MAL"
+        }
 }
 
 data class SearchUiState(

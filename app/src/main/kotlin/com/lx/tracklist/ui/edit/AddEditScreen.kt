@@ -113,6 +113,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.lx.tracklist.R
 import com.lx.tracklist.data.remote.JikanMediaDetails
+import com.lx.tracklist.util.ExternalLinkHelper
 import com.lx.tracklist.data.remote.TmdbSearchResult
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -2951,16 +2952,72 @@ private fun ExternalDbSyncDialog(
                                                         verticalAlignment = Alignment.CenterVertically,
                                                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                                                     ) {
-                                                        IconButton(
-                                                            onClick = { openExternalUrl(webUrl) },
-                                                            modifier = Modifier.size(26.dp)
-                                                        ) {
-                                                            Icon(
-                                                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                                                contentDescription = "Open on TMDB",
-                                                                tint = LXTextSecondary,
-                                                                modifier = Modifier.size(16.dp)
-                                                            )
+                                                        var showCardTmdbMenu by remember { mutableStateOf(false) }
+                                                        Box {
+                                                            IconButton(
+                                                                onClick = { showCardTmdbMenu = true },
+                                                                modifier = Modifier.size(26.dp)
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                                                    contentDescription = "Open on TMDB",
+                                                                    tint = LXTextSecondary,
+                                                                    modifier = Modifier.size(16.dp)
+                                                                )
+                                                            }
+
+                                                            DropdownMenu(
+                                                                expanded = showCardTmdbMenu,
+                                                                onDismissRequest = { showCardTmdbMenu = false },
+                                                                modifier = Modifier.background(LXSurfaceElevated)
+                                                            ) {
+                                                                DropdownMenuItem(
+                                                                    text = {
+                                                                        Column {
+                                                                            Text("Open on TMDB", fontWeight = FontWeight.Bold, color = LXTextPrimary, fontSize = 12.sp)
+                                                                            Text("themoviedb.org", fontSize = 10.sp, color = LXTextSecondary)
+                                                                        }
+                                                                    },
+                                                                    leadingIcon = {
+                                                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(14.dp))
+                                                                    },
+                                                                    onClick = {
+                                                                        showCardTmdbMenu = false
+                                                                        openExternalUrl(webUrl)
+                                                                    }
+                                                                )
+                                                                HorizontalDivider(color = LXBorder)
+                                                                DropdownMenuItem(
+                                                                    text = {
+                                                                        Column {
+                                                                            Text("Open on IMDb ⭐", fontWeight = FontWeight.Bold, color = Color(0xFFF5C518), fontSize = 12.sp)
+                                                                            Text("Search on IMDb (Works in India)", fontSize = 10.sp, color = LXTextSecondary)
+                                                                        }
+                                                                    },
+                                                                    leadingIcon = {
+                                                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = Color(0xFFF5C518), modifier = Modifier.size(14.dp))
+                                                                    },
+                                                                    onClick = {
+                                                                        showCardTmdbMenu = false
+                                                                        openExternalUrl(ExternalLinkHelper.buildImdbUrl(item.title))
+                                                                    }
+                                                                )
+                                                                DropdownMenuItem(
+                                                                    text = {
+                                                                        Column {
+                                                                            Text("Open on Rotten Tomatoes 🍅", fontWeight = FontWeight.Bold, color = Color(0xFFFF523B), fontSize = 12.sp)
+                                                                            Text("Search on Rotten Tomatoes", fontSize = 10.sp, color = LXTextSecondary)
+                                                                        }
+                                                                    },
+                                                                    leadingIcon = {
+                                                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = Color(0xFFFF523B), modifier = Modifier.size(14.dp))
+                                                                    },
+                                                                    onClick = {
+                                                                        showCardTmdbMenu = false
+                                                                        openExternalUrl(ExternalLinkHelper.buildRottenTomatoesUrl(item.title))
+                                                                    }
+                                                                )
+                                                            }
                                                         }
                                                         IconButton(
                                                             onClick = { expandedItemKey = if (isExpanded) null else itemKey },
@@ -3028,34 +3085,142 @@ private fun ExternalDbSyncDialog(
                                                         }
                                                     }
 
+                                                    // Quick ISP Alternatives row
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clip(RoundedCornerShape(6.dp))
+                                                            .background(LXSurfaceBlack.copy(alpha = 0.5f))
+                                                            .border(BorderStroke(1.dp, LXBorder.copy(alpha = 0.6f)), RoundedCornerShape(6.dp))
+                                                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text(
+                                                            text = "ISP blocking TMDB?",
+                                                            fontSize = 10.sp,
+                                                            color = LXTextSecondary
+                                                        )
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                            Surface(
+                                                                shape = RoundedCornerShape(4.dp),
+                                                                color = Color(0xFFE2B616).copy(alpha = 0.15f),
+                                                                border = BorderStroke(1.dp, Color(0xFFE2B616).copy(alpha = 0.5f)),
+                                                                modifier = Modifier.clickable {
+                                                                    openExternalUrl(ExternalLinkHelper.buildImdbUrl(item.title))
+                                                                }
+                                                            ) {
+                                                                Text(
+                                                                    text = "IMDb ↗",
+                                                                    color = Color(0xFFF5C518),
+                                                                    fontSize = 10.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                                )
+                                                            }
+                                                            Surface(
+                                                                shape = RoundedCornerShape(4.dp),
+                                                                color = Color(0xFFFA320A).copy(alpha = 0.15f),
+                                                                border = BorderStroke(1.dp, Color(0xFFFA320A).copy(alpha = 0.5f)),
+                                                                modifier = Modifier.clickable {
+                                                                    openExternalUrl(ExternalLinkHelper.buildRottenTomatoesUrl(item.title))
+                                                                }
+                                                            ) {
+                                                                Text(
+                                                                    text = "Rotten Tomatoes ↗",
+                                                                    color = Color(0xFFFF523B),
+                                                                    fontSize = 10.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+
                                                     Spacer(modifier = Modifier.height(2.dp))
 
                                                     // Bottom expanded actions
+                                                    var showExpandedTmdbMenu by remember { mutableStateOf(false) }
                                                     Row(
                                                         modifier = Modifier.fillMaxWidth(),
                                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
-                                                        OutlinedButton(
-                                                            onClick = { openExternalUrl(webUrl) },
-                                                            modifier = Modifier
-                                                                .weight(1.35f)
-                                                                .heightIn(min = 34.dp),
-                                                            shape = RoundedCornerShape(6.dp),
-                                                            border = BorderStroke(1.dp, LXBorder),
-                                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
-                                                        ) {
-                                                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                            Spacer(modifier = Modifier.width(4.dp))
-                                                            Text(
-                                                                text = "Open TMDB",
-                                                                fontSize = 11.sp,
-                                                                fontWeight = FontWeight.Medium,
-                                                                maxLines = 1,
-                                                                softWrap = false,
-                                                                overflow = TextOverflow.Ellipsis
-                                                            )
+                                                        Box(modifier = Modifier.weight(1.35f)) {
+                                                            OutlinedButton(
+                                                                onClick = { showExpandedTmdbMenu = true },
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .heightIn(min = 34.dp),
+                                                                shape = RoundedCornerShape(6.dp),
+                                                                border = BorderStroke(1.dp, LXBorder),
+                                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                                                            ) {
+                                                                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                                Spacer(modifier = Modifier.width(4.dp))
+                                                                Text(
+                                                                    text = "Open TMDB ▾",
+                                                                    fontSize = 11.sp,
+                                                                    fontWeight = FontWeight.Medium,
+                                                                    maxLines = 1,
+                                                                    softWrap = false,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                            }
+
+                                                            DropdownMenu(
+                                                                expanded = showExpandedTmdbMenu,
+                                                                onDismissRequest = { showExpandedTmdbMenu = false },
+                                                                modifier = Modifier.background(LXSurfaceElevated)
+                                                            ) {
+                                                                DropdownMenuItem(
+                                                                    text = {
+                                                                        Column {
+                                                                            Text("The Movie Database (TMDB)", fontWeight = FontWeight.Bold, color = LXTextPrimary, fontSize = 12.sp)
+                                                                            Text("themoviedb.org (may be blocked by some ISPs)", fontSize = 10.sp, color = LXTextSecondary)
+                                                                        }
+                                                                    },
+                                                                    leadingIcon = {
+                                                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(14.dp))
+                                                                    },
+                                                                    onClick = {
+                                                                        showExpandedTmdbMenu = false
+                                                                        openExternalUrl(webUrl)
+                                                                    }
+                                                                )
+                                                                HorizontalDivider(color = LXBorder)
+                                                                DropdownMenuItem(
+                                                                    text = {
+                                                                        Column {
+                                                                            Text("Open on IMDb ⭐", fontWeight = FontWeight.Bold, color = Color(0xFFF5C518), fontSize = 12.sp)
+                                                                            Text("Search on IMDb (Works in India)", fontSize = 10.sp, color = LXTextSecondary)
+                                                                        }
+                                                                    },
+                                                                    leadingIcon = {
+                                                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = Color(0xFFF5C518), modifier = Modifier.size(14.dp))
+                                                                    },
+                                                                    onClick = {
+                                                                        showExpandedTmdbMenu = false
+                                                                        openExternalUrl(ExternalLinkHelper.buildImdbUrl(item.title))
+                                                                    }
+                                                                )
+                                                                DropdownMenuItem(
+                                                                    text = {
+                                                                        Column {
+                                                                            Text("Open on Rotten Tomatoes 🍅", fontWeight = FontWeight.Bold, color = Color(0xFFFF523B), fontSize = 12.sp)
+                                                                            Text("Search on Rotten Tomatoes", fontSize = 10.sp, color = LXTextSecondary)
+                                                                        }
+                                                                    },
+                                                                    leadingIcon = {
+                                                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = Color(0xFFFF523B), modifier = Modifier.size(14.dp))
+                                                                    },
+                                                                    onClick = {
+                                                                        showExpandedTmdbMenu = false
+                                                                        openExternalUrl(ExternalLinkHelper.buildRottenTomatoesUrl(item.title))
+                                                                    }
+                                                                )
+                                                            }
                                                         }
 
                                                         Button(

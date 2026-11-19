@@ -206,7 +206,7 @@ object TmdbApiClient {
             return Result.failure(TmdbAuthException("TMDB Read Access Token is not configured."))
         }
 
-        val endpoint = "${baseUrl.trimEnd('/')}/movie/$tmdbId?append_to_response=alternative_titles,credits,recommendations"
+        val endpoint = "${baseUrl.trimEnd('/')}/movie/$tmdbId?append_to_response=alternative_titles,credits,recommendations,external_ids"
         return try {
             val request = buildRequest(endpoint, token)
             val response = okHttpClient.newCall(request).execute()
@@ -256,7 +256,7 @@ object TmdbApiClient {
             return Result.failure(TmdbAuthException("TMDB Read Access Token is not configured."))
         }
 
-        val endpoint = "${baseUrl.trimEnd('/')}/tv/$tmdbId?append_to_response=alternative_titles,credits,recommendations"
+        val endpoint = "${baseUrl.trimEnd('/')}/tv/$tmdbId?append_to_response=alternative_titles,credits,recommendations,external_ids"
         return try {
             val request = buildRequest(endpoint, token)
             val response = okHttpClient.newCall(request).execute()
@@ -1082,7 +1082,9 @@ object TmdbApiClient {
         val externalScore = voteAvg?.takeIf { it > 0f }
 
         val overview = obj.get("overview")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+        val extIdsObj = obj.getAsJsonObject("external_ids")
         val imdbId = obj.get("imdb_id")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+            ?: extIdsObj?.get("imdb_id")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
 
         // Genres
         val tagList = mutableListOf<String>()
@@ -1336,6 +1338,10 @@ object TmdbApiClient {
             }
         }
 
+        val tvExtIdsObj = obj.getAsJsonObject("external_ids")
+        val tvImdbId = obj.get("imdb_id")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+            ?: tvExtIdsObj?.get("imdb_id")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+
         return TmdbMediaDetails(
             tmdbId = id,
             title = name,
@@ -1354,7 +1360,7 @@ object TmdbApiClient {
             externalScore = externalScore,
             externalScoreSource = "TMDB",
             type = "TV",
-            imdbId = null,
+            imdbId = tvImdbId,
             sourceProvider = "TMDB",
             relatedItems = recList.takeIf { it.isNotEmpty() }
         )

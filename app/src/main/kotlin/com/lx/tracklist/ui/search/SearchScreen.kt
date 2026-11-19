@@ -60,12 +60,14 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -83,6 +85,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.platform.LocalUriHandler
+import com.lx.tracklist.util.ExternalLinkHelper
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -991,6 +995,90 @@ private fun SearchResultCard(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (item.webUrl != null) {
+                        val isTmdb = item.externalSource.equals("TMDB", ignoreCase = true)
+                        var showCardMenu by remember { mutableStateOf(false) }
+                        val context = LocalContext.current
+                        val uriHandler = LocalUriHandler.current
+
+                        Box {
+                            IconButton(
+                                onClick = {
+                                    if (isTmdb) {
+                                        showCardMenu = true
+                                    } else {
+                                        ExternalLinkHelper.openUrlSafely(item.webUrl, uriHandler, context)
+                                    }
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.OpenInNew,
+                                    contentDescription = item.openWebLabel,
+                                    tint = LXTextSecondary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
+                            if (isTmdb) {
+                                DropdownMenu(
+                                    expanded = showCardMenu,
+                                    onDismissRequest = { showCardMenu = false },
+                                    modifier = Modifier.background(LXSurfaceElevated)
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text("Open on TMDB", fontWeight = FontWeight.Bold, color = LXTextPrimary, fontSize = 12.sp)
+                                                Text("themoviedb.org", fontSize = 10.sp, color = LXTextSecondary)
+                                            }
+                                        },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.OpenInNew, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(14.dp))
+                                        },
+                                        onClick = {
+                                            showCardMenu = false
+                                            ExternalLinkHelper.openUrlSafely(item.webUrl, uriHandler, context)
+                                        }
+                                    )
+                                    HorizontalDivider(color = LXBorder)
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text("Open on IMDb ⭐", fontWeight = FontWeight.Bold, color = Color(0xFFF5C518), fontSize = 12.sp)
+                                                Text("Search on IMDb (Works in India)", fontSize = 10.sp, color = LXTextSecondary)
+                                            }
+                                        },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.OpenInNew, contentDescription = null, tint = Color(0xFFF5C518), modifier = Modifier.size(14.dp))
+                                        },
+                                        onClick = {
+                                            showCardMenu = false
+                                            ExternalLinkHelper.openUrlSafely(ExternalLinkHelper.buildImdbUrl(item.title, item.imdbId), uriHandler, context)
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text("Open on Rotten Tomatoes 🍅", fontWeight = FontWeight.Bold, color = Color(0xFFFF523B), fontSize = 12.sp)
+                                                Text("Search on Rotten Tomatoes", fontSize = 10.sp, color = LXTextSecondary)
+                                            }
+                                        },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.OpenInNew, contentDescription = null, tint = Color(0xFFFF523B), modifier = Modifier.size(14.dp))
+                                        },
+                                        onClick = {
+                                            showCardMenu = false
+                                            ExternalLinkHelper.openUrlSafely(ExternalLinkHelper.buildRottenTomatoesUrl(item.title), uriHandler, context)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+
                     if (item.isAlreadyInLibrary) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
@@ -1215,6 +1303,7 @@ private fun SearchResultDetailSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val clipboardManager = LocalClipboardManager.current
     var detailedSynopsis by remember(item.externalId) { mutableStateOf(item.synopsis) }
     var detailedAuthor by remember(item.externalId) { mutableStateOf(item.author) }
@@ -1223,10 +1312,11 @@ private fun SearchResultDetailSheet(
     var detailedSeasons by remember(item.externalId) { mutableStateOf(item.totalVolumes) }
     var detailedEpisodes by remember(item.externalId) { mutableStateOf(item.totalUnits) }
     var detailedDuration by remember(item.externalId) { mutableStateOf(item.durationMinutes) }
+    var detailedImdbId by remember(item.externalId) { mutableStateOf<String?>(item.imdbId) }
     var isLoadingDetails by remember(item.externalId) { mutableStateOf(false) }
 
     LaunchedEffect(item.externalId) {
-        if (item.mediaType == MediaType.SHOW && item.externalSource.equals("TMDB", ignoreCase = true) && (detailedEpisodes == null || detailedSeasons == null)) {
+        if (item.mediaType == MediaType.SHOW && item.externalSource.equals("TMDB", ignoreCase = true) && (detailedEpisodes == null || detailedSeasons == null || detailedImdbId == null)) {
             val tmdbId = item.externalId.toLongOrNull()
             if (tmdbId != null) {
                 isLoadingDetails = true
@@ -1246,12 +1336,15 @@ private fun SearchResultDetailSheet(
                             if (detailedSynopsis.isNullOrBlank() && !tvDetails.synopsis.isNullOrBlank()) {
                                 detailedSynopsis = tvDetails.synopsis
                             }
+                            if (!tvDetails.imdbId.isNullOrBlank()) {
+                                detailedImdbId = tvDetails.imdbId
+                            }
                         }
                     } catch (_: Exception) {}
                     isLoadingDetails = false
                 }
             }
-        } else if (item.mediaType == MediaType.MOVIE && item.externalSource.equals("TMDB", ignoreCase = true) && detailedDuration == null) {
+        } else if (item.mediaType == MediaType.MOVIE && item.externalSource.equals("TMDB", ignoreCase = true) && (detailedDuration == null || detailedImdbId == null)) {
             val tmdbId = item.externalId.toLongOrNull()
             if (tmdbId != null) {
                 withContext(Dispatchers.IO) {
@@ -1263,6 +1356,9 @@ private fun SearchResultDetailSheet(
                             }
                             if (detailedSynopsis.isNullOrBlank() && !movieDetails.synopsis.isNullOrBlank()) {
                                 detailedSynopsis = movieDetails.synopsis
+                            }
+                            if (!movieDetails.imdbId.isNullOrBlank()) {
+                                detailedImdbId = movieDetails.imdbId
                             }
                         }
                     } catch (_: Exception) {}
@@ -1695,27 +1791,111 @@ private fun SearchResultDetailSheet(
                 }
             }
 
-            // Attribution Notice
-            if (item.externalSource == "TMDB") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(LXSurfaceElevated)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Attribution Notice & ISP Alternative Links
+            if (item.externalSource.equals("TMDB", ignoreCase = true)) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Image(
-                        painter = painterResource(R.drawable.ic_tmdb_logo),
-                        contentDescription = "TMDB",
-                        modifier = Modifier.height(14.dp).width(20.dp)
-                    )
-                    Text(
-                        text = "This product uses the TMDB API but is not endorsed or certified by TMDB.",
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                        color = LXTextSecondary.copy(alpha = 0.6f)
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_tmdb_logo),
+                            contentDescription = "TMDB",
+                            modifier = Modifier.height(14.dp).width(20.dp)
+                        )
+                        Text(
+                            text = "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                            color = LXTextSecondary.copy(alpha = 0.6f)
+                        )
+                    }
+
+                    // Quick ISP Alternatives row (for India & regions where themoviedb.org is blocked)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated.copy(alpha = 0.65f))
+                            .border(BorderStroke(1.dp, LXBorder), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "ISP blocking TMDB?",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                                color = LXTextPrimary
+                            )
+                            Text(
+                                text = "Try alternative databases:",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp),
+                                color = LXTextSecondary.copy(alpha = 0.7f)
+                            )
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(0xFFE2B616).copy(alpha = 0.15f),
+                                border = BorderStroke(1.dp, Color(0xFFE2B616).copy(alpha = 0.5f)),
+                                modifier = Modifier.clickable {
+                                    ExternalLinkHelper.openUrlSafely(
+                                        ExternalLinkHelper.buildImdbUrl(item.title, detailedImdbId),
+                                        uriHandler,
+                                        context,
+                                        clipboardManager
+                                    )
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "IMDb ↗",
+                                        color = Color(0xFFF5C518),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(0xFFFA320A).copy(alpha = 0.15f),
+                                border = BorderStroke(1.dp, Color(0xFFFA320A).copy(alpha = 0.5f)),
+                                modifier = Modifier.clickable {
+                                    ExternalLinkHelper.openUrlSafely(
+                                        ExternalLinkHelper.buildRottenTomatoesUrl(item.title),
+                                        uriHandler,
+                                        context,
+                                        clipboardManager
+                                    )
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Rotten Tomatoes ↗",
+                                        color = Color(0xFFFF523B),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             } else if (item.externalSource.equals("Google Books", ignoreCase = true)) {
                 Row(
@@ -1764,48 +1944,172 @@ private fun SearchResultDetailSheet(
             }
 
             // Bottom Actions
-            if (item.isAlreadyInLibrary && item.existingEntryId != null) {
-                Button(
-                    onClick = {
-                        onDismiss()
-                        onViewInLibrary(item.existingEntryId)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = LXPrimaryGreen,
-                        contentColor = LXBackgroundBlack
-                    ),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "View in Library (${item.existingStatus?.defaultLabel ?: "Saved"})",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
+            val isTmdb = item.externalSource.equals("TMDB", ignoreCase = true)
+            var showTmdbMenu by remember { mutableStateOf(false) }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (item.webUrl != null) {
+                    Box(modifier = Modifier.weight(1.15f)) {
+                        OutlinedButton(
+                            onClick = {
+                                if (isTmdb) {
+                                    showTmdbMenu = true
+                                } else {
+                                    ExternalLinkHelper.openUrlSafely(
+                                        item.webUrl,
+                                        uriHandler,
+                                        context,
+                                        clipboardManager
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, LXBorder),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.OpenInNew,
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isTmdb) "${item.openWebLabel} ▾" else item.openWebLabel,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        if (isTmdb) {
+                            DropdownMenu(
+                                expanded = showTmdbMenu,
+                                onDismissRequest = { showTmdbMenu = false },
+                                modifier = Modifier.background(LXSurfaceElevated)
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text("The Movie Database (TMDB)", fontWeight = FontWeight.Bold, color = LXTextPrimary, fontSize = 13.sp)
+                                            Text("themoviedb.org (may be blocked by some ISPs)", fontSize = 10.sp, color = LXTextSecondary)
+                                        }
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.OpenInNew, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(16.dp))
+                                    },
+                                    onClick = {
+                                        showTmdbMenu = false
+                                        ExternalLinkHelper.openUrlSafely(item.webUrl, uriHandler, context, clipboardManager)
+                                    }
+                                )
+                                HorizontalDivider(color = LXBorder)
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text("IMDb ⭐", fontWeight = FontWeight.Bold, color = Color(0xFFF5C518), fontSize = 13.sp)
+                                            Text(
+                                                text = if (!detailedImdbId.isNullOrBlank()) "Direct title ($detailedImdbId) • Works in India" else "Search title • Works in India",
+                                                fontSize = 10.sp,
+                                                color = LXTextSecondary
+                                            )
+                                        }
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.OpenInNew, contentDescription = null, tint = Color(0xFFF5C518), modifier = Modifier.size(16.dp))
+                                    },
+                                    onClick = {
+                                        showTmdbMenu = false
+                                        ExternalLinkHelper.openUrlSafely(
+                                            ExternalLinkHelper.buildImdbUrl(item.title, detailedImdbId),
+                                            uriHandler,
+                                            context,
+                                            clipboardManager
+                                        )
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text("Rotten Tomatoes 🍅", fontWeight = FontWeight.Bold, color = Color(0xFFFF523B), fontSize = 13.sp)
+                                            Text("Search on Rotten Tomatoes", fontSize = 10.sp, color = LXTextSecondary)
+                                        }
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.OpenInNew, contentDescription = null, tint = Color(0xFFFF523B), modifier = Modifier.size(16.dp))
+                                    },
+                                    onClick = {
+                                        showTmdbMenu = false
+                                        ExternalLinkHelper.openUrlSafely(
+                                            ExternalLinkHelper.buildRottenTomatoesUrl(item.title),
+                                            uriHandler,
+                                            context,
+                                            clipboardManager
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
-            } else {
-                Button(
-                    onClick = onAddClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = LXPrimaryGreen,
-                        contentColor = LXBackgroundBlack
-                    ),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Add to Library",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
-                    )
+
+                // Add to Library or In Library button
+                val actionWeight = if (item.webUrl != null) 1.25f else 1f
+                if (item.isAlreadyInLibrary && item.existingEntryId != null) {
+                    Button(
+                        onClick = {
+                            onDismiss()
+                            onViewInLibrary(item.existingEntryId)
+                        },
+                        modifier = Modifier
+                            .weight(actionWeight)
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LXPrimaryGreen,
+                            contentColor = LXBackgroundBlack
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "In Library (${item.existingStatus?.defaultLabel ?: "Saved"})",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = onAddClick,
+                        modifier = Modifier
+                            .weight(actionWeight)
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LXPrimaryGreen,
+                            contentColor = LXBackgroundBlack
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Add to Library",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
 
