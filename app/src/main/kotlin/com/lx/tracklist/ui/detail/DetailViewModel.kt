@@ -136,7 +136,7 @@ class DetailViewModel(
                         else -> ""
                     }
                     val msg = if (progressStr.isNotBlank()) {
-                        "Fetched from MyAnimeList: ${updated.status.displayName} ($progressStr)"
+                        "Fetched from MyAnimeList: ${updated.status.getDisplayLabel(updated.mediaType)} ($progressStr)"
                     } else {
                         "Successfully fetched from MyAnimeList!"
                     }

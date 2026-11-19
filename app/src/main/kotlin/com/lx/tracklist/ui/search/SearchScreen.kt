@@ -1884,7 +1884,7 @@ private fun SearchResultDetailSheet(
                         externalId = item.externalId,
                         externalSource = item.externalSource,
                         directMalId = item.rawJikanDetails?.malId,
-                        directSiteUrl = item.rawJikanDetails?.siteUrl,
+                        directSiteUrl = item.rawJikanDetails?.url ?: item.rawJikanDetails?.webUrl,
                         webUrl = item.webUrl
                     )
                     isLightNovel -> ExternalLinkHelper.buildLightNovelOpenOptions(

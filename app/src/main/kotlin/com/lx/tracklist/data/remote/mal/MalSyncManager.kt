@@ -196,7 +196,7 @@ object MalSyncManager {
                     totalEpisodes = if (details.numEpisodes > 0) details.numEpisodes else entry.totalEpisodes,
                     isRewatching = listStatus.isRewatching,
                     rewatchCount = listStatus.numTimesRewatched,
-                    lastModified = System.currentTimeMillis()
+                    updatedAt = System.currentTimeMillis()
                 )
                 repository.update(updatedEntry)
                 Result.success(updatedEntry)
@@ -219,7 +219,7 @@ object MalSyncManager {
                     totalChapters = if (details.numChapters > 0) details.numChapters else entry.totalChapters,
                     isRewatching = listStatus.isRereading,
                     rewatchCount = listStatus.numTimesReread,
-                    lastModified = System.currentTimeMillis()
+                    updatedAt = System.currentTimeMillis()
                 )
                 repository.update(updatedEntry)
                 Result.success(updatedEntry)

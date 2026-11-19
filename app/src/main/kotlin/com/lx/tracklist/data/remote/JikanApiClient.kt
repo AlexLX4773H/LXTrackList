@@ -298,7 +298,7 @@ object JikanApiClient {
 
             // If rate limited (429), wait 1s and retry once
             if (code == 429) {
-                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                Log.w(TAG, "Jikan request rate limited (429), waiting 1s before retry...")
                 try {
                     Thread.sleep(1000)
                 } catch (_: InterruptedException) {}
@@ -432,7 +432,7 @@ object JikanApiClient {
 
             // If rate limited (429), wait 1s and retry once
             if (code == 429) {
-                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                Log.w(TAG, "Jikan request rate limited (429), waiting 1s before retry...")
                 try {
                     Thread.sleep(1000)
                 } catch (_: InterruptedException) {}
@@ -671,7 +671,7 @@ object JikanApiClient {
 
             // If rate limited (429), wait 1s and retry once
             if (code == 429) {
-                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                Log.w(TAG, "Jikan request rate limited (429), waiting 1s before retry...")
                 try {
                     Thread.sleep(1000)
                 } catch (_: InterruptedException) {}
@@ -928,7 +928,7 @@ object JikanApiClient {
 
             // If rate limited (429), wait 1s and retry once
             if (code == 429) {
-                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                Log.w(TAG, "Jikan request rate limited (429), waiting 1s before retry...")
                 try {
                     Thread.sleep(1000)
                 } catch (_: InterruptedException) {}
@@ -993,7 +993,7 @@ object JikanApiClient {
 
             // If rate limited (429), wait 1s and retry once
             if (code == 429) {
-                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                Log.w(TAG, "Jikan request rate limited (429), waiting 1s before retry...")
                 try {
                     Thread.sleep(1000)
                 } catch (_: InterruptedException) {}
@@ -1156,7 +1156,7 @@ object JikanApiClient {
 
             // If rate limited (429), wait 1s and retry once
             if (code == 429) {
-                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                Log.w(TAG, "Jikan request rate limited (429), waiting 1s before retry...")
                 try {
                     Thread.sleep(1000)
                 } catch (_: InterruptedException) {}
@@ -1770,7 +1770,7 @@ object JikanApiClient {
 
             // If rate limited (429), wait 1s and retry once
             if (code == 429) {
-                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                Log.w(TAG, "Jikan request rate limited (429), waiting 1s before retry...")
                 try {
                     Thread.sleep(1000)
                 } catch (_: InterruptedException) {}
@@ -1859,7 +1859,7 @@ object JikanApiClient {
 
             // If rate limited (429), wait 1s and retry once
             if (code == 429) {
-                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                Log.w(TAG, "Jikan request rate limited (429), waiting 1s before retry...")
                 try {
                     Thread.sleep(1000)
                 } catch (_: InterruptedException) {}
@@ -2190,7 +2190,7 @@ object JikanApiClient {
 
             // If rate limited (429), wait 1s and retry once
             if (code == 429) {
-                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                Log.w(TAG, "Jikan request rate limited (429), waiting 1s before retry...")
                 try {
                     Thread.sleep(1000)
                 } catch (_: InterruptedException) {}
@@ -2722,7 +2722,7 @@ object JikanApiClient {
 
             // If rate limited (429), wait 1s and retry once
             if (code == 429) {
-                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                Log.w(TAG, "Jikan request rate limited (429), waiting 1s before retry...")
                 try {
                     Thread.sleep(1000)
                 } catch (_: InterruptedException) {}
