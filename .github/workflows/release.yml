@@ -21,6 +21,8 @@ jobs:
   release:
     name: Build & Release APK
     runs-on: ubuntu-latest
+    env:
+      HAS_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
 
     steps:
       - name: Checkout repository
@@ -80,10 +82,18 @@ jobs:
 
       - name: Prepare Signing Keystore
         if: steps.version_check.outputs.should_release == 'true' && env.HAS_KEYSTORE == 'true'
-        env:
-          HAS_KEYSTORE: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
         run: |
           echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > app/release.jks
+          cp app/release.jks release.jks
+
+      - name: Verify Signing Keystore
+        if: steps.version_check.outputs.should_release == 'true'
+        run: |
+          if [ ! -f app/release.jks ]; then
+            echo "::error::Release keystore not found! Check secrets.RELEASE_KEYSTORE_BASE64."
+            exit 1
+          fi
+          echo "Keystore successfully placed at app/release.jks and release.jks ($(wc -c < app/release.jks) bytes)"
 
       - name: Build Release APK
         if: steps.version_check.outputs.should_release == 'true'
@@ -93,6 +103,17 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon
+
+      - name: Verify APK Signature
+        if: steps.version_check.outputs.should_release == 'true'
+        run: |
+          APK=$(find app/build/outputs/apk/release/ -name "*.apk" -type f | head -n 1)
+          if [ -z "$APK" ]; then
+            echo "::error::No release APK found!"
+            exit 1
+          fi
+          echo "Verifying signature for $APK..."
+          $ANDROID_HOME/build-tools/36.0.0/apksigner verify --print-certs "$APK"
 
       - name: Prepare APK Asset
         if: steps.version_check.outputs.should_release == 'true'

@@ -860,7 +860,11 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                         } else state
                     }
                     withContext(Dispatchers.Main) {
-                        AppUpdateDownloader.installApk(context, apkFile)
+                        val installResult = AppUpdateDownloader.installApk(context, apkFile)
+                        if (installResult.isFailure) {
+                            val err = installResult.exceptionOrNull()?.message
+                            _uiState.update { it.copy(statusMessage = err) }
+                        }
                     }
                 },
                 onFailure = { error ->

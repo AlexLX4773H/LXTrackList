@@ -163,4 +163,17 @@ object AppUpdateDownloader {
             Result.failure(e)
         }
     }
+
+    fun openUpdateInBrowser(context: Context, downloadUrl: String): Boolean {
+        return try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open update in browser", e)
+            false
+        }
+    }
 }

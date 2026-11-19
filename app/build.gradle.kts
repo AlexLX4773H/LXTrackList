@@ -27,8 +27,8 @@ android {
     applicationId = "com.lx.tracklist"
     minSdk = 26
     targetSdk = 36
-    versionCode = 511
-    versionName = "0.5.11"
+    versionCode = 512
+    versionName = "0.5.12"
 
     val tmdbReadToken = envProperties.getProperty("TMDB_READ_ACCESS_TOKEN")
       ?: System.getenv("TMDB_READ_ACCESS_TOKEN")
@@ -89,6 +89,10 @@ android {
       signingConfig = if (releaseKeystore.storeFile != null && releaseKeystore.storeFile!!.exists()) {
         releaseKeystore
       } else {
+        val isCi = System.getenv("CI") == "true" || System.getenv("GITHUB_ACTIONS") == "true"
+        if (isCi) {
+          throw GradleException("FATAL: Release keystore file not found on CI runner! Failing release build to prevent generating an untrusted debug-signed APK.")
+        }
         signingConfigs.getByName("debug")
       }
     }
