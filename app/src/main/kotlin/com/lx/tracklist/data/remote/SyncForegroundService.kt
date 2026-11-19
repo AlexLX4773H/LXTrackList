@@ -93,10 +93,11 @@ object SyncForegroundService {
 
     fun cancelAllSyncs(context: Context? = null) {
         try {
-            JikanSyncManager.cancelSync(context)
-            TmdbSyncManager.cancelSync(context)
-            BookSyncManager.cancelSync(context)
-            TachiyomiResolverManager.cancelResolution(context)
+            val ctx = context ?: com.lx.tracklist.LXApplication.instance
+            JikanSyncManager.cancelSync(ctx)
+            TmdbSyncManager.cancelSync(ctx)
+            BookSyncManager.cancelSync(ctx)
+            TachiyomiResolverManager.cancelResolution(ctx)
             MalSyncManager.cancelSync()
             releaseWakeLock()
         } catch (e: Exception) {
