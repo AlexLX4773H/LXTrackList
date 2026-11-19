@@ -3552,15 +3552,20 @@ private fun SyncJobsContent(
                         Button(
                             onClick = {
                                 try {
-                                    val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                        data = Uri.parse("package:${context.packageName}")
+                                    }
                                     context.startActivity(intent)
                                 } catch (e: Exception) {
                                     try {
+                                        val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                        context.startActivity(fallback)
+                                    } catch (e2: Exception) {
                                         val appSettings = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                                             data = Uri.fromParts("package", context.packageName, null)
                                         }
                                         context.startActivity(appSettings)
-                                    } catch (_: Exception) {}
+                                    }
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(
