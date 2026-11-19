@@ -61,7 +61,7 @@ object KitsuApiClient {
                 val item = dataArray.get(i)
                 if (item.isJsonObject) {
                     try {
-                        val parsed = parseKitsuItem(item.asJsonObject)
+                        val parsed = parseKitsuItem(item.asJsonObject, isAnime = false)
                         if (parsed != null) {
                             results.add(parsed)
                         }
@@ -75,6 +75,63 @@ object KitsuApiClient {
             Result.success(results)
         } catch (e: Exception) {
             Log.e(TAG, "Exception during Kitsu search for '$cleanQuery'", e)
+            Result.failure(e)
+        }
+    }
+
+    fun searchAnimeMultiple(
+        query: String,
+        limit: Int = 20
+    ): Result<List<JikanMediaDetails>> {
+        val cleanQuery = query.trim()
+        if (cleanQuery.isBlank()) return Result.success(emptyList())
+
+        val encodedTitle = URLEncoder.encode(cleanQuery, "UTF-8")
+        val limitClamped = limit.coerceIn(1, 20)
+        val endpoint = "$BASE_URL/anime?filter[text]=$encodedTitle&page[limit]=$limitClamped"
+
+        return try {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/vnd.api+json")
+                .get()
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                Log.w(TAG, "Kitsu anime search failed with HTTP $code: ${bodyString.take(150)}")
+                return Result.failure(Exception("Kitsu HTTP $code: ${bodyString.take(150)}"))
+            }
+
+            val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
+            val dataArray = rootObj?.getAsJsonArray("data")
+            if (dataArray == null || dataArray.size() == 0) {
+                return Result.success(emptyList())
+            }
+
+            val results = mutableListOf<JikanMediaDetails>()
+            for (i in 0 until dataArray.size()) {
+                val item = dataArray.get(i)
+                if (item.isJsonObject) {
+                    try {
+                        val parsed = parseKitsuItem(item.asJsonObject, isAnime = true)
+                        if (parsed != null) {
+                            results.add(parsed)
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error parsing Kitsu anime item at index $i: ${e.message}")
+                    }
+                }
+            }
+
+            Log.d(TAG, "Kitsu anime search for '$cleanQuery' returned ${results.size} results")
+            Result.success(results)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception during Kitsu anime search for '$cleanQuery'", e)
             Result.failure(e)
         }
     }
@@ -99,7 +156,7 @@ object KitsuApiClient {
         return Result.success(exactMatch ?: list.first())
     }
 
-    fun parseKitsuItem(itemObj: JsonObject): JikanMediaDetails? {
+    fun parseKitsuItem(itemObj: JsonObject, isAnime: Boolean = false): JikanMediaDetails? {
         val id = itemObj.get("id")?.takeIf { !it.isJsonNull }?.asString ?: return null
         val attributes = itemObj.getAsJsonObject("attributes") ?: return null
 
@@ -109,7 +166,7 @@ object KitsuApiClient {
         val enJpTitle = titlesObj?.get("en_jp")?.takeIf { !it.isJsonNull }?.asString?.trim()
         val jaJpTitle = titlesObj?.get("ja_jp")?.takeIf { !it.isJsonNull }?.asString?.trim()
 
-        val title = canonicalTitle ?: enTitle ?: enJpTitle ?: jaJpTitle ?: "Unknown Manga"
+        val title = canonicalTitle ?: enTitle ?: enJpTitle ?: jaJpTitle ?: if (isAnime) "Unknown Anime" else "Unknown Manga"
 
         // Alternate titles
         val altList = mutableListOf<String>()
@@ -130,9 +187,11 @@ object KitsuApiClient {
             ?: posterObj?.get("original")?.takeIf { !it.isJsonNull }?.asString
             ?: posterObj?.get("medium")?.takeIf { !it.isJsonNull }?.asString
 
-        // Chapters & Volumes
-        val totalChapters = attributes.get("chapterCount")?.takeIf { !it.isJsonNull }?.asInt
-        val totalVolumes = attributes.get("volumeCount")?.takeIf { !it.isJsonNull }?.asInt
+        // Units
+        val totalEpisodes = if (isAnime) attributes.get("episodeCount")?.takeIf { !it.isJsonNull }?.asInt else null
+        val durationMinutes = if (isAnime) attributes.get("episodeLength")?.takeIf { !it.isJsonNull }?.asInt else null
+        val totalChapters = if (!isAnime) attributes.get("chapterCount")?.takeIf { !it.isJsonNull }?.asInt else null
+        val totalVolumes = if (!isAnime) attributes.get("volumeCount")?.takeIf { !it.isJsonNull }?.asInt else null
 
         // Dates
         val startDateStr = attributes.get("startDate")?.takeIf { !it.isJsonNull }?.asString
@@ -148,15 +207,15 @@ object KitsuApiClient {
         val ratingStr = attributes.get("averageRating")?.takeIf { !it.isJsonNull }?.asString
         val score = ratingStr?.toFloatOrNull()?.let { it / 10f }
 
-        val subtype = attributes.get("subtype")?.takeIf { !it.isJsonNull }?.asString?.replaceFirstChar { it.uppercase() } ?: "Manga"
+        val subtype = attributes.get("subtype")?.takeIf { !it.isJsonNull }?.asString?.replaceFirstChar { it.uppercase() } ?: if (isAnime) "Anime" else "Manga"
 
         return JikanMediaDetails(
             malId = id.toLongOrNull(),
             title = title,
             posterUrl = posterUrl,
-            durationText = null,
-            durationMinutes = null,
-            totalEpisodes = null,
+            durationText = durationMinutes?.let { "${it}m" },
+            durationMinutes = durationMinutes,
+            totalEpisodes = totalEpisodes,
             totalChapters = totalChapters,
             totalVolumes = totalVolumes,
             alternateTitle = alternateTitle,
@@ -169,7 +228,7 @@ object KitsuApiClient {
             externalScoreSource = if (score != null) "Kitsu" else null,
             type = subtype,
             sourceProvider = "Kitsu",
-            url = "https://kitsu.app/manga/$id"
+            url = if (isAnime) "https://kitsu.app/anime/$id" else "https://kitsu.app/manga/$id"
         )
     }
 }

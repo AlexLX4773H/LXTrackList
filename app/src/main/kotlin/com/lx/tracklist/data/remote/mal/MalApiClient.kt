@@ -259,5 +259,55 @@ object MalApiClient {
             gson.fromJson(body, MalMangaListResponse::class.java)
         }
     }
+
+    /**
+     * Fetch user's status for a specific anime from MyAnimeList.
+     */
+    suspend fun getAnimeUserStatus(
+        context: Context,
+        userId: Long,
+        malAnimeId: Long
+    ): Result<MalAnimeDetailsResponse> = withContext(Dispatchers.IO) {
+        val result = executeWithAuth(context, userId) { token ->
+            Request.Builder()
+                .url("$BASE_URL/anime/$malAnimeId?fields=my_list_status,num_episodes")
+                .header("Authorization", "Bearer $token")
+                .get()
+                .build()
+        }
+
+        result.mapCatching { response ->
+            val body = response.body?.string()
+            if (!response.isSuccessful || body.isNullOrBlank()) {
+                throw IOException("Failed to fetch MAL anime status: HTTP ${response.code}")
+            }
+            gson.fromJson(body, MalAnimeDetailsResponse::class.java)
+        }
+    }
+
+    /**
+     * Fetch user's status for a specific manga from MyAnimeList.
+     */
+    suspend fun getMangaUserStatus(
+        context: Context,
+        userId: Long,
+        malMangaId: Long
+    ): Result<MalMangaDetailsResponse> = withContext(Dispatchers.IO) {
+        val result = executeWithAuth(context, userId) { token ->
+            Request.Builder()
+                .url("$BASE_URL/manga/$malMangaId?fields=my_list_status,num_volumes,num_chapters")
+                .header("Authorization", "Bearer $token")
+                .get()
+                .build()
+        }
+
+        result.mapCatching { response ->
+            val body = response.body?.string()
+            if (!response.isSuccessful || body.isNullOrBlank()) {
+                throw IOException("Failed to fetch MAL manga status: HTTP ${response.code}")
+            }
+            gson.fromJson(body, MalMangaDetailsResponse::class.java)
+        }
+    }
 }
 

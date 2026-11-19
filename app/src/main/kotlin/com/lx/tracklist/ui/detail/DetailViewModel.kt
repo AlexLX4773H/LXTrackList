@@ -72,6 +72,9 @@ class DetailViewModel(
     private val _isPushingToExternalTracker = MutableStateFlow(false)
     val isPushingToExternalTracker: StateFlow<Boolean> = _isPushingToExternalTracker.asStateFlow()
 
+    private val _isFetchingFromExternalTracker = MutableStateFlow(false)
+    val isFetchingFromExternalTracker: StateFlow<Boolean> = _isFetchingFromExternalTracker.asStateFlow()
+
     private val _externalSyncMessage = MutableStateFlow<String?>(null)
     val externalSyncMessage: StateFlow<String?> = _externalSyncMessage.asStateFlow()
 
@@ -81,7 +84,7 @@ class DetailViewModel(
 
     fun pushToExternalTracker(context: Context) {
         val cur = entry.value ?: return
-        if (_isPushingToExternalTracker.value) return
+        if (_isPushingToExternalTracker.value || _isFetchingFromExternalTracker.value) return
 
         viewModelScope.launch(Dispatchers.IO) {
             _isPushingToExternalTracker.value = true
@@ -105,6 +108,47 @@ class DetailViewModel(
                 _externalSyncMessage.value = "MAL sync error: ${e.message}"
             } finally {
                 _isPushingToExternalTracker.value = false
+            }
+        }
+    }
+
+    fun fetchFromExternalTracker(context: Context) {
+        val cur = entry.value ?: return
+        if (_isFetchingFromExternalTracker.value || _isPushingToExternalTracker.value) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isFetchingFromExternalTracker.value = true
+            try {
+                if (!cur.isExternallyTracked) {
+                    _externalSyncMessage.value = "External tracking is off for this entry. Enable it first."
+                    return@launch
+                }
+                if (!MalSyncManager.canBeExternallyTracked(cur)) {
+                    _externalSyncMessage.value = "Missing valid MyAnimeList ID."
+                    return@launch
+                }
+                val result = MalSyncManager.pullSingleEntrySync(context, cur, repository)
+                if (result.isSuccess) {
+                    val updated = result.getOrThrow()
+                    val progressStr = when (updated.mediaType) {
+                        MediaType.ANIME -> "Ep ${updated.currentEpisodes}"
+                        MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "Ch ${updated.currentChapters}"
+                        else -> ""
+                    }
+                    val msg = if (progressStr.isNotBlank()) {
+                        "Fetched from MyAnimeList: ${updated.status.displayName} ($progressStr)"
+                    } else {
+                        "Successfully fetched from MyAnimeList!"
+                    }
+                    _externalSyncMessage.value = msg
+                } else {
+                    val ex = result.exceptionOrNull()
+                    _externalSyncMessage.value = "MAL fetch failed: ${ex?.message ?: "Unknown error"}"
+                }
+            } catch (e: Exception) {
+                _externalSyncMessage.value = "MAL fetch error: ${e.message}"
+            } finally {
+                _isFetchingFromExternalTracker.value = false
             }
         }
     }

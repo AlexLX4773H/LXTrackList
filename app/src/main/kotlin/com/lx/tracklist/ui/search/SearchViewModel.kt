@@ -1245,14 +1245,14 @@ class SearchViewModel(
                                 }
                             }
 
-                            // Wait up to 4.5s for Jikan; if Jikan hangs/slows down, fall back to AniList immediately
+                            // Wait up to 10s for Jikan; if Jikan hangs/slows down, fall back to AniList immediately
                             val jikanRes = try {
-                                withTimeoutOrNull(4500L) {
+                                withTimeoutOrNull(10000L) {
                                     jikanDeferred.await()
                                 } ?: run {
-                                    Log.w("SearchViewModel", "Jikan anime search for '$query' exceeded 4.5s; falling back to AniList")
+                                    Log.w("SearchViewModel", "Jikan anime search for '$query' exceeded 10s; falling back to AniList")
                                     jikanDeferred.cancel()
-                                    Result.failure(Exception("Jikan search timed out"))
+                                    Result.failure(Exception("Search timed out"))
                                 }
                             } catch (e: CancellationException) {
                                 throw e
@@ -1283,8 +1283,25 @@ class SearchViewModel(
                                 if (seenKeys.add(key)) combined.add(item)
                             }
 
+                            // If still empty (e.g. Jikan timed out and AniList had no results/error), query Kitsu as fallback
+                            if (combined.isEmpty()) {
+                                try {
+                                    val kitsuList = com.lx.tracklist.data.remote.KitsuApiClient.searchAnimeMultiple(query, limit = 20).getOrDefault(emptyList())
+                                    for (item in kitsuList) {
+                                        val key = item.title?.trim()?.lowercase(Locale.ROOT) ?: continue
+                                        if (seenKeys.add(key)) combined.add(item)
+                                    }
+                                } catch (_: Exception) {}
+                            }
+
                             if (combined.isEmpty() && jikanRes.isFailure && anilistRes.isFailure) {
-                                throw jikanRes.exceptionOrNull() ?: anilistRes.exceptionOrNull() ?: Exception("Failed to fetch anime")
+                                val err = jikanRes.exceptionOrNull()
+                                val msg = if (err?.message?.contains("time", ignoreCase = true) == true) {
+                                    "Search timed out. Please check your network and try again."
+                                } else {
+                                    err?.message ?: anilistRes.exceptionOrNull()?.message ?: "Failed to fetch anime"
+                                }
+                                throw Exception(msg)
                             }
 
                             combined.mapIndexed { idx, details ->
@@ -1348,11 +1365,11 @@ class SearchViewModel(
                             }
 
                             val jikanRes = try {
-                                withTimeoutOrNull(4500L) {
+                                withTimeoutOrNull(10000L) {
                                     jikanDeferred.await()
                                 } ?: run {
                                     jikanDeferred.cancel()
-                                    Result.failure(Exception("Jikan search timed out"))
+                                    Result.failure(Exception("Search timed out"))
                                 }
                             } catch (e: CancellationException) {
                                 throw e
@@ -1484,9 +1501,9 @@ class SearchViewModel(
 
                             if (combined.isEmpty()) {
                                 val jikanRes = try {
-                                    withTimeoutOrNull(4500L) {
+                                    withTimeoutOrNull(10000L) {
                                         JikanApiClient.searchJikanDirect(query, isManga = true, subType = "manhwa", limit = 20)
-                                    } ?: Result.failure(Exception("Jikan search timed out"))
+                                    } ?: Result.failure(Exception("Search timed out"))
                                 } catch (e: CancellationException) {
                                     throw e
                                 } catch (e: Exception) {

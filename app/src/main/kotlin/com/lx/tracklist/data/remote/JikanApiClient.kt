@@ -95,9 +95,9 @@ object JikanApiClient {
         .build()
 
     private val searchOkHttpClient = okHttpClient.newBuilder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(6, TimeUnit.SECONDS)
-        .callTimeout(8, TimeUnit.SECONDS)
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(12, TimeUnit.SECONDS)
+        .callTimeout(15, TimeUnit.SECONDS)
         .build()
 
     fun JsonObject.getSafeJsonArray(key: String): JsonArray? =
@@ -293,8 +293,19 @@ object JikanApiClient {
                 .get()
                 .build()
 
-            val response = searchOkHttpClient.newCall(request).execute()
-            val code = response.code
+            var response = searchOkHttpClient.newCall(request).execute()
+            var code = response.code
+
+            // If rate limited (429), wait 1s and retry once
+            if (code == 429) {
+                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                try {
+                    Thread.sleep(1000)
+                } catch (_: InterruptedException) {}
+                response.close()
+                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+                code = response.code
+            }
             val bodyString = response.body?.string() ?: ""
 
             Log.d(TAG, "Jikan HTTP $code for $endpoint")
@@ -416,8 +427,19 @@ object JikanApiClient {
             .build()
 
         return try {
-            val response = searchOkHttpClient.newCall(request).execute()
-            val code = response.code
+            var response = searchOkHttpClient.newCall(request).execute()
+            var code = response.code
+
+            // If rate limited (429), wait 1s and retry once
+            if (code == 429) {
+                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                try {
+                    Thread.sleep(1000)
+                } catch (_: InterruptedException) {}
+                response.close()
+                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+                code = response.code
+            }
             val bodyString = response.body?.string() ?: ""
 
             Log.d(TAG, "AniList HTTP $code for $label ($type)")
@@ -644,8 +666,19 @@ object JikanApiClient {
                 .get()
                 .build()
 
-            val response = searchOkHttpClient.newCall(request).execute()
-            val code = response.code
+            var response = searchOkHttpClient.newCall(request).execute()
+            var code = response.code
+
+            // If rate limited (429), wait 1s and retry once
+            if (code == 429) {
+                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                try {
+                    Thread.sleep(1000)
+                } catch (_: InterruptedException) {}
+                response.close()
+                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+                code = response.code
+            }
             val bodyString = response.body?.string() ?: ""
 
             if (response.isSuccessful) {
@@ -890,8 +923,19 @@ object JikanApiClient {
             .build()
 
         return try {
-            val response = searchOkHttpClient.newCall(request).execute()
-            val code = response.code
+            var response = searchOkHttpClient.newCall(request).execute()
+            var code = response.code
+
+            // If rate limited (429), wait 1s and retry once
+            if (code == 429) {
+                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                try {
+                    Thread.sleep(1000)
+                } catch (_: InterruptedException) {}
+                response.close()
+                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+                code = response.code
+            }
             val bodyString = response.body?.string() ?: ""
 
             Log.d(TAG, "AniList multiple search HTTP $code for '$cleanTitle' ($type, country=$country)")
@@ -944,8 +988,19 @@ object JikanApiClient {
                 .get()
                 .build()
 
-            val response = searchOkHttpClient.newCall(request).execute()
-            val code = response.code
+            var response = searchOkHttpClient.newCall(request).execute()
+            var code = response.code
+
+            // If rate limited (429), wait 1s and retry once
+            if (code == 429) {
+                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                try {
+                    Thread.sleep(1000)
+                } catch (_: InterruptedException) {}
+                response.close()
+                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+                code = response.code
+            }
             val bodyString = response.body?.string() ?: ""
 
             Log.d(TAG, "Jikan title search HTTP $code for $endpoint")
@@ -1096,8 +1151,19 @@ object JikanApiClient {
             .build()
 
         return try {
-            val response = searchOkHttpClient.newCall(request).execute()
-            val code = response.code
+            var response = searchOkHttpClient.newCall(request).execute()
+            var code = response.code
+
+            // If rate limited (429), wait 1s and retry once
+            if (code == 429) {
+                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                try {
+                    Thread.sleep(1000)
+                } catch (_: InterruptedException) {}
+                response.close()
+                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+                code = response.code
+            }
             val bodyString = response.body?.string() ?: ""
 
             Log.d(TAG, "AniList title search HTTP $code for '$searchTitle' ($type, isManhwa=$isManhwa)")
@@ -1699,8 +1765,19 @@ object JikanApiClient {
             .build()
 
         return try {
-            val response = searchOkHttpClient.newCall(request).execute()
-            val code = response.code
+            var response = searchOkHttpClient.newCall(request).execute()
+            var code = response.code
+
+            // If rate limited (429), wait 1s and retry once
+            if (code == 429) {
+                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                try {
+                    Thread.sleep(1000)
+                } catch (_: InterruptedException) {}
+                response.close()
+                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+                code = response.code
+            }
             val bodyString = response.body?.string() ?: ""
 
             Log.d(TAG, "AniList relations HTTP $code for MAL ID $malId / AniList ID $aniListId ($type)")
@@ -1777,8 +1854,19 @@ object JikanApiClient {
             .build()
 
         return try {
-            val response = searchOkHttpClient.newCall(request).execute()
-            val code = response.code
+            var response = searchOkHttpClient.newCall(request).execute()
+            var code = response.code
+
+            // If rate limited (429), wait 1s and retry once
+            if (code == 429) {
+                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                try {
+                    Thread.sleep(1000)
+                } catch (_: InterruptedException) {}
+                response.close()
+                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+                code = response.code
+            }
             val bodyString = response.body?.string() ?: ""
 
             Log.d(TAG, "AniList relations by title HTTP $code for '$searchTitle' ($type)")
@@ -2097,8 +2185,19 @@ object JikanApiClient {
             .build()
 
         return try {
-            val response = searchOkHttpClient.newCall(request).execute()
-            val code = response.code
+            var response = searchOkHttpClient.newCall(request).execute()
+            var code = response.code
+
+            // If rate limited (429), wait 1s and retry once
+            if (code == 429) {
+                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                try {
+                    Thread.sleep(1000)
+                } catch (_: InterruptedException) {}
+                response.close()
+                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+                code = response.code
+            }
             val bodyString = response.body?.string() ?: ""
 
             Log.d(TAG, "AniList discovery HTTP $code for mode=$mode (sort=$sort, search=$search, adultMode=$adultMode, tags=+${includedTags.size}/-${excludedTags.size})")
@@ -2618,8 +2717,19 @@ object JikanApiClient {
                 .post(requestBody)
                 .build()
 
-            val response = searchOkHttpClient.newCall(request).execute()
-            val code = response.code
+            var response = searchOkHttpClient.newCall(request).execute()
+            var code = response.code
+
+            // If rate limited (429), wait 1s and retry once
+            if (code == 429) {
+                Log.w(TAG, "Jikan direct search rate limited (429) for '$cleanTitle', waiting 1s before retry...")
+                try {
+                    Thread.sleep(1000)
+                } catch (_: InterruptedException) {}
+                response.close()
+                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+                code = response.code
+            }
             val bodyString = response.body?.string().orEmpty()
 
             if (!response.isSuccessful) {

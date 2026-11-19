@@ -1791,111 +1791,27 @@ private fun SearchResultDetailSheet(
                 }
             }
 
-            // Attribution Notice & ISP Alternative Links
+            // Attribution Notice
             if (item.externalSource.equals("TMDB", ignoreCase = true)) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LXSurfaceElevated)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(LXSurfaceElevated)
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Image(
-                            painter = painterResource(R.drawable.ic_tmdb_logo),
-                            contentDescription = "TMDB",
-                            modifier = Modifier.height(14.dp).width(20.dp)
-                        )
-                        Text(
-                            text = "This product uses the TMDB API but is not endorsed or certified by TMDB.",
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                            color = LXTextSecondary.copy(alpha = 0.6f)
-                        )
-                    }
-
-                    // Quick ISP Alternatives row (for India & regions where themoviedb.org is blocked)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(LXSurfaceElevated.copy(alpha = 0.65f))
-                            .border(BorderStroke(1.dp, LXBorder), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "ISP blocking TMDB?",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
-                                color = LXTextPrimary
-                            )
-                            Text(
-                                text = "Try alternative databases:",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp),
-                                color = LXTextSecondary.copy(alpha = 0.7f)
-                            )
-                        }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = Color(0xFFE2B616).copy(alpha = 0.15f),
-                                border = BorderStroke(1.dp, Color(0xFFE2B616).copy(alpha = 0.5f)),
-                                modifier = Modifier.clickable {
-                                    ExternalLinkHelper.openUrlSafely(
-                                        ExternalLinkHelper.buildImdbUrl(item.title, detailedImdbId),
-                                        uriHandler,
-                                        context,
-                                        clipboardManager
-                                    )
-                                }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "IMDb ↗",
-                                        color = Color(0xFFF5C518),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = Color(0xFFFA320A).copy(alpha = 0.15f),
-                                border = BorderStroke(1.dp, Color(0xFFFA320A).copy(alpha = 0.5f)),
-                                modifier = Modifier.clickable {
-                                    ExternalLinkHelper.openUrlSafely(
-                                        ExternalLinkHelper.buildRottenTomatoesUrl(item.title),
-                                        uriHandler,
-                                        context,
-                                        clipboardManager
-                                    )
-                                }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Rotten Tomatoes ↗",
-                                        color = Color(0xFFFF523B),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-                    }
+                    Image(
+                        painter = painterResource(R.drawable.ic_tmdb_logo),
+                        contentDescription = "TMDB",
+                        modifier = Modifier.height(14.dp).width(20.dp)
+                    )
+                    Text(
+                        text = "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                        color = LXTextSecondary.copy(alpha = 0.6f)
+                    )
                 }
             } else if (item.externalSource.equals("Google Books", ignoreCase = true)) {
                 Row(
@@ -1944,23 +1860,75 @@ private fun SearchResultDetailSheet(
             }
 
             // Bottom Actions
-            val isTmdb = item.externalSource.equals("TMDB", ignoreCase = true)
-            var showTmdbMenu by remember { mutableStateOf(false) }
+            val isMovieOrShow = item.mediaType == MediaType.MOVIE || item.mediaType == MediaType.SHOW || item.externalSource.equals("TMDB", ignoreCase = true)
+            val isLightNovel = item.mediaType == MediaType.BOOK && (
+                item.statusText?.contains("Light Novel", ignoreCase = true) == true ||
+                item.statusText?.contains("Novel", ignoreCase = true) == true ||
+                item.externalSource.startsWith("AniList", ignoreCase = true)
+            )
+            val isBook = item.mediaType == MediaType.BOOK && !isLightNovel
+            val isAnime = item.mediaType == MediaType.ANIME
+            val isMangaOrManhwa = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA
+
+            val openOptions = remember(item, detailedImdbId) {
+                when {
+                    isMovieOrShow -> ExternalLinkHelper.buildTmdbOpenOptions(
+                        title = item.title,
+                        tmdbId = item.externalId,
+                        isMovie = item.mediaType == MediaType.MOVIE,
+                        imdbId = detailedImdbId ?: item.imdbId,
+                        webUrl = item.webUrl
+                    )
+                    isAnime -> ExternalLinkHelper.buildAnimeOpenOptions(
+                        title = item.title,
+                        externalId = item.externalId,
+                        externalSource = item.externalSource,
+                        directMalId = item.rawJikanDetails?.malId,
+                        directSiteUrl = item.rawJikanDetails?.siteUrl,
+                        webUrl = item.webUrl
+                    )
+                    isLightNovel -> ExternalLinkHelper.buildLightNovelOpenOptions(
+                        title = item.title,
+                        externalId = item.externalId,
+                        externalSource = item.externalSource,
+                        directMalId = item.rawJikanDetails?.malId,
+                        webUrl = item.webUrl
+                    )
+                    isBook -> ExternalLinkHelper.buildBookOpenOptions(
+                        title = item.title,
+                        externalId = item.externalId,
+                        externalSource = item.externalSource,
+                        webUrl = item.webUrl
+                    )
+                    isMangaOrManhwa -> ExternalLinkHelper.buildMangaOpenOptions(
+                        title = item.title,
+                        externalId = item.externalId,
+                        externalSource = item.externalSource,
+                        directMalId = item.rawJikanDetails?.malId,
+                        webUrl = item.webUrl
+                    )
+                    else -> item.webUrl?.let {
+                        listOf(ExternalLinkHelper.ExternalOpenOption("Open in Browser", it, it))
+                    } ?: emptyList()
+                }
+            }
+
+            var showOpenMenu by remember { mutableStateOf(false) }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (item.webUrl != null) {
+                if (openOptions.isNotEmpty()) {
                     Box(modifier = Modifier.weight(1.15f)) {
                         OutlinedButton(
                             onClick = {
-                                if (isTmdb) {
-                                    showTmdbMenu = true
+                                if (openOptions.size > 1) {
+                                    showOpenMenu = true
                                 } else {
                                     ExternalLinkHelper.openUrlSafely(
-                                        item.webUrl,
+                                        openOptions.first().url,
                                         uriHandler,
                                         context,
                                         clipboardManager
@@ -1982,7 +1950,7 @@ private fun SearchResultDetailSheet(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (isTmdb) "${item.openWebLabel} ▾" else item.openWebLabel,
+                                text = if (openOptions.size > 1) "Open ▾" else "Open",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
@@ -1991,72 +1959,51 @@ private fun SearchResultDetailSheet(
                             )
                         }
 
-                        if (isTmdb) {
+                        if (openOptions.size > 1) {
                             DropdownMenu(
-                                expanded = showTmdbMenu,
-                                onDismissRequest = { showTmdbMenu = false },
+                                expanded = showOpenMenu,
+                                onDismissRequest = { showOpenMenu = false },
                                 modifier = Modifier.background(LXSurfaceElevated)
                             ) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Column {
-                                            Text("The Movie Database (TMDB)", fontWeight = FontWeight.Bold, color = LXTextPrimary, fontSize = 13.sp)
-                                            Text("themoviedb.org (may be blocked by some ISPs)", fontSize = 10.sp, color = LXTextSecondary)
-                                        }
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.OpenInNew, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(16.dp))
-                                    },
-                                    onClick = {
-                                        showTmdbMenu = false
-                                        ExternalLinkHelper.openUrlSafely(item.webUrl, uriHandler, context, clipboardManager)
+                                openOptions.forEachIndexed { index, option ->
+                                    if (index > 0) {
+                                        HorizontalDivider(color = LXBorder)
                                     }
-                                )
-                                HorizontalDivider(color = LXBorder)
-                                DropdownMenuItem(
-                                    text = {
-                                        Column {
-                                            Text("IMDb ⭐", fontWeight = FontWeight.Bold, color = Color(0xFFF5C518), fontSize = 13.sp)
-                                            Text(
-                                                text = if (!detailedImdbId.isNullOrBlank()) "Direct title ($detailedImdbId) • Works in India" else "Search title • Works in India",
-                                                fontSize = 10.sp,
-                                                color = LXTextSecondary
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text(
+                                                    text = option.title,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(option.color),
+                                                    fontSize = 13.sp
+                                                )
+                                                Text(
+                                                    text = option.subtitle,
+                                                    fontSize = 10.sp,
+                                                    color = LXTextSecondary
+                                                )
+                                            }
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.OpenInNew,
+                                                contentDescription = null,
+                                                tint = Color(option.color),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        },
+                                        onClick = {
+                                            showOpenMenu = false
+                                            ExternalLinkHelper.openUrlSafely(
+                                                option.url,
+                                                uriHandler,
+                                                context,
+                                                clipboardManager
                                             )
                                         }
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.OpenInNew, contentDescription = null, tint = Color(0xFFF5C518), modifier = Modifier.size(16.dp))
-                                    },
-                                    onClick = {
-                                        showTmdbMenu = false
-                                        ExternalLinkHelper.openUrlSafely(
-                                            ExternalLinkHelper.buildImdbUrl(item.title, detailedImdbId),
-                                            uriHandler,
-                                            context,
-                                            clipboardManager
-                                        )
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Column {
-                                            Text("Rotten Tomatoes 🍅", fontWeight = FontWeight.Bold, color = Color(0xFFFF523B), fontSize = 13.sp)
-                                            Text("Search on Rotten Tomatoes", fontSize = 10.sp, color = LXTextSecondary)
-                                        }
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.OpenInNew, contentDescription = null, tint = Color(0xFFFF523B), modifier = Modifier.size(16.dp))
-                                    },
-                                    onClick = {
-                                        showTmdbMenu = false
-                                        ExternalLinkHelper.openUrlSafely(
-                                            ExternalLinkHelper.buildRottenTomatoesUrl(item.title),
-                                            uriHandler,
-                                            context,
-                                            clipboardManager
-                                        )
-                                    }
-                                )
+                                    )
+                                }
                             }
                         }
                     }

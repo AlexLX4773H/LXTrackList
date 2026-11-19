@@ -183,6 +183,7 @@ fun DetailScreen(
     val isRefreshingMetadata by viewModel.isRefreshingMetadata.collectAsState()
     val metadataRefreshMessage by viewModel.metadataRefreshMessage.collectAsState()
     val isPushingToExternalTracker by viewModel.isPushingToExternalTracker.collectAsState()
+    val isFetchingFromExternalTracker by viewModel.isFetchingFromExternalTracker.collectAsState()
     val externalSyncMessage by viewModel.externalSyncMessage.collectAsState()
     val vmActiveUser by viewModel.activeUser.collectAsState()
     val effectiveUser = activeUser ?: vmActiveUser
@@ -641,8 +642,10 @@ fun DetailScreen(
                             entry = currentEntry,
                             activeUser = effectiveUser,
                             isPushing = isPushingToExternalTracker,
+                            isFetching = isFetchingFromExternalTracker,
                             onToggleTracking = { viewModel.setExternalTracking(it) },
                             onPushToExternalTracker = { viewModel.pushToExternalTracker(context) },
+                            onFetchFromExternalTracker = { viewModel.fetchFromExternalTracker(context) },
                             onRequestLinkExternalId = { showRefreshConfirmDialog = true }
                         )
                         DetailTagsCard(currentEntry)
@@ -808,8 +811,10 @@ fun DetailScreen(
                             entry = currentEntry,
                             activeUser = effectiveUser,
                             isPushing = isPushingToExternalTracker,
+                            isFetching = isFetchingFromExternalTracker,
                             onToggleTracking = { viewModel.setExternalTracking(it) },
                             onPushToExternalTracker = { viewModel.pushToExternalTracker(context) },
+                            onFetchFromExternalTracker = { viewModel.fetchFromExternalTracker(context) },
                             onRequestLinkExternalId = { showRefreshConfirmDialog = true }
                         )
                         DetailTagsCard(currentEntry)
@@ -1847,8 +1852,10 @@ private fun DetailExternalTrackingCard(
     entry: MediaEntry,
     activeUser: UserProfile,
     isPushing: Boolean,
+    isFetching: Boolean = false,
     onToggleTracking: (Boolean) -> Unit,
     onPushToExternalTracker: () -> Unit,
+    onFetchFromExternalTracker: () -> Unit = {},
     onRequestLinkExternalId: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -2029,10 +2036,51 @@ private fun DetailExternalTrackingCard(
 
                         Spacer(modifier = Modifier.height(2.dp))
 
+                        // Fetch Data Button
+                        OutlinedButton(
+                            onClick = onFetchFromExternalTracker,
+                            enabled = !isPushing && !isFetching && canTrack,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(40.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = LXPrimaryGreen,
+                                disabledContentColor = LXTextSecondary
+                            ),
+                            border = BorderStroke(1.dp, if (!isPushing && !isFetching && canTrack) LXPrimaryGreen.copy(alpha = 0.7f) else LXBorder),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            if (isFetching) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = LXPrimaryGreen
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Fetching from MyAnimeList...",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Fetch Data from External Tracker",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
                         // Manual Send Button
                         Button(
                             onClick = onPushToExternalTracker,
-                            enabled = !isPushing && canTrack,
+                            enabled = !isPushing && !isFetching && canTrack,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(40.dp),

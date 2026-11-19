@@ -159,6 +159,76 @@ object MalSyncManager {
     }
 
     /**
+     * Pulls the user's status for a single media entry from MyAnimeList and updates the local entry in repository.
+     */
+    suspend fun pullSingleEntrySync(
+        context: Context,
+        entry: MediaEntry,
+        repository: MediaRepository
+    ): Result<MediaEntry> = withContext(Dispatchers.IO) {
+        val tokenStore = MalTokenStore(context)
+        val userId = if (entry.userId > 0L) entry.userId else null
+        if (userId == null) {
+            return@withContext Result.failure(Exception("No valid profile assigned to entry '${entry.title}'"))
+        }
+
+        if (!tokenStore.isLoggedIn(userId)) {
+            return@withContext Result.failure(Exception("MyAnimeList account is not connected for this profile."))
+        }
+
+        val malId = entry.externalId?.toLongOrNull()
+            ?: return@withContext Result.failure(Exception("Entry '${entry.title}' has no valid MyAnimeList ID."))
+
+        when (entry.mediaType) {
+            MediaType.ANIME -> {
+                val res = MalApiClient.getAnimeUserStatus(context, userId, malId)
+                if (res.isFailure) {
+                    return@withContext Result.failure(res.exceptionOrNull() ?: Exception("Failed to fetch anime status from MAL"))
+                }
+                val details = res.getOrThrow()
+                val listStatus = details.myListStatus
+                    ?: return@withContext Result.failure(Exception("Entry is not on your MyAnimeList list yet."))
+
+                val updatedEntry = entry.copy(
+                    status = mapMalStatusToLx(listStatus.status),
+                    score = listStatus.score?.takeIf { it > 0 } ?: entry.score,
+                    currentEpisodes = listStatus.numEpisodesWatched,
+                    totalEpisodes = if (details.numEpisodes > 0) details.numEpisodes else entry.totalEpisodes,
+                    isRewatching = listStatus.isRewatching,
+                    rewatchCount = listStatus.numTimesRewatched,
+                    lastModified = System.currentTimeMillis()
+                )
+                repository.update(updatedEntry)
+                Result.success(updatedEntry)
+            }
+            MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> {
+                val res = MalApiClient.getMangaUserStatus(context, userId, malId)
+                if (res.isFailure) {
+                    return@withContext Result.failure(res.exceptionOrNull() ?: Exception("Failed to fetch manga status from MAL"))
+                }
+                val details = res.getOrThrow()
+                val listStatus = details.myListStatus
+                    ?: return@withContext Result.failure(Exception("Entry is not on your MyAnimeList list yet."))
+
+                val updatedEntry = entry.copy(
+                    status = mapMalStatusToLx(listStatus.status),
+                    score = listStatus.score?.takeIf { it > 0 } ?: entry.score,
+                    currentVolumes = listStatus.numVolumesRead,
+                    currentChapters = listStatus.numChaptersRead,
+                    totalVolumes = if (details.numVolumes > 0) details.numVolumes else entry.totalVolumes,
+                    totalChapters = if (details.numChapters > 0) details.numChapters else entry.totalChapters,
+                    isRewatching = listStatus.isRereading,
+                    rewatchCount = listStatus.numTimesReread,
+                    lastModified = System.currentTimeMillis()
+                )
+                repository.update(updatedEntry)
+                Result.success(updatedEntry)
+            }
+            else -> Result.failure(Exception("Unsupported media type for MyAnimeList tracking"))
+        }
+    }
+
+    /**
      * Map LX MediaStatus to MAL string status.
      */
     private fun mapStatusToMal(status: MediaStatus, isAnime: Boolean): String {

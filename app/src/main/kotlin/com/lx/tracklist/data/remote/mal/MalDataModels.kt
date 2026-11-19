@@ -102,3 +102,19 @@ data class MalMangaListResponse(
     @SerializedName("paging") val paging: MalPaging? = null
 )
 
+data class MalAnimeDetailsResponse(
+    @SerializedName("id") val id: Long,
+    @SerializedName("title") val title: String? = null,
+    @SerializedName("num_episodes") val numEpisodes: Int = 0,
+    @SerializedName("my_list_status") val myListStatus: MalAnimeListStatus? = null
+)
+
+data class MalMangaDetailsResponse(
+    @SerializedName("id") val id: Long,
+    @SerializedName("title") val title: String? = null,
+    @SerializedName("num_volumes") val numVolumes: Int = 0,
+    @SerializedName("num_chapters") val numChapters: Int = 0,
+    @SerializedName("my_list_status") val myListStatus: MalMangaListStatus? = null
+)
+
+
