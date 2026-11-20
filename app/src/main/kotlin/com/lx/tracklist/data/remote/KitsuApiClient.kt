@@ -263,8 +263,145 @@ object KitsuApiClient {
             externalScoreSource = if (score != null) "Kitsu" else null,
             type = subtype,
             sourceProvider = "Kitsu",
-            url = if (isAnime) "https://kitsu.app/anime/$resolvedTarget" else "https://kitsu.app/manga/$resolvedTarget"
+            url = if (slug?.isNotBlank() == true) {
+                if (isAnime) "https://kitsu.app/anime/$slug" else "https://kitsu.app/manga/$slug"
+            } else {
+                val type = if (isAnime) "anime" else "manga"
+                val encTitle = URLEncoder.encode(title, "UTF-8")
+                "kitsu-resolve://$type?title=$encTitle&kitsuId=$id"
+            }
         )
+    }
+
+    /**
+     * Look up exact Kitsu slug directly from the media ID (GET /anime/{id} or /manga/{id}).
+     */
+    fun lookupSlugById(id: Long, isAnime: Boolean): String? {
+        if (id <= 0) return null
+        val type = if (isAnime) "anime" else "manga"
+        val endpoint = "$BASE_URL/$type/$id"
+
+        return try {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/vnd.api+json")
+                .get()
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) return null
+            val bodyString = response.body?.string() ?: return null
+            val root = gson.fromJson(bodyString, JsonObject::class.java) ?: return null
+            val data = root.getAsJsonObject("data")
+            val slug = data?.getAsJsonObject("attributes")?.get("slug")?.takeIf { !it.isJsonNull }?.asString?.trim()
+            if (!slug.isNullOrBlank()) {
+                Log.d(TAG, "Resolved Kitsu slug by ID ($id -> $slug)")
+                return slug
+            }
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "Error looking up Kitsu slug by ID $id: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Look up exact Kitsu slug from an external MyAnimeList ID using Kitsu's mapping endpoint.
+     */
+    fun lookupSlugByMalId(malId: Long, isAnime: Boolean): String? {
+        if (malId <= 0) return null
+        val extSite = if (isAnime) "myanimelist/anime" else "myanimelist/manga"
+        val endpoint = "$BASE_URL/mappings?filter[externalSite]=$extSite&filter[externalId]=$malId&include=item"
+
+        return try {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/vnd.api+json")
+                .get()
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) return null
+            val bodyString = response.body?.string() ?: return null
+            val root = gson.fromJson(bodyString, JsonObject::class.java) ?: return null
+
+            // 1. Check included array for the item object
+            val included = root.getAsJsonArray("included")
+            if (included != null && included.size() > 0) {
+                for (i in 0 until included.size()) {
+                    val elem = included.get(i)?.asJsonObject ?: continue
+                    val slug = elem.getAsJsonObject("attributes")?.get("slug")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                    if (!slug.isNullOrBlank()) {
+                        Log.d(TAG, "Resolved Kitsu slug via MAL mapping ($malId -> $slug)")
+                        return slug
+                    }
+                }
+            }
+
+            // 2. Check relationship item id if included didn't have slug directly
+            val dataArr = root.getAsJsonArray("data")
+            if (dataArr != null && dataArr.size() > 0) {
+                for (i in 0 until dataArr.size()) {
+                    val mappingObj = dataArr.get(i)?.asJsonObject ?: continue
+                    val itemRel = mappingObj.getAsJsonObject("relationships")?.getAsJsonObject("item")?.getAsJsonObject("data")
+                    val itemIdStr = itemRel?.get("id")?.takeIf { !it.isJsonNull }?.asString
+                    val itemId = itemIdStr?.toLongOrNull()
+                    if (itemId != null && itemId > 0) {
+                        val slugFromId = lookupSlugById(itemId, isAnime)
+                        if (!slugFromId.isNullOrBlank()) {
+                            return slugFromId
+                        }
+                    }
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "Error looking up Kitsu slug by MAL ID $malId: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Look up exact Kitsu slug by searching title text.
+     */
+    fun lookupSlugByTitle(title: String, isAnime: Boolean): String? {
+        val clean = title.trim()
+        if (clean.isBlank()) return null
+        val encodedTitle = URLEncoder.encode(clean, "UTF-8")
+        val endpoint = if (isAnime) {
+            "$BASE_URL/anime?filter[text]=$encodedTitle&page[limit]=1"
+        } else {
+            "$BASE_URL/manga?filter[text]=$encodedTitle&page[limit]=1"
+        }
+
+        return try {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/vnd.api+json")
+                .get()
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            if (!response.isSuccessful) return null
+            val bodyString = response.body?.string() ?: return null
+            val root = gson.fromJson(bodyString, JsonObject::class.java) ?: return null
+            val data = root.getAsJsonArray("data")
+            if (data != null && data.size() > 0) {
+                val item = data.get(0)?.asJsonObject
+                val slug = item?.getAsJsonObject("attributes")?.get("slug")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                if (!slug.isNullOrBlank()) {
+                    Log.d(TAG, "Resolved Kitsu slug via search for '$clean': $slug")
+                    return slug
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "Error looking up Kitsu slug by title '$title': ${e.message}")
+            null
+        }
     }
 }
 

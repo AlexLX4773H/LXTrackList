@@ -104,9 +104,13 @@ data class SearchResultItem(
                 }
                 externalSource.equals("Kitsu", ignoreCase = true) -> {
                     val type = if (isMangaType) "manga" else "anime"
-                    val slug = com.lx.tracklist.util.ExternalLinkHelper.toKitsuSlug(title)
-                    val target = if (!externalId.all { it.isDigit() }) externalId else if (slug.isNotBlank()) slug else externalId
-                    "https://kitsu.app/$type/$target"
+                    if (!externalId.all { it.isDigit() } && externalId.isNotBlank()) {
+                        "https://kitsu.app/$type/$externalId"
+                    } else {
+                        val encoded = android.net.Uri.encode(title.trim())
+                        val kitsuId = externalId.takeIf { it.all { c -> c.isDigit() } } ?: "0"
+                        "kitsu-resolve://$type?title=$encoded&kitsuId=$kitsuId"
+                    }
                 }
                 externalSource.equals("Google Books", ignoreCase = true) -> {
                     "https://books.google.com/books?id=$externalId"

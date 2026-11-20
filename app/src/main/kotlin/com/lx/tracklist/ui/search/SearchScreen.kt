@@ -1046,7 +1046,7 @@ private fun SearchResultCard(
                                         text = {
                                             Column {
                                                 Text("Open on IMDb ⭐", fontWeight = FontWeight.Bold, color = Color(0xFFF5C518), fontSize = 12.sp)
-                                                Text("Search on IMDb (Works in India)", fontSize = 10.sp, color = LXTextSecondary)
+                                                Text("Search on IMDb", fontSize = 10.sp, color = LXTextSecondary)
                                             }
                                         },
                                         leadingIcon = {

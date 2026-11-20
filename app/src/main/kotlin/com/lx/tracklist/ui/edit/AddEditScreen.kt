@@ -2179,11 +2179,7 @@ private fun ExternalDbSyncDialog(
 
     fun openExternalUrl(url: String?) {
         if (url.isNullOrBlank()) return
-        try {
-            uriHandler.openUri(url)
-        } catch (e: Exception) {
-            Toast.makeText(context, "Could not open browser", Toast.LENGTH_SHORT).show()
-        }
+        ExternalLinkHelper.openUrlSafely(url, uriHandler, context)
     }
 
     val availableSources = remember(mediaType, syncState.selectedSource) {
@@ -2477,6 +2473,39 @@ private fun ExternalDbSyncDialog(
                                     val itemKey = "${item.sourceProvider}_${item.malId ?: item.url}_${item.title}"
                                     val isExpanded = expandedItemKey == itemKey
                                     val webUrl = item.webUrl
+                                    val openOptions = remember(item, mediaType) {
+                                        val displayTitle = item.title ?: ""
+                                        val extId = item.malId?.toString() ?: item.url?.substringAfterLast('/')
+                                        when {
+                                            mediaType == MediaType.ANIME -> ExternalLinkHelper.buildAnimeOpenOptions(
+                                                title = displayTitle,
+                                                externalId = extId,
+                                                externalSource = item.sourceProvider,
+                                                directMalId = item.malId,
+                                                directAniListId = item.aniListId,
+                                                directSiteUrl = item.url,
+                                                webUrl = item.webUrl
+                                            )
+                                            mediaType == MediaType.MANGA || mediaType == MediaType.MANHWA -> ExternalLinkHelper.buildMangaOpenOptions(
+                                                title = displayTitle,
+                                                externalId = extId,
+                                                externalSource = item.sourceProvider,
+                                                directMalId = item.malId,
+                                                directAniListId = item.aniListId,
+                                                directSiteUrl = item.url,
+                                                webUrl = item.webUrl
+                                            )
+                                            mediaType == MediaType.BOOK -> ExternalLinkHelper.buildBookOpenOptions(
+                                                title = displayTitle,
+                                                externalId = extId,
+                                                externalSource = item.sourceProvider,
+                                                webUrl = item.webUrl
+                                            )
+                                            else -> item.webUrl?.let {
+                                                listOf(ExternalLinkHelper.ExternalOpenOption("Open in Browser", it, it))
+                                            } ?: emptyList()
+                                        }
+                                    }
 
                                     Card(
                                         modifier = Modifier
@@ -2638,17 +2667,69 @@ private fun ExternalDbSyncDialog(
                                                         verticalAlignment = Alignment.CenterVertically,
                                                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                                                     ) {
-                                                        if (webUrl != null) {
-                                                            IconButton(
-                                                                onClick = { openExternalUrl(webUrl) },
-                                                                modifier = Modifier.size(26.dp)
-                                                            ) {
-                                                                Icon(
-                                                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                                                    contentDescription = "Open in MyAnimeList",
-                                                                    tint = LXTextSecondary,
-                                                                    modifier = Modifier.size(16.dp)
-                                                                )
+                                                        var showCardMalMenu by remember { mutableStateOf(false) }
+                                                        if (openOptions.isNotEmpty()) {
+                                                            Box {
+                                                                IconButton(
+                                                                    onClick = {
+                                                                        if (openOptions.size > 1) {
+                                                                            showCardMalMenu = true
+                                                                        } else {
+                                                                            openExternalUrl(openOptions.first().url)
+                                                                        }
+                                                                    },
+                                                                    modifier = Modifier.size(26.dp)
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                                                        contentDescription = "Open",
+                                                                        tint = LXTextSecondary,
+                                                                        modifier = Modifier.size(16.dp)
+                                                                    )
+                                                                }
+
+                                                                if (openOptions.size > 1) {
+                                                                    DropdownMenu(
+                                                                        expanded = showCardMalMenu,
+                                                                        onDismissRequest = { showCardMalMenu = false },
+                                                                        modifier = Modifier.background(LXSurfaceElevated)
+                                                                    ) {
+                                                                        openOptions.forEachIndexed { index, option ->
+                                                                            if (index > 0) {
+                                                                                HorizontalDivider(color = LXBorder)
+                                                                            }
+                                                                            DropdownMenuItem(
+                                                                                text = {
+                                                                                    Column {
+                                                                                        Text(
+                                                                                            text = option.title,
+                                                                                            fontWeight = FontWeight.Bold,
+                                                                                            color = Color(option.color),
+                                                                                            fontSize = 12.sp
+                                                                                        )
+                                                                                        Text(
+                                                                                            text = option.subtitle,
+                                                                                            fontSize = 10.sp,
+                                                                                            color = LXTextSecondary
+                                                                                        )
+                                                                                    }
+                                                                                },
+                                                                                leadingIcon = {
+                                                                                    Icon(
+                                                                                        Icons.AutoMirrored.Filled.OpenInNew,
+                                                                                        contentDescription = null,
+                                                                                        tint = Color(option.color),
+                                                                                        modifier = Modifier.size(14.dp)
+                                                                                    )
+                                                                                },
+                                                                                onClick = {
+                                                                                    showCardMalMenu = false
+                                                                                    openExternalUrl(option.url)
+                                                                                }
+                                                                            )
+                                                                        }
+                                                                    }
+                                                                }
                                                             }
                                                         }
                                                         IconButton(
@@ -2762,28 +2843,79 @@ private fun ExternalDbSyncDialog(
                                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
-                                                        if (webUrl != null) {
-                                                            OutlinedButton(
-                                                                onClick = { openExternalUrl(webUrl) },
-                                                                modifier = Modifier
-                                                                    .weight(1.35f)
-                                                                    .heightIn(min = 34.dp),
-                                                                shape = RoundedCornerShape(6.dp),
-                                                                border = BorderStroke(1.dp, LXBorder),
-                                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
-                                                            ) {
-                                                                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                                Spacer(modifier = Modifier.width(4.dp))
-                                                                val openLabel = if (item.sourceProvider == "MangaDex") "Open MangaDex" else if (item.sourceProvider.startsWith("AniList")) "Open AniList" else if (item.sourceProvider == "Kitsu") "Open Kitsu" else "Open MAL"
-                                                                Text(
-                                                                    text = openLabel,
-                                                                    fontSize = 11.sp,
-                                                                    fontWeight = FontWeight.Medium,
-                                                                    maxLines = 1,
-                                                                    softWrap = false,
-                                                                    overflow = TextOverflow.Ellipsis
-                                                                )
+                                                        if (openOptions.isNotEmpty()) {
+                                                            var showExpandedMalMenu by remember { mutableStateOf(false) }
+                                                            Box(modifier = Modifier.weight(1.35f)) {
+                                                                OutlinedButton(
+                                                                    onClick = {
+                                                                        if (openOptions.size > 1) {
+                                                                            showExpandedMalMenu = true
+                                                                        } else {
+                                                                            openExternalUrl(openOptions.first().url)
+                                                                        }
+                                                                    },
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .heightIn(min = 34.dp),
+                                                                    shape = RoundedCornerShape(6.dp),
+                                                                    border = BorderStroke(1.dp, LXBorder),
+                                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                                                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                                                                ) {
+                                                                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                                    Text(
+                                                                        text = if (openOptions.size > 1) "Open ▾" else "Open",
+                                                                        fontSize = 11.sp,
+                                                                        fontWeight = FontWeight.Medium,
+                                                                        maxLines = 1,
+                                                                        softWrap = false,
+                                                                        overflow = TextOverflow.Ellipsis
+                                                                    )
+                                                                }
+
+                                                                if (openOptions.size > 1) {
+                                                                    DropdownMenu(
+                                                                        expanded = showExpandedMalMenu,
+                                                                        onDismissRequest = { showExpandedMalMenu = false },
+                                                                        modifier = Modifier.background(LXSurfaceElevated)
+                                                                    ) {
+                                                                        openOptions.forEachIndexed { index, option ->
+                                                                            if (index > 0) {
+                                                                                HorizontalDivider(color = LXBorder)
+                                                                            }
+                                                                            DropdownMenuItem(
+                                                                                text = {
+                                                                                    Column {
+                                                                                        Text(
+                                                                                            text = option.title,
+                                                                                            fontWeight = FontWeight.Bold,
+                                                                                            color = Color(option.color),
+                                                                                            fontSize = 12.sp
+                                                                                        )
+                                                                                        Text(
+                                                                                            text = option.subtitle,
+                                                                                            fontSize = 10.sp,
+                                                                                            color = LXTextSecondary
+                                                                                        )
+                                                                                    }
+                                                                                },
+                                                                                leadingIcon = {
+                                                                                    Icon(
+                                                                                        Icons.AutoMirrored.Filled.OpenInNew,
+                                                                                        contentDescription = null,
+                                                                                        tint = Color(option.color),
+                                                                                        modifier = Modifier.size(14.dp)
+                                                                                    )
+                                                                                },
+                                                                                onClick = {
+                                                                                    showExpandedMalMenu = false
+                                                                                    openExternalUrl(option.url)
+                                                                                }
+                                                                            )
+                                                                        }
+                                                                    }
+                                                                }
                                                             }
                                                         }
 
@@ -2826,6 +2958,15 @@ private fun ExternalDbSyncDialog(
                                     val itemKey = "tmdb_${item.tmdbId}_${item.title}"
                                     val isExpanded = expandedItemKey == itemKey
                                     val webUrl = item.webUrl
+                                    val openOptions = remember(item) {
+                                        ExternalLinkHelper.buildTmdbOpenOptions(
+                                            title = item.title,
+                                            tmdbId = item.tmdbId.toString(),
+                                            isMovie = item.isMovie,
+                                            imdbId = null,
+                                            webUrl = item.webUrl
+                                        )
+                                    }
 
                                     Card(
                                         modifier = Modifier
@@ -2894,7 +3035,7 @@ private fun ExternalDbSyncDialog(
                                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                                         verticalArrangement = Arrangement.spacedBy(4.dp)
                                                     ) {
-                                                        val formattedScore = formatScore(item.voteAverage?.toFloat())
+                                                        val formattedScore = formatScore(item.voteAverage)
                                                         if (formattedScore != null) {
                                                             Text(
                                                                 text = "★ $formattedScore",
@@ -2953,70 +3094,68 @@ private fun ExternalDbSyncDialog(
                                                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                                                     ) {
                                                         var showCardTmdbMenu by remember { mutableStateOf(false) }
-                                                        Box {
-                                                            IconButton(
-                                                                onClick = { showCardTmdbMenu = true },
-                                                                modifier = Modifier.size(26.dp)
-                                                            ) {
-                                                                Icon(
-                                                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                                                    contentDescription = "Open on TMDB",
-                                                                    tint = LXTextSecondary,
-                                                                    modifier = Modifier.size(16.dp)
-                                                                )
-                                                            }
+                                                        if (openOptions.isNotEmpty()) {
+                                                            Box {
+                                                                IconButton(
+                                                                    onClick = {
+                                                                        if (openOptions.size > 1) {
+                                                                            showCardTmdbMenu = true
+                                                                        } else {
+                                                                            openExternalUrl(openOptions.first().url)
+                                                                        }
+                                                                    },
+                                                                    modifier = Modifier.size(26.dp)
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                                                        contentDescription = "Open",
+                                                                        tint = LXTextSecondary,
+                                                                        modifier = Modifier.size(16.dp)
+                                                                    )
+                                                                }
 
-                                                            DropdownMenu(
-                                                                expanded = showCardTmdbMenu,
-                                                                onDismissRequest = { showCardTmdbMenu = false },
-                                                                modifier = Modifier.background(LXSurfaceElevated)
-                                                            ) {
-                                                                DropdownMenuItem(
-                                                                    text = {
-                                                                        Column {
-                                                                            Text("Open on TMDB", fontWeight = FontWeight.Bold, color = LXTextPrimary, fontSize = 12.sp)
-                                                                            Text("themoviedb.org", fontSize = 10.sp, color = LXTextSecondary)
+                                                                if (openOptions.size > 1) {
+                                                                    DropdownMenu(
+                                                                        expanded = showCardTmdbMenu,
+                                                                        onDismissRequest = { showCardTmdbMenu = false },
+                                                                        modifier = Modifier.background(LXSurfaceElevated)
+                                                                    ) {
+                                                                        openOptions.forEachIndexed { index, option ->
+                                                                            if (index > 0) {
+                                                                                HorizontalDivider(color = LXBorder)
+                                                                            }
+                                                                            DropdownMenuItem(
+                                                                                text = {
+                                                                                    Column {
+                                                                                        Text(
+                                                                                            text = option.title,
+                                                                                            fontWeight = FontWeight.Bold,
+                                                                                            color = Color(option.color),
+                                                                                            fontSize = 12.sp
+                                                                                        )
+                                                                                        Text(
+                                                                                            text = option.subtitle,
+                                                                                            fontSize = 10.sp,
+                                                                                            color = LXTextSecondary
+                                                                                        )
+                                                                                    }
+                                                                                },
+                                                                                leadingIcon = {
+                                                                                    Icon(
+                                                                                        Icons.AutoMirrored.Filled.OpenInNew,
+                                                                                        contentDescription = null,
+                                                                                        tint = Color(option.color),
+                                                                                        modifier = Modifier.size(14.dp)
+                                                                                    )
+                                                                                },
+                                                                                onClick = {
+                                                                                    showCardTmdbMenu = false
+                                                                                    openExternalUrl(option.url)
+                                                                                }
+                                                                            )
                                                                         }
-                                                                    },
-                                                                    leadingIcon = {
-                                                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(14.dp))
-                                                                    },
-                                                                    onClick = {
-                                                                        showCardTmdbMenu = false
-                                                                        openExternalUrl(webUrl)
                                                                     }
-                                                                )
-                                                                HorizontalDivider(color = LXBorder)
-                                                                DropdownMenuItem(
-                                                                    text = {
-                                                                        Column {
-                                                                            Text("Open on IMDb ⭐", fontWeight = FontWeight.Bold, color = Color(0xFFF5C518), fontSize = 12.sp)
-                                                                            Text("Search on IMDb (Works in India)", fontSize = 10.sp, color = LXTextSecondary)
-                                                                        }
-                                                                    },
-                                                                    leadingIcon = {
-                                                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = Color(0xFFF5C518), modifier = Modifier.size(14.dp))
-                                                                    },
-                                                                    onClick = {
-                                                                        showCardTmdbMenu = false
-                                                                        openExternalUrl(ExternalLinkHelper.buildImdbUrl(item.title))
-                                                                    }
-                                                                )
-                                                                DropdownMenuItem(
-                                                                    text = {
-                                                                        Column {
-                                                                            Text("Open on Rotten Tomatoes 🍅", fontWeight = FontWeight.Bold, color = Color(0xFFFF523B), fontSize = 12.sp)
-                                                                            Text("Search on Rotten Tomatoes", fontSize = 10.sp, color = LXTextSecondary)
-                                                                        }
-                                                                    },
-                                                                    leadingIcon = {
-                                                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = Color(0xFFFF523B), modifier = Modifier.size(14.dp))
-                                                                    },
-                                                                    onClick = {
-                                                                        showCardTmdbMenu = false
-                                                                        openExternalUrl(ExternalLinkHelper.buildRottenTomatoesUrl(item.title))
-                                                                    }
-                                                                )
+                                                                }
                                                             }
                                                         }
                                                         IconButton(
@@ -3085,60 +3224,6 @@ private fun ExternalDbSyncDialog(
                                                         }
                                                     }
 
-                                                    // Quick ISP Alternatives row
-                                                    Row(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .clip(RoundedCornerShape(6.dp))
-                                                            .background(LXSurfaceBlack.copy(alpha = 0.5f))
-                                                            .border(BorderStroke(1.dp, LXBorder.copy(alpha = 0.6f)), RoundedCornerShape(6.dp))
-                                                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.SpaceBetween
-                                                    ) {
-                                                        Text(
-                                                            text = "ISP blocking TMDB?",
-                                                            fontSize = 10.sp,
-                                                            color = LXTextSecondary
-                                                        )
-                                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                                            Surface(
-                                                                shape = RoundedCornerShape(4.dp),
-                                                                color = Color(0xFFE2B616).copy(alpha = 0.15f),
-                                                                border = BorderStroke(1.dp, Color(0xFFE2B616).copy(alpha = 0.5f)),
-                                                                modifier = Modifier.clickable {
-                                                                    openExternalUrl(ExternalLinkHelper.buildImdbUrl(item.title))
-                                                                }
-                                                            ) {
-                                                                Text(
-                                                                    text = "IMDb ↗",
-                                                                    color = Color(0xFFF5C518),
-                                                                    fontSize = 10.sp,
-                                                                    fontWeight = FontWeight.Bold,
-                                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                                                )
-                                                            }
-                                                            Surface(
-                                                                shape = RoundedCornerShape(4.dp),
-                                                                color = Color(0xFFFA320A).copy(alpha = 0.15f),
-                                                                border = BorderStroke(1.dp, Color(0xFFFA320A).copy(alpha = 0.5f)),
-                                                                modifier = Modifier.clickable {
-                                                                    openExternalUrl(ExternalLinkHelper.buildRottenTomatoesUrl(item.title))
-                                                                }
-                                                            ) {
-                                                                Text(
-                                                                    text = "Rotten Tomatoes ↗",
-                                                                    color = Color(0xFFFF523B),
-                                                                    fontSize = 10.sp,
-                                                                    fontWeight = FontWeight.Bold,
-                                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                                                )
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Spacer(modifier = Modifier.height(2.dp))
-
                                                     // Bottom expanded actions
                                                     var showExpandedTmdbMenu by remember { mutableStateOf(false) }
                                                     Row(
@@ -3146,80 +3231,78 @@ private fun ExternalDbSyncDialog(
                                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                                                         verticalAlignment = Alignment.CenterVertically
                                                     ) {
-                                                        Box(modifier = Modifier.weight(1.35f)) {
-                                                            OutlinedButton(
-                                                                onClick = { showExpandedTmdbMenu = true },
-                                                                modifier = Modifier
-                                                                    .fillMaxWidth()
-                                                                    .heightIn(min = 34.dp),
-                                                                shape = RoundedCornerShape(6.dp),
-                                                                border = BorderStroke(1.dp, LXBorder),
-                                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                                                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
-                                                            ) {
-                                                                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                                Spacer(modifier = Modifier.width(4.dp))
-                                                                Text(
-                                                                    text = "Open TMDB ▾",
-                                                                    fontSize = 11.sp,
-                                                                    fontWeight = FontWeight.Medium,
-                                                                    maxLines = 1,
-                                                                    softWrap = false,
-                                                                    overflow = TextOverflow.Ellipsis
-                                                                )
-                                                            }
+                                                        if (openOptions.isNotEmpty()) {
+                                                            Box(modifier = Modifier.weight(1.35f)) {
+                                                                OutlinedButton(
+                                                                    onClick = {
+                                                                        if (openOptions.size > 1) {
+                                                                            showExpandedTmdbMenu = true
+                                                                        } else {
+                                                                            openExternalUrl(openOptions.first().url)
+                                                                        }
+                                                                    },
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .heightIn(min = 34.dp),
+                                                                    shape = RoundedCornerShape(6.dp),
+                                                                    border = BorderStroke(1.dp, LXBorder),
+                                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                                                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                                                                ) {
+                                                                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                                    Text(
+                                                                        text = if (openOptions.size > 1) "Open ▾" else "Open",
+                                                                        fontSize = 11.sp,
+                                                                        fontWeight = FontWeight.Medium,
+                                                                        maxLines = 1,
+                                                                        softWrap = false,
+                                                                        overflow = TextOverflow.Ellipsis
+                                                                    )
+                                                                }
 
-                                                            DropdownMenu(
-                                                                expanded = showExpandedTmdbMenu,
-                                                                onDismissRequest = { showExpandedTmdbMenu = false },
-                                                                modifier = Modifier.background(LXSurfaceElevated)
-                                                            ) {
-                                                                DropdownMenuItem(
-                                                                    text = {
-                                                                        Column {
-                                                                            Text("The Movie Database (TMDB)", fontWeight = FontWeight.Bold, color = LXTextPrimary, fontSize = 12.sp)
-                                                                            Text("themoviedb.org (may be blocked by some ISPs)", fontSize = 10.sp, color = LXTextSecondary)
+                                                                if (openOptions.size > 1) {
+                                                                    DropdownMenu(
+                                                                        expanded = showExpandedTmdbMenu,
+                                                                        onDismissRequest = { showExpandedTmdbMenu = false },
+                                                                        modifier = Modifier.background(LXSurfaceElevated)
+                                                                    ) {
+                                                                        openOptions.forEachIndexed { index, option ->
+                                                                            if (index > 0) {
+                                                                                HorizontalDivider(color = LXBorder)
+                                                                            }
+                                                                            DropdownMenuItem(
+                                                                                text = {
+                                                                                    Column {
+                                                                                        Text(
+                                                                                            text = option.title,
+                                                                                            fontWeight = FontWeight.Bold,
+                                                                                            color = Color(option.color),
+                                                                                            fontSize = 12.sp
+                                                                                        )
+                                                                                        Text(
+                                                                                            text = option.subtitle,
+                                                                                            fontSize = 10.sp,
+                                                                                            color = LXTextSecondary
+                                                                                        )
+                                                                                    }
+                                                                                },
+                                                                                leadingIcon = {
+                                                                                    Icon(
+                                                                                        Icons.AutoMirrored.Filled.OpenInNew,
+                                                                                        contentDescription = null,
+                                                                                        tint = Color(option.color),
+                                                                                        modifier = Modifier.size(14.dp)
+                                                                                    )
+                                                                                },
+                                                                                onClick = {
+                                                                                    showExpandedTmdbMenu = false
+                                                                                    openExternalUrl(option.url)
+                                                                                }
+                                                                            )
                                                                         }
-                                                                    },
-                                                                    leadingIcon = {
-                                                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(14.dp))
-                                                                    },
-                                                                    onClick = {
-                                                                        showExpandedTmdbMenu = false
-                                                                        openExternalUrl(webUrl)
                                                                     }
-                                                                )
-                                                                HorizontalDivider(color = LXBorder)
-                                                                DropdownMenuItem(
-                                                                    text = {
-                                                                        Column {
-                                                                            Text("Open on IMDb ⭐", fontWeight = FontWeight.Bold, color = Color(0xFFF5C518), fontSize = 12.sp)
-                                                                            Text("Search on IMDb (Works in India)", fontSize = 10.sp, color = LXTextSecondary)
-                                                                        }
-                                                                    },
-                                                                    leadingIcon = {
-                                                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = Color(0xFFF5C518), modifier = Modifier.size(14.dp))
-                                                                    },
-                                                                    onClick = {
-                                                                        showExpandedTmdbMenu = false
-                                                                        openExternalUrl(ExternalLinkHelper.buildImdbUrl(item.title))
-                                                                    }
-                                                                )
-                                                                DropdownMenuItem(
-                                                                    text = {
-                                                                        Column {
-                                                                            Text("Open on Rotten Tomatoes 🍅", fontWeight = FontWeight.Bold, color = Color(0xFFFF523B), fontSize = 12.sp)
-                                                                            Text("Search on Rotten Tomatoes", fontSize = 10.sp, color = LXTextSecondary)
-                                                                        }
-                                                                    },
-                                                                    leadingIcon = {
-                                                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = Color(0xFFFF523B), modifier = Modifier.size(14.dp))
-                                                                    },
-                                                                    onClick = {
-                                                                        showExpandedTmdbMenu = false
-                                                                        openExternalUrl(ExternalLinkHelper.buildRottenTomatoesUrl(item.title))
-                                                                    }
-                                                                )
+                                                                }
                                                             }
                                                         }
 

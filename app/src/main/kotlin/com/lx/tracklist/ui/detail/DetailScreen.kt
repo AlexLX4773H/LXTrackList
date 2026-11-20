@@ -1,6 +1,7 @@
 package com.lx.tracklist.ui.detail
 
 import android.content.Context
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -3368,13 +3369,13 @@ private fun RelatedItemDetailSheet(
                 "https://mangadex.org/title/$displayExternalId"
             } else if (displayExternalSource.equals("Kitsu", ignoreCase = true)) {
                 val typeStr = if (item.mediaType == MediaType.ANIME) "anime" else "manga"
-                val slug = ExternalLinkHelper.toKitsuSlug(item.title)
-                val target = when {
-                    !displayExternalId.isNullOrBlank() && !displayExternalId.all { it.isDigit() } -> displayExternalId
-                    slug.isNotBlank() -> slug
-                    else -> displayExternalId.orEmpty()
+                if (!displayExternalId.isNullOrBlank() && !displayExternalId.all { it.isDigit() }) {
+                    "https://kitsu.app/$typeStr/$displayExternalId"
+                } else {
+                    val encoded = Uri.encode(item.title.trim())
+                    val kitsuId = displayExternalId.takeIf { it.all { c -> c.isDigit() } } ?: "0"
+                    "kitsu-resolve://$typeStr?title=$encoded&kitsuId=$kitsuId"
                 }
-                "https://kitsu.app/$typeStr/$target"
             } else {
                 val isManga = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA || item.mediaType == MediaType.BOOK
                 val typeStr = if (isManga) "manga" else "anime"
@@ -3570,12 +3571,7 @@ private fun RelatedItemDetailSheet(
                                     border = BorderStroke(1.dp, if (!displayWebUrl.isNullOrBlank()) LXPrimaryGreen.copy(alpha = 0.4f) else LXBorder),
                                     modifier = Modifier.clickable {
                                         if (!displayWebUrl.isNullOrBlank()) {
-                                            try {
-                                                uriHandler.openUri(displayWebUrl)
-                                            } catch (_: Exception) {
-                                                clipboardManager.setText(AnnotatedString(displayExternalId))
-                                                Toast.makeText(context, "Copied ID $displayExternalId to clipboard", Toast.LENGTH_SHORT).show()
-                                            }
+                                            ExternalLinkHelper.openUrlSafely(displayWebUrl, uriHandler, context, clipboardManager)
                                         } else {
                                             clipboardManager.setText(AnnotatedString(displayExternalId))
                                             Toast.makeText(context, "Copied ID $displayExternalId to clipboard", Toast.LENGTH_SHORT).show()
@@ -3707,77 +3703,6 @@ private fun RelatedItemDetailSheet(
                             color = LXTextSecondary.copy(alpha = 0.6f)
                         )
                     }
-
-                    // Quick ISP Alternatives row
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(LXSurfaceElevated.copy(alpha = 0.65f))
-                            .border(BorderStroke(1.dp, LXBorder), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "ISP blocking TMDB?",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
-                                color = LXTextPrimary
-                            )
-                            Text(
-                                text = "Try alternative databases:",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 9.sp),
-                                color = LXTextSecondary.copy(alpha = 0.7f)
-                            )
-                        }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = Color(0xFFE2B616).copy(alpha = 0.15f),
-                                border = BorderStroke(1.dp, Color(0xFFE2B616).copy(alpha = 0.5f)),
-                                modifier = Modifier.clickable {
-                                    ExternalLinkHelper.openUrlSafely(
-                                        ExternalLinkHelper.buildImdbUrl(displayTitle),
-                                        uriHandler,
-                                        context,
-                                        clipboardManager
-                                    )
-                                }
-                            ) {
-                                Text(
-                                    text = "IMDb ↗",
-                                    color = Color(0xFFF5C518),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                                )
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = Color(0xFFFA320A).copy(alpha = 0.15f),
-                                border = BorderStroke(1.dp, Color(0xFFFA320A).copy(alpha = 0.5f)),
-                                modifier = Modifier.clickable {
-                                    ExternalLinkHelper.openUrlSafely(
-                                        ExternalLinkHelper.buildRottenTomatoesUrl(displayTitle),
-                                        uriHandler,
-                                        context,
-                                        clipboardManager
-                                    )
-                                }
-                            ) {
-                                Text(
-                                    text = "Rotten Tomatoes ↗",
-                                    color = Color(0xFFFF523B),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                                )
-                            }
-                        }
-                    }
                 }
 
                 // Bottom Actions
@@ -3791,9 +3716,9 @@ private fun RelatedItemDetailSheet(
                                 if (isTmdb) {
                                     showDetailTmdbMenu = true
                                 } else {
-                                    try {
-                                        uriHandler.openUri(displayWebUrl)
-                                    } catch (_: Exception) {
+                                    if (!displayWebUrl.isNullOrBlank()) {
+                                        ExternalLinkHelper.openUrlSafely(displayWebUrl, uriHandler, context, clipboardManager)
+                                    } else {
                                         clipboardManager.setText(AnnotatedString(displayExternalId ?: ""))
                                         Toast.makeText(context, "Copied ID $displayExternalId", Toast.LENGTH_SHORT).show()
                                     }
@@ -3816,7 +3741,7 @@ private fun RelatedItemDetailSheet(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = (if (isTmdb) "Open on TMDB ▾" else "Open on $displayExternalSource") + (displayExternalId?.let { " (ID: $it)" } ?: ""),
+                                text = (if (isTmdb) "Open ▾" else "Open") + (displayExternalId?.let { " (ID: $it)" } ?: ""),
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp
                             )
@@ -3832,7 +3757,7 @@ private fun RelatedItemDetailSheet(
                                     text = {
                                         Column {
                                             Text("The Movie Database (TMDB)", fontWeight = FontWeight.Bold, color = LXTextPrimary, fontSize = 13.sp)
-                                            Text("themoviedb.org (may be blocked by some ISPs)", fontSize = 10.sp, color = LXTextSecondary)
+                                            Text("themoviedb.org", fontSize = 10.sp, color = LXTextSecondary)
                                         }
                                     },
                                     leadingIcon = {
@@ -3848,7 +3773,7 @@ private fun RelatedItemDetailSheet(
                                     text = {
                                         Column {
                                             Text("IMDb ⭐", fontWeight = FontWeight.Bold, color = Color(0xFFF5C518), fontSize = 13.sp)
-                                            Text("Search on IMDb (Works in India)", fontSize = 10.sp, color = LXTextSecondary)
+                                            Text("Search on IMDb", fontSize = 10.sp, color = LXTextSecondary)
                                         }
                                     },
                                     leadingIcon = {

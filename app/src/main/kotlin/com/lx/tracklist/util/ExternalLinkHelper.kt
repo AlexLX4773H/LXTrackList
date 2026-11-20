@@ -1,13 +1,22 @@
 package com.lx.tracklist.util
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.AnnotatedString
+import com.lx.tracklist.data.remote.KitsuApiClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
 object ExternalLinkHelper {
+
+    private val kitsuCache = ConcurrentHashMap<String, String>()
 
     fun openUrlSafely(
         url: String?,
@@ -16,14 +25,126 @@ object ExternalLinkHelper {
         clipboardManager: ClipboardManager? = null
     ) {
         if (url.isNullOrBlank()) return
+
+        // Intercept kitsu-resolve scheme
+        if (url.startsWith("kitsu-resolve://", ignoreCase = true)) {
+            resolveAndOpenKitsu(url, uriHandler, context, clipboardManager)
+            return
+        }
+
+        // Intercept numeric Kitsu web URLs which are known to 404 on Kitsu's frontend SPA
+        if (url.startsWith("https://kitsu.app/anime/", ignoreCase = true) ||
+            url.startsWith("https://kitsu.app/manga/", ignoreCase = true) ||
+            url.startsWith("https://kitsu.io/anime/", ignoreCase = true) ||
+            url.startsWith("https://kitsu.io/manga/", ignoreCase = true)
+        ) {
+            val cleanUrl = url.replace("kitsu.io", "kitsu.app").substringBefore("?").substringBefore("#")
+            val isAnime = cleanUrl.contains("/anime/")
+            val target = cleanUrl.substringAfterLast('/')
+            if (target.all { it.isDigit() } && target.isNotBlank()) {
+                val type = if (isAnime) "anime" else "manga"
+                resolveAndOpenKitsu("kitsu-resolve://$type?kitsuId=$target", uriHandler, context, clipboardManager)
+                return
+            }
+        }
+
         try {
             uriHandler.openUri(url)
         } catch (e: Exception) {
-            if (clipboardManager != null) {
-                clipboardManager.setText(AnnotatedString(url))
-                Toast.makeText(context, "Link copied to clipboard (no browser available)", Toast.LENGTH_SHORT).show()
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            } catch (_: Exception) {
+                if (clipboardManager != null) {
+                    clipboardManager.setText(AnnotatedString(url))
+                    Toast.makeText(context, "Link copied to clipboard (no browser available)", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Could not open browser", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun resolveAndOpenKitsu(
+        uriString: String,
+        uriHandler: UriHandler,
+        context: Context,
+        clipboardManager: ClipboardManager?
+    ) {
+        val parsedUri = Uri.parse(uriString)
+        val isAnime = parsedUri.host.equals("anime", ignoreCase = true) || uriString.contains("/anime")
+        val mediaType = if (isAnime) "anime" else "manga"
+        val title = parsedUri.getQueryParameter("title").orEmpty()
+        val malId = parsedUri.getQueryParameter("malId")?.toLongOrNull() ?: 0L
+        val kitsuId = parsedUri.getQueryParameter("kitsuId")?.toLongOrNull() ?: 0L
+
+        val cacheKey = "$mediaType:$malId:$title:$kitsuId"
+        val cachedUrl = kitsuCache[cacheKey]
+        if (!cachedUrl.isNullOrBlank()) {
+            openResolvedUri(cachedUrl, uriHandler, context, clipboardManager)
+            return
+        }
+
+        Toast.makeText(context, "Opening on Kitsu...", Toast.LENGTH_SHORT).show()
+
+        CoroutineScope(Dispatchers.IO).launch {
+            var resolvedSlug: String? = null
+
+            // 1. If numeric kitsuId provided, lookup directly from Kitsu API
+            if (kitsuId > 0) {
+                resolvedSlug = KitsuApiClient.lookupSlugById(kitsuId, isAnime)
+            }
+
+            // 2. If MAL ID is provided, lookup via official mappings endpoint
+            if (resolvedSlug.isNullOrBlank() && malId > 0) {
+                resolvedSlug = KitsuApiClient.lookupSlugByMalId(malId, isAnime)
+            }
+
+            // 3. If still not resolved, query Kitsu search API by title
+            if (resolvedSlug.isNullOrBlank() && title.isNotBlank()) {
+                val cleanTitle = title
+                    .replace(Regex("\\((TV|ONA|OVA|Movie|Special|Dub|Sub)\\)", RegexOption.IGNORE_CASE), "")
+                    .trim()
+                resolvedSlug = KitsuApiClient.lookupSlugByTitle(cleanTitle, isAnime)
+            }
+
+            // 4. Construct final URL:
+            val finalUrl = if (!resolvedSlug.isNullOrBlank()) {
+                "https://kitsu.app/$mediaType/$resolvedSlug"
             } else {
-                Toast.makeText(context, "Could not open browser", Toast.LENGTH_SHORT).show()
+                val cleanTitle = title
+                    .replace(Regex("\\((TV|ONA|OVA|Movie|Special|Dub|Sub)\\)", RegexOption.IGNORE_CASE), "")
+                    .trim()
+                "https://www.google.com/search?q=site:kitsu.app/$mediaType+${Uri.encode(cleanTitle)}"
+            }
+
+            kitsuCache[cacheKey] = finalUrl
+
+            withContext(Dispatchers.Main) {
+                openResolvedUri(finalUrl, uriHandler, context, clipboardManager)
+            }
+        }
+    }
+
+    private fun openResolvedUri(
+        finalUrl: String,
+        uriHandler: UriHandler,
+        context: Context,
+        clipboardManager: ClipboardManager?
+    ) {
+        try {
+            uriHandler.openUri(finalUrl)
+        } catch (_: Exception) {
+            try {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(finalUrl)).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            } catch (_: Exception) {
+                clipboardManager?.setText(AnnotatedString(finalUrl))
+                Toast.makeText(context, "Copied link to clipboard", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -156,20 +277,18 @@ object ExternalLinkHelper {
         )
 
         // 3. Kitsu
-        val kitsuSlug = toKitsuSlug(title)
         val kitsuUrl = when {
-            !directSiteUrl.isNullOrBlank() && (directSiteUrl.contains("kitsu.io", ignoreCase = true) || directSiteUrl.contains("kitsu.app", ignoreCase = true)) ->
-                directSiteUrl.replace("kitsu.io", "kitsu.app")
-            webUrl != null && (webUrl.contains("kitsu.io", ignoreCase = true) || webUrl.contains("kitsu.app", ignoreCase = true)) ->
-                webUrl.replace("kitsu.io", "kitsu.app")
-            externalSource.equals("Kitsu", ignoreCase = true) && !externalId.isNullOrBlank() -> {
-                val target = if (!externalId.all { it.isDigit() }) externalId else if (kitsuSlug.isNotBlank()) kitsuSlug else externalId
-                "https://kitsu.app/anime/$target"
+            !directSiteUrl.isNullOrBlank() &&
+                (directSiteUrl.contains("kitsu.io/anime/") || directSiteUrl.contains("kitsu.app/anime/")) &&
+                !directSiteUrl.substringAfterLast('/').all { it.isDigit() } ->
+                    directSiteUrl.replace("kitsu.io", "kitsu.app")
+            externalSource.equals("Kitsu", ignoreCase = true) && !externalId.isNullOrBlank() && !externalId.all { it.isDigit() } ->
+                "https://kitsu.app/anime/$externalId"
+            else -> {
+                val malIdParam = directMalId ?: if (externalSource.equals("MAL", ignoreCase = true)) externalId?.toLongOrNull() else null
+                val kitsuIdParam = if (externalSource.equals("Kitsu", ignoreCase = true)) externalId?.toLongOrNull() else null
+                "kitsu-resolve://anime?title=$encodedTitle&malId=${malIdParam ?: 0}&kitsuId=${kitsuIdParam ?: 0}"
             }
-            kitsuSlug.isNotBlank() ->
-                "https://kitsu.app/anime/$kitsuSlug"
-            else ->
-                "https://duckduckgo.com/?q=%5C+site:kitsu.app/anime+$encodedTitle"
         }
         list.add(
             ExternalOpenOption(
@@ -248,20 +367,18 @@ object ExternalLinkHelper {
         )
 
         // 4. Kitsu
-        val kitsuSlug = toKitsuSlug(title)
         val kitsuUrl = when {
-            !directSiteUrl.isNullOrBlank() && (directSiteUrl.contains("kitsu.io", ignoreCase = true) || directSiteUrl.contains("kitsu.app", ignoreCase = true)) ->
-                directSiteUrl.replace("kitsu.io", "kitsu.app")
-            webUrl != null && (webUrl.contains("kitsu.io", ignoreCase = true) || webUrl.contains("kitsu.app", ignoreCase = true)) ->
-                webUrl.replace("kitsu.io", "kitsu.app")
-            externalSource.equals("Kitsu", ignoreCase = true) && !externalId.isNullOrBlank() -> {
-                val target = if (!externalId.all { it.isDigit() }) externalId else if (kitsuSlug.isNotBlank()) kitsuSlug else externalId
-                "https://kitsu.app/manga/$target"
+            !directSiteUrl.isNullOrBlank() &&
+                (directSiteUrl.contains("kitsu.io/manga/") || directSiteUrl.contains("kitsu.app/manga/")) &&
+                !directSiteUrl.substringAfterLast('/').all { it.isDigit() } ->
+                    directSiteUrl.replace("kitsu.io", "kitsu.app")
+            externalSource.equals("Kitsu", ignoreCase = true) && !externalId.isNullOrBlank() && !externalId.all { it.isDigit() } ->
+                "https://kitsu.app/manga/$externalId"
+            else -> {
+                val malIdParam = directMalId ?: if (externalSource.equals("MAL", ignoreCase = true)) externalId?.toLongOrNull() else null
+                val kitsuIdParam = if (externalSource.equals("Kitsu", ignoreCase = true)) externalId?.toLongOrNull() else null
+                "kitsu-resolve://manga?title=$encodedTitle&malId=${malIdParam ?: 0}&kitsuId=${kitsuIdParam ?: 0}"
             }
-            kitsuSlug.isNotBlank() ->
-                "https://kitsu.app/manga/$kitsuSlug"
-            else ->
-                "https://duckduckgo.com/?q=%5C+site:kitsu.app/manga+$encodedTitle"
         }
         list.add(
             ExternalOpenOption(
