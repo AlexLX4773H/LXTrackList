@@ -1254,12 +1254,23 @@ class SearchViewModel(
                                 }
                             }
 
-                            // Wait up to 10s for Jikan; if Jikan hangs/slows down, fall back to AniList immediately
+                            val anilistRes = try {
+                                anilistDeferred.await()
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Result.failure(e)
+                            }
+
+                            val anilistList = anilistRes.getOrDefault(emptyList())
+
+                            // If AniList already has results, wait at most 1800ms for Jikan so user gets fast results
+                            val jikanTimeout = if (anilistList.isNotEmpty()) 1800L else 3500L
                             val jikanRes = try {
-                                withTimeoutOrNull(10000L) {
+                                withTimeoutOrNull(jikanTimeout) {
                                     jikanDeferred.await()
                                 } ?: run {
-                                    Log.w("SearchViewModel", "Jikan anime search for '$query' exceeded 10s; falling back to AniList")
+                                    Log.w("SearchViewModel", "Jikan anime search for '$query' exceeded ${jikanTimeout}ms; falling back to AniList")
                                     jikanDeferred.cancel()
                                     Result.failure(Exception("Search timed out"))
                                 }
@@ -1269,16 +1280,7 @@ class SearchViewModel(
                                 Result.failure(e)
                             }
 
-                            val anilistRes = try {
-                                anilistDeferred.await()
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (e: Exception) {
-                                Result.failure(e)
-                            }
-
                             val jikanList = jikanRes.getOrDefault(emptyList())
-                            val anilistList = anilistRes.getOrDefault(emptyList())
 
                             val seenKeys = mutableSetOf<String>()
                             val combined = mutableListOf<JikanMediaDetails>()
@@ -1380,8 +1382,22 @@ class SearchViewModel(
                                 Result.failure(e)
                             }
 
+                            val anilistRes = try {
+                                anilistDeferred.await()
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                Result.failure(e)
+                            }
+
+                            val mangaDexList = mangaDexRes.getOrDefault(emptyList())
+                            val anilistList = anilistRes.getOrDefault(emptyList())
+                            val hasFastResults = mangaDexList.isNotEmpty() || anilistList.isNotEmpty()
+
+                            // If MangaDex or AniList already returned results, wait at most 1800ms for Jikan
+                            val jikanTimeout = if (hasFastResults) 1800L else 3500L
                             val jikanRes = try {
-                                withTimeoutOrNull(10000L) {
+                                withTimeoutOrNull(jikanTimeout) {
                                     jikanDeferred.await()
                                 } ?: run {
                                     jikanDeferred.cancel()
@@ -1393,17 +1409,7 @@ class SearchViewModel(
                                 Result.failure(e)
                             }
 
-                            val anilistRes = try {
-                                anilistDeferred.await()
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (e: Exception) {
-                                Result.failure(e)
-                            }
-
-                            val mangaDexList = mangaDexRes.getOrDefault(emptyList())
                             val jikanList = jikanRes.getOrDefault(emptyList())
-                            val anilistList = anilistRes.getOrDefault(emptyList())
 
                             val seenKeys = mutableSetOf<String>()
                             val combined = mutableListOf<JikanMediaDetails>()
@@ -1524,7 +1530,7 @@ class SearchViewModel(
 
                             if (combined.isEmpty()) {
                                 val jikanRes = try {
-                                    withTimeoutOrNull(10000L) {
+                                    withTimeoutOrNull(2500L) {
                                         JikanApiClient.searchJikanDirect(query, isManga = true, subType = "manhwa", limit = 20)
                                     } ?: Result.failure(Exception("Search timed out"))
                                 } catch (e: CancellationException) {

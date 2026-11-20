@@ -8,6 +8,7 @@ import coil.memory.MemoryCache
 import com.lx.tracklist.data.local.CoverCacheManager
 import com.lx.tracklist.data.local.LXTrackListDatabase
 import com.lx.tracklist.data.local.StorageHelper
+import com.lx.tracklist.data.remote.AniListNovelApiClient
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.KitsuApiClient
 import com.lx.tracklist.data.remote.MangaDexApiClient
@@ -45,6 +46,7 @@ class LXApplication : Application(), ImageLoaderFactory {
         JikanApiClient.initWithDoH(this)
         KitsuApiClient.initWithDoH(this)
         MangaDexApiClient.initWithDoH(this)
+        AniListNovelApiClient.initWithDoH(this)
     }
 
     override fun newImageLoader(): ImageLoader {

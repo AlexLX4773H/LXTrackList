@@ -1,5 +1,6 @@
 package com.lx.tracklist.data.remote
 
+import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -17,12 +18,24 @@ object AniListNovelApiClient {
     private const val USER_AGENT = "LXTrackList/1.0 (Android; Novels Tracker)"
     private val gson = Gson()
 
-    private val okHttpClient = OkHttpClient.Builder()
+    private var okHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
+
+    fun initWithDoH(context: Context) {
+        try {
+            val dohResolver = TmdbDnsHelper.createDoHResolver(context)
+            okHttpClient = okHttpClient.newBuilder()
+                .dns(dohResolver)
+                .build()
+            Log.i(TAG, "Initialized AniListNovel OkHttpClient with DNS-over-HTTPS resolver")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize DNS-over-HTTPS resolver for AniListNovel client", e)
+        }
+    }
 
     fun searchLightNovels(
         query: String,
@@ -135,9 +148,8 @@ object AniListNovelApiClient {
     }
 
     private fun parseAniListNovelMedia(mediaObj: JsonObject): JikanMediaDetails {
-        val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong
-        val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull }?.asLong
-        val resolvedId = idMal ?: aniId
+        val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull && it.asLong > 0 }?.asLong
+        val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull && it.asLong > 0 }?.asLong
 
         val titleObj = mediaObj.getAsJsonObject("title")
         val engTitle = titleObj?.get("english")?.takeIf { !it.isJsonNull }?.asString?.trim()
@@ -221,7 +233,8 @@ object AniListNovelApiClient {
         val resolvedLang = countryOfOrigin?.let { com.lx.tracklist.ui.search.OriginalLanguageRegistry.findByCode(it)?.code ?: it.lowercase(java.util.Locale.ROOT) } ?: "ja"
 
         return JikanMediaDetails(
-            malId = resolvedId,
+            malId = idMal,
+            aniListId = aniId,
             title = primaryTitle,
             posterUrl = posterUrl,
             durationText = null,

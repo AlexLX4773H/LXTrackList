@@ -261,7 +261,7 @@ object KitsuApiClient {
             externalScoreSource = if (score != null) "Kitsu" else null,
             type = subtype,
             sourceProvider = "Kitsu",
-            url = if (isAnime) "https://kitsu.app/anime/$id" else "https://kitsu.app/manga/$id"
+            url = if (isAnime) "https://kitsu.io/anime/$id" else "https://kitsu.io/manga/$id"
         )
     }
 }

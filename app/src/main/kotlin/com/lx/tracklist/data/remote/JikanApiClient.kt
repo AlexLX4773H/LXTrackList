@@ -108,9 +108,9 @@ object JikanApiClient {
         .build()
 
     private var searchOkHttpClient = okHttpClient.newBuilder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .callTimeout(20, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .callTimeout(6, TimeUnit.SECONDS)
         .build()
 
     private val jikanLock = Any()
@@ -724,7 +724,6 @@ object JikanApiClient {
         val endpoint = "${baseUrl.trimEnd('/')}/$type?q=$encodedQuery&limit=$limit$subTypeParam"
 
         return try {
-            throttleJikan()
             val request = Request.Builder()
                 .url(endpoint)
                 .header("User-Agent", USER_AGENT)
@@ -733,29 +732,8 @@ object JikanApiClient {
                 .get()
                 .build()
 
-            var response = try {
-                searchOkHttpClient.newCall(request).execute()
-            } catch (e: java.io.IOException) {
-                Log.w(TAG, "Connection failed to Jikan search ($endpoint): ${e.message}. Retrying in 1.2s...")
-                try {
-                    Thread.sleep(1200)
-                } catch (_: InterruptedException) {}
-                throttleJikan()
-                searchOkHttpClient.newCall(request.newBuilder().build()).execute()
-            }
-            var code = response.code
-
-            // If rate limited (429), wait 1s and retry once
-            if (code == 429) {
-                Log.w(TAG, "Jikan request rate limited (429), waiting 1s before retry...")
-                try {
-                    Thread.sleep(1000)
-                } catch (_: InterruptedException) {}
-                response.close()
-                throttleJikan()
-                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
-                code = response.code
-            }
+            val response = searchOkHttpClient.newCall(request).execute()
+            val code = response.code
             val bodyString = response.body?.string() ?: ""
 
             if (response.isSuccessful) {
@@ -1057,7 +1035,6 @@ object JikanApiClient {
         val encodedQuery = URLEncoder.encode(queryTitle, "UTF-8")
         val endpoint = "${baseUrl.trimEnd('/')}/$type?q=$encodedQuery&limit=1"
         return try {
-            throttleJikan()
             val request = Request.Builder()
                 .url(endpoint)
                 .header("User-Agent", USER_AGENT)
@@ -1066,29 +1043,8 @@ object JikanApiClient {
                 .get()
                 .build()
 
-            var response = try {
-                searchOkHttpClient.newCall(request).execute()
-            } catch (e: java.io.IOException) {
-                Log.w(TAG, "Connection failed to Jikan search ($endpoint): ${e.message}. Retrying in 1.2s...")
-                try {
-                    Thread.sleep(1200)
-                } catch (_: InterruptedException) {}
-                throttleJikan()
-                searchOkHttpClient.newCall(request.newBuilder().build()).execute()
-            }
-            var code = response.code
-
-            // If rate limited (429), wait 1s and retry once
-            if (code == 429) {
-                Log.w(TAG, "Jikan request rate limited (429), waiting 1s before retry...")
-                try {
-                    Thread.sleep(1000)
-                } catch (_: InterruptedException) {}
-                response.close()
-                throttleJikan()
-                response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
-                code = response.code
-            }
+            val response = searchOkHttpClient.newCall(request).execute()
+            val code = response.code
             val bodyString = response.body?.string() ?: ""
 
             Log.d(TAG, "Jikan title search HTTP $code for $endpoint")

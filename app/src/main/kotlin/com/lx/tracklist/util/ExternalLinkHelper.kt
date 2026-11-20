@@ -147,14 +147,14 @@ object ExternalLinkHelper {
         // 3. Kitsu
         val kitsuUrl = when {
             externalSource.equals("Kitsu", ignoreCase = true) && !externalId.isNullOrBlank() ->
-                "https://kitsu.app/anime/$externalId"
-            webUrl != null && webUrl.contains("kitsu.app", ignoreCase = true) -> webUrl
-            else -> "https://kitsu.app/anime?text=$encodedTitle"
+                "https://kitsu.io/anime/$externalId"
+            webUrl != null && (webUrl.contains("kitsu.io", ignoreCase = true) || webUrl.contains("kitsu.app", ignoreCase = true)) -> webUrl
+            else -> "https://kitsu.io/explore/anime?text=$encodedTitle"
         }
         list.add(
             ExternalOpenOption(
                 title = "Kitsu",
-                subtitle = "kitsu.app",
+                subtitle = "kitsu.io",
                 url = kitsuUrl,
                 color = 0xFFFF4081
             )
@@ -230,14 +230,14 @@ object ExternalLinkHelper {
         // 4. Kitsu
         val kitsuUrl = when {
             externalSource.equals("Kitsu", ignoreCase = true) && !externalId.isNullOrBlank() ->
-                "https://kitsu.app/manga/$externalId"
-            webUrl != null && webUrl.contains("kitsu.app", ignoreCase = true) -> webUrl
-            else -> "https://kitsu.app/manga?text=$encodedTitle"
+                "https://kitsu.io/manga/$externalId"
+            webUrl != null && (webUrl.contains("kitsu.io", ignoreCase = true) || webUrl.contains("kitsu.app", ignoreCase = true)) -> webUrl
+            else -> "https://kitsu.io/explore/manga?text=$encodedTitle"
         }
         list.add(
             ExternalOpenOption(
                 title = "Kitsu",
-                subtitle = "kitsu.app",
+                subtitle = "kitsu.io",
                 url = kitsuUrl,
                 color = 0xFFFF4081
             )
