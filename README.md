@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.4.8-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-0.5.16-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26--36)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Kotlin_2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
   <img src="https://img.shields.io/badge/UI-Jetpack_Compose_&_Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" />
@@ -63,6 +63,36 @@ Discover what's airing, trending, and premiering directly inside the **Search & 
   - Long-pressing the primary or alternate title in the expanded search bottom sheet copies it straight to the clipboard with instant toast confirmation.
 - **Clean Discovery UI**:
   - Automatically hides external provider attribution notices during discovery browsing to keep the catalog clean and immersive.
+- **Accelerated Multi-Source Search**:
+  - Optimized, parallel query execution across Jikan API v4, AniList GraphQL, MangaDex, and Kitsu.
+  - Dramatically speeds up Anime, Manga, and Manhwa search queries while respecting upstream rate limits.
+
+### 🌐 Unified Multi-Platform "Open ▾" Launcher & Kitsu Resolver
+Seamlessly open external media pages on authoritative platforms without screen clutter or broken links:
+- **Centralized "Open ▾" Dropdown**:
+  - Replaces messy separate platform buttons and ISP workaround rows with a sleek, consolidated dropdown menu across **Search & Discover**, **Edit Entity (Sync from External DB)**, and **Media Details**.
+  - Automatically curates relevant platforms based on media category:
+    - **Movies & TV Shows**: *The Movie Database (TMDB)*, *IMDb ⭐*, and *Rotten Tomatoes 🍅*.
+    - **Anime**: *MyAnimeList (MAL)*, *AniList*, and *Kitsu*.
+    - **Manga & Manhwa**: *MangaDex*, *MyAnimeList (MAL)*, *AniList*, and *Kitsu*.
+    - **Light Novels**: *AniList*, *MyAnimeList (MAL)*, *BookWalker 🇯🇵*, and *MangaDex*.
+    - **Books**: *Google Books*, *Open Library*, and *Goodreads 📚*.
+- **Dynamic Kitsu Exact Slug Resolution (Zero 404s)**:
+  - Kitsu's web frontend (SPA) requires exact database slugs (typically Romaji, e.g. `shingeki-no-kyojin`) rather than generic English titles or raw numeric IDs, which previously led to blank `kitsu.app/404` errors.
+  - LX Track List dynamically resolves the exact slug via Kitsu's official mappings endpoint (`/mappings?filter[externalSite]=myanimelist&include=item`) using the MAL ID, or queries Kitsu's search API.
+  - Features an in-memory resolution cache for instant subsequent launches and a guaranteed safe Google site search fallback (`site:kitsu.app/anime ...`) if an entry is unlisted, completely eliminating 404 dead ends.
+
+### ⏳ "NYA" (Not Yet Aired) & "NYP" (Not Yet Published) Tracking
+Clear, accurate status tracking for upcoming and unreleased media:
+- **Distinct Status Badges**:
+  - Prevents unreleased media from being ambiguously labeled as "Airing" or "Publishing".
+  - Shows **"NYA"** (Not Yet Aired) for Anime episodes and **"NYP"** (Not Yet Published) for Manga/Manhwa chapters and volumes when release dates are in the future or no episodes/chapters have dropped yet.
+- **Advanced Airing Status Filter**:
+  - Filter your library with dedicated 4-mode toggles in the Advanced Filter Sheet:
+    1. **All**: Shows all entries.
+    2. **Airing / Publishing**: Shows currently active, ongoing broadcasts and releases.
+    3. **NYA / NYP**: Isolates upcoming titles that have not yet started broadcasting or publishing.
+    4. **Finished**: Shows completed releases.
 
 ### 🚀 In-App GitHub Releases & APK Auto-Updater
 Keep your app up to date effortlessly without opening a web browser:
@@ -89,19 +119,23 @@ Tailor the app's visual identity to your liking:
 
 ### 🎬 Comprehensive Media Support
 Track each medium with metrics tailored to its natural progression:
-- **Anime**: Total and watched episodes, seasons, airing status, broadcast seasons, and series types (TV, Movie, OVA, ONA, Special).
-- **Manga & Manhwa**: Read chapters, volumes, or total pages. Flexible progress tracking adapts based on which metrics you choose to populate.
+- **Anime**: Total and watched episodes, seasons, airing status (including NYA for upcoming titles), broadcast schedule, countdowns, and series types (TV, Movie, OVA, ONA, Special).
+- **Manga & Manhwa**: Read chapters, volumes, or total pages. Flexible progress tracking adapts based on which metrics you choose to populate, with NYP status for future releases.
+- **Light Novels**: First-class support with dedicated AniList `NOVEL` GraphQL integration. Automatically maps to authoritative MyAnimeList manga IDs (`idMal`) to prevent mismatching with doujinshis or unrelated manga adaptations.
 - **Movies & Live-Action TV Shows**: Track standalone movies or full cinematic franchises, runtime in minutes, TV seasons, and current episode progress.
-- **Books & Light Novels**: Track pages read, total chapters, volume progress, ISBN, and authors.
+- **Books**: Track pages read, total chapters, volume progress, ISBN, and authors via Google Books and Open Library.
 - **Custom Categories & Subcategories**: Create custom categories (e.g., *Donghua*, *Web Novels*, *Podcasts*, *Documentaries*) with custom tracking units (Episodes, Chapters, Volumes, Pages) and badge accent colors.
 
 ### 🌐 Multi-Source External DB & Cascading Sync
 LX Track List integrates with 5 major metadata providers to enrich your library with covers, runtimes, episode counts, scores, and synopses:
 - **MyAnimeList (Jikan API & AniList GraphQL)**: Fast, keyless search and metadata synchronization for Anime and Manga.
+- **Direct ID Hydration & Robust Sync**: Background and batch synchronization jobs prioritize authoritative direct ID queries (`fetchAnimeDetailsById`, `fetchMangaDetailsById`) via Jikan API v4 and official MyAnimeList OAuth, preventing sync job failures when titles have pre-existing MAL IDs.
 - **Official MyAnimeList (MAL) 2-Way Sync**: Built-in OAuth2 authentication allows opt-in, live bi-directional sync of progress, scores, and watch/read statuses directly to your MyAnimeList account.
+- **Foreground Sync Service (`SyncForegroundService`)**: Runs intensive batch sync jobs (MAL, TMDB, MangaDex, Books, and ID Resolution) as an Android Foreground Service with live progress notifications and battery optimization management.
 - **The Movie Database (TMDB)**: Direct search, seasonal discovery, high-resolution poster retrieval, release dates, runtimes, and season/episode breakdowns for Movies and TV Shows.
   - **ISP Block Bypass**: Built-in DNS-over-HTTPS (DoH via Cloudflare & Google DNS) and automatic fallback routing (`api.themoviedb.org` $\leftrightarrow$ `api.tmdb.org`) ensures uninterrupted connectivity even on restricted networks.
 - **MangaDex API**: Full native integration for Manga, Manhwa, and Manhua with direct UUID linking and alternate title matching.
+- **Light Novel AniList & MAL Accurate Mapping**: Specialized `AniListNovelApiClient` queries AniList GraphQL strictly for Light Novels (`format: NOVEL`) and resolves the official MyAnimeList manga ID (`idMal`), guaranteeing that clicking "Open in MAL" navigates directly to the authentic Light Novel entry.
 - **Intelligent Fallback Cascading**: For Manga & Manhwa, searches cascade seamlessly across **Jikan (MAL) $\rightarrow$ MangaDex $\rightarrow$ AniList $\rightarrow$ Kitsu** to discover and link obscure webtoons, manhwa, and scanlations that MyAnimeList does not index.
 
 ### 🔍 Automated "Resolve IDs" Engine & Audit Reports
@@ -136,15 +170,17 @@ Never worry about duplicate entries when restoring backups after names or IDs ch
   - **Batch DB Sync**: Bulk **Fetch Missing**, **Re-fetch All**, or **Resolve IDs** with background notifications.
   - **Delete**: Bulk removal with confirmation.
 - **8 Dynamic Sort Options**: Sort by Title (A-Z, Z-A), Score, Progress, Recently Updated, Date Added, Start Date, or Finish Date.
-- **Granular Filters**: Filter simultaneously by Media Type, Status, Priority (Low, Medium, High), Airing Status, Score, and Custom Categories.
+- **Granular Filters**: Filter simultaneously by Media Type, Status, Priority (Low, Medium, High), Airing Status (All, Airing/Publishing, NYA/NYP, Finished), Score, and Custom Categories.
 
 ### ✏️ Context-Aware External DB Sync Dialog
 - When manually editing an entry, the **Sync from External DB** dialog automatically adapts its source chips to the item's media type:
-  - **Manga / Manhwa / Books**: Offers `MAL` and `MangaDex`.
-  - **Movies / TV Shows**: Offers `TMDB` and `MAL`.
-  - **Anime**: Offers `MAL` and `TMDB`.
+  - **Manga / Manhwa**: Offers `MAL`, `MangaDex`, and `AniList`.
+  - **Movies / TV Shows**: Offers `TMDB`, `IMDb`, and `Rotten Tomatoes`.
+  - **Anime**: Offers `MAL`, `AniList`, and `TMDB`.
+  - **Books**: Offers `MAL` (for Light Novels), `MangaDex`, `Google Books`, and `Open Library`.
 - Horizontally scrollable source pills with single-line enforcement prevent text wrapping.
-- Quick web links (`Open MangaDex`, `Open TMDB`, `Open MAL`) and expand/collapse cards with full synopsis, release dates, ratings, and genre tags.
+- Unified **"Open ▾"** button provides clean, one-tap access to TMDB, IMDb, Rotten Tomatoes, MAL, AniList, and Kitsu without cluttering the cards.
+- Expandable result cards display high-res cover art, full synopsis, broadcast schedule, release year, ratings, and genre tags.
 
 ### 📊 Deep Statistics & Visual Analytics
 - Comprehensive distribution breakdown across statuses (*Watching/Reading*, *Completed*, *On-Hold*, *Dropped*, *Plan to Watch/Read*).
@@ -189,10 +225,13 @@ app/src/main/kotlin/com/lx/tracklist/
 │   ├── model/             # MediaEntry, UserProfile, CustomCategory, Enums
 │   ├── remote/            # Jikan, TMDB, MangaDex, AniList, Kitsu, and MAL OAuth clients
 │   │   ├── mal/           # MyAnimeList OAuth2 token store & 2-way sync manager
+│   │   ├── AniListNovelApiClient.kt # AniList Light Novel GraphQL & MAL ID mapping
 │   │   ├── AppUpdateChecker.kt     # GitHub Releases API client
 │   │   ├── AppUpdateDownloader.kt  # In-app APK downloader & installer
 │   │   ├── JikanApiClient.kt       # Jikan v4 & AniList GraphQL seasonal client
+│   │   ├── KitsuApiClient.kt       # Kitsu JSON:API client & slug resolver
 │   │   ├── MangaDexApiClient.kt
+│   │   ├── SyncForegroundService.kt # Foreground service for uninterrupted sync
 │   │   ├── TmdbApiClient.kt        # TMDB API with DoH & ISP Block Bypass
 │   │   └── TachiyomiResolverManager.kt # Universal ID Resolution Engine
 │   └── repository/        # MediaRepository (Single source of truth & deduplication)
@@ -201,7 +240,7 @@ app/src/main/kotlin/com/lx/tracklist/
 │   ├── detail/            # Entry detail view, metadata refresh, and related media manager
 │   ├── edit/              # Add and edit media screen with ExternalDbSyncDialog
 │   ├── home/              # Main dashboard with status tabs
-│   ├── library/           # Searchable library with multi-sort, filters, and batch operations
+│   ├── library/           # Searchable library with multi-sort, NYA/NYP filters, and batch operations
 │   ├── navigation/        # Compose Navigation graph and destinations
 │   ├── search/            # Unified local & multi-database search & Seasonal Discovery sheet
 │   │   ├── DiscoveryModels.kt          # Discovery filters, seasons, sort enums & 3-state adult modes
@@ -212,7 +251,7 @@ app/src/main/kotlin/com/lx/tracklist/
 │   ├── settings/          # Data import/export, profile management, conflict resolution & updater
 │   ├── stats/             # Visualization charts and metrics
 │   └── theme/             # Material 3 colors, typography, and dark theme
-└── util/                  # Notification helpers and system utilities
+└── util/                  # ExternalLinkHelper, notification helpers, and system utilities
 ```
 
 ### Key Libraries
