@@ -1097,7 +1097,12 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Left Master Pane: Settings Navigation Menu
-                val masterPaneWidth = if (configuration.screenWidthDp >= 960) 360.dp else 340.dp
+                val masterPaneWidth = when {
+                    configuration.screenWidthDp >= 1100 -> 340.dp
+                    configuration.screenWidthDp >= 900 -> 300.dp
+                    configuration.screenWidthDp >= 750 -> 270.dp
+                    else -> 260.dp
+                }
                 Card(
                     modifier = Modifier
                         .width(masterPaneWidth)
@@ -1745,14 +1750,19 @@ private fun SettingsMainMenu(
         // Section: System & About
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SettingsSectionHeader("System & About")
+            val isUpdateAvailable = state.updateStatus is AppUpdateStatus.UpdateAvailable
+            val updateVersion = (state.updateStatus as? AppUpdateStatus.UpdateAvailable)?.updateInfo?.latestVersion
             SettingsMenuItem(
                 icon = Icons.Default.Info,
-                iconBackgroundColor = Color(0xFF00E5FF).copy(alpha = 0.15f),
-                iconTintColor = Color(0xFF00E5FF),
+                iconBackgroundColor = if (isUpdateAvailable) LXPrimaryGreen.copy(alpha = 0.15f) else Color(0xFF00E5FF).copy(alpha = 0.15f),
+                iconTintColor = if (isUpdateAvailable) LXPrimaryGreen else Color(0xFF00E5FF),
                 title = "About LX Track List",
-                subtitle = "Version ${com.lx.tracklist.BuildConfig.VERSION_NAME} • Device & storage details",
-                badgeText = "v${com.lx.tracklist.BuildConfig.VERSION_NAME}",
-                badgeColor = Color(0xFF00E5FF),
+                subtitle = if (isUpdateAvailable && updateVersion != null)
+                    "Update available ($updateVersion) • Tap to view"
+                else
+                    "Version ${com.lx.tracklist.BuildConfig.VERSION_NAME} • Device & storage details",
+                badgeText = if (isUpdateAvailable) "UPDATE" else "v${com.lx.tracklist.BuildConfig.VERSION_NAME}",
+                badgeColor = if (isUpdateAvailable) LXPrimaryGreen else Color(0xFF00E5FF),
                 isSelected = selectedSubMenu == SettingsSubMenu.ABOUT,
                 onClick = { onSelectSubMenu(SettingsSubMenu.ABOUT) }
             )
@@ -5293,6 +5303,7 @@ private fun AboutContent(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Row(
+                        modifier = Modifier.weight(1f, fill = false),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
@@ -5326,19 +5337,25 @@ private fun AboutContent(
                             )
                         }
 
-                        Column {
+                        Column(modifier = Modifier.weight(1f, fill = false)) {
                             Text(
                                 text = "Check for Updates",
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = LXTextPrimary
+                                color = LXTextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = "Current version: v${com.lx.tracklist.BuildConfig.VERSION_NAME}",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = LXTextSecondary
+                                color = LXTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     // Status Badge
                     when (state.updateStatus) {
@@ -5355,6 +5372,7 @@ private fun AboutContent(
                                         fontSize = 11.sp
                                     ),
                                     color = LXPrimaryGreen,
+                                    maxLines = 1,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
@@ -5372,6 +5390,7 @@ private fun AboutContent(
                                         fontSize = 11.sp
                                     ),
                                     color = LXTextSecondary,
+                                    maxLines = 1,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
@@ -5491,8 +5510,12 @@ private fun AboutContent(
                                 Text(
                                     text = status.updateInfo.releaseName ?: "New Release ${status.updateInfo.latestVersion}",
                                     style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = LXPrimaryGreen
+                                    color = LXPrimaryGreen,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                                     contentDescription = "Open Release Page",
@@ -5508,14 +5531,23 @@ private fun AboutContent(
                             )
 
                             if (!status.updateInfo.releaseNotes.isNullOrBlank()) {
-                                val snippet = status.updateInfo.releaseNotes.trim().lines().take(3).joinToString("\n")
-                                Text(
-                                    text = snippet,
-                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                    color = LXTextSecondary,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                val cleanNotes = status.updateInfo.releaseNotes
+                                    .replace(Regex("""\*\*([^*]+)\*\*"""), "$1")
+                                    .trim()
+                                    .lines()
+                                    .map { it.trim() }
+                                    .filter { it.isNotBlank() }
+                                    .take(4)
+                                    .joinToString("\n")
+                                if (cleanNotes.isNotBlank()) {
+                                    Text(
+                                        text = cleanNotes,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                        color = LXTextSecondary,
+                                        maxLines = 4,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
 
@@ -5618,24 +5650,38 @@ private fun AboutContent(
                                     OutlinedButton(
                                         onClick = { onDownloadUpdate(context) },
                                         shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                         border = BorderStroke(1.dp, LXBorder),
                                         colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
-                                        modifier = Modifier.weight(1f).height(38.dp)
+                                        modifier = Modifier.weight(1f).defaultMinSize(minHeight = 36.dp)
                                     ) {
                                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Re-download", fontSize = 12.sp)
+                                        Text(
+                                            text = "Re-download",
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                     OutlinedButton(
                                         onClick = { openUrl(status.updateInfo.releaseUrl) },
                                         shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                         border = BorderStroke(1.dp, LXBorder),
                                         colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
-                                        modifier = Modifier.weight(1f).height(38.dp)
+                                        modifier = Modifier.weight(1f).defaultMinSize(minHeight = 36.dp)
                                     ) {
                                         Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Release Page", fontSize = 12.sp)
+                                        Text(
+                                            text = "Release Page",
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                 }
                             }
@@ -5665,14 +5711,8 @@ private fun AboutContent(
                                 }
                             }
 
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(IntrinsicSize.Min),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                val hasApk = !status.updateInfo.apkDownloadUrl.isNullOrBlank()
+                            val hasApk = !status.updateInfo.apkDownloadUrl.isNullOrBlank()
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = {
                                         if (hasApk) {
@@ -5687,16 +5727,14 @@ private fun AboutContent(
                                     ),
                                     shape = RoundedCornerShape(8.dp),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
+                                    modifier = Modifier.fillMaxWidth().height(42.dp)
                                 ) {
                                     Icon(
                                         imageVector = if (hasApk) Icons.Default.Download else Icons.AutoMirrored.Filled.OpenInNew,
                                         contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = if (hasApk) "Download & Install (${status.updateInfo.latestVersion})" else "Open Release (${status.updateInfo.latestVersion})",
                                         fontSize = 13.sp,
@@ -5707,34 +5745,55 @@ private fun AboutContent(
                                     )
                                 }
 
-                                OutlinedButton(
-                                    onClick = { openUrl(status.updateInfo.releaseUrl) },
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                    border = BorderStroke(1.dp, LXBorder),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
-                                    modifier = Modifier.fillMaxHeight()
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
-                                        contentDescription = "Open in Browser",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
+                                    OutlinedButton(
+                                        onClick = { openUrl(status.updateInfo.releaseUrl) },
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                        border = BorderStroke(1.dp, LXBorder),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
+                                        modifier = Modifier.weight(1f).defaultMinSize(minHeight = 36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Release Page",
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
 
-                                OutlinedButton(
-                                    onClick = onCheckForUpdates,
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                                    border = BorderStroke(1.dp, LXBorder),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
-                                    modifier = Modifier.fillMaxHeight()
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Refresh,
-                                        contentDescription = "Re-check",
-                                        modifier = Modifier.size(16.dp)
-                                    )
+                                    OutlinedButton(
+                                        onClick = onCheckForUpdates,
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                        border = BorderStroke(1.dp, LXBorder),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
+                                        modifier = Modifier.weight(1f).defaultMinSize(minHeight = 36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Refresh,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Check Again",
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -5778,57 +5837,59 @@ private fun AboutContent(
                         }
 
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(IntrinsicSize.Min),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             OutlinedButton(
                                 onClick = onCheckForUpdates,
                                 shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                 border = BorderStroke(1.dp, LXBorder),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextPrimary),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .fillMaxHeight()
+                                    .defaultMinSize(minHeight = 36.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = "Check Again",
-                                    fontSize = 13.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
-                                    softWrap = false
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
 
                             OutlinedButton(
                                 onClick = { openUrl(status.updateInfo.releaseUrl) },
                                 shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                 border = BorderStroke(1.dp, LXBorder),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
-                                modifier = Modifier.fillMaxHeight()
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .defaultMinSize(minHeight = 36.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = "View on GitHub",
-                                    fontSize = 13.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
                                     maxLines = 1,
-                                    softWrap = false
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -5867,9 +5928,7 @@ private fun AboutContent(
                         }
 
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(IntrinsicSize.Min),
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -5880,46 +5939,50 @@ private fun AboutContent(
                                     contentColor = LXTextPrimary
                                 ),
                                 shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .fillMaxHeight()
+                                    .defaultMinSize(minHeight = 36.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = "Retry",
-                                    fontSize = 13.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
-                                    softWrap = false
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
 
                             OutlinedButton(
                                 onClick = { openUrl(status.fallbackUrl) },
                                 shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                 border = BorderStroke(1.dp, LXBorder),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = LXTextSecondary),
-                                modifier = Modifier.fillMaxHeight()
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .defaultMinSize(minHeight = 36.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = "Open GitHub",
-                                    fontSize = 13.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
                                     maxLines = 1,
-                                    softWrap = false
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
