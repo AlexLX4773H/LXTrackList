@@ -1082,6 +1082,15 @@ private fun DetailProgressCard(
             val isDone = entry.status == MediaStatus.COMPLETED
             ProgressInfo(if (isDone) 1 else 0, 1, "1", "Film", if (isDone) "Watched" else "Plan to watch")
         }
+        MediaType.GAME -> {
+            if (entry.trackingUnit == TrackingUnit.PERCENTAGE) {
+                ProgressInfo(entry.gameProgressPercent, 100, "100%", "%", "Game progress")
+            } else {
+                val label = entry.customUnitLabel?.takeIf { it.isNotBlank() } ?: "Units"
+                val totalStr = if (entry.customUnitTotal > 0) "${entry.customUnitTotal}" else "?"
+                ProgressInfo(entry.customUnitCurrent, entry.customUnitTotal, totalStr, label, "$label completed")
+            }
+        }
     }
 
     Card(
@@ -1759,6 +1768,7 @@ private fun DetailDatesCard(entry: MediaEntry) {
                 } else {
                     val airedTitle = when (entry.mediaType) {
                         MediaType.ANIME, MediaType.SHOW -> "Aired / Broadcast Dates"
+                        MediaType.GAME -> "Release Date"
                         else -> "Publishing Period"
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1843,6 +1853,7 @@ private fun DetailDatesCard(entry: MediaEntry) {
             if (hasUserData) {
                 val userTitle = when (entry.mediaType) {
                     MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "My Reading Dates"
+                    MediaType.GAME -> "My Play Dates"
                     else -> "My Watch Dates"
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -3409,6 +3420,9 @@ private fun RelatedItemDetailSheet(
             val chs = detailedInfo?.totalUnits?.takeIf { it > 0 }?.let { "$it Chapters" }
             val vols = detailedInfo?.totalVolumes?.takeIf { it > 0 }?.let { "$it Volumes" }
             listOfNotNull(chs, vols).joinToString(" • ").takeIf { it.isNotBlank() }
+        }
+        MediaType.GAME -> {
+            null
         }
     }
 

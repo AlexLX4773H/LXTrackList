@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.AlertDialog
@@ -880,6 +881,7 @@ private fun SearchResultCard(
                             MediaType.MOVIE -> Icons.Default.Movie
                             MediaType.SHOW -> Icons.Default.Tv
                             MediaType.BOOK -> Icons.Default.Book
+                            MediaType.GAME -> Icons.Default.SportsEsports
                             else -> Icons.Default.Search
                         },
                         contentDescription = null,
@@ -958,6 +960,7 @@ private fun SearchResultCard(
                             MediaType.SHOW -> if (it == 1) "1 Ep" else "$it Eps"
                             MediaType.BOOK -> if (it == 1) "1 page" else "$it pages"
                             MediaType.MOVIE -> null
+                            MediaType.GAME -> null
                         }
                         if (unitLabel != null) metaParts.add(unitLabel)
                     }
@@ -1480,6 +1483,7 @@ private fun SearchResultDetailSheet(
                                 MediaType.MOVIE -> Icons.Default.Movie
                                 MediaType.SHOW -> Icons.Default.Tv
                                 MediaType.BOOK -> Icons.Default.Book
+                                MediaType.GAME -> Icons.Default.SportsEsports
                                 else -> Icons.Default.Search
                             },
                             contentDescription = null,
@@ -1635,6 +1639,9 @@ private fun SearchResultDetailSheet(
                             val vols = item.totalVolumes?.takeIf { it > 0 }?.let { if (it == 1) "1 Volume" else "$it Volumes" }
                             val chs = item.rawBookDetails?.totalChapters?.takeIf { it > 0 }?.let { if (it == 1) "1 Chapter" else "$it Chapters" }
                             listOfNotNull(pages, vols, chs).joinToString(" • ").ifBlank { "Pages unknown" }
+                        }
+                        MediaType.GAME -> {
+                            null
                         }
                     }
                     if (!unitsInfo.isNullOrBlank()) {

@@ -721,6 +721,7 @@ class MediaRepository(
         if (typeA == typeB) return true
         if (typeA.isReadType && typeB.isReadType) return true
         if (typeA.isWatchType && typeB.isWatchType) return true
+        if (typeA.isPlayType && typeB.isPlayType) return true
         return false
     }
 
@@ -996,6 +997,24 @@ class MediaRepository(
                     airedStartDate = publishEpoch,
                     airedEndDate = publishEpoch,
                     isAiring = false
+                )
+            } else if (item.mediaType == MediaType.GAME || item.externalSource in listOf("IGDB", "RAWG")) {
+                val releaseMillis = item.releaseYear?.trim()?.take(4)?.toIntOrNull()?.let { year ->
+                    val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+                    cal.set(year, java.util.Calendar.JANUARY, 1, 0, 0, 0)
+                    cal.timeInMillis
+                }
+                MediaEntry(
+                    userId = effectiveUserId,
+                    title = item.title,
+                    mediaType = MediaType.GAME,
+                    status = status,
+                    externalId = item.externalId,
+                    externalSource = if (item.externalSource.isNotBlank()) item.externalSource else "IGDB",
+                    externalScore = item.score,
+                    externalScoreSource = if (item.externalSource.isNotBlank()) item.externalSource else "IGDB",
+                    coverImageUri = item.posterUrl,
+                    airedStartDate = releaseMillis
                 )
             } else if (item.externalSource.equals("TMDB", ignoreCase = true)) {
                 val tmdbId = item.externalId.toLongOrNull() ?: 0L

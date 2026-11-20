@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -281,6 +282,7 @@ fun getCategoryIcon(type: MediaType): ImageVector {
         MediaType.MOVIE -> Icons.Default.Movie
         MediaType.SHOW -> Icons.Default.Tv
         MediaType.BOOK -> Icons.Default.Book
+        MediaType.GAME -> Icons.Default.SportsEsports
     }
 }
 

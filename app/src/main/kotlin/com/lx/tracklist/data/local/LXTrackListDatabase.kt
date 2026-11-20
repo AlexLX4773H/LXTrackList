@@ -14,7 +14,7 @@ import com.lx.tracklist.data.model.UserProfile
 
 @Database(
     entities = [MediaEntry::class, UserProfile::class, CustomCategory::class, SubCategory::class],
-    version = 17,
+    version = 18,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -180,6 +180,18 @@ abstract class LXTrackListDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_entries ADD COLUMN gamePlatforms TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE media_entries ADD COLUMN isGameFranchise INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE media_entries ADD COLUMN gameSeriesEntriesJson TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE media_entries ADD COLUMN gameProgressPercent INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE media_entries ADD COLUMN customUnitLabel TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE media_entries ADD COLUMN customUnitCurrent INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE media_entries ADD COLUMN customUnitTotal INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getDatabase(context: Context): LXTrackListDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -191,7 +203,7 @@ abstract class LXTrackListDatabase : RoomDatabase() {
                         MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
                         MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
                         MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
-                        MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17
+                        MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18
                     )
                     .fallbackToDestructiveMigration()
                     .build()

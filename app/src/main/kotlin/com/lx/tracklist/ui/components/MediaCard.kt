@@ -1,5 +1,7 @@
 package com.lx.tracklist.ui.components
 
+import com.lx.tracklist.data.model.MediaType
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -436,7 +438,7 @@ fun MediaCard(
                                     }
 
                                     if (entry.isNotYetAiredOrPublished) {
-                                        val nyaLabel = if (entry.mediaType.isWatchType) "NYA" else "NYP"
+                                        val nyaLabel = if (entry.mediaType == MediaType.GAME) "NYR" else if (entry.mediaType.isWatchType) "NYA" else "NYP"
                                         Text(
                                             text = nyaLabel,
                                             style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),

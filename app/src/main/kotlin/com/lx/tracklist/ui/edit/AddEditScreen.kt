@@ -1019,6 +1019,9 @@ fun AddEditScreen(
                                 onUpdateTime = { viewModel.updateCurrentTimeMinutes(it) }
                             )
                         }
+                        MediaType.GAME -> {
+                            // Phase 3 will render full Game tracking UI
+                        }
                     }
                 }
             }
@@ -1043,6 +1046,7 @@ fun AddEditScreen(
                     // Personal Watch / Reading Dates
                     val personalLabel = when (state.mediaType) {
                         MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "My Reading Dates"
+                        MediaType.GAME -> "My Play Dates"
                         else -> "My Watch Dates"
                     }
                     Text(
@@ -1068,6 +1072,7 @@ fun AddEditScreen(
                         MediaType.ANIME, MediaType.SHOW -> "Airing / Broadcast Dates"
                         MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "Publishing Dates"
                         MediaType.MOVIE -> "Theatrical / Release Dates"
+                        MediaType.GAME -> "Release Date"
                     }
                     Text(
                         text = airedLabel,

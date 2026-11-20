@@ -146,6 +146,12 @@ fun calculateCategoryStatSummary(
                     }
                 }
             }
+            MediaType.GAME -> {
+                val hours = if (entry.customUnitLabel?.trim()?.equals("Hours", ignoreCase = true) == true) {
+                    entry.customUnitCurrent.toDouble()
+                } else 0.0
+                totalMinutes += hours * 60.0
+            }
         }
     }
     val days = totalMinutes / 1440.0

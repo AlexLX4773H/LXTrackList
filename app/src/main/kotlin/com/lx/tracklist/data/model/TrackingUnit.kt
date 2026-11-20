@@ -4,7 +4,9 @@ enum class TrackingUnit(val displayName: String) {
     CHAPTERS("Chapters"),
     VOLUMES("Volumes"),
     PAGES("Pages"),
-    COMBINED("Combined");
+    COMBINED("Combined"),
+    PERCENTAGE("Percentage"),
+    CUSTOM("Custom Unit");
 
     companion object {
         fun fromString(value: String): TrackingUnit {
