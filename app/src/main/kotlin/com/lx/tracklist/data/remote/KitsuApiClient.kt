@@ -192,6 +192,7 @@ object KitsuApiClient {
     fun parseKitsuItem(itemObj: JsonObject, isAnime: Boolean = false): JikanMediaDetails? {
         val id = itemObj.get("id")?.takeIf { !it.isJsonNull }?.asString ?: return null
         val attributes = itemObj.getAsJsonObject("attributes") ?: return null
+        val slug = attributes.get("slug")?.takeIf { !it.isJsonNull }?.asString?.trim()
 
         val canonicalTitle = attributes.get("canonicalTitle")?.takeIf { !it.isJsonNull }?.asString?.trim()
         val titlesObj = attributes.getAsJsonObject("titles")
@@ -241,6 +242,7 @@ object KitsuApiClient {
         val score = ratingStr?.toFloatOrNull()?.let { it / 10f }
 
         val subtype = attributes.get("subtype")?.takeIf { !it.isJsonNull }?.asString?.replaceFirstChar { it.uppercase() } ?: if (isAnime) "Anime" else "Manga"
+        val resolvedTarget = slug?.takeIf { it.isNotBlank() } ?: id
 
         return JikanMediaDetails(
             malId = null,
@@ -261,7 +263,7 @@ object KitsuApiClient {
             externalScoreSource = if (score != null) "Kitsu" else null,
             type = subtype,
             sourceProvider = "Kitsu",
-            url = if (isAnime) "https://kitsu.io/anime/$id" else "https://kitsu.io/manga/$id"
+            url = if (isAnime) "https://kitsu.app/anime/$resolvedTarget" else "https://kitsu.app/manga/$resolvedTarget"
         )
     }
 }

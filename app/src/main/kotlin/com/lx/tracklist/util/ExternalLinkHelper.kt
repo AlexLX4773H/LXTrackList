@@ -47,6 +47,17 @@ object ExternalLinkHelper {
         return "https://www.rottentomatoes.com/search?search=$encodedTitle"
     }
 
+    fun toKitsuSlug(title: String): String {
+        val cleanTitle = title
+            .replace(Regex("\\((TV|ONA|OVA|Movie|Special|Dub|Sub)\\)", RegexOption.IGNORE_CASE), "")
+            .trim()
+        return cleanTitle
+            .lowercase()
+            .replace(Regex("['’]"), "")
+            .replace(Regex("[^a-z0-9]+"), "-")
+            .trim('-')
+    }
+
     fun buildTmdbUrl(tmdbId: String, isMovie: Boolean): String {
         val type = if (isMovie) "movie" else "tv"
         return "https://www.themoviedb.org/$type/$tmdbId"
@@ -145,16 +156,25 @@ object ExternalLinkHelper {
         )
 
         // 3. Kitsu
+        val kitsuSlug = toKitsuSlug(title)
         val kitsuUrl = when {
-            externalSource.equals("Kitsu", ignoreCase = true) && !externalId.isNullOrBlank() ->
-                "https://kitsu.io/anime/$externalId"
-            webUrl != null && (webUrl.contains("kitsu.io", ignoreCase = true) || webUrl.contains("kitsu.app", ignoreCase = true)) -> webUrl
-            else -> "https://kitsu.io/explore/anime?text=$encodedTitle"
+            !directSiteUrl.isNullOrBlank() && (directSiteUrl.contains("kitsu.io", ignoreCase = true) || directSiteUrl.contains("kitsu.app", ignoreCase = true)) ->
+                directSiteUrl.replace("kitsu.io", "kitsu.app")
+            webUrl != null && (webUrl.contains("kitsu.io", ignoreCase = true) || webUrl.contains("kitsu.app", ignoreCase = true)) ->
+                webUrl.replace("kitsu.io", "kitsu.app")
+            externalSource.equals("Kitsu", ignoreCase = true) && !externalId.isNullOrBlank() -> {
+                val target = if (!externalId.all { it.isDigit() }) externalId else if (kitsuSlug.isNotBlank()) kitsuSlug else externalId
+                "https://kitsu.app/anime/$target"
+            }
+            kitsuSlug.isNotBlank() ->
+                "https://kitsu.app/anime/$kitsuSlug"
+            else ->
+                "https://duckduckgo.com/?q=%5C+site:kitsu.app/anime+$encodedTitle"
         }
         list.add(
             ExternalOpenOption(
                 title = "Kitsu",
-                subtitle = "kitsu.io",
+                subtitle = "kitsu.app",
                 url = kitsuUrl,
                 color = 0xFFFF4081
             )
@@ -228,16 +248,25 @@ object ExternalLinkHelper {
         )
 
         // 4. Kitsu
+        val kitsuSlug = toKitsuSlug(title)
         val kitsuUrl = when {
-            externalSource.equals("Kitsu", ignoreCase = true) && !externalId.isNullOrBlank() ->
-                "https://kitsu.io/manga/$externalId"
-            webUrl != null && (webUrl.contains("kitsu.io", ignoreCase = true) || webUrl.contains("kitsu.app", ignoreCase = true)) -> webUrl
-            else -> "https://kitsu.io/explore/manga?text=$encodedTitle"
+            !directSiteUrl.isNullOrBlank() && (directSiteUrl.contains("kitsu.io", ignoreCase = true) || directSiteUrl.contains("kitsu.app", ignoreCase = true)) ->
+                directSiteUrl.replace("kitsu.io", "kitsu.app")
+            webUrl != null && (webUrl.contains("kitsu.io", ignoreCase = true) || webUrl.contains("kitsu.app", ignoreCase = true)) ->
+                webUrl.replace("kitsu.io", "kitsu.app")
+            externalSource.equals("Kitsu", ignoreCase = true) && !externalId.isNullOrBlank() -> {
+                val target = if (!externalId.all { it.isDigit() }) externalId else if (kitsuSlug.isNotBlank()) kitsuSlug else externalId
+                "https://kitsu.app/manga/$target"
+            }
+            kitsuSlug.isNotBlank() ->
+                "https://kitsu.app/manga/$kitsuSlug"
+            else ->
+                "https://duckduckgo.com/?q=%5C+site:kitsu.app/manga+$encodedTitle"
         }
         list.add(
             ExternalOpenOption(
                 title = "Kitsu",
-                subtitle = "kitsu.io",
+                subtitle = "kitsu.app",
                 url = kitsuUrl,
                 color = 0xFFFF4081
             )

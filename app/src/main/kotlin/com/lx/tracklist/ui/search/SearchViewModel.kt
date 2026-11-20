@@ -104,7 +104,9 @@ data class SearchResultItem(
                 }
                 externalSource.equals("Kitsu", ignoreCase = true) -> {
                     val type = if (isMangaType) "manga" else "anime"
-                    "https://kitsu.app/$type/$externalId"
+                    val slug = com.lx.tracklist.util.ExternalLinkHelper.toKitsuSlug(title)
+                    val target = if (!externalId.all { it.isDigit() }) externalId else if (slug.isNotBlank()) slug else externalId
+                    "https://kitsu.app/$type/$target"
                 }
                 externalSource.equals("Google Books", ignoreCase = true) -> {
                     "https://books.google.com/books?id=$externalId"
