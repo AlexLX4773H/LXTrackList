@@ -76,19 +76,33 @@ In `DetailScreen.kt` (the Entity detail view):
 ### 2.2 Recommended Hybrid Architecture
 1. **Primary Metadata & Relations: [IGDB v4](https://api-docs.igdb.com/)**
    - **Why:** No monthly request cap (unlike RAWG's 20k/month), native vertical box-art covers (`t_cover_big_2x`), structured `collections`/`franchises`/`expansions`/`dlcs`/`remakes`/`remasters`/`parent_game` fields, and `first_release_date` Unix timestamps.
+   - **Usage Limits & Throttling:**
+     - **Monthly Quota:** Unlimited (no monthly cap).
+     - **Rate Limit (Throttling):** Strictly **4 requests per second** (HTTP 429 returned if exceeded).
+     - **Burst Limit:** Up to 8 requests in a short burst window.
+     - **Payload Limit:** Maximum 500 items per query (`limit 500;`).
+     - **Built-in Handling:** `GameSyncManager` paces all loop iterations with `RATE_LIMIT_DELAY_MS = 270L` (≤ 3.7 req/s), safely preventing 429 rate limit errors. OAuth tokens are cached in `SharedPreferences` for their ~60-day lifespan.
    - **Auth Handling on Android:** Follow the exact pattern of `TmdbConfig.kt` and `GoogleBooksConfig.kt`:
      - Inject `IGDB_CLIENT_ID` and `IGDB_CLIENT_SECRET` via `.env` / GitHub Secrets into `BuildConfig` (empty in public git repo), with user override fields in **Settings → API Keys**.
      - Implement `IgdbTokenManager` to `POST https://id.twitch.tv/oauth2/token?client_id=...&client_secret=...&grant_type=client_credentials`, cache `access_token` + `expires_at` in `SharedPreferences` (or `EncryptedSharedPreferences`, already a dependency in `app/build.gradle.kts`), and auto-refresh on `401 Unauthorized` or when `< 1 hour` remains.
    - **Querying Trick (Clean Search Results):** Use IGDB's Apicalypse syntax with `where version_parent = null;` to filter out duplicate Collector's/GOTY editions during search ([IGDB Docs](https://api-docs.igdb.com/)).
 2. **Fallback Metadata: [RAWG](https://rawg.io/apidocs)**
+   - **Usage Limits & Throttling:**
+     - **Monthly Quota:** **20,000 requests per calendar month** on free tier (resets on 1st of month).
+     - **Rate Limit (Throttling):** **5 requests per second** (HTTP 429 returned if exceeded).
+     - **Built-in Handling:** RAWG is used strictly as a zero-OAuth secondary fallback when IGDB is unconfigured or returns zero hits. Typical personal tracking consumes < 1% of the monthly allowance.
    - Optional single API key (`RAWG_API_KEY`) in `.env` / Settings. Used automatically if IGDB credentials are unconfigured or return 0 hits. Add required attribution text (`"Game data powered by RAWG"`) in Settings/Detail footer when RAWG is used.
 3. **Poster & Asset Pipeline (How to Get Posters & Other Assets)**
    - **Tier 1 (Automatic on Add/Sync):** IGDB `cover.image_id` → `https://images.igdb.com/igdb/image/upload/t_cover_big_2x/{image_id}.jpg` (528×748, crisp 2:3 portrait that matches `MediaCard` without stretching). Optional detail-screen backdrop from `artworks.image_id` → `t_1080p`.
    - **Tier 2 (High-Res Custom Posters / Alternate Art):** **[SteamGridDB v2](https://github.com/SteamGridDB/node-steamgriddb)** (`STEAMGRIDDB_API_KEY` in `.env` / Settings). Add a **"Search SteamGridDB Posters"** button inside `AddEditScreen` and `DetailScreen`:
+     - **Usage Limits & Throttling:**
+       - **Monthly Quota:** Unlimited for personal use.
+       - **Rate Limit (Throttling):** ~100 requests per minute (~1.6 req/s), with a burst allowance of 30 req / 10s.
+       - **Built-in Handling:** Only queried on-demand when the user opens the poster picker sheet (never called during bulk background syncs).
      1. `GET https://www.steamgriddb.com/api/v2/search/autocomplete/{urlEncodedTitle}` (use the English canonical title from IGDB, and cross-check release year if multiple results match).
      2. `GET https://www.steamgriddb.com/api/v2/grids/game/{sgdbId}?dimensions=600x900&mimes=image/png,image/jpeg&types=static&nsfw=false&humor=false` for vertical posters, and `/heroes/game/{sgdbId}?dimensions=1920x620` if you want wide banners.
      3. Present a clean grid of candidate posters for one-tap selection.
-   - **Tier 3 (Zero-Key PC Poster Fallback):** If IGDB `external_games` contains a Steam App ID (`external_game_source = 1`), fallback URL: `https://cdn.cloudflare.steamstatic.com/steam/apps/{steamAppId}/library_600x900_2x.jpg`.
+   - **Tier 3 (Zero-Key PC Poster Fallback):** If IGDB `external_games` contains a Steam App ID (`external_game_source = 1`), fallback URL: `https://cdn.cloudflare.steamstatic.com/steam/apps/{steamAppId}/library_600x900_2x.jpg` (Unlimited public Cloudflare CDN).
    - **Tier 4 (Manual Fallback):** Existing `CoverImageSearchDialog.kt` (Google / DuckDuckGo / Bing WebView) pre-filled with `"$title game cover art"`.
    - **Local Caching:** All selected poster URLs automatically flow through existing `CoverCacheManager.kt` + Coil disk/memory cache.
 

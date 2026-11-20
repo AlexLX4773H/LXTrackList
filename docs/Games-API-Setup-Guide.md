@@ -1,19 +1,19 @@
 # Video Games Tracking — API Setup & Configuration Guide
 
-This guide provides step-by-step instructions for obtaining and configuring all API credentials used by the Video Games tracking system in **LX Track List**.
+This guide provides step-by-step instructions for obtaining and configuring all API credentials used by the Video Games tracking system in **LX Track List**, along with comprehensive details on **usage quotas, rate limits, and built-in throttling**.
 
 ---
 
-## Quick Summary of Required & Optional APIs
+## 1. Quick Summary & Usage Limits Comparison
 
 All APIs listed below are **100% free** and **do not require a credit card**.
 
-| Service | Role | Necessity | Free Tier Limits | Credentials Required |
-| :--- | :--- | :--- | :--- | :--- |
-| **[IGDB v4](#1-igdb-v4-twitch-developer--primary-metadata)** | Primary game metadata, official cover art, franchise series, DLCs/expansions & relations | **Recommended (Primary)** | Unlimited requests (4 req/sec rate limit) | `Client ID` + `Client Secret` |
-| **[RAWG](#2-rawg-api--secondary--fallback-metadata)** | Fallback search & metadata when IGDB is unconfigured or finds no match | **Optional (Fallback)** | 20,000 requests / month | `API Key` |
-| **[SteamGridDB](#3-steamgriddb-api-v2--custom-600900-posters)** | High-res 600×900 vertical box-art poster picker | **Optional (Poster Picker)** | Unlimited personal use | `API Key` |
-| **Steam CDN** | Zero-key vertical posters for Steam games | **Automatic (Built-in)** | Unlimited (public CDN) | None |
+| Service | Role | Monthly Quota | Rate Limit (Throttling) | Burst Limit | Status on Exceeded | App Built-in Handling |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **[IGDB v4](#2-igdb-v4-twitch-developer--primary-metadata)** | Primary metadata, covers, series & DLCs | **Unlimited** | **4 req / sec** | 8 req / window | `HTTP 429` | Paced with 270ms loop delay (≤ 3.7 req/s) + token caching |
+| **[RAWG](#3-rawg-api--secondary--fallback-metadata)** | Fallback search & secondary metadata | **20,000 req / mo** | **5 req / sec** | ~10 req / burst | `HTTP 429` | Zero-OAuth fallback only when IGDB has 0 hits or is empty |
+| **[SteamGridDB](#4-steamgriddb-api-v2--custom-600900-posters)** | High-res 600×900 vertical poster picker | **Unlimited** (Personal) | **~100 req / min** | 30 req / 10s | `HTTP 429` | On-demand UI search only (never called in bulk background sync) |
+| **Steam CDN** | Zero-key vertical posters for Steam games | **Unlimited** | None (Static CDN) | Unlimited | `HTTP 404` (if unlisted) | Local Coil disk & memory cache |
 
 > [!TIP]
 > **You can start tracking games immediately without any API keys!**
@@ -21,14 +21,19 @@ All APIs listed below are **100% free** and **do not require a credit card**.
 
 ---
 
-## 1. IGDB v4 (Twitch Developer) — Primary Metadata
+## 2. IGDB v4 (Twitch Developer) — Primary Metadata
 
 IGDB (Internet Game Database) is owned by Twitch/Amazon and is the most comprehensive video game database available. It provides crisp 2:3 vertical cover art (`t_cover_big_2x`), franchise/series grouping, release dates, platforms, ratings, and DLC/expansion trees.
 
-### Why IGDB?
-- **No Monthly Request Cap:** Unlike RAWG (which caps free users at 20,000 requests/month), IGDB has no monthly cap.
-- **Native Portrait Covers:** Covers match LX Track List's 2:3 aspect ratio perfectly without cropping or distortion.
-- **Franchise Collections:** Automatically detects if a game belongs to a series (e.g., *The Witcher*, *Dark Souls*, *God of War*) to generate checklists.
+### Usage & Throttling Limits
+- **Rate Limit (Throttling):** Exactly **4 requests per second (4 req/sec)** per Client ID.
+- **Burst Window:** Allows small bursts of up to **8 requests** within short intervals, but sustained bursts will immediately trigger `HTTP 429 Too Many Requests`.
+- **Monthly Volume Limit:** **Unlimited**. There is no daily or monthly cap on the number of requests you can make.
+- **Payload & Pagination Limit:** Maximum **500 records** per single query (`limit 500;`).
+- **OAuth Token Lifetime:** App Access Tokens (`client_credentials`) generated via `https://id.twitch.tv/oauth2/token` remain valid for approximately **60 days (~5,184,000 seconds)**. The token endpoint itself is limited to 100 requests per minute.
+- **How LX Track List Protects Your Quota:**
+  - `GameSyncManager` paces all batch requests with a built-in rate limit delay (`RATE_LIMIT_DELAY_MS = 270L`), guaranteeing that background library syncs never exceed 3.7 requests per second.
+  - Cached OAuth tokens and expiration timestamps are stored in private `SharedPreferences` so the app only hits the Twitch OAuth server once every ~60 days (or when force-refreshed).
 
 ### Step-by-Step Setup Guide:
 1. **Twitch Account & 2FA:**
@@ -50,14 +55,17 @@ IGDB (Internet Game Database) is owned by Twitch/Amazon and is the most comprehe
 
 ---
 
-## 2. RAWG API — Secondary / Fallback Metadata
+## 3. RAWG API — Secondary / Fallback Metadata
 
 RAWG is a fast, lightweight video games database with over 500,000 games. It uses a single API key with simple HTTP queries (no OAuth token exchanges).
 
-### Why RAWG?
-- **Zero-OAuth Fallback:** Uses a direct query parameter (`?key=...`).
-- **Instant Setup:** Generates an API key in under 1 minute.
-- **Broad Coverage:** Useful fallback when IGDB credentials have not yet been configured.
+### Usage & Throttling Limits
+- **Rate Limit (Throttling):** **5 requests per second (5 req/sec)**. Exceeding this rate returns `HTTP 429 Too Many Requests`.
+- **Monthly Volume Limit:** **20,000 requests per calendar month** on the free tier. The quota resets on the 1st of every month.
+- **Page Size Limit:** Maximum **40 games** per single search query (`page_size=40`).
+- **How LX Track List Protects Your Quota:**
+  - RAWG is strictly utilized as a secondary fallback. The app only queries RAWG when IGDB credentials are empty or when an IGDB search returns zero hits.
+  - Because of this tiered fallback design, personal tracking typically consumes less than 50–100 requests per month (less than 0.5% of your free allowance).
 
 ### Step-by-Step Setup Guide:
 1. Go to [rawg.io](https://rawg.io/) and click **Sign Up** to create a free account.
@@ -70,13 +78,18 @@ RAWG is a fast, lightweight video games database with over 500,000 games. It use
 
 ---
 
-## 3. SteamGridDB API v2 — Custom 600×900 Posters
+## 4. SteamGridDB API v2 — Custom 600×900 Posters
 
 SteamGridDB is a community repository of high-resolution video game artwork, including vertical covers, custom posters, and textless variants.
 
-### Why SteamGridDB?
-- **High-Resolution Custom Art:** Vertical covers designed specifically at 600×900 resolution.
-- **In-App Poster Picker:** Lets you browse alternate box arts and community posters directly from the **Detail Screen** or **Add/Edit Screen** with a single tap.
+### Usage & Throttling Limits
+- **Rate Limit (Throttling):** Approximately **100 requests per minute (~1.6 req/sec)** on standard personal API keys.
+- **Burst Window:** Allows up to **30 requests in a 10-second burst**, after which temporary `HTTP 429` responses are returned until the window cools down.
+- **Monthly Volume Limit:** **Unlimited** for personal non-commercial use.
+- **Dimensions Filter:** The app specifically queries `dimensions=600x900` with `types=static` to guarantee vertical portrait aspect ratios without wasting bandwidth on animated GIFs or horizontal banners.
+- **How LX Track List Protects Your Quota:**
+  - SteamGridDB is **never** called during automated background sync jobs.
+  - Queries only fire on-demand when you explicitly tap **"SteamGridDB"** in the Add/Edit screen, tap the cover art in the Detail screen, or use the poster search sheet.
 
 ### Step-by-Step Setup Guide:
 1. Go to [steamgriddb.com](https://www.steamgriddb.com/).
@@ -87,7 +100,21 @@ SteamGridDB is a community repository of high-resolution video game artwork, inc
 
 ---
 
-## 4. How to Configure Keys in LX Track List
+## 5. Steam Cloudflare CDN — Zero-Key Poster Fallback
+
+When a game in your library has a known Steam Application ID (`steamAppId`), LX Track List can automatically load its official vertical library cover directly from Steam's content delivery network:
+```
+https://cdn.cloudflare.steamstatic.com/steam/apps/{steamAppId}/library_600x900_2x.jpg
+```
+
+### Usage & Throttling Limits
+- **Rate Limit (Throttling):** None (public global CDN).
+- **Monthly Volume Limit:** **Unlimited**.
+- **Caching:** Automatically cached on device storage via Coil image loader to prevent redundant network fetches.
+
+---
+
+## 6. How to Configure Keys in LX Track List
 
 You have two convenient ways to configure your API keys:
 
@@ -102,7 +129,7 @@ No need to rebuild the application! You can paste and test keys directly on your
    - `RAWG API Key`
    - `SteamGridDB API Key`
 6. Tap the **Test Connection** button under each service:
-   - A green confirmation indicates successful authentication.
+   - A green confirmation message indicates successful authentication.
    - Credentials are automatically saved to private encrypted preferences on your device.
 
 ### Option B: Compile-Time via `.env` (Recommended for Dev & Personal Builds)
@@ -131,7 +158,7 @@ If you build and run the app from Android Studio or command-line Gradle:
 
 ---
 
-## 5. Official Attribution Notices
+## 7. Official Attribution Notices
 
 In compliance with provider API terms of service:
 - **IGDB:** *"Game metadata and cover art provided by IGDB"* (displayed in Settings and Game detail footers).
