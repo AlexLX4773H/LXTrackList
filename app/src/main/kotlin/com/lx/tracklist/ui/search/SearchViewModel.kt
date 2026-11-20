@@ -71,7 +71,10 @@ data class SearchResultItem(
     val rawBookDetails: BookDetails? = null,
     val rawJikanDetails: JikanMediaDetails? = null,
     val rawTmdbResult: TmdbSearchResult? = null,
-    val imdbId: String? = null
+    val imdbId: String? = null,
+    val directMalId: Long? = null,
+    val directAniListId: Long? = null,
+    val directSiteUrl: String? = null
 ) {
     val originalLanguageDisplayName: String?
         get() = OriginalLanguageRegistry.getDisplayName(originalLanguage)
@@ -995,19 +998,23 @@ class SearchViewModel(
         val extSource = when (details.sourceProvider) {
             "MangaDex" -> "MangaDex"
             "Kitsu" -> "Kitsu"
-            "AniList" -> "AniList"
-            else -> if (details.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
+            "AniList" -> if (details.malId != null && details.malId > 0) "MAL" else "AniList"
+            else -> if (details.sourceProvider.startsWith("AniList")) (if (details.malId != null && details.malId > 0) "MAL" else "AniList") else "MAL"
         }
         val extId = if (details.sourceProvider == "MangaDex") {
             details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
                 ?: "md_${details.title?.hashCode() ?: idx}_$idx"
+        } else if (extSource == "AniList" && details.aniListId != null && details.aniListId > 0) {
+            details.aniListId.toString()
         } else {
-            details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+            details.malId?.takeIf { it > 0 }?.toString() ?: details.aniListId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
         }
-        val status = when (mediaType) {
-            MediaType.ANIME -> if (details.isAiring == true) "Airing" else "Finished"
-            MediaType.MANGA, MediaType.MANHWA -> if (details.isAiring == true) "Publishing" else "Finished"
-            MediaType.BOOK -> "Light Novel"
+        val status = when {
+            details.airedStartDate != null && details.airedStartDate > System.currentTimeMillis() ->
+                if (mediaType.isWatchType) "NYA" else "NYP"
+            mediaType == MediaType.ANIME -> if (details.isAiring == true) "Airing" else "Finished"
+            mediaType == MediaType.MANGA || mediaType == MediaType.MANHWA -> if (details.isAiring == true) "Publishing" else "Finished"
+            mediaType == MediaType.BOOK -> "Light Novel"
             else -> if (details.isAiring == true) "Ongoing" else "Finished"
         }
         val resolvedLang = details.originalLanguage ?: when (mediaType) {
@@ -1032,7 +1039,9 @@ class SearchViewModel(
             statusText = status,
             synopsis = details.synopsis,
             author = details.authors,
-            rawJikanDetails = details
+            rawJikanDetails = details,
+            directMalId = details.malId,
+            directAniListId = details.aniListId
         )
     }
 
@@ -1305,8 +1314,12 @@ class SearchViewModel(
                             }
 
                             combined.mapIndexed { idx, details ->
-                                val extId = details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+                                val extId = details.malId?.takeIf { it > 0 }?.toString()
+                                    ?: details.aniListId?.takeIf { it > 0 }?.toString()
+                                    ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
                                 val extSource = if (details.sourceProvider == "AniList" && (details.malId == null || details.malId == 0L)) "AniList" else "MAL"
+                                val isNya = (details.airedStartDate != null && details.airedStartDate > System.currentTimeMillis()) ||
+                                        (details.nextAiringEpoch != null && details.nextAiringEpoch > System.currentTimeMillis() && (details.airedEpisodes ?: 0) == 0)
                                 SearchResultItem(
                                     externalId = extId,
                                     externalSource = extSource,
@@ -1319,9 +1332,12 @@ class SearchViewModel(
                                     totalUnits = details.totalEpisodes,
                                     durationMinutes = details.durationMinutes,
                                     score = details.externalScore,
-                                    statusText = if (details.isAiring == true) "Airing" else "Finished",
+                                    statusText = if (isNya) "NYA" else if (details.isAiring == true) "Airing" else "Finished",
                                     synopsis = details.synopsis,
-                                    rawJikanDetails = details
+                                    rawJikanDetails = details,
+                                    directMalId = details.malId?.takeIf { it > 0 },
+                                    directAniListId = details.aniListId?.takeIf { it > 0 },
+                                    directSiteUrl = details.url ?: details.webUrl
                                 )
                             }
                         }
@@ -1425,8 +1441,12 @@ class SearchViewModel(
                                     details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
                                         ?: "md_${details.title?.hashCode() ?: idx}_$idx"
                                 } else {
-                                    details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+                                    details.malId?.takeIf { it > 0 }?.toString()
+                                        ?: details.aniListId?.takeIf { it > 0 }?.toString()
+                                        ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
                                 }
+                                val isNyp = (details.airedStartDate != null && details.airedStartDate > System.currentTimeMillis()) ||
+                                        (details.nextAiringEpoch != null && details.nextAiringEpoch > System.currentTimeMillis() && (details.airedEpisodes ?: 0) == 0)
                                 SearchResultItem(
                                     externalId = extId,
                                     externalSource = extSource,
@@ -1439,10 +1459,13 @@ class SearchViewModel(
                                     totalUnits = details.totalChapters,
                                     totalVolumes = details.totalVolumes,
                                     score = details.externalScore,
-                                    statusText = if (details.isAiring == true) "Publishing" else "Finished",
+                                    statusText = if (isNyp) "NYP" else if (details.isAiring == true) "Publishing" else "Finished",
                                     synopsis = details.synopsis,
                                     author = details.authors,
-                                    rawJikanDetails = details
+                                    rawJikanDetails = details,
+                                    directMalId = details.malId?.takeIf { it > 0 },
+                                    directAniListId = details.aniListId?.takeIf { it > 0 },
+                                    directSiteUrl = details.url ?: details.webUrl
                                 )
                             }
                         }
@@ -1527,8 +1550,12 @@ class SearchViewModel(
                                     details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
                                         ?: "md_${details.title?.hashCode() ?: idx}_$idx"
                                 } else {
-                                    details.malId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
+                                    details.malId?.takeIf { it > 0 }?.toString()
+                                        ?: details.aniListId?.takeIf { it > 0 }?.toString()
+                                        ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
                                 }
+                                val isNyp = (details.airedStartDate != null && details.airedStartDate > System.currentTimeMillis()) ||
+                                        (details.nextAiringEpoch != null && details.nextAiringEpoch > System.currentTimeMillis() && (details.airedEpisodes ?: 0) == 0)
                                 SearchResultItem(
                                     externalId = extId,
                                     externalSource = extSource,
@@ -1541,10 +1568,13 @@ class SearchViewModel(
                                     totalUnits = details.totalChapters,
                                     totalVolumes = details.totalVolumes,
                                     score = details.externalScore,
-                                    statusText = if (details.isAiring == true) "Publishing" else "Finished",
+                                    statusText = if (isNyp) "NYP" else if (details.isAiring == true) "Publishing" else "Finished",
                                     synopsis = details.synopsis,
                                     author = details.authors,
-                                    rawJikanDetails = details
+                                    rawJikanDetails = details,
+                                    directMalId = details.malId?.takeIf { it > 0 },
+                                    directAniListId = details.aniListId?.takeIf { it > 0 },
+                                    directSiteUrl = details.url ?: details.webUrl
                                 )
                             }
                         }
@@ -1622,7 +1652,11 @@ class SearchViewModel(
                         if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch light novels")
                         res.getOrDefault(emptyList()).mapIndexed { idx, details ->
                             val extSource = details.sourceProvider
-                            val extId = details.malId?.takeIf { it > 0 }?.toString() ?: "ln_${details.title?.hashCode() ?: idx}_$idx"
+                            val extId = details.malId?.takeIf { it > 0 }?.toString()
+                                ?: details.aniListId?.takeIf { it > 0 }?.toString()
+                                ?: "ln_${details.title?.hashCode() ?: idx}_$idx"
+                            val isNyp = (details.airedStartDate != null && details.airedStartDate > System.currentTimeMillis()) ||
+                                    (details.nextAiringEpoch != null && details.nextAiringEpoch > System.currentTimeMillis() && (details.airedEpisodes ?: 0) == 0)
                             SearchResultItem(
                                 externalId = extId,
                                 externalSource = extSource,
@@ -1635,10 +1669,13 @@ class SearchViewModel(
                                 totalUnits = details.totalChapters,
                                 totalVolumes = details.totalVolumes,
                                 score = details.externalScore,
-                                statusText = "Light Novel",
+                                statusText = if (isNyp) "NYP" else "Light Novel",
                                 synopsis = details.synopsis,
                                 author = details.authors,
-                                rawJikanDetails = details
+                                rawJikanDetails = details,
+                                directMalId = details.malId?.takeIf { it > 0 },
+                                directAniListId = details.aniListId?.takeIf { it > 0 },
+                                directSiteUrl = details.url ?: details.webUrl
                             )
                         }
                     }

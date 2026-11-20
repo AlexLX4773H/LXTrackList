@@ -435,7 +435,17 @@ fun MediaCard(
                                         )
                                     }
 
-                                    if (entry.isAiring) {
+                                    if (entry.isNotYetAiredOrPublished) {
+                                        val nyaLabel = if (entry.mediaType.isWatchType) "NYA" else "NYP"
+                                        Text(
+                                            text = nyaLabel,
+                                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                            color = androidx.compose.ui.graphics.Color(0xFFF59E0B),
+                                            modifier = Modifier
+                                                .background(androidx.compose.ui.graphics.Color(0xFFF59E0B).copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                                        )
+                                    } else if (entry.isAiring) {
                                         val airingLabel = if (entry.mediaType.isWatchType) "AIRING" else "PUBLISHING"
                                         Text(
                                             text = airingLabel,
@@ -507,7 +517,7 @@ fun MediaCard(
                                 }
                             }
 
-                            if (entry.mediaType == com.lx.tracklist.data.model.MediaType.ANIME && entry.isAiring) {
+                            if (entry.mediaType == com.lx.tracklist.data.model.MediaType.ANIME && (entry.isAiring || entry.isNotYetAiredOrPublished)) {
                                 val airingCardText = entry.formatAiringCardText()
                                 if (!airingCardText.isNullOrBlank()) {
                                     Spacer(modifier = Modifier.height(3.dp))

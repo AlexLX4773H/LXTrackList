@@ -1700,7 +1700,7 @@ fun LibraryScreen(
                     state.includedTags.isNotEmpty() ||
                     state.excludedTags.isNotEmpty() ||
                     state.favoritesFilter != InclusionFilterOption.ALL ||
-                    state.airingFilter != InclusionFilterOption.ALL ||
+                    state.airingFilter != AiringFilterOption.ALL ||
                     state.externalTrackingFilter != InclusionFilterOption.ALL ||
                     state.coverImageFilter != CoverImageFilterOption.ALL
 
@@ -1805,20 +1805,34 @@ fun LibraryScreen(
                         }
                     }
 
-                    val airingFilterPrefix = if (state.selectedCategoryFilter?.isReadType == true) "Publishing" else "Airing"
-                    if (state.airingFilter == InclusionFilterOption.INCLUDE_ONLY) {
-                        item {
-                            RemovableFilterBadge(
-                                label = "+$airingFilterPrefix",
-                                onRemove = { viewModel.setAiringFilter(InclusionFilterOption.ALL) }
-                            )
+                    val isReadType = state.selectedCategoryFilter?.isReadType == true
+                    val airingFilterPrefix = if (isReadType) "Publishing" else "Airing"
+                    val nyaPrefix = if (isReadType) "NYP" else "NYA"
+                    when (state.airingFilter) {
+                        AiringFilterOption.ALL -> { /* no-op */ }
+                        AiringFilterOption.AIRING_ONLY -> {
+                            item {
+                                RemovableFilterBadge(
+                                    label = "+$airingFilterPrefix",
+                                    onRemove = { viewModel.setAiringFilter(AiringFilterOption.ALL) }
+                                )
+                            }
                         }
-                    } else if (state.airingFilter == InclusionFilterOption.EXCLUDE) {
-                        item {
-                            RemovableFilterBadge(
-                                label = "-$airingFilterPrefix",
-                                onRemove = { viewModel.setAiringFilter(InclusionFilterOption.ALL) }
-                            )
+                        AiringFilterOption.NYA_ONLY -> {
+                            item {
+                                RemovableFilterBadge(
+                                    label = "+$nyaPrefix",
+                                    onRemove = { viewModel.setAiringFilter(AiringFilterOption.ALL) }
+                                )
+                            }
+                        }
+                        AiringFilterOption.EXCLUDE -> {
+                            item {
+                                RemovableFilterBadge(
+                                    label = "-$airingFilterPrefix",
+                                    onRemove = { viewModel.setAiringFilter(AiringFilterOption.ALL) }
+                                )
+                            }
                         }
                     }
 
@@ -2161,6 +2175,196 @@ private fun TriStateFilterRow(
                     }
                 }
                 InclusionFilterOption.EXCLUDE -> {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(LXErrorRed.copy(alpha = 0.2f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "Excluded",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                            color = LXErrorRed
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .background(LXErrorRed, RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(4.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Excluded",
+                            tint = Color.White,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiringFilterRow(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    state: AiringFilterOption,
+    isReadType: Boolean,
+    onClick: () -> Unit
+) {
+    val nyaLabel = if (isReadType) "NYP" else "NYA"
+    val activeColor = when (state) {
+        AiringFilterOption.AIRING_ONLY -> LXPrimaryGreen
+        AiringFilterOption.NYA_ONLY -> Color(0xFFF59E0B)
+        AiringFilterOption.EXCLUDE -> LXErrorRed
+        AiringFilterOption.ALL -> LXTextSecondary
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                when (state) {
+                    AiringFilterOption.AIRING_ONLY -> LXPrimaryGreen.copy(alpha = 0.12f)
+                    AiringFilterOption.NYA_ONLY -> Color(0xFFF59E0B).copy(alpha = 0.12f)
+                    AiringFilterOption.EXCLUDE -> LXErrorRed.copy(alpha = 0.12f)
+                    AiringFilterOption.ALL -> LXSurfaceElevated
+                }
+            )
+            .border(
+                width = if (state != AiringFilterOption.ALL) 1.dp else 0.5.dp,
+                color = when (state) {
+                    AiringFilterOption.AIRING_ONLY -> LXPrimaryGreen.copy(alpha = 0.6f)
+                    AiringFilterOption.NYA_ONLY -> Color(0xFFF59E0B).copy(alpha = 0.6f)
+                    AiringFilterOption.EXCLUDE -> LXErrorRed.copy(alpha = 0.6f)
+                    AiringFilterOption.ALL -> LXBorder
+                },
+                shape = RoundedCornerShape(10.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(
+                        when (state) {
+                            AiringFilterOption.AIRING_ONLY -> LXPrimaryGreen.copy(alpha = 0.2f)
+                            AiringFilterOption.NYA_ONLY -> Color(0xFFF59E0B).copy(alpha = 0.2f)
+                            AiringFilterOption.EXCLUDE -> LXErrorRed.copy(alpha = 0.2f)
+                            AiringFilterOption.ALL -> LXSurfaceBlack
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = activeColor,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = if (state != AiringFilterOption.ALL) FontWeight.Bold else FontWeight.Medium,
+                        fontSize = 13.sp
+                    ),
+                    color = if (state != AiringFilterOption.ALL) activeColor else LXTextPrimary
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                    color = if (state != AiringFilterOption.ALL) activeColor.copy(alpha = 0.85f) else LXTextSecondary
+                )
+            }
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            when (state) {
+                AiringFilterOption.ALL -> {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .border(BorderStroke(1.5.dp, LXTextSecondary.copy(alpha = 0.5f)), RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(4.dp))
+                    )
+                }
+                AiringFilterOption.AIRING_ONLY -> {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(LXPrimaryGreen.copy(alpha = 0.2f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "Only",
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                            color = LXPrimaryGreen
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .background(LXPrimaryGreen, RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(4.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Included",
+                            tint = LXBackgroundBlack,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
+                AiringFilterOption.NYA_ONLY -> {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFFF59E0B).copy(alpha = 0.2f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = nyaLabel,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                            color = Color(0xFFF59E0B)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .background(Color(0xFFF59E0B), RoundedCornerShape(4.dp))
+                            .clip(RoundedCornerShape(4.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = nyaLabel,
+                            tint = LXBackgroundBlack,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
+                AiringFilterOption.EXCLUDE -> {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
@@ -3050,16 +3254,21 @@ private fun AdvancedFilterSheet(
                         color = LXTextSecondary
                     )
 
-                    // Ongoing Filter
-                    TriStateFilterRow(
-                        title = "Ongoing",
+                    // Ongoing / Airing / Publishing / NYA / NYP Filter
+                    val isReadType = state.selectedCategoryFilter?.isReadType == true
+                    val ongoingWord = if (isReadType) "Publishing" else "Ongoing"
+                    val nyaWord = if (isReadType) "NYP" else "NYA"
+                    AiringFilterRow(
+                        title = if (isReadType) "Publishing / NYP" else "Ongoing / NYA",
                         subtitle = when (state.airingFilter) {
-                            InclusionFilterOption.ALL -> "Tap: Only Ongoing → Exclude Ongoing → Off"
-                            InclusionFilterOption.INCLUDE_ONLY -> "Showing Only Ongoing"
-                            InclusionFilterOption.EXCLUDE -> "Excluding / Hiding Ongoing (Finished only)"
+                            AiringFilterOption.ALL -> "Tap: Only $ongoingWord → Only $nyaWord → Exclude → Off"
+                            AiringFilterOption.AIRING_ONLY -> "Showing Only Currently $ongoingWord"
+                            AiringFilterOption.NYA_ONLY -> "Showing Only Not Yet ${if (isReadType) "Published" else "Aired"} ($nyaWord)"
+                            AiringFilterOption.EXCLUDE -> "Excluding / Hiding Ongoing ($ongoingWord & $nyaWord)"
                         },
-                        icon = Icons.Default.Tv,
+                        icon = if (isReadType) Icons.Default.Bookmarks else Icons.Default.Tv,
                         state = state.airingFilter,
+                        isReadType = isReadType,
                         onClick = { viewModel.cycleAiringFilter() }
                     )
 

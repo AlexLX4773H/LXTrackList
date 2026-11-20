@@ -1,5 +1,6 @@
 package com.lx.tracklist.data.remote
 
+import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -15,12 +16,24 @@ object KitsuApiClient {
     const val BASE_URL = "https://kitsu.app/api/edge"
     private const val USER_AGENT = "LXTrackList/1.0 (Android; https://github.com/RyanYuuki/AnymeX)"
 
-    private val okHttpClient = OkHttpClient.Builder()
+    private var okHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
+
+    fun initWithDoH(context: Context) {
+        try {
+            val dohResolver = TmdbDnsHelper.createDoHResolver(context)
+            okHttpClient = okHttpClient.newBuilder()
+                .dns(dohResolver)
+                .build()
+            Log.i(TAG, "Initialized Kitsu OkHttpClient with DNS-over-HTTPS resolver")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize DNS-over-HTTPS resolver for Kitsu client", e)
+        }
+    }
 
     fun searchMangaMultiple(
         query: String,
@@ -136,6 +149,26 @@ object KitsuApiClient {
         }
     }
 
+    fun searchAnimeDetailsByTitle(title: String): Result<JikanMediaDetails> {
+        val cleanTitle = title.trim()
+        if (cleanTitle.isBlank()) return Result.failure(IllegalArgumentException("Title cannot be blank"))
+
+        val searchResult = searchAnimeMultiple(cleanTitle, limit = 5)
+        if (searchResult.isFailure) return Result.failure(searchResult.exceptionOrNull() ?: Exception("Kitsu anime search failed"))
+
+        val list = searchResult.getOrDefault(emptyList())
+        if (list.isEmpty()) {
+            return Result.failure(NotFoundException("No Kitsu anime results found for '$cleanTitle'"))
+        }
+
+        val exactMatch = list.firstOrNull {
+            it.title.equals(cleanTitle, ignoreCase = true) ||
+                    it.alternateTitle?.split("\n")?.any { alt -> alt.equals(cleanTitle, ignoreCase = true) } == true
+        }
+
+        return Result.success(exactMatch ?: list.first())
+    }
+
     fun searchMangaDetailsByTitle(title: String): Result<JikanMediaDetails> {
         val cleanTitle = title.trim()
         if (cleanTitle.isBlank()) return Result.failure(IllegalArgumentException("Title cannot be blank"))
@@ -210,7 +243,7 @@ object KitsuApiClient {
         val subtype = attributes.get("subtype")?.takeIf { !it.isJsonNull }?.asString?.replaceFirstChar { it.uppercase() } ?: if (isAnime) "Anime" else "Manga"
 
         return JikanMediaDetails(
-            malId = id.toLongOrNull(),
+            malId = null,
             title = title,
             posterUrl = posterUrl,
             durationText = durationMinutes?.let { "${it}m" },

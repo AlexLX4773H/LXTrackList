@@ -1,5 +1,7 @@
 package com.lx.tracklist.data.remote
 
+import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonArray
@@ -39,6 +41,7 @@ data class JikanAnimeDetails(
 
 data class JikanMediaDetails(
     val malId: Long?,
+    val aniListId: Long? = null,
     val title: String?,
     val posterUrl: String? = null,
     val durationText: String? = null,
@@ -72,11 +75,21 @@ data class JikanMediaDetails(
     val webUrl: String?
         get() {
             if (!url.isNullOrBlank()) return url
-            val id = malId?.takeIf { it > 0 } ?: return null
-            val typeLower = type?.lowercase(Locale.ROOT) ?: ""
-            val isMangaType = typeLower in listOf("manga", "manhwa", "manhua", "light novel", "novel", "one-shot", "doujinshi", "book") ||
-                    (totalChapters != null && totalChapters > 0) || (totalPages != null && totalPages > 0)
-            return if (isMangaType) "https://myanimelist.net/manga/$id" else "https://myanimelist.net/anime/$id"
+            val id = malId?.takeIf { it > 0 }
+            if (id != null) {
+                val typeLower = type?.lowercase(Locale.ROOT) ?: ""
+                val isMangaType = typeLower in listOf("manga", "manhwa", "manhua", "light novel", "novel", "one-shot", "doujinshi", "book") ||
+                        (totalChapters != null && totalChapters > 0) || (totalPages != null && totalPages > 0)
+                return if (isMangaType) "https://myanimelist.net/manga/$id" else "https://myanimelist.net/anime/$id"
+            }
+            val aniId = aniListId?.takeIf { it > 0 }
+            if (aniId != null) {
+                val typeLower = type?.lowercase(Locale.ROOT) ?: ""
+                val isMangaType = typeLower in listOf("manga", "manhwa", "manhua", "light novel", "novel", "one-shot", "doujinshi", "book") ||
+                        (totalChapters != null && totalChapters > 0) || (totalPages != null && totalPages > 0)
+                return if (isMangaType) "https://anilist.co/manga/$aniId" else "https://anilist.co/anime/$aniId"
+            }
+            return null
         }
 }
 
@@ -87,18 +100,50 @@ object JikanApiClient {
     const val DEFAULT_BASE_URL = "https://api.jikan.moe/v4"
     private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
-    private val okHttpClient = OkHttpClient.Builder()
+    private var okHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
 
-    private val searchOkHttpClient = okHttpClient.newBuilder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(12, TimeUnit.SECONDS)
-        .callTimeout(15, TimeUnit.SECONDS)
+    private var searchOkHttpClient = okHttpClient.newBuilder()
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .callTimeout(20, TimeUnit.SECONDS)
         .build()
+
+    private val jikanLock = Any()
+    private var lastJikanRequestTime = 0L
+    private const val MIN_JIKAN_INTERVAL_MS = 400L
+
+    fun initWithDoH(context: Context) {
+        try {
+            val dohResolver = TmdbDnsHelper.createDoHResolver(context)
+            okHttpClient = okHttpClient.newBuilder()
+                .dns(dohResolver)
+                .build()
+            searchOkHttpClient = searchOkHttpClient.newBuilder()
+                .dns(dohResolver)
+                .build()
+            Log.i(TAG, "Initialized Jikan OkHttpClient with DNS-over-HTTPS resolver")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize DNS-over-HTTPS resolver for Jikan client", e)
+        }
+    }
+
+    private fun throttleJikan() {
+        synchronized(jikanLock) {
+            val now = SystemClock.elapsedRealtime()
+            val elapsed = now - lastJikanRequestTime
+            if (elapsed < MIN_JIKAN_INTERVAL_MS) {
+                try {
+                    Thread.sleep(MIN_JIKAN_INTERVAL_MS - elapsed)
+                } catch (_: InterruptedException) {}
+            }
+            lastJikanRequestTime = SystemClock.elapsedRealtime()
+        }
+    }
 
     fun JsonObject.getSafeJsonArray(key: String): JsonArray? =
         get(key)?.takeIf { it.isJsonArray }?.asJsonArray
@@ -239,11 +284,15 @@ object JikanApiClient {
             }
         }
 
-        // 5. Fallback: Kitsu by title (for Manga)
-        if (isManga && !title.isNullOrBlank()) {
-            val kitsuRes = KitsuApiClient.searchMangaDetailsByTitle(title)
+        // 5. Fallback: Kitsu by title (for Anime or Manga)
+        if (!title.isNullOrBlank()) {
+            val kitsuRes = if (isManga) {
+                KitsuApiClient.searchMangaDetailsByTitle(title)
+            } else {
+                KitsuApiClient.searchAnimeDetailsByTitle(title)
+            }
             if (kitsuRes.isSuccess && !kitsuRes.getOrNull()?.posterUrl.isNullOrBlank()) {
-                Log.d(TAG, "Successfully fetched Manga fallback from Kitsu for '$title'")
+                Log.d(TAG, "Successfully fetched ${if (isManga) "Manga" else "Anime"} fallback from Kitsu for '$title'")
                 return kitsuRes
             }
         }
@@ -285,6 +334,7 @@ object JikanApiClient {
     ): Result<JikanMediaDetails> {
         val endpoint = "${baseUrl.trimEnd('/')}/$type/$malId"
         return try {
+            throttleJikan()
             val request = Request.Builder()
                 .url(endpoint)
                 .header("User-Agent", USER_AGENT)
@@ -293,7 +343,16 @@ object JikanApiClient {
                 .get()
                 .build()
 
-            var response = searchOkHttpClient.newCall(request).execute()
+            var response = try {
+                searchOkHttpClient.newCall(request).execute()
+            } catch (e: java.io.IOException) {
+                Log.w(TAG, "Connection failed to Jikan ($endpoint): ${e.message}. Retrying in 1.2s...")
+                try {
+                    Thread.sleep(1200)
+                } catch (_: InterruptedException) {}
+                throttleJikan()
+                searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+            }
             var code = response.code
 
             // If rate limited (429), wait 1s and retry once
@@ -303,6 +362,7 @@ object JikanApiClient {
                     Thread.sleep(1000)
                 } catch (_: InterruptedException) {}
                 response.close()
+                throttleJikan()
                 response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
                 code = response.code
             }
@@ -603,19 +663,25 @@ object JikanApiClient {
             }
         }
 
-        // 5. If Manga or Manhwa, Fallback 3 is Kitsu
-        if (isMangaOrManhwa) {
-            val kitsuResult = KitsuApiClient.searchMangaDetailsByTitle(cleanedTitle)
-            if (kitsuResult.isSuccess && !kitsuResult.getOrNull()?.posterUrl.isNullOrBlank()) {
-                Log.d(TAG, "Successfully found ${(if (isManhwa) "Manhwa" else "Manga")} on Kitsu for '$cleanedTitle'")
-                return kitsuResult
+        // 5. Fallback 3 is Kitsu (for Manga or Anime)
+        val kitsuResult = if (isMangaOrManhwa) {
+            KitsuApiClient.searchMangaDetailsByTitle(cleanedTitle)
+        } else {
+            KitsuApiClient.searchAnimeDetailsByTitle(cleanedTitle)
+        }
+        if (kitsuResult.isSuccess && !kitsuResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+            Log.d(TAG, "Successfully found ${(if (isMangaOrManhwa) "Manga" else "Anime")} on Kitsu for '$cleanedTitle'")
+            return kitsuResult
+        }
+        if (cleanedTitle != rawTitle) {
+            val rawKitsuResult = if (isMangaOrManhwa) {
+                KitsuApiClient.searchMangaDetailsByTitle(rawTitle)
+            } else {
+                KitsuApiClient.searchAnimeDetailsByTitle(rawTitle)
             }
-            if (cleanedTitle != rawTitle) {
-                val rawKitsuResult = KitsuApiClient.searchMangaDetailsByTitle(rawTitle)
-                if (rawKitsuResult.isSuccess && !rawKitsuResult.getOrNull()?.posterUrl.isNullOrBlank()) {
-                    Log.d(TAG, "Successfully found ${(if (isManhwa) "Manhwa" else "Manga")} on Kitsu for '$rawTitle'")
-                    return rawKitsuResult
-                }
+            if (rawKitsuResult.isSuccess && !rawKitsuResult.getOrNull()?.posterUrl.isNullOrBlank()) {
+                Log.d(TAG, "Successfully found ${(if (isMangaOrManhwa) "Manga" else "Anime")} on Kitsu for '$rawTitle'")
+                return rawKitsuResult
             }
         }
 
@@ -658,6 +724,7 @@ object JikanApiClient {
         val endpoint = "${baseUrl.trimEnd('/')}/$type?q=$encodedQuery&limit=$limit$subTypeParam"
 
         return try {
+            throttleJikan()
             val request = Request.Builder()
                 .url(endpoint)
                 .header("User-Agent", USER_AGENT)
@@ -666,7 +733,16 @@ object JikanApiClient {
                 .get()
                 .build()
 
-            var response = searchOkHttpClient.newCall(request).execute()
+            var response = try {
+                searchOkHttpClient.newCall(request).execute()
+            } catch (e: java.io.IOException) {
+                Log.w(TAG, "Connection failed to Jikan search ($endpoint): ${e.message}. Retrying in 1.2s...")
+                try {
+                    Thread.sleep(1200)
+                } catch (_: InterruptedException) {}
+                throttleJikan()
+                searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+            }
             var code = response.code
 
             // If rate limited (429), wait 1s and retry once
@@ -676,6 +752,7 @@ object JikanApiClient {
                     Thread.sleep(1000)
                 } catch (_: InterruptedException) {}
                 response.close()
+                throttleJikan()
                 response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
                 code = response.code
             }
@@ -955,9 +1032,9 @@ object JikanApiClient {
                 val elem = mediaArray.get(i)
                 if (elem.isJsonObject) {
                     val mediaObj = elem.asJsonObject
-                    val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong
-                    val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull }?.asLong
-                    val fallbackId = idMal ?: aniId
+                    val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong?.takeIf { it > 0 }
+                    val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull }?.asLong?.takeIf { it > 0 }
+                    val fallbackId = idMal
                     try {
                         list.add(parseAniListMedia(mediaObj, fallbackMalId = fallbackId))
                     } catch (e: Exception) {
@@ -980,6 +1057,7 @@ object JikanApiClient {
         val encodedQuery = URLEncoder.encode(queryTitle, "UTF-8")
         val endpoint = "${baseUrl.trimEnd('/')}/$type?q=$encodedQuery&limit=1"
         return try {
+            throttleJikan()
             val request = Request.Builder()
                 .url(endpoint)
                 .header("User-Agent", USER_AGENT)
@@ -988,7 +1066,16 @@ object JikanApiClient {
                 .get()
                 .build()
 
-            var response = searchOkHttpClient.newCall(request).execute()
+            var response = try {
+                searchOkHttpClient.newCall(request).execute()
+            } catch (e: java.io.IOException) {
+                Log.w(TAG, "Connection failed to Jikan search ($endpoint): ${e.message}. Retrying in 1.2s...")
+                try {
+                    Thread.sleep(1200)
+                } catch (_: InterruptedException) {}
+                throttleJikan()
+                searchOkHttpClient.newCall(request.newBuilder().build()).execute()
+            }
             var code = response.code
 
             // If rate limited (429), wait 1s and retry once
@@ -998,6 +1085,7 @@ object JikanApiClient {
                     Thread.sleep(1000)
                 } catch (_: InterruptedException) {}
                 response.close()
+                throttleJikan()
                 response = searchOkHttpClient.newCall(request.newBuilder().build()).execute()
                 code = response.code
             }
@@ -1363,9 +1451,9 @@ object JikanApiClient {
     }
 
     fun parseAniListMedia(mediaObj: JsonObject, fallbackMalId: Long?): JikanMediaDetails {
-        val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong
-        val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull }?.asLong
-        val resolvedId = idMal ?: fallbackMalId ?: aniId
+        val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong?.takeIf { it > 0 }
+        val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull }?.asLong?.takeIf { it > 0 }
+        val resolvedMalId = idMal ?: fallbackMalId?.takeIf { it != aniId && it > 0 }
 
         val titleObj = mediaObj.getSafeJsonObject("title")
         val engTitle = titleObj?.get("english")?.takeIf { !it.isJsonNull }?.asString?.trim()
@@ -1461,7 +1549,8 @@ object JikanApiClient {
         val relations = parseAniListRelations(mediaObj)
 
         return JikanMediaDetails(
-            malId = resolvedId,
+            malId = resolvedMalId,
+            aniListId = aniId,
             title = title,
             posterUrl = posterUrl,
             durationText = durationMinutes?.let { "$it min" },
@@ -2217,9 +2306,9 @@ object JikanApiClient {
                 val elem = mediaArray.get(i)
                 if (elem.isJsonObject) {
                     val mediaObj = elem.asJsonObject
-                    val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong
-                    val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull }?.asLong
-                    val fallbackId = idMal ?: aniId
+                    val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong?.takeIf { it > 0 }
+                    val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull }?.asLong?.takeIf { it > 0 }
+                    val fallbackId = idMal
                     try {
                         list.add(parseAniListMedia(mediaObj, fallbackMalId = fallbackId))
                     } catch (e: Exception) {
@@ -2748,9 +2837,9 @@ object JikanApiClient {
                 val elem = mediaArray.get(i)
                 if (elem.isJsonObject) {
                     val mediaObj = elem.asJsonObject
-                    val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong
-                    val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull }?.asLong
-                    val fallbackId = idMal ?: aniId
+                    val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong?.takeIf { it > 0 }
+                    val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull }?.asLong?.takeIf { it > 0 }
+                    val fallbackId = idMal
                     try {
                         list.add(parseAniListMedia(mediaObj, fallbackMalId = fallbackId))
                     } catch (e: Exception) {

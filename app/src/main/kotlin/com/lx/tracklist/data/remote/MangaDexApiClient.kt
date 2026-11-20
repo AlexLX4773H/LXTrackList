@@ -1,5 +1,6 @@
 package com.lx.tracklist.data.remote
 
+import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonArray
@@ -23,12 +24,24 @@ object MangaDexApiClient {
     const val COVERS_CDN_URL = "https://uploads.mangadex.org/covers"
     private const val USER_AGENT = "LXTrackList/1.0 (Android; https://github.com/RyanYuuki/AnymeX)"
 
-    private val okHttpClient = OkHttpClient.Builder()
+    private var okHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
+
+    fun initWithDoH(context: Context) {
+        try {
+            val dohResolver = TmdbDnsHelper.createDoHResolver(context)
+            okHttpClient = okHttpClient.newBuilder()
+                .dns(dohResolver)
+                .build()
+            Log.i(TAG, "Initialized MangaDex OkHttpClient with DNS-over-HTTPS resolver")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize DNS-over-HTTPS resolver for MangaDex client", e)
+        }
+    }
 
     fun buildCoverUrl(mangaId: String, fileName: String, size: String = "512"): String {
         return "$COVERS_CDN_URL/$mangaId/$fileName.$size.jpg"

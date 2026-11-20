@@ -55,6 +55,20 @@ enum class InclusionFilterOption {
     }
 }
 
+enum class AiringFilterOption {
+    ALL,
+    AIRING_ONLY,
+    NYA_ONLY,
+    EXCLUDE;
+
+    fun next(): AiringFilterOption = when (this) {
+        ALL -> AIRING_ONLY
+        AIRING_ONLY -> NYA_ONLY
+        NYA_ONLY -> EXCLUDE
+        EXCLUDE -> ALL
+    }
+}
+
 enum class CoverImageFilterOption {
     ALL,
     HAS_COVER,
@@ -84,7 +98,7 @@ data class LibraryUiState(
     val availableTags: List<String> = emptyList(),
     val tagCounts: Map<String, Int> = emptyMap(),
     val favoritesFilter: InclusionFilterOption = InclusionFilterOption.ALL,
-    val airingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
+    val airingFilter: AiringFilterOption = AiringFilterOption.ALL,
     val externalTrackingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val validExternalIdFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val coverImageFilter: CoverImageFilterOption = CoverImageFilterOption.ALL,
@@ -99,7 +113,8 @@ data class LibraryUiState(
 ) {
     val isSelectionMode: Boolean get() = selectedIds.isNotEmpty()
     val onlyFavorites: Boolean get() = favoritesFilter == InclusionFilterOption.INCLUDE_ONLY
-    val onlyAiring: Boolean get() = airingFilter == InclusionFilterOption.INCLUDE_ONLY
+    val onlyAiring: Boolean get() = airingFilter == AiringFilterOption.AIRING_ONLY
+    val onlyNya: Boolean get() = airingFilter == AiringFilterOption.NYA_ONLY
     val onlyExternallyTracked: Boolean get() = externalTrackingFilter == InclusionFilterOption.INCLUDE_ONLY
     val onlyNotExternallyTracked: Boolean get() = externalTrackingFilter == InclusionFilterOption.EXCLUDE
     val onlyValidExternalId: Boolean get() = validExternalIdFilter == InclusionFilterOption.INCLUDE_ONLY
@@ -126,7 +141,7 @@ private data class LibraryFilterState(
     val includedTags: Set<String> = emptySet(),
     val excludedTags: Set<String> = emptySet(),
     val favoritesFilter: InclusionFilterOption = InclusionFilterOption.ALL,
-    val airingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
+    val airingFilter: AiringFilterOption = AiringFilterOption.ALL,
     val externalTrackingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val validExternalIdFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val coverImageFilter: CoverImageFilterOption = CoverImageFilterOption.ALL,
@@ -145,7 +160,7 @@ private data class LibraryFilterState(
             if (minScore != null || onlyUnrated) count++
             if (includedTags.isNotEmpty() || excludedTags.isNotEmpty()) count++
             if (favoritesFilter != InclusionFilterOption.ALL) count++
-            if (airingFilter != InclusionFilterOption.ALL) count++
+            if (airingFilter != AiringFilterOption.ALL) count++
             if (externalTrackingFilter != InclusionFilterOption.ALL) count++
             if (validExternalIdFilter != InclusionFilterOption.ALL) count++
             if (coverImageFilter != CoverImageFilterOption.ALL) count++
@@ -207,14 +222,17 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             }
         }
 
-        // 4. Airing Filter (Tri-State: All / Include Only / Exclude)
+        // 4. Airing / Publishing / NYA / NYP Filter
         when (filter.airingFilter) {
-            InclusionFilterOption.ALL -> { /* no-op */ }
-            InclusionFilterOption.INCLUDE_ONLY -> {
-                list = list.filter { it.isAiring }
+            AiringFilterOption.ALL -> { /* no-op */ }
+            AiringFilterOption.AIRING_ONLY -> {
+                list = list.filter { it.isAiring && !it.isNotYetAiredOrPublished }
             }
-            InclusionFilterOption.EXCLUDE -> {
-                list = list.filter { !it.isAiring }
+            AiringFilterOption.NYA_ONLY -> {
+                list = list.filter { it.isNotYetAiredOrPublished }
+            }
+            AiringFilterOption.EXCLUDE -> {
+                list = list.filter { !it.isAiring && !it.isNotYetAiredOrPublished }
             }
         }
 
@@ -464,7 +482,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         _filterState.update { it.copy(favoritesFilter = option) }
     }
 
-    fun setAiringFilter(option: InclusionFilterOption) {
+    fun setAiringFilter(option: AiringFilterOption) {
         _filterState.update { it.copy(airingFilter = option) }
     }
 
@@ -529,7 +547,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                 includedTags = emptySet(),
                 excludedTags = emptySet(),
                 favoritesFilter = InclusionFilterOption.ALL,
-                airingFilter = InclusionFilterOption.ALL,
+                airingFilter = AiringFilterOption.ALL,
                 externalTrackingFilter = InclusionFilterOption.ALL,
                 validExternalIdFilter = InclusionFilterOption.ALL,
                 coverImageFilter = CoverImageFilterOption.ALL

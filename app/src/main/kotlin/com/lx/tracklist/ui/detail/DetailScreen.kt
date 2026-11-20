@@ -773,7 +773,10 @@ fun DetailScreen(
                             if (currentEntry.rewatchCount > 0) {
                                 MetaChip(label = "Rewatched ${currentEntry.rewatchCount}x", color = LXScoreGold)
                             }
-                            if (currentEntry.isAiring) {
+                            if (currentEntry.isNotYetAiredOrPublished) {
+                                val nyaLabel = if (currentEntry.mediaType.isWatchType) "NYA" else "NYP"
+                                MetaChip(label = nyaLabel, color = Color(0xFFF59E0B))
+                            } else if (currentEntry.isAiring) {
                                 val airingLabel = if (currentEntry.mediaType.isWatchType) "AIRING" else "PUBLISHING"
                                 MetaChip(label = airingLabel, color = LXAiringBlue)
                             }
@@ -1131,6 +1134,21 @@ private fun DetailProgressCard(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
+                } else if (entry.isNotYetAiredOrPublished) {
+                    val nyaLabel = if (entry.mediaType.isWatchType) "NYA" else "NYP"
+                    Surface(
+                        color = Color(0xFFF59E0B).copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.4f))
+                    ) {
+                        Text(
+                            text = nyaLabel,
+                            color = Color(0xFFF59E0B),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
                 } else if (entry.isAiring) {
                     val airingLabel = if (entry.mediaType.isWatchType) "Airing" else "Publishing"
                     Surface(
@@ -1421,7 +1439,7 @@ private fun DetailProgressCard(
             }
 
             // Airing / Release Status Panel
-            if (entry.isAiring && (isVideo || isMangaOrBook)) {
+            if ((entry.isAiring || entry.isNotYetAiredOrPublished) && (isVideo || isMangaOrBook)) {
                 val (readWatched, airedReleased, total) = if (isVideo) {
                     Triple(entry.getTotalWatchedEpisodes(), entry.getEffectiveAiredEpisodes(), entry.getEffectiveTotalEpisodes())
                 } else {
@@ -1697,7 +1715,7 @@ private fun DetailDatesCard(entry: MediaEntry) {
     val userFinishStr = entry.finishDate?.let { sdf.format(Date(it)) }
 
     val airedStartStr = entry.airedStartDate?.let { sdf.format(Date(it)) }
-    val airedEndStr = if (entry.isAiring && entry.airedEndDate == null) "Present" else entry.airedEndDate?.let { sdf.format(Date(it)) }
+    val airedEndStr = if (entry.isAiring && !entry.isNotYetAiredOrPublished && entry.airedEndDate == null) "Present" else entry.airedEndDate?.let { sdf.format(Date(it)) }
 
     val hasUserData = userStartStr != null || userFinishStr != null
     val hasAiredData = airedStartStr != null || airedEndStr != null
@@ -1758,7 +1776,7 @@ private fun DetailDatesCard(entry: MediaEntry) {
                             }
                         }
 
-                        if (entry.mediaType == MediaType.ANIME && entry.isAiring) {
+                        if (entry.mediaType == MediaType.ANIME && (entry.isAiring || entry.isNotYetAiredOrPublished)) {
                             val localSchedule = entry.formatAiringSchedule(short = false)
                             val countdown = entry.getTimeUntilNextEpisode(prefixIn = true)
                             if (!localSchedule.isNullOrBlank() || !countdown.isNullOrBlank()) {

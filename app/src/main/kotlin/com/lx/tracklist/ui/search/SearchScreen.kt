@@ -1883,7 +1883,8 @@ private fun SearchResultDetailSheet(
                         title = item.title,
                         externalId = item.externalId,
                         externalSource = item.externalSource,
-                        directMalId = item.rawJikanDetails?.malId,
+                        directMalId = item.directMalId ?: item.rawJikanDetails?.malId,
+                        directAniListId = item.directAniListId ?: item.rawJikanDetails?.aniListId,
                         directSiteUrl = item.rawJikanDetails?.url ?: item.rawJikanDetails?.webUrl,
                         webUrl = item.webUrl
                     )
@@ -1891,7 +1892,9 @@ private fun SearchResultDetailSheet(
                         title = item.title,
                         externalId = item.externalId,
                         externalSource = item.externalSource,
-                        directMalId = item.rawJikanDetails?.malId,
+                        directMalId = item.directMalId ?: item.rawJikanDetails?.malId,
+                        directAniListId = item.directAniListId ?: item.rawJikanDetails?.aniListId,
+                        directSiteUrl = item.rawJikanDetails?.url ?: item.rawJikanDetails?.webUrl,
                         webUrl = item.webUrl
                     )
                     isBook -> ExternalLinkHelper.buildBookOpenOptions(
@@ -1904,7 +1907,9 @@ private fun SearchResultDetailSheet(
                         title = item.title,
                         externalId = item.externalId,
                         externalSource = item.externalSource,
-                        directMalId = item.rawJikanDetails?.malId,
+                        directMalId = item.directMalId ?: item.rawJikanDetails?.malId,
+                        directAniListId = item.directAniListId ?: item.rawJikanDetails?.aniListId,
+                        directSiteUrl = item.rawJikanDetails?.url ?: item.rawJikanDetails?.webUrl,
                         webUrl = item.webUrl
                     )
                     else -> item.webUrl?.let {

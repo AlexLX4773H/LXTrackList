@@ -324,10 +324,10 @@ object JikanSyncManager {
             var failed = 0
             var lastError: String? = null
 
-            var currentBatchSize = 3
+            var currentBatchSize = 2
             val minBatchSize = 1
-            val maxBatchSize = 5
-            var interBatchDelayMs = 200L
+            val maxBatchSize = 3
+            var interBatchDelayMs = 350L
             var consecutiveCleanBatches = 0
             val mutex = Mutex()
             val activeTitles = ConcurrentHashMap.newKeySet<String>()
@@ -353,7 +353,7 @@ object JikanSyncManager {
                     chunk.mapIndexed { chunkIdx, entry ->
                         async {
                             if (syncJob?.isCancelled == true) return@async
-                            if (chunkIdx > 0) delay(chunkIdx * 150L)
+                            if (chunkIdx > 0) delay(chunkIdx * 250L)
                             activeTitles.add(entry.title)
                             try {
                                 val outcome = syncSingleEntry(

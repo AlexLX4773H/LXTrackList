@@ -111,6 +111,23 @@ data class MediaEntry(
     @get:Ignore
     val notes: String?
         get() = description
+
+    val isNotYetAiredOrPublished: Boolean
+        get() {
+            val now = System.currentTimeMillis()
+            // 1. Release / broadcast start date is strictly in the future
+            if (airedStartDate != null && airedStartDate > now) {
+                return true
+            }
+            // 2. Next airing epoch is strictly in the future and 0 episodes/chapters have aired
+            if (isAiring && mediaType.isWatchType && airedEpisodes == 0 && nextAiringEpoch != null && nextAiringEpoch > now) {
+                return true
+            }
+            if (isAiring && !mediaType.isWatchType && airedChapters == 0 && airedStartDate != null && airedStartDate > now) {
+                return true
+            }
+            return false
+        }
     fun getRelatedMediaItems(): List<RelatedMediaItem> {
         if (relatedEntriesJson.isNullOrBlank()) return emptyList()
         return try {
@@ -584,7 +601,7 @@ data class MediaEntry(
         if (airedStartDate == null && airedEndDate == null) return ""
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val startStr = airedStartDate?.let { sdf.format(Date(it)) } ?: "?"
-        val endStr = if (isAiring && airedEndDate == null) "Present" else (airedEndDate?.let { sdf.format(Date(it)) } ?: "")
+        val endStr = if (isAiring && !isNotYetAiredOrPublished && airedEndDate == null) "Present" else (airedEndDate?.let { sdf.format(Date(it)) } ?: "")
         return if (endStr.isNotBlank()) "$startStr - $endStr" else startStr
     }
 
@@ -608,7 +625,7 @@ data class MediaEntry(
     }
 
     fun getComputedNextAiringEpoch(): Long? {
-        if (mediaType != MediaType.ANIME || !isAiring) return null
+        if (mediaType != MediaType.ANIME || (!isAiring && !isNotYetAiredOrPublished)) return null
         val now = System.currentTimeMillis()
 
         // 1. If nextAiringEpoch is explicitly available, use it (roll forward if elapsed)
@@ -643,7 +660,7 @@ data class MediaEntry(
         timeZone: TimeZone = TimeZone.getDefault(),
         includeTimeZone: Boolean = !short
     ): String? {
-        if (mediaType != MediaType.ANIME || !isAiring) return null
+        if (mediaType != MediaType.ANIME || (!isAiring && !isNotYetAiredOrPublished)) return null
         val nextEpoch = getComputedNextAiringEpoch() ?: return null
         val pattern = when {
             short && includeTimeZone -> "EEE HH:mm z"
@@ -658,7 +675,7 @@ data class MediaEntry(
     }
 
     fun getTimeUntilNextEpisode(prefixIn: Boolean = true): String? {
-        if (mediaType != MediaType.ANIME || !isAiring) return null
+        if (mediaType != MediaType.ANIME || (!isAiring && !isNotYetAiredOrPublished)) return null
         val nextEpoch = getComputedNextAiringEpoch() ?: return null
         val now = System.currentTimeMillis()
         val diff = nextEpoch - now
@@ -680,7 +697,7 @@ data class MediaEntry(
     }
 
     fun formatAiringCardText(): String? {
-        if (mediaType != MediaType.ANIME || !isAiring) return null
+        if (mediaType != MediaType.ANIME || (!isAiring && !isNotYetAiredOrPublished)) return null
         val schedule = formatAiringSchedule(short = true, includeTimeZone = false)
         val countdown = getTimeUntilNextEpisode(prefixIn = true)
         return when {

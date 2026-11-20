@@ -102,6 +102,7 @@ object ExternalLinkHelper {
         externalId: String?,
         externalSource: String?,
         directMalId: Long? = null,
+        directAniListId: Long? = null,
         directSiteUrl: String? = null,
         webUrl: String? = null
     ): List<ExternalOpenOption> {
@@ -127,6 +128,7 @@ object ExternalLinkHelper {
 
         // 2. AniList
         val aniUrl = when {
+            directAniListId != null && directAniListId > 0 -> "https://anilist.co/anime/$directAniListId"
             !directSiteUrl.isNullOrBlank() && directSiteUrl.contains("anilist.co", ignoreCase = true) -> directSiteUrl
             externalSource?.startsWith("AniList", ignoreCase = true) == true && !externalId.isNullOrBlank() && externalId.toLongOrNull() != null ->
                 "https://anilist.co/anime/$externalId"
@@ -166,6 +168,8 @@ object ExternalLinkHelper {
         externalId: String?,
         externalSource: String?,
         directMalId: Long? = null,
+        directAniListId: Long? = null,
+        directSiteUrl: String? = null,
         webUrl: String? = null
     ): List<ExternalOpenOption> {
         val list = mutableListOf<ExternalOpenOption>()
@@ -173,6 +177,7 @@ object ExternalLinkHelper {
 
         // 1. MangaDex
         val mdUrl = when {
+            !directSiteUrl.isNullOrBlank() && directSiteUrl.contains("mangadex.org", ignoreCase = true) -> directSiteUrl
             externalSource.equals("MangaDex", ignoreCase = true) && !externalId.isNullOrBlank() && externalId != "0" ->
                 "https://mangadex.org/title/$externalId"
             webUrl != null && webUrl.contains("mangadex.org", ignoreCase = true) -> webUrl
@@ -206,6 +211,8 @@ object ExternalLinkHelper {
 
         // 3. AniList
         val aniUrl = when {
+            directAniListId != null && directAniListId > 0 -> "https://anilist.co/manga/$directAniListId"
+            !directSiteUrl.isNullOrBlank() && directSiteUrl.contains("anilist.co", ignoreCase = true) -> directSiteUrl
             externalSource?.startsWith("AniList", ignoreCase = true) == true && !externalId.isNullOrBlank() && externalId.toLongOrNull() != null ->
                 "https://anilist.co/manga/$externalId"
             webUrl != null && webUrl.contains("anilist.co", ignoreCase = true) -> webUrl
@@ -300,6 +307,8 @@ object ExternalLinkHelper {
         externalId: String?,
         externalSource: String?,
         directMalId: Long? = null,
+        directAniListId: Long? = null,
+        directSiteUrl: String? = null,
         webUrl: String? = null
     ): List<ExternalOpenOption> {
         val list = mutableListOf<ExternalOpenOption>()
@@ -307,6 +316,8 @@ object ExternalLinkHelper {
 
         // 1. AniList
         val aniUrl = when {
+            directAniListId != null && directAniListId > 0 -> "https://anilist.co/manga/$directAniListId"
+            !directSiteUrl.isNullOrBlank() && directSiteUrl.contains("anilist.co", ignoreCase = true) -> directSiteUrl
             externalSource?.startsWith("AniList", ignoreCase = true) == true && !externalId.isNullOrBlank() && externalId.toLongOrNull() != null ->
                 "https://anilist.co/manga/$externalId"
             webUrl != null && webUrl.contains("anilist.co", ignoreCase = true) -> webUrl
@@ -350,6 +361,7 @@ object ExternalLinkHelper {
 
         // 4. MangaDex
         val mdUrl = when {
+            !directSiteUrl.isNullOrBlank() && directSiteUrl.contains("mangadex.org", ignoreCase = true) -> directSiteUrl
             externalSource.equals("MangaDex", ignoreCase = true) && !externalId.isNullOrBlank() ->
                 "https://mangadex.org/title/$externalId"
             else -> "https://mangadex.org/titles?q=$encodedTitle"
