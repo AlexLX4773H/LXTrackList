@@ -54,9 +54,11 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
+import com.lx.tracklist.ui.components.SteamGridDbPickerSheet
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
@@ -129,12 +131,14 @@ import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import com.lx.tracklist.R
+import com.lx.tracklist.data.model.GameSeriesItemStatus
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.remote.GameMetadataManager
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
@@ -194,6 +198,7 @@ fun DetailScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showStartRewatchDialog by remember { mutableStateOf(false) }
     var showRefreshConfirmDialog by remember { mutableStateOf(false) }
+    var showSteamGridPicker by remember { mutableStateOf(false) }
     var showChangeStatusOnIncrementDialog by remember { mutableStateOf(false) }
     var relatedItemToAdd by remember { mutableStateOf<RelatedMediaItem?>(null) }
     var previewRelatedItem by remember { mutableStateOf<RelatedMediaItem?>(null) }
@@ -235,14 +240,27 @@ fun DetailScreen(
 
     BackHandler(onBack = onNavigateBack)
 
+    if (showSteamGridPicker && entry != null) {
+        SteamGridDbPickerSheet(
+            initialTitle = entry!!.title,
+            onPosterSelected = { url ->
+                viewModel.updateCoverImage(url)
+                showSteamGridPicker = false
+            },
+            onDismiss = { showSteamGridPicker = false }
+        )
+    }
+
     if (showRefreshConfirmDialog && entry != null) {
         val current = entry!!
         val isTachiyomi = JikanSyncManager.isTachiyomiSource(current)
         val isMovieOrShow = current.mediaType == MediaType.MOVIE || current.mediaType == MediaType.SHOW
         val isBook = current.mediaType == MediaType.BOOK
+        val isGame = current.mediaType == MediaType.GAME
         val hasValidId = JikanSyncManager.hasValidExternalId(current)
         val isMal = JikanSyncManager.isMalSource(current) || current.mediaType == MediaType.ANIME || current.mediaType == MediaType.MANGA || current.mediaType == MediaType.MANHWA
         val sourceName = when {
+            isGame -> current.externalSource?.takeIf { it.isNotBlank() } ?: "IGDB / RAWG"
             isMovieOrShow -> "The Movie Database (TMDB)"
             isBook -> current.externalSource?.takeIf { it.isNotBlank() } ?: "Google Books / Open Library"
             isTachiyomi -> "Jikan / MangaDex / AniList / Kitsu"
@@ -267,6 +285,7 @@ fun DetailScreen(
                     Text(
                         text = if (isFindingAndLinking) {
                             when {
+                                isGame -> "Find & Link Game ID?"
                                 isMovieOrShow -> "Find & Link TMDB ID?"
                                 isBook -> "Find & Link Book ID?"
                                 else -> "Find & Link External ID?"
@@ -291,12 +310,15 @@ fun DetailScreen(
                     Text(
                         text = if (isFindingAndLinking) {
                             when {
+                                isGame -> "This will search IGDB/RAWG to link a valid game ID and update cover art, release date, platforms, genres, ratings, and synopsis."
                                 isMovieOrShow -> "This will search TMDB to link a valid ID and update poster, release dates, runtime, genres, scores, and synopsis."
                                 isBook -> "This will search Google Books and Open Library to link a valid book ID and update cover, pages, publication details, and synopsis."
                                 else -> "This will search databases to link a valid external ID (MAL, MangaDex, AniList, Kitsu) and update cover, chapters/episodes, and synopsis. Once linked, external tracking can be enabled."
                             }
                         } else {
-                            if (isBook) {
+                            if (isGame) {
+                                "This will update cover art, release dates, platforms, genres, scores, and synopsis to the latest information from $sourceName."
+                            } else if (isBook) {
                                 "This will update cover, page counts, publisher, published dates, ratings, and description to the latest information from $sourceName."
                             } else {
                                 "This will update posters, episode/chapter counts, runtime, broadcast/air dates, scores, and synopsis to the latest information from the external database."
@@ -429,6 +451,15 @@ fun DetailScreen(
                 actions = {
                     entry?.let { e ->
                         // Refresh metadata button from external source
+                        if (e.mediaType == MediaType.GAME) {
+                            IconButton(onClick = { showSteamGridPicker = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Image,
+                                    contentDescription = "SteamGridDB Posters",
+                                    tint = LXPrimaryGreen
+                                )
+                            }
+                        }
                         IconButton(
                             onClick = { showRefreshConfirmDialog = true },
                             enabled = !isRefreshingMetadata
@@ -508,7 +539,12 @@ fun DetailScreen(
                                 .height(420.dp)
                                 .clip(RoundedCornerShape(14.dp))
                                 .background(LXSurfaceBlack)
-                                .border(1.dp, LXBorder, RoundedCornerShape(14.dp)),
+                                .border(1.dp, LXBorder, RoundedCornerShape(14.dp))
+                                .then(
+                                    if (currentEntry.mediaType == MediaType.GAME) {
+                                        Modifier.clickable { showSteamGridPicker = true }
+                                    } else Modifier
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             if (!currentEntry.coverImageUri.isNullOrBlank()) {
@@ -601,6 +637,21 @@ fun DetailScreen(
                             if (currentEntry.rewatchCount > 0) {
                                 MetaChip(label = "Rewatched ${currentEntry.rewatchCount}x", color = LXScoreGold)
                             }
+                            if (currentEntry.mediaType == MediaType.GAME) {
+                                if (currentEntry.isGameFranchise) {
+                                    MetaChip(label = "FRANCHISE", color = Color(0xFF8B5CF6))
+                                }
+                                currentEntry.getGamePlatformList().forEach { platform ->
+                                    MetaChip(label = "🎮 $platform", color = LXPrimaryGreen)
+                                }
+                            }
+                            if (currentEntry.isNotYetAiredOrPublished) {
+                                val nyaLabel = if (currentEntry.mediaType == MediaType.GAME) "UNRELEASED" else if (currentEntry.mediaType.isWatchType) "NYA" else "NYP"
+                                MetaChip(label = nyaLabel, color = Color(0xFFF59E0B))
+                            } else if (currentEntry.isAiring) {
+                                val airingLabel = if (currentEntry.mediaType.isWatchType) "AIRING" else "PUBLISHING"
+                                MetaChip(label = airingLabel, color = LXAiringBlue)
+                            }
                         }
                     }
 
@@ -623,6 +674,7 @@ fun DetailScreen(
                             onDecrement = { viewModel.decrement() },
                             onSetProgress = { viewModel.setProgress(it) },
                             onSetShowProgress = { season, ep -> viewModel.setShowProgress(season, ep) },
+                            onUpdateGameSeriesStatus = { idx, st -> viewModel.updateGameSeriesItemStatus(idx, st) },
                             onStartRewatch = { showStartRewatchDialog = true },
                             onFinishRewatch = { viewModel.finishRewatch() },
                             onCancelRewatch = { viewModel.cancelRewatch() }
@@ -665,7 +717,12 @@ fun DetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(260.dp)
-                            .background(LXSurfaceBlack),
+                            .background(LXSurfaceBlack)
+                            .then(
+                                if (currentEntry.mediaType == MediaType.GAME) {
+                                    Modifier.clickable { showSteamGridPicker = true }
+                                } else Modifier
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         if (!currentEntry.coverImageUri.isNullOrBlank()) {
@@ -774,8 +831,16 @@ fun DetailScreen(
                             if (currentEntry.rewatchCount > 0) {
                                 MetaChip(label = "Rewatched ${currentEntry.rewatchCount}x", color = LXScoreGold)
                             }
+                            if (currentEntry.mediaType == MediaType.GAME) {
+                                if (currentEntry.isGameFranchise) {
+                                    MetaChip(label = "FRANCHISE", color = Color(0xFF8B5CF6))
+                                }
+                                currentEntry.getGamePlatformList().forEach { platform ->
+                                    MetaChip(label = "🎮 $platform", color = LXPrimaryGreen)
+                                }
+                            }
                             if (currentEntry.isNotYetAiredOrPublished) {
-                                val nyaLabel = if (currentEntry.mediaType.isWatchType) "NYA" else "NYP"
+                                val nyaLabel = if (currentEntry.mediaType == MediaType.GAME) "UNRELEASED" else if (currentEntry.mediaType.isWatchType) "NYA" else "NYP"
                                 MetaChip(label = nyaLabel, color = Color(0xFFF59E0B))
                             } else if (currentEntry.isAiring) {
                                 val airingLabel = if (currentEntry.mediaType.isWatchType) "AIRING" else "PUBLISHING"
@@ -795,6 +860,7 @@ fun DetailScreen(
                             onDecrement = { viewModel.decrement() },
                             onSetProgress = { viewModel.setProgress(it) },
                             onSetShowProgress = { season, ep -> viewModel.setShowProgress(season, ep) },
+                            onUpdateGameSeriesStatus = { idx, st -> viewModel.updateGameSeriesItemStatus(idx, st) },
                             onStartRewatch = { showStartRewatchDialog = true },
                             onFinishRewatch = { viewModel.finishRewatch() },
                             onCancelRewatch = { viewModel.cancelRewatch() }
@@ -993,6 +1059,7 @@ private fun DetailProgressCard(
     onDecrement: () -> Unit,
     onSetProgress: (Int) -> Unit = {},
     onSetShowProgress: (Int, Int) -> Unit = { _, _ -> },
+    onUpdateGameSeriesStatus: (Int, GameSeriesItemStatus) -> Unit = { _, _ -> },
     onStartRewatch: () -> Unit,
     onFinishRewatch: () -> Unit,
     onCancelRewatch: () -> Unit
@@ -1083,12 +1150,16 @@ private fun DetailProgressCard(
             ProgressInfo(if (isDone) 1 else 0, 1, "1", "Film", if (isDone) "Watched" else "Plan to watch")
         }
         MediaType.GAME -> {
-            if (entry.trackingUnit == TrackingUnit.PERCENTAGE) {
-                ProgressInfo(entry.gameProgressPercent, 100, "100%", "%", "Game progress")
-            } else {
+            if (entry.isGameFranchise) {
+                val (completed, active, skipped) = entry.getFranchiseProgressSummary()
+                val desc = if (skipped > 0) "$completed/$active completed ($skipped skipped)" else "$completed/$active games completed"
+                ProgressInfo(completed, active, if (active > 0) "$active" else "?", "Games", desc)
+            } else if (entry.trackingUnit == TrackingUnit.CUSTOM) {
                 val label = entry.customUnitLabel?.takeIf { it.isNotBlank() } ?: "Units"
                 val totalStr = if (entry.customUnitTotal > 0) "${entry.customUnitTotal}" else "?"
                 ProgressInfo(entry.customUnitCurrent, entry.customUnitTotal, totalStr, label, "$label completed")
+            } else {
+                ProgressInfo(entry.gameProgressPercent, 100, "100%", "%", "Game progress")
             }
         }
     }
@@ -1360,6 +1431,160 @@ private fun DetailProgressCard(
                             .clip(RoundedCornerShape(3.dp))
                             .background(LXPrimaryGreen)
                     )
+                }
+            }
+
+            // Franchise series breakdown (GAME with isGameFranchise only)
+            if (entry.mediaType == MediaType.GAME && entry.isGameFranchise) {
+                val series = remember(entry.gameSeriesEntriesJson) { entry.getGameSeriesEntries() }
+                if (series.isNotEmpty()) {
+                    var showFranchiseList by remember(entry.id) { mutableStateOf(true) }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(LXSurfaceElevated)
+                            .border(1.dp, LXBorder.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showFranchiseList = !showFranchiseList },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Franchise Checklist (${series.size} installments)",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = LXTextPrimary
+                            )
+                            Icon(
+                                imageVector = if (showFranchiseList) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (showFranchiseList) "Hide checklist" else "Show checklist",
+                                tint = LXTextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        if (showFranchiseList) {
+                            HorizontalDivider(color = LXBorder.copy(alpha = 0.4f))
+                            series.forEachIndexed { index, sItem ->
+                                Surface(
+                                    color = LXBackgroundBlack,
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = BorderStroke(1.dp, if (sItem.status == GameSeriesItemStatus.PLAYING) LXPrimaryGreen.copy(alpha = 0.5f) else LXBorder.copy(alpha = 0.4f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = "#${index + 1}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = LXPrimaryGreen
+                                        )
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = sItem.title,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = if (sItem.status == GameSeriesItemStatus.SKIPPED) LXTextSecondary else LXTextPrimary,
+                                                textDecoration = if (sItem.status == GameSeriesItemStatus.SKIPPED) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            if (sItem.platforms.isNotEmpty()) {
+                                                Text(
+                                                    text = sItem.platforms.joinToString(", "),
+                                                    fontSize = 10.sp,
+                                                    color = LXTextSecondary
+                                                )
+                                            }
+                                        }
+
+                                        var showSeriesStatusMenu by remember { mutableStateOf(false) }
+                                        Box {
+                                            Surface(
+                                                color = when (sItem.status) {
+                                                    GameSeriesItemStatus.COMPLETED -> LXPrimaryGreen.copy(alpha = 0.2f)
+                                                    GameSeriesItemStatus.PLAYING -> Color(0xFF2196F3).copy(alpha = 0.2f)
+                                                    GameSeriesItemStatus.SKIPPED -> LXTextSecondary.copy(alpha = 0.2f)
+                                                    GameSeriesItemStatus.DROPPED -> LXErrorRed.copy(alpha = 0.2f)
+                                                    else -> LXSurfaceElevated
+                                                },
+                                                shape = RoundedCornerShape(4.dp),
+                                                border = BorderStroke(1.dp, LXBorder),
+                                                modifier = Modifier.clickable { showSeriesStatusMenu = true }
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = when (sItem.status) {
+                                                            GameSeriesItemStatus.COMPLETED -> "Done"
+                                                            GameSeriesItemStatus.PLAYING -> "Playing"
+                                                            GameSeriesItemStatus.SKIPPED -> "Skip"
+                                                            GameSeriesItemStatus.DROPPED -> "Drop"
+                                                            else -> "Plan"
+                                                        },
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = when (sItem.status) {
+                                                            GameSeriesItemStatus.COMPLETED -> LXPrimaryGreen
+                                                            GameSeriesItemStatus.PLAYING -> Color(0xFF64B5F6)
+                                                            GameSeriesItemStatus.SKIPPED -> LXTextSecondary
+                                                            GameSeriesItemStatus.DROPPED -> LXErrorRed
+                                                            else -> LXTextPrimary
+                                                        }
+                                                    )
+                                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = LXTextSecondary, modifier = Modifier.size(12.dp))
+                                                }
+                                            }
+
+                                            DropdownMenu(
+                                                expanded = showSeriesStatusMenu,
+                                                onDismissRequest = { showSeriesStatusMenu = false },
+                                                modifier = Modifier.background(LXSurfaceElevated)
+                                            ) {
+                                                GameSeriesItemStatus.values().forEach { st ->
+                                                    DropdownMenuItem(
+                                                        text = {
+                                                            Text(
+                                                                text = when (st) {
+                                                                    GameSeriesItemStatus.PLANNED -> "Planned"
+                                                                    GameSeriesItemStatus.PLAYING -> "Playing"
+                                                                    GameSeriesItemStatus.COMPLETED -> "Completed"
+                                                                    GameSeriesItemStatus.SKIPPED -> "Skipped"
+                                                                    GameSeriesItemStatus.DROPPED -> "Dropped"
+                                                                },
+                                                                fontSize = 12.sp,
+                                                                fontWeight = if (sItem.status == st) FontWeight.Bold else FontWeight.Normal,
+                                                                color = if (sItem.status == st) LXPrimaryGreen else LXTextPrimary
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            showSeriesStatusMenu = false
+                                                            onUpdateGameSeriesStatus(index, st)
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1745,7 +1970,7 @@ private fun DetailDatesCard(entry: MediaEntry) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (hasAiredData) {
-                if (entry.mediaType == MediaType.MOVIE) {
+                if (entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.GAME) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("Release Date", color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                         Text(
@@ -3311,6 +3536,33 @@ private fun RelatedItemDetailSheet(
                         externalSource = "Open Library",
                         webUrl = full?.infoUrl ?: "https://openlibrary.org/works/$workKey"
                     )
+                } else if (item.mediaType == MediaType.GAME || item.externalSource.equals("IGDB", ignoreCase = true) || item.externalSource.equals("RAWG", ignoreCase = true)) {
+                    val gDetails = GameMetadataManager.getGameDetails(context, item.externalId, item.externalSource).getOrNull()
+                        ?: GameMetadataManager.searchGames(context, item.title, limit = 1).getOrNull()?.firstOrNull()?.let {
+                            GameMetadataManager.getGameDetails(context, it.externalId, it.externalSource).getOrNull()
+                        }
+                    val yr = gDetails?.releaseYear ?: item.releaseYear
+                    val webUrl = if (item.externalSource.equals("RAWG", ignoreCase = true)) {
+                        "https://rawg.io/games/${gDetails?.externalId ?: item.externalId}"
+                    } else {
+                        "https://www.igdb.com/games/${gDetails?.externalId ?: item.externalId}"
+                    }
+                    detailedInfo = RelatedDetailedInfo(
+                        title = gDetails?.title ?: item.title,
+                        alternateTitle = gDetails?.alternateTitles?.firstOrNull(),
+                        synopsis = gDetails?.summary,
+                        tags = gDetails?.genres?.joinToString(", "),
+                        posterUrl = gDetails?.coverUrl ?: item.posterUrl,
+                        score = gDetails?.rating ?: item.score,
+                        scoreSource = gDetails?.ratingSource ?: item.externalSource,
+                        releaseYear = yr,
+                        durationMinutes = null,
+                        totalUnits = null,
+                        statusText = "Game",
+                        externalId = gDetails?.externalId ?: item.externalId,
+                        externalSource = gDetails?.externalSource ?: item.externalSource,
+                        webUrl = webUrl
+                    )
                 } else {
                     val malId = item.externalId.toLongOrNull() ?: 0L
                     val isManga = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA || item.mediaType == MediaType.BOOK
@@ -3376,6 +3628,10 @@ private fun RelatedItemDetailSheet(
             if (displayExternalSource.equals("TMDB", ignoreCase = true)) {
                 val typeStr = if (item.mediaType == MediaType.MOVIE) "movie" else "tv"
                 "https://www.themoviedb.org/$typeStr/$displayExternalId"
+            } else if (displayExternalSource.equals("IGDB", ignoreCase = true)) {
+                "https://www.igdb.com/games/$displayExternalId"
+            } else if (displayExternalSource.equals("RAWG", ignoreCase = true)) {
+                "https://rawg.io/games/$displayExternalId"
             } else if (displayExternalSource.equals("MangaDex", ignoreCase = true)) {
                 "https://mangadex.org/title/$displayExternalId"
             } else if (displayExternalSource.equals("Kitsu", ignoreCase = true)) {
@@ -3422,7 +3678,7 @@ private fun RelatedItemDetailSheet(
             listOfNotNull(chs, vols).joinToString(" • ").takeIf { it.isNotBlank() }
         }
         MediaType.GAME -> {
-            null
+            detailedInfo?.tags?.takeIf { it.isNotBlank() } ?: "Game"
         }
     }
 

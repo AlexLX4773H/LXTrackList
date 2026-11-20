@@ -104,11 +104,30 @@ fun SearchDiscoverySheet(
     onApplyManhwa: (DiscoveryFilter.Manhwa) -> Unit,
     onApplyLightNovel: (DiscoveryFilter.LightNovel) -> Unit,
     onApplyBook: (DiscoveryFilter.Book) -> Unit,
+    onApplyGame: (DiscoveryFilter.Game) -> Unit = {},
     onResetFilter: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val currentYear = AnimeSeason.currentYear()
     val maxYear = AnimeSeason.maxDiscoveryYear() // currentYear + 2
+
+    // Game state
+    val gameFilter = activeFilter as? DiscoveryFilter.Game
+    var selectedGameMode by remember {
+        mutableStateOf(gameFilter?.mode)
+    }
+    var selectedGameYear by remember {
+        mutableIntStateOf(gameFilter?.year ?: currentYear)
+    }
+    var selectedGameStartYear by remember {
+        mutableStateOf<Int?>(gameFilter?.startYear ?: gameFilter?.year ?: currentYear)
+    }
+    var selectedGameEndYear by remember {
+        mutableStateOf<Int?>(gameFilter?.endYear ?: gameFilter?.year ?: currentYear)
+    }
+    var selectedGameSort by remember {
+        mutableStateOf(gameFilter?.sortOrder ?: GameSortOrder.POPULARITY)
+    }
 
     // Anime state
     val animeFilter = activeFilter as? DiscoveryFilter.Anime
@@ -303,6 +322,7 @@ fun SearchDiscoverySheet(
         SearchCategory.MANHWA -> selectedManhwaLanguages
         SearchCategory.LIGHT_NOVELS -> selectedLightNovelLanguages
         SearchCategory.BOOKS -> selectedBookLanguages
+        SearchCategory.GAMES -> emptySet()
     }
 
     fun setCategoryLanguages(languages: Set<String>) {
@@ -314,6 +334,7 @@ fun SearchDiscoverySheet(
             SearchCategory.MANHWA -> selectedManhwaLanguages = languages
             SearchCategory.LIGHT_NOVELS -> selectedLightNovelLanguages = languages
             SearchCategory.BOOKS -> selectedBookLanguages = languages
+            SearchCategory.GAMES -> {}
         }
     }
 
@@ -339,6 +360,7 @@ fun SearchDiscoverySheet(
         SearchCategory.MANHWA -> manhwaIncludedTags
         SearchCategory.LIGHT_NOVELS -> lightNovelIncludedTags
         SearchCategory.BOOKS -> bookIncludedTags
+        SearchCategory.GAMES -> emptySet()
     }
 
     val activeExcludedTags: Set<String> = when (category) {
@@ -349,6 +371,7 @@ fun SearchDiscoverySheet(
         SearchCategory.MANHWA -> manhwaExcludedTags
         SearchCategory.LIGHT_NOVELS -> lightNovelExcludedTags
         SearchCategory.BOOKS -> bookExcludedTags
+        SearchCategory.GAMES -> emptySet()
     }
 
     BackHandler(enabled = showTagsSubMenu || showLanguageSubMenu) {
@@ -487,6 +510,7 @@ fun SearchDiscoverySheet(
                     }
                 }
             }
+            SearchCategory.GAMES -> {}
         }
     }
 
@@ -529,6 +553,7 @@ fun SearchDiscoverySheet(
                 bookIncludedTags = emptySet()
                 bookExcludedTags = emptySet()
             }
+            SearchCategory.GAMES -> {}
         }
     }
 
@@ -588,6 +613,7 @@ fun SearchDiscoverySheet(
                                 SearchCategory.MANHWA -> "Manhwa Tags & Genres"
                                 SearchCategory.LIGHT_NOVELS -> "Light Novel Tags & Genres"
                                 SearchCategory.BOOKS -> "Book Genres & Subjects"
+                                SearchCategory.GAMES -> "Game Genres"
                             },
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             color = LXTextPrimary
@@ -731,6 +757,7 @@ fun SearchDiscoverySheet(
                         SearchCategory.BOOKS -> BookTagRegistry.filterBookGenres(tagSearchQuery).map {
                             TagDisplayItem(it.name, "Genre")
                         }
+                        SearchCategory.GAMES -> emptyList()
                     }
                 }
 
@@ -3133,6 +3160,33 @@ fun SearchDiscoverySheet(
                             )
                         }
                     }
+                }
+
+                SearchCategory.GAMES -> {
+                    GameDiscoveryContent(
+                        currentYear = currentYear,
+                        selectedGameMode = selectedGameMode,
+                        onSelectGameMode = { selectedGameMode = it },
+                        selectedGameYear = selectedGameYear,
+                        onSelectGameYear = { yr ->
+                            selectedGameYear = yr
+                            selectedGameStartYear = yr
+                            selectedGameEndYear = yr
+                        },
+                        selectedGameSort = selectedGameSort,
+                        onSelectGameSort = { selectedGameSort = it },
+                        onApply = {
+                            val filter = DiscoveryFilter.Game(
+                                mode = selectedGameMode ?: ContentDiscoveryMode.MOST_POPULAR,
+                                year = if (selectedGameMode == ContentDiscoveryMode.BY_YEAR) selectedGameYear else null,
+                                startYear = if (selectedGameMode == ContentDiscoveryMode.BY_YEAR) selectedGameStartYear else null,
+                                endYear = if (selectedGameMode == ContentDiscoveryMode.BY_YEAR) selectedGameEndYear else null,
+                                sortOrder = selectedGameSort
+                            )
+                            onApplyGame(filter)
+                            onDismiss()
+                        }
+                    )
                 }
             }
 

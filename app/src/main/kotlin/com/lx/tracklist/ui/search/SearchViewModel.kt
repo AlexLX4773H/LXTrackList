@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.lx.tracklist.data.model.CustomCategory
+import com.lx.tracklist.data.model.GameSeriesItem
+import com.lx.tracklist.data.model.GameSeriesItemStatus
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
@@ -13,6 +15,8 @@ import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.remote.BookDetails
 import com.lx.tracklist.data.remote.BookMetadataManager
+import com.lx.tracklist.data.remote.GameMetadataManager
+import com.lx.tracklist.data.remote.GameSearchResult
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanMediaDetails
 import com.lx.tracklist.data.remote.MangaDexApiClient
@@ -43,12 +47,13 @@ enum class SearchCategory(val displayName: String, val sourceName: String) {
     MOVIES("Movies", "TMDB"),
     TV_SHOWS("TV Shows", "TMDB"),
     BOOKS("Books", "Google Books / Open Library"),
-    LIGHT_NOVELS("Light Novels", "AniList / MAL")
+    LIGHT_NOVELS("Light Novels", "AniList / MAL"),
+    GAMES("Games", "IGDB / RAWG")
 }
 
 data class SearchResultItem(
     val externalId: String,
-    val externalSource: String, // "MAL", "MangaDex", "AniList", "TMDB", "Google Books", "Open Library"
+    val externalSource: String, // "MAL", "MangaDex", "AniList", "TMDB", "Google Books", "Open Library", "IGDB", "RAWG"
     val mediaType: MediaType,
     val title: String,
     val alternateTitle: String? = null,
@@ -71,6 +76,9 @@ data class SearchResultItem(
     val rawBookDetails: BookDetails? = null,
     val rawJikanDetails: JikanMediaDetails? = null,
     val rawTmdbResult: TmdbSearchResult? = null,
+    val rawGameResult: GameSearchResult? = null,
+    val gamePlatforms: List<String> = emptyList(),
+    val isGameFranchise: Boolean = false,
     val imdbId: String? = null,
     val directMalId: Long? = null,
     val directAniListId: Long? = null,
@@ -84,6 +92,7 @@ data class SearchResultItem(
 
     val webUrl: String?
         get() {
+            if (rawGameResult?.webUrl != null) return rawGameResult.webUrl
             if (rawJikanDetails?.webUrl != null) return rawJikanDetails.webUrl
             if (rawBookDetails?.infoUrl != null) return rawBookDetails.infoUrl
             if (rawTmdbResult != null) return rawTmdbResult.webUrl
@@ -91,6 +100,12 @@ data class SearchResultItem(
 
             val isMangaType = mediaType == MediaType.MANGA || mediaType == MediaType.MANHWA || mediaType == MediaType.BOOK
             return when {
+                externalSource.equals("RAWG", ignoreCase = true) -> {
+                    "https://rawg.io/games/$externalId"
+                }
+                externalSource.equals("IGDB", ignoreCase = true) -> {
+                    "https://www.igdb.com/games/$externalId"
+                }
                 externalSource.equals("TMDB", ignoreCase = true) -> {
                     val type = if (mediaType == MediaType.MOVIE) "movie" else "tv"
                     "https://www.themoviedb.org/$type/$externalId"
@@ -128,6 +143,8 @@ data class SearchResultItem(
 
     val openWebLabel: String
         get() = when {
+            externalSource.equals("IGDB", ignoreCase = true) -> "Open IGDB"
+            externalSource.equals("RAWG", ignoreCase = true) -> "Open RAWG"
             externalSource.equals("TMDB", ignoreCase = true) -> "Open TMDB"
             externalSource.equals("MangaDex", ignoreCase = true) -> "Open MangaDex"
             externalSource.startsWith("AniList", ignoreCase = true) -> "Open AniList"
@@ -269,6 +286,7 @@ class SearchViewModel(
             is DiscoveryFilter.Manhwa -> applyManhwaDiscoveryFilter(filter, context)
             is DiscoveryFilter.LightNovel -> applyLightNovelDiscoveryFilter(filter, context)
             is DiscoveryFilter.Book -> applyBookDiscoveryFilter(filter, context)
+            is DiscoveryFilter.Game -> applyGameDiscoveryFilter(filter, context)
         }
     }
 
@@ -438,6 +456,7 @@ class SearchViewModel(
             is DiscoveryFilter.Manhwa -> removeManhwaTagFilter(tag, context)
             is DiscoveryFilter.LightNovel -> removeLightNovelTagFilter(tag, context)
             is DiscoveryFilter.Book -> removeBookTagFilter(tag, context)
+            is DiscoveryFilter.Game -> {}
             null -> {}
         }
     }
@@ -791,6 +810,74 @@ class SearchViewModel(
         )
     }
 
+    fun applyGameDiscoveryFilter(filter: DiscoveryFilter.Game, context: Context? = null) {
+        searchJob?.cancel()
+        val yearPart = filter.year?.toString() ?: filter.endYear?.toString() ?: "ALL"
+        activeSearchKey = "DISCOVER:GAME:${filter.mode}:$yearPart:${filter.sortOrder}"
+        _uiState.update {
+            it.copy(
+                selectedCategory = SearchCategory.GAMES,
+                activeDiscoveryFilter = filter,
+                query = "",
+                isLoading = true,
+                currentPage = 1,
+                canLoadMore = false,
+                errorMessage = null,
+                results = emptyList()
+            )
+        }
+        searchJob = viewModelScope.launch {
+            try {
+                val results = withContext(Dispatchers.IO) {
+                    val appContext = context ?: com.lx.tracklist.LXApplication.instance
+                    val y = if (filter.mode == ContentDiscoveryMode.BY_YEAR) (filter.year ?: filter.endYear) else null
+                    val res = GameMetadataManager.discoverGames(
+                        context = appContext,
+                        year = y,
+                        sort = filter.sortOrder.apiValue,
+                        limit = 20
+                    )
+                    if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to discover games")
+                    res.getOrDefault(emptyList()).map { game ->
+                        SearchResultItem(
+                            externalId = game.externalId,
+                            externalSource = game.externalSource,
+                            mediaType = MediaType.GAME,
+                            title = game.title,
+                            alternateTitle = game.alternateTitle,
+                            posterUrl = game.coverUrl,
+                            releaseYear = game.releaseYear,
+                            score = game.score,
+                            statusText = if (game.releaseDateMillis != null && game.releaseDateMillis > System.currentTimeMillis()) "NYR" else "Game",
+                            synopsis = game.summary,
+                            rawGameResult = game,
+                            gamePlatforms = game.platforms,
+                            isGameFranchise = game.isCollectionFranchise
+                        )
+                    }
+                }
+                _uiState.update {
+                    it.copy(
+                        results = results,
+                        isLoading = false,
+                        canLoadMore = results.size >= 15,
+                        errorMessage = if (results.isEmpty()) "No games found matching filter" else null
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        results = emptyList(),
+                        isLoading = false,
+                        errorMessage = e.message ?: "Failed to discover games"
+                    )
+                }
+            }
+        }
+    }
+
     fun loadMore(context: Context? = null) {
         val currentState = _uiState.value
         if (currentState.isLoading || currentState.isLoadingMore || !currentState.canLoadMore) return
@@ -944,6 +1031,32 @@ class SearchViewModel(
                                 context = context
                             ).getOrThrow()
                             list.mapIndexed { idx, b -> mapBookToSearchResult(b, currentState.results.size + idx) }
+                        }
+                        filter is DiscoveryFilter.Game -> {
+                            val y = if (filter.mode == ContentDiscoveryMode.BY_YEAR) (filter.year ?: filter.endYear) else null
+                            val list = GameMetadataManager.discoverGames(
+                                context = context ?: com.lx.tracklist.LXApplication.instance,
+                                year = y,
+                                sort = filter.sortOrder.apiValue,
+                                limit = 20
+                            ).getOrThrow()
+                            list.map { game ->
+                                SearchResultItem(
+                                    externalId = game.externalId,
+                                    externalSource = game.externalSource,
+                                    mediaType = MediaType.GAME,
+                                    title = game.title,
+                                    alternateTitle = game.alternateTitle,
+                                    posterUrl = game.coverUrl,
+                                    releaseYear = game.releaseYear,
+                                    score = game.score,
+                                    statusText = if (game.releaseDateMillis != null && game.releaseDateMillis > System.currentTimeMillis()) "NYR" else "Game",
+                                    synopsis = game.summary,
+                                    rawGameResult = game,
+                                    gamePlatforms = game.platforms,
+                                    isGameFranchise = game.isCollectionFranchise
+                                )
+                            }
                         }
                         currentState.selectedCategory == SearchCategory.MOVIES && query.length >= 2 -> {
                             val list = TmdbApiClient.searchMoviesMultiple(
@@ -1234,6 +1347,33 @@ class SearchViewModel(
                                 context = context
                             ).getOrThrow()
                             return@withContext list.mapIndexed { idx, b -> mapBookToSearchResult(b, idx) }
+                        }
+                        is DiscoveryFilter.Game -> {
+                            val appContext = context ?: com.lx.tracklist.LXApplication.instance
+                            val y = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) (activeFilter.year ?: activeFilter.endYear) else null
+                            val list = GameMetadataManager.discoverGames(
+                                context = appContext,
+                                year = y,
+                                sort = activeFilter.sortOrder.apiValue,
+                                limit = 20
+                            ).getOrThrow()
+                            return@withContext list.map { game ->
+                                SearchResultItem(
+                                    externalId = game.externalId,
+                                    externalSource = game.externalSource,
+                                    mediaType = MediaType.GAME,
+                                    title = game.title,
+                                    alternateTitle = game.alternateTitle,
+                                    posterUrl = game.coverUrl,
+                                    releaseYear = game.releaseYear,
+                                    score = game.score,
+                                    statusText = if (game.releaseDateMillis != null && game.releaseDateMillis > System.currentTimeMillis()) "NYR" else "Game",
+                                    synopsis = game.summary,
+                                    rawGameResult = game,
+                                    gamePlatforms = game.platforms,
+                                    isGameFranchise = game.isCollectionFranchise
+                                )
+                            }
                         }
                     }
                 }
@@ -1691,6 +1831,28 @@ class SearchViewModel(
                             )
                         }
                     }
+                    SearchCategory.GAMES -> {
+                        val appContext = context ?: com.lx.tracklist.LXApplication.instance
+                        val res = GameMetadataManager.searchGames(appContext, query, limit = 20)
+                        if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to search games")
+                        res.getOrDefault(emptyList()).map { game ->
+                            SearchResultItem(
+                                externalId = game.externalId,
+                                externalSource = game.externalSource,
+                                mediaType = MediaType.GAME,
+                                title = game.title,
+                                alternateTitle = game.alternateTitle,
+                                posterUrl = game.coverUrl,
+                                releaseYear = game.releaseYear,
+                                score = game.score,
+                                statusText = if (game.releaseDateMillis != null && game.releaseDateMillis > System.currentTimeMillis()) "NYR" else "Game",
+                                synopsis = game.summary,
+                                rawGameResult = game,
+                                gamePlatforms = game.platforms,
+                                isGameFranchise = game.isCollectionFranchise
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1735,12 +1897,56 @@ class SearchViewModel(
         status: MediaStatus,
         customCategory: String? = null,
         subCategory: String? = null,
-        context: Context? = null
+        context: Context? = null,
+        asFranchise: Boolean? = null
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val targetUserId = repository.activeUser.value.id
-                val entry: MediaEntry = if (item.externalSource == "TMDB") {
+                val entry: MediaEntry = if (item.mediaType == MediaType.GAME) {
+                    val fullDetails = if (context != null) {
+                        GameMetadataManager.getGameDetails(context, item.externalId, item.externalSource).getOrNull()
+                    } else null
+                    val platforms = fullDetails?.platforms?.takeIf { it.isNotEmpty() } ?: item.gamePlatforms
+                    val franchiseMode = asFranchise ?: item.isGameFranchise
+                    val franchiseItems = if (franchiseMode && fullDetails != null && fullDetails.collectionGames.isNotEmpty()) {
+                        fullDetails.collectionGames.mapIndexed { idx, cGame ->
+                            val isTarget = cGame.externalId == fullDetails.externalId || cGame.title.equals(fullDetails.title, ignoreCase = true)
+                            GameSeriesItem(
+                                id = cGame.externalId,
+                                order = idx + 1,
+                                title = cGame.title,
+                                releaseYear = cGame.releaseYear,
+                                coverUrl = cGame.coverUrl,
+                                status = if (isTarget) GameSeriesItemStatus.PLAYING else GameSeriesItemStatus.PLANNED,
+                                platforms = cGame.platforms
+                            )
+                        }
+                    } else emptyList()
+
+                    MediaEntry(
+                        userId = targetUserId,
+                        title = fullDetails?.title ?: item.title,
+                        alternateTitle = fullDetails?.alternateTitles?.firstOrNull() ?: item.alternateTitle,
+                        mediaType = MediaType.GAME,
+                        status = status,
+                        customCategory = customCategory,
+                        subCategory = subCategory,
+                        externalId = fullDetails?.externalId ?: item.externalId,
+                        externalSource = fullDetails?.externalSource ?: item.externalSource,
+                        externalScore = fullDetails?.rating ?: item.score,
+                        externalScoreSource = fullDetails?.ratingSource ?: item.externalSource,
+                        coverImageUri = fullDetails?.coverUrl ?: item.posterUrl,
+                        tags = fullDetails?.genres?.joinToString(", "),
+                        description = fullDetails?.summary ?: item.synopsis,
+                        airedStartDate = fullDetails?.releaseDateMillis,
+                        trackingUnit = TrackingUnit.PERCENTAGE,
+                        gamePlatforms = MediaEntry.formatGamePlatforms(platforms),
+                        isGameFranchise = franchiseMode && franchiseItems.isNotEmpty(),
+                        gameSeriesEntriesJson = if (franchiseMode && franchiseItems.isNotEmpty()) MediaEntry.formatGameSeriesEntries(franchiseItems) else null,
+                        relatedEntriesJson = if (fullDetails != null && fullDetails.relatedItems.isNotEmpty()) com.google.gson.Gson().toJson(fullDetails.relatedItems) else null
+                    )
+                } else if (item.externalSource == "TMDB") {
                     val tmdbId = item.externalId.toLongOrNull() ?: 0L
                     if (item.mediaType == MediaType.MOVIE) {
                         val fullDetails = TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()

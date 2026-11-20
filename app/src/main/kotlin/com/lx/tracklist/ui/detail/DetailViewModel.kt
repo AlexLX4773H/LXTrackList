@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.lx.tracklist.data.model.GameSeriesItem
+import com.lx.tracklist.data.model.GameSeriesItemStatus
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
@@ -11,6 +13,7 @@ import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.BookMetadataManager
+import com.lx.tracklist.data.remote.GameMetadataManager
 import com.lx.tracklist.data.remote.GoogleBooksApiClient
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanSyncManager
@@ -249,6 +252,22 @@ class DetailViewModel(
                 }
 
                 val fetchResult: Result<List<RelatedMediaItem>> = when {
+                    cur.mediaType == MediaType.GAME -> {
+                        if (context != null) {
+                            val gameId = cur.externalId ?: run {
+                                val sRes = GameMetadataManager.searchGames(context, cur.title, limit = 1)
+                                sRes.getOrNull()?.firstOrNull()?.externalId
+                            }
+                            if (gameId != null) {
+                                val dRes = GameMetadataManager.getGameDetails(context, gameId, cur.externalSource)
+                                Result.success(dRes.getOrNull()?.relatedItems ?: emptyList())
+                            } else {
+                                Result.success(emptyList())
+                            }
+                        } else {
+                            Result.success(emptyList())
+                        }
+                    }
                     isBook -> {
                         BookMetadataManager.fetchRelatedBooks(cur, context)
                     }
@@ -527,6 +546,28 @@ class DetailViewModel(
         }
     }
 
+    fun updateGameSeriesItemStatus(index: Int, newStatus: GameSeriesItemStatus) {
+        val cur = entry.value ?: return
+        val series = cur.getGameSeriesEntries().toMutableList()
+        if (index in series.indices) {
+            series[index] = series[index].copy(status = newStatus)
+            val updatedJson = MediaEntry.formatGameSeriesEntries(series)
+            val active = series.count { it.status != GameSeriesItemStatus.SKIPPED }
+            val completed = series.count { it.status == GameSeriesItemStatus.COMPLETED }
+            val isDone = active > 0 && completed >= active
+            val now = System.currentTimeMillis()
+            val finalStatus = if (isDone) MediaStatus.COMPLETED else if (completed > 0 && cur.status == MediaStatus.PLAN_TO_WATCH) MediaStatus.WATCHING else cur.status
+            viewModelScope.launch {
+                repository.update(cur.copy(
+                    gameSeriesEntriesJson = updatedJson,
+                    status = finalStatus,
+                    finishDate = if (isDone && cur.finishDate == null) now else cur.finishDate,
+                    updatedAt = now
+                ))
+            }
+        }
+    }
+
     fun updateStatus(newStatus: MediaStatus) {
         val cur = entry.value ?: return
         if (cur.status == newStatus) return
@@ -642,6 +683,73 @@ class DetailViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             _isRefreshingMetadata.value = true
             try {
+                if (cur.mediaType == MediaType.GAME) {
+                    val gameId = cur.externalId ?: run {
+                        val sRes = GameMetadataManager.searchGames(context, cur.title, limit = 1)
+                        sRes.getOrNull()?.firstOrNull()?.externalId
+                    }
+                    if (gameId == null) {
+                        _metadataRefreshMessage.value = "No matching game found for \"${cur.title}\""
+                        return@launch
+                    }
+
+                    val detailsRes = GameMetadataManager.getGameDetails(context, gameId, cur.externalSource)
+                    val details = detailsRes.getOrNull()
+                    if (details != null) {
+                        val now = System.currentTimeMillis()
+                        val remotePlatforms = details.platforms
+                        val mergedPlatforms = if (cur.gamePlatforms.isNullOrBlank()) {
+                            MediaEntry.formatGamePlatforms(remotePlatforms)
+                        } else {
+                            val curList = cur.getGamePlatformList().toMutableList()
+                            remotePlatforms.forEach { p ->
+                                if (!curList.any { it.equals(p, ignoreCase = true) }) curList.add(p)
+                            }
+                            MediaEntry.formatGamePlatforms(curList)
+                        }
+
+                        val franchiseItems = if (cur.isGameFranchise && cur.getGameSeriesEntries().isEmpty() && details.collectionGames.isNotEmpty()) {
+                            details.collectionGames.mapIndexed { idx, cGame ->
+                                val isTarget = cGame.externalId == details.externalId || cGame.title.equals(details.title, ignoreCase = true)
+                                GameSeriesItem(
+                                    id = cGame.externalId,
+                                    order = idx + 1,
+                                    title = cGame.title,
+                                    releaseYear = cGame.releaseYear,
+                                    coverUrl = cGame.coverUrl,
+                                    status = if (isTarget) GameSeriesItemStatus.PLAYING else GameSeriesItemStatus.PLANNED,
+                                    platforms = cGame.platforms
+                                )
+                            }
+                        } else cur.getGameSeriesEntries()
+
+                        val updated = cur.copy(
+                            externalId = details.externalId,
+                            externalSource = details.externalSource,
+                            coverImageUri = details.coverUrl ?: cur.coverImageUri,
+                            alternateTitle = if (details.alternateTitles.isNotEmpty()) details.alternateTitles.joinToString("\n") else cur.alternateTitle,
+                            airedStartDate = details.releaseDateMillis ?: cur.airedStartDate,
+                            externalScore = details.rating ?: cur.externalScore,
+                            externalScoreSource = details.ratingSource,
+                            tags = if (details.genres.isNotEmpty()) details.genres.joinToString(", ") else cur.tags,
+                            description = details.summary?.takeIf { it.isNotBlank() } ?: cur.description,
+                            gamePlatforms = mergedPlatforms,
+                            gameSeriesEntriesJson = if (cur.isGameFranchise && franchiseItems.isNotEmpty()) MediaEntry.formatGameSeriesEntries(franchiseItems) else cur.gameSeriesEntriesJson,
+                            relatedEntriesJson = if (details.relatedItems.isNotEmpty()) com.google.gson.Gson().toJson(details.relatedItems) else cur.relatedEntriesJson,
+                            updatedAt = now
+                        )
+                        repository.update(updated)
+                        _metadataRefreshMessage.value = "Metadata refreshed from ${details.externalSource} (${details.title})"
+                        loadedForEntryId = -1L
+                        loadRelatedEntries(updated, context)
+                        return@launch
+                    } else {
+                        val errMsg = detailsRes.exceptionOrNull()?.message ?: "Failed to fetch game details"
+                        _metadataRefreshMessage.value = errMsg
+                        return@launch
+                    }
+                }
+
                 if (cur.mediaType == MediaType.BOOK) {
                     val isLightNovel = cur.externalSource.equals("AniList", ignoreCase = true) ||
                             cur.customCategory.equals("Light Novels", ignoreCase = true) ||
@@ -995,6 +1103,18 @@ class DetailViewModel(
             } finally {
                 _isRefreshingMetadata.value = false
             }
+        }
+    }
+
+    fun updateCoverImage(coverUrl: String) {
+        val cur = entry.value ?: return
+        viewModelScope.launch {
+            val updated = cur.copy(
+                coverImageUri = coverUrl,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.update(updated)
+            _metadataRefreshMessage.value = "Cover image updated"
         }
     }
 }

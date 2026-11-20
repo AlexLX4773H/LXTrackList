@@ -660,11 +660,11 @@ fun LibraryScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Search and update posters, runtimes, broadcast dates, season/episode counts, and metadata for the selected ${state.selectedIds.size} entries using MyAnimeList (Jikan), The Movie Database (TMDB), Google Books, and Open Library.",
+                        text = "Search and update posters, runtimes, broadcast dates, season/episode counts, platforms, and metadata for the selected ${state.selectedIds.size} entries using MyAnimeList (Jikan), The Movie Database (TMDB), Google Books, Open Library, and IGDB / RAWG.",
                         color = LXTextSecondary
                     )
                     Text(
-                        text = "Anime, Manga, and Manhwa entries are synced with Jikan (MAL) / MangaDex / AniList. Movies and TV Shows are synced with TMDB. Books and Novels are synced with Google Books and Open Library (or AniList/MAL for Light Novels).",
+                        text = "Anime, Manga, and Manhwa entries are synced with Jikan (MAL) / MangaDex / AniList. Movies and TV Shows are synced with TMDB. Books and Novels are synced with Google Books and Open Library. Video Games are synced with IGDB and RAWG.",
                         color = LXTextSecondary,
                         fontSize = 12.sp
                     )

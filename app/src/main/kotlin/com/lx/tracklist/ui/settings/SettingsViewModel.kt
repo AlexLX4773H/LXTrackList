@@ -268,6 +268,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
     val jikanSyncState = JikanSyncManager.syncState
     val tmdbSyncState = TmdbSyncManager.syncState
     val bookSyncState = BookSyncManager.syncState
+    val gameSyncState = com.lx.tracklist.data.remote.GameSyncManager.syncState
     val malSyncState = com.lx.tracklist.data.remote.mal.MalSyncManager.syncState
     val tachiyomiResolveState = TachiyomiResolverManager.resolveState
 
@@ -390,6 +391,21 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun cancelBookSync(context: Context? = null) {
         BookSyncManager.cancelSync(context)
+    }
+
+    fun startGameSync(context: Context, forceRefresh: Boolean = false) {
+        val user = _uiState.value.activeUser
+        com.lx.tracklist.data.remote.GameSyncManager.syncLibrary(
+            context = context,
+            repository = repository,
+            profileId = user.id,
+            profileName = user.name,
+            forceRefresh = forceRefresh
+        )
+    }
+
+    fun cancelGameSync(context: Context? = null) {
+        com.lx.tracklist.data.remote.GameSyncManager.cancelSync(context)
     }
 
     fun startTachiyomiResolution(context: Context) {

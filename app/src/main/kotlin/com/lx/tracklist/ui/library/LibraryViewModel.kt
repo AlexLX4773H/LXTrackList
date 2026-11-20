@@ -660,10 +660,13 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             val jikanIds = mutableSetOf<Long>()
             val tmdbIds = mutableSetOf<Long>()
             val bookIds = mutableSetOf<Long>()
+            val gameIds = mutableSetOf<Long>()
 
             for (entry in selectedEntries) {
                 val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim() ?: ""
-                if (src.equals("TMDB", ignoreCase = true)) {
+                if (src.equals("IGDB", ignoreCase = true) || src.equals("RAWG", ignoreCase = true) || entry.mediaType == MediaType.GAME) {
+                    gameIds.add(entry.id)
+                } else if (src.equals("TMDB", ignoreCase = true)) {
                     tmdbIds.add(entry.id)
                 } else if (src.equals("Google Books", ignoreCase = true) || src.equals("Open Library", ignoreCase = true)) {
                     bookIds.add(entry.id)
@@ -712,6 +715,16 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                         targetEntryIds = bookIds,
                         targetProfileId = user.id,
                         targetProfileName = user.name
+                    )
+                }
+                if (gameIds.isNotEmpty()) {
+                    com.lx.tracklist.data.remote.GameSyncManager.syncLibrary(
+                        context = context,
+                        repository = repository,
+                        profileId = user.id,
+                        profileName = user.name,
+                        forceRefresh = forceRefresh,
+                        targetEntryIds = gameIds
                     )
                 }
             }

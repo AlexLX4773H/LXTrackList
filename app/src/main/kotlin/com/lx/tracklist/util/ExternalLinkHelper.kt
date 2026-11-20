@@ -523,4 +523,76 @@ object ExternalLinkHelper {
 
         return list
     }
+
+    private fun safeUrlEncode(text: String): String {
+        return try {
+            Uri.encode(text)
+        } catch (_: Throwable) {
+            java.net.URLEncoder.encode(text, "UTF-8")
+        }
+    }
+
+    fun buildGameOpenOptions(
+        title: String,
+        externalId: String?,
+        externalSource: String?,
+        webUrl: String? = null
+    ): List<ExternalOpenOption> {
+        val list = mutableListOf<ExternalOpenOption>()
+        val encodedTitle = safeUrlEncode(title.trim())
+
+        // 1. IGDB
+        val igdbUrl = when {
+            externalSource.equals("IGDB", ignoreCase = true) && !externalId.isNullOrBlank() ->
+                webUrl ?: "https://www.igdb.com/games/$externalId"
+            webUrl != null && webUrl.contains("igdb.com", ignoreCase = true) -> webUrl
+            else -> "https://www.igdb.com/search?utf8=✓&q=$encodedTitle"
+        }
+        list.add(
+            ExternalOpenOption(
+                title = "IGDB",
+                subtitle = "igdb.com",
+                url = igdbUrl,
+                color = 0xFF9146FF
+            )
+        )
+
+        // 2. RAWG
+        val rawgUrl = when {
+            externalSource.equals("RAWG", ignoreCase = true) && !externalId.isNullOrBlank() ->
+                webUrl ?: "https://rawg.io/games/$externalId"
+            webUrl != null && webUrl.contains("rawg.io", ignoreCase = true) -> webUrl
+            else -> "https://rawg.io/search?query=$encodedTitle"
+        }
+        list.add(
+            ExternalOpenOption(
+                title = "RAWG",
+                subtitle = "rawg.io",
+                url = rawgUrl,
+                color = 0xFF000000
+            )
+        )
+
+        // 3. Steam Store
+        list.add(
+            ExternalOpenOption(
+                title = "Steam Store",
+                subtitle = "store.steampowered.com",
+                url = "https://store.steampowered.com/search/?term=$encodedTitle",
+                color = 0xFF171A21
+            )
+        )
+
+        // 4. SteamGridDB
+        list.add(
+            ExternalOpenOption(
+                title = "SteamGridDB",
+                subtitle = "steamgriddb.com",
+                url = "https://www.steamgriddb.com/search/grids?term=$encodedTitle",
+                color = 0xFF1B2838
+            )
+        )
+
+        return list
+    }
 }

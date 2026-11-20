@@ -42,10 +42,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
@@ -79,6 +82,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -119,12 +124,17 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import com.lx.tracklist.data.model.GameSeriesItem
+import com.lx.tracklist.data.model.GameSeriesItemStatus
+import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.Priority
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.remote.GameSearchResult
 import com.lx.tracklist.ui.components.CoverImageSearchDialog
+import com.lx.tracklist.ui.components.SteamGridDbPickerSheet
 import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.ThemeManager
@@ -152,6 +162,7 @@ fun AddEditScreen(
     var showExternalSyncDialog by remember { mutableStateOf(false) }
     val defaultExternalSource = remember(state.mediaType) {
         when {
+            state.mediaType == MediaType.GAME -> ExternalDbSource.IGDB
             state.mediaType == MediaType.MANHWA -> ExternalDbSource.MANGADEX
             state.mediaType == MediaType.BOOK -> ExternalDbSource.GOOGLE_BOOKS
             state.mediaType == MediaType.MOVIE || state.mediaType == MediaType.SHOW -> ExternalDbSource.TMDB
@@ -163,6 +174,7 @@ fun AddEditScreen(
     val customCategories by viewModel.customCategories.collectAsState(initial = emptyList())
     val subCategories by viewModel.subCategories.collectAsState(initial = emptyList())
     var showCoverSearchDialog by remember { mutableStateOf(false) }
+    var showSteamGridPicker by remember { mutableStateOf(false) }
     var mainCategoryExpanded by remember { mutableStateOf(false) }
     var subCategoryExpanded by remember { mutableStateOf(false) }
     var pendingMainCategory by remember { mutableStateOf<MainCategoryItem?>(null) }
@@ -320,6 +332,10 @@ fun AddEditScreen(
                     ) {
                         val orderedMenuSources = remember(state.mediaType) {
                             when {
+                                state.mediaType == MediaType.GAME -> listOf(
+                                    ExternalDbSource.IGDB,
+                                    ExternalDbSource.RAWG
+                                )
                                 state.mediaType == MediaType.MANHWA -> listOf(
                                     ExternalDbSource.MANGADEX,
                                     ExternalDbSource.ANILIST,
@@ -510,6 +526,50 @@ fun AddEditScreen(
                                             showSyncDropdown = false
                                             selectedExternalSource = ExternalDbSource.ANILIST
                                             viewModel.searchExternalDb(state.title, ExternalDbSource.ANILIST, context)
+                                            showExternalSyncDialog = true
+                                        }
+                                    )
+                                }
+                                ExternalDbSource.IGDB -> {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text("🎮", fontSize = 16.sp)
+                                                Column {
+                                                    Text("IGDB (Twitch)", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                                    Text("Video Games, Platforms & Franchises", fontSize = 11.sp, color = LXTextSecondary)
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            showSyncDropdown = false
+                                            selectedExternalSource = ExternalDbSource.IGDB
+                                            viewModel.searchExternalDb(state.title, ExternalDbSource.IGDB, context)
+                                            showExternalSyncDialog = true
+                                        }
+                                    )
+                                }
+                                ExternalDbSource.RAWG -> {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text("🕹️", fontSize = 16.sp)
+                                                Column {
+                                                    Text("RAWG", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                                    Text("Video Games Database (Zero-OAuth Fallback)", fontSize = 11.sp, color = LXTextSecondary)
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            showSyncDropdown = false
+                                            selectedExternalSource = ExternalDbSource.RAWG
+                                            viewModel.searchExternalDb(state.title, ExternalDbSource.RAWG, context)
                                             showExternalSyncDialog = true
                                         }
                                     )
@@ -1020,7 +1080,505 @@ fun AddEditScreen(
                             )
                         }
                         MediaType.GAME -> {
-                            // Phase 3 will render full Game tracking UI
+                            // 1. Mode Switch: Standalone Game vs Franchise / Series
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FilterChip(
+                                    selected = !state.isGameFranchise,
+                                    onClick = { viewModel.updateIsGameFranchise(false) },
+                                    label = { Text("🎮 Standalone Game", fontSize = 12.sp) },
+                                    modifier = Modifier.weight(1f),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
+                                )
+                                FilterChip(
+                                    selected = state.isGameFranchise,
+                                    onClick = { viewModel.updateIsGameFranchise(true) },
+                                    label = { Text("📚 Franchise / Series", fontSize = 12.sp) },
+                                    modifier = Modifier.weight(1f),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
+                                )
+                            }
+
+                            // 2. Platforms Section
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    text = if (state.isGameFranchise) "Franchise Platforms" else "Platforms",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = LXTextPrimary
+                                )
+                                val presetPlatforms = remember {
+                                    listOf(
+                                        "PC (Steam)", "PC (Epic)", "PC (GOG)", "PS5", "PS4",
+                                        "Xbox Series X|S", "Xbox One", "Nintendo Switch", "Switch 2",
+                                        "Steam Deck", "Android", "iOS", "Retro / Emulated"
+                                    )
+                                }
+                                val currentPlatforms = remember(state.gamePlatforms) {
+                                    MediaEntry.parseGamePlatforms(state.gamePlatforms)
+                                }
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    presetPlatforms.forEach { platform ->
+                                        val isSelected = currentPlatforms.any { it.equals(platform, ignoreCase = true) }
+                                        FilterChip(
+                                            selected = isSelected,
+                                            onClick = { viewModel.toggleGamePlatform(platform) },
+                                            label = { Text(platform, fontSize = 11.sp) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = LXPrimaryGreen,
+                                                selectedLabelColor = LXBackgroundBlack,
+                                                containerColor = LXSurfaceElevated,
+                                                labelColor = LXTextSecondary
+                                            )
+                                        )
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = state.gamePlatforms,
+                                    onValueChange = { viewModel.updateGamePlatforms(it) },
+                                    label = { Text("Platform(s) (comma-separated or custom)") },
+                                    placeholder = { Text("e.g. PC (Steam), PS5, Nintendo Switch") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = outlinedColors()
+                                )
+                            }
+
+                            if (!state.isGameFranchise) {
+                                // 3. Standalone Progress Tracking
+                                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
+
+                                Text(
+                                    text = "Tracking Unit",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = LXTextPrimary
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FilterChip(
+                                        selected = state.trackingUnit != TrackingUnit.CUSTOM,
+                                        onClick = { viewModel.updateTrackingUnit(TrackingUnit.PERCENTAGE) },
+                                        label = { Text("Percentage (0..100%)", fontSize = 11.sp) },
+                                        modifier = Modifier.weight(1f),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = LXPrimaryGreen,
+                                            selectedLabelColor = LXBackgroundBlack,
+                                            containerColor = LXSurfaceElevated,
+                                            labelColor = LXTextSecondary
+                                        )
+                                    )
+                                    FilterChip(
+                                        selected = state.trackingUnit == TrackingUnit.CUSTOM,
+                                        onClick = { viewModel.updateTrackingUnit(TrackingUnit.CUSTOM) },
+                                        label = { Text("Custom Units", fontSize = 11.sp) },
+                                        modifier = Modifier.weight(1f),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = LXPrimaryGreen,
+                                            selectedLabelColor = LXBackgroundBlack,
+                                            containerColor = LXSurfaceElevated,
+                                            labelColor = LXTextSecondary
+                                        )
+                                    )
+                                }
+
+                                if (state.trackingUnit != TrackingUnit.CUSTOM) {
+                                    // Percentage Mode Slider & Controls
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Progress: ${state.gameProgressPercent}%",
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = LXPrimaryGreen
+                                            )
+                                            if (state.gameProgressPercent >= 100) {
+                                                Surface(
+                                                    color = LXPrimaryGreen.copy(alpha = 0.15f),
+                                                    shape = RoundedCornerShape(4.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "Completed",
+                                                        color = LXPrimaryGreen,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Slider(
+                                            value = state.gameProgressPercent.toFloat(),
+                                            onValueChange = { viewModel.updateGameProgressPercent(it.roundToInt()) },
+                                            valueRange = 0f..100f,
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = LXPrimaryGreen,
+                                                activeTrackColor = LXPrimaryGreen,
+                                                inactiveTrackColor = LXBorder
+                                            ),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent - 5) },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                modifier = Modifier.height(32.dp)
+                                            ) {
+                                                Text("-5%", fontSize = 11.sp)
+                                            }
+                                            OutlinedButton(
+                                                onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent - 1) },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                modifier = Modifier.height(32.dp)
+                                            ) {
+                                                Text("-1%", fontSize = 11.sp)
+                                            }
+                                            OutlinedTextField(
+                                                value = state.gameProgressPercent.toString(),
+                                                onValueChange = { viewModel.updateGameProgressPercent(it.toIntOrNull() ?: 0) },
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                modifier = Modifier.weight(1f),
+                                                colors = outlinedColors(),
+                                                suffix = { Text("%", color = LXTextSecondary) }
+                                            )
+                                            OutlinedButton(
+                                                onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent + 1) },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                modifier = Modifier.height(32.dp)
+                                            ) {
+                                                Text("+1%", fontSize = 11.sp)
+                                            }
+                                            OutlinedButton(
+                                                onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent + 5) },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                modifier = Modifier.height(32.dp)
+                                            ) {
+                                                Text("+5%", fontSize = 11.sp)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // Custom Units Mode
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(
+                                            text = "Unit Presets",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = LXTextSecondary
+                                        )
+                                        val unitPresets = remember {
+                                            listOf("Levels", "Cities", "Chapters", "Missions", "Bosses", "Hours", "Quests", "Achievements")
+                                        }
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            unitPresets.forEach { preset ->
+                                                val isSelected = state.customUnitLabel.equals(preset, ignoreCase = true)
+                                                FilterChip(
+                                                    selected = isSelected,
+                                                    onClick = { viewModel.updateCustomUnitLabel(preset) },
+                                                    label = { Text(preset, fontSize = 11.sp) },
+                                                    colors = FilterChipDefaults.filterChipColors(
+                                                        selectedContainerColor = LXPrimaryGreen,
+                                                        selectedLabelColor = LXBackgroundBlack,
+                                                        containerColor = LXSurfaceElevated,
+                                                        labelColor = LXTextSecondary
+                                                    )
+                                                )
+                                            }
+                                        }
+
+                                        OutlinedTextField(
+                                            value = state.customUnitLabel,
+                                            onValueChange = { viewModel.updateCustomUnitLabel(it) },
+                                            label = { Text("Unit Name (e.g. Levels, Cities, Quests)") },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = outlinedColors()
+                                        )
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            OutlinedTextField(
+                                                value = state.customUnitCurrent.toString(),
+                                                onValueChange = { viewModel.updateCustomUnitCurrent(it.toIntOrNull() ?: 0) },
+                                                label = { Text("Current ${state.customUnitLabel.ifBlank { "Progress" }}") },
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                modifier = Modifier.weight(1f),
+                                                colors = outlinedColors()
+                                            )
+                                            OutlinedTextField(
+                                                value = state.customUnitTotal?.toString() ?: "",
+                                                onValueChange = { viewModel.updateCustomUnitTotal(it.toIntOrNull()) },
+                                                label = { Text("Total Target (optional)") },
+                                                placeholder = { Text("None") },
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                modifier = Modifier.weight(1f),
+                                                colors = outlinedColors()
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                // 4. Franchise / Series Checklist Editor
+                                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
+
+                                val seriesCount = state.gameSeriesEntries.size
+                                val completedCount = state.gameSeriesEntries.count { it.status == GameSeriesItemStatus.COMPLETED }
+                                val skippedCount = state.gameSeriesEntries.count { it.status == GameSeriesItemStatus.SKIPPED }
+                                val activeCount = seriesCount - skippedCount
+
+                                Surface(
+                                    color = LXSurfaceElevated,
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, LXBorder),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(
+                                            text = "Franchise Progress: $completedCount/$activeCount played" + if (skippedCount > 0) " ($skippedCount skipped)" else "",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = LXPrimaryGreen
+                                        )
+                                        Text(
+                                            text = "Skipped entries do not count against completion percentage.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = LXTextSecondary,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = "Series Entries (${state.gameSeriesEntries.size})",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = LXTextPrimary
+                                )
+
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    state.gameSeriesEntries.forEachIndexed { index, item ->
+                                        Surface(
+                                            color = LXSurfaceElevated,
+                                            shape = RoundedCornerShape(8.dp),
+                                            border = BorderStroke(1.dp, if (item.status == GameSeriesItemStatus.PLAYING) LXPrimaryGreen.copy(alpha = 0.7f) else LXBorder),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                // Order badge
+                                                Surface(
+                                                    color = LXBackgroundBlack,
+                                                    shape = CircleShape,
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Box(contentAlignment = Alignment.Center) {
+                                                        Text(
+                                                            text = "${index + 1}",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = LXPrimaryGreen
+                                                        )
+                                                    }
+                                                }
+
+                                                // Title & Platform
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = item.title,
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = if (item.status == GameSeriesItemStatus.SKIPPED) LXTextSecondary else LXTextPrimary,
+                                                        textDecoration = if (item.status == GameSeriesItemStatus.SKIPPED) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                                                        maxLines = 2,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    if (item.platforms.isNotEmpty()) {
+                                                        Text(
+                                                            text = item.platforms.joinToString(", "),
+                                                            fontSize = 10.sp,
+                                                            color = LXTextSecondary
+                                                        )
+                                                    }
+                                                }
+
+                                                // Status Dropdown
+                                                var showStatusMenu by remember { mutableStateOf(false) }
+                                                Box {
+                                                    Surface(
+                                                        color = when (item.status) {
+                                                            GameSeriesItemStatus.COMPLETED -> LXPrimaryGreen.copy(alpha = 0.2f)
+                                                            GameSeriesItemStatus.PLAYING -> Color(0xFF2196F3).copy(alpha = 0.2f)
+                                                            GameSeriesItemStatus.SKIPPED -> LXTextSecondary.copy(alpha = 0.2f)
+                                                            GameSeriesItemStatus.DROPPED -> LXErrorRed.copy(alpha = 0.2f)
+                                                            else -> LXBackgroundBlack
+                                                        },
+                                                        shape = RoundedCornerShape(4.dp),
+                                                        border = BorderStroke(1.dp, LXBorder),
+                                                        modifier = Modifier.clickable { showStatusMenu = true }
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = when (item.status) {
+                                                                    GameSeriesItemStatus.COMPLETED -> "Done"
+                                                                    GameSeriesItemStatus.PLAYING -> "Playing"
+                                                                    GameSeriesItemStatus.SKIPPED -> "Skip"
+                                                                    GameSeriesItemStatus.DROPPED -> "Drop"
+                                                                    else -> "Plan"
+                                                                },
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = when (item.status) {
+                                                                    GameSeriesItemStatus.COMPLETED -> LXPrimaryGreen
+                                                                    GameSeriesItemStatus.PLAYING -> Color(0xFF64B5F6)
+                                                                    GameSeriesItemStatus.SKIPPED -> LXTextSecondary
+                                                                    GameSeriesItemStatus.DROPPED -> LXErrorRed
+                                                                    else -> LXTextPrimary
+                                                                }
+                                                            )
+                                                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = LXTextSecondary, modifier = Modifier.size(14.dp))
+                                                        }
+                                                    }
+
+                                                    DropdownMenu(
+                                                        expanded = showStatusMenu,
+                                                        onDismissRequest = { showStatusMenu = false },
+                                                        modifier = Modifier.background(LXSurfaceElevated)
+                                                    ) {
+                                                        GameSeriesItemStatus.values().forEach { st ->
+                                                            DropdownMenuItem(
+                                                                text = {
+                                                                    Text(
+                                                                        text = when (st) {
+                                                                            GameSeriesItemStatus.PLANNED -> "Planned"
+                                                                            GameSeriesItemStatus.PLAYING -> "Playing"
+                                                                            GameSeriesItemStatus.COMPLETED -> "Completed"
+                                                                            GameSeriesItemStatus.SKIPPED -> "Skipped"
+                                                                            GameSeriesItemStatus.DROPPED -> "Dropped"
+                                                                        },
+                                                                        fontSize = 12.sp,
+                                                                        fontWeight = if (item.status == st) FontWeight.Bold else FontWeight.Normal,
+                                                                        color = if (item.status == st) LXPrimaryGreen else LXTextPrimary
+                                                                    )
+                                                                },
+                                                                onClick = {
+                                                                    showStatusMenu = false
+                                                                    viewModel.updateGameSeriesItemStatus(index, st)
+                                                                }
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                // Move Up / Down
+                                                IconButton(
+                                                    onClick = { viewModel.moveGameSeriesItem(index, index - 1) },
+                                                    enabled = index > 0,
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.ArrowUpward,
+                                                        contentDescription = "Move Up",
+                                                        tint = if (index > 0) LXTextPrimary else LXTextSecondary.copy(alpha = 0.3f),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                                IconButton(
+                                                    onClick = { viewModel.moveGameSeriesItem(index, index + 1) },
+                                                    enabled = index < state.gameSeriesEntries.size - 1,
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.ArrowDownward,
+                                                        contentDescription = "Move Down",
+                                                        tint = if (index < state.gameSeriesEntries.size - 1) LXTextPrimary else LXTextSecondary.copy(alpha = 0.3f),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+
+                                                // Delete
+                                                IconButton(
+                                                    onClick = { viewModel.removeGameSeriesItem(index) },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Delete,
+                                                        contentDescription = "Remove Game",
+                                                        tint = LXErrorRed.copy(alpha = 0.8f),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Add Game to Series row
+                                    var newGameTitle by remember { mutableStateOf("") }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        OutlinedTextField(
+                                            value = newGameTitle,
+                                            onValueChange = { newGameTitle = it },
+                                            placeholder = { Text("Game title to add...") },
+                                            singleLine = true,
+                                            modifier = Modifier.weight(1f),
+                                            colors = outlinedColors()
+                                        )
+                                        Button(
+                                            onClick = {
+                                                if (newGameTitle.isNotBlank()) {
+                                                    viewModel.addGameSeriesItem(newGameTitle)
+                                                    newGameTitle = ""
+                                                }
+                                            },
+                                            enabled = newGameTitle.isNotBlank(),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = LXPrimaryGreen,
+                                                contentColor = LXBackgroundBlack
+                                            ),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text("+ Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1375,17 +1933,33 @@ fun AddEditScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Cover Image", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)
-                Button(
-                    onClick = { showCoverSearchDialog = true },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = LXPrimaryGreen.copy(alpha = 0.15f),
-                        contentColor = LXPrimaryGreen
-                    ),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Search Web for Cover", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (state.mediaType == MediaType.GAME) {
+                        Button(
+                            onClick = { showSteamGridPicker = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXScoreGold.copy(alpha = 0.15f),
+                                contentColor = LXScoreGold
+                            ),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("SteamGridDB", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Button(
+                        onClick = { showCoverSearchDialog = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LXPrimaryGreen.copy(alpha = 0.15f),
+                            contentColor = LXPrimaryGreen
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Search Web", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 
@@ -1504,6 +2078,17 @@ fun AddEditScreen(
                 )
             }
 
+            if (showSteamGridPicker) {
+                SteamGridDbPickerSheet(
+                    initialTitle = state.title,
+                    onPosterSelected = { url ->
+                        viewModel.updateCoverUri(url)
+                        showSteamGridPicker = false
+                    },
+                    onDismiss = { showSteamGridPicker = false }
+                )
+            }
+
             if (showExternalSyncDialog) {
                 ExternalDbSyncDialog(
                     isOpen = showExternalSyncDialog,
@@ -1518,6 +2103,10 @@ fun AddEditScreen(
                     },
                     onSelectTmdb = { item ->
                         viewModel.applySelectedTmdbResult(item, context)
+                        showExternalSyncDialog = false
+                    },
+                    onSelectGame = { item ->
+                        viewModel.applySelectedGameResult(item, context)
                         showExternalSyncDialog = false
                     }
                 )
@@ -2173,7 +2762,8 @@ private fun ExternalDbSyncDialog(
     mediaType: MediaType = MediaType.ANIME,
     onSearch: (String, ExternalDbSource) -> Unit,
     onSelectMal: (JikanMediaDetails) -> Unit,
-    onSelectTmdb: (TmdbSearchResult) -> Unit
+    onSelectTmdb: (TmdbSearchResult) -> Unit,
+    onSelectGame: (GameSearchResult) -> Unit = {}
 ) {
     if (!isOpen) return
 
@@ -2189,6 +2779,10 @@ private fun ExternalDbSyncDialog(
 
     val availableSources = remember(mediaType, syncState.selectedSource) {
         val base = when {
+            mediaType == MediaType.GAME -> listOf(
+                ExternalDbSource.IGDB,
+                ExternalDbSource.RAWG
+            )
             mediaType == MediaType.MANHWA -> listOf(
                 ExternalDbSource.MANGADEX,
                 ExternalDbSource.ANILIST,
@@ -2426,6 +3020,42 @@ private fun ExternalDbSyncDialog(
                                     )
                                 )
                             }
+                            ExternalDbSource.IGDB -> {
+                                FilterChip(
+                                    selected = syncState.selectedSource == ExternalDbSource.IGDB,
+                                    onClick = {
+                                        if (syncState.selectedSource != ExternalDbSource.IGDB) {
+                                            expandedItemKey = null
+                                            onSearch(searchInput, ExternalDbSource.IGDB)
+                                        }
+                                    },
+                                    label = { Text("🎮 IGDB", fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
+                                )
+                            }
+                            ExternalDbSource.RAWG -> {
+                                FilterChip(
+                                    selected = syncState.selectedSource == ExternalDbSource.RAWG,
+                                    onClick = {
+                                        if (syncState.selectedSource != ExternalDbSource.RAWG) {
+                                            expandedItemKey = null
+                                            onSearch(searchInput, ExternalDbSource.RAWG)
+                                        }
+                                    },
+                                    label = { Text("🕹️ RAWG", fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -2463,6 +3093,283 @@ private fun ExternalDbSyncDialog(
                                 color = LXTextSecondary,
                                 fontSize = 13.sp
                             )
+                        }
+                    } else if (syncState.selectedSource == ExternalDbSource.IGDB || syncState.selectedSource == ExternalDbSource.RAWG) {
+                        if (syncState.gameResults.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("Enter a game title and tap search.", color = LXTextSecondary, fontSize = 13.sp)
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                itemsIndexed(syncState.gameResults, key = { idx, item -> "${item.externalSource}_${item.externalId}_$idx" }) { _, item ->
+                                    val itemKey = "${item.externalSource}_${item.externalId}_${item.title}"
+                                    val isExpanded = expandedItemKey == itemKey
+                                    val openOptions = remember(item) {
+                                        ExternalLinkHelper.buildGameOpenOptions(
+                                            title = item.title,
+                                            externalId = item.externalId,
+                                            externalSource = item.externalSource,
+                                            webUrl = item.webUrl
+                                        )
+                                    }
+
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .animateContentSize(),
+                                        colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, if (isExpanded) LXPrimaryGreen.copy(alpha = 0.6f) else LXBorder)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .clickable { expandedItemKey = if (isExpanded) null else itemKey },
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                if (!item.coverUrl.isNullOrBlank()) {
+                                                    AsyncImage(
+                                                        model = item.coverUrl,
+                                                        contentDescription = null,
+                                                        modifier = Modifier
+                                                            .size(width = 46.dp, height = 64.dp)
+                                                            .clip(RoundedCornerShape(4.dp)),
+                                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                    )
+                                                } else {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(width = 46.dp, height = 64.dp)
+                                                            .clip(RoundedCornerShape(4.dp))
+                                                            .background(LXBackgroundBlack),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(Icons.Default.Image, contentDescription = null, tint = LXTextSecondary.copy(alpha = 0.5f))
+                                                    }
+                                                }
+
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = item.title,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = LXTextPrimary,
+                                                        fontSize = 13.sp,
+                                                        maxLines = if (isExpanded) Int.MAX_VALUE else 2,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    if (!item.alternateTitle.isNullOrBlank()) {
+                                                        Text(
+                                                            text = item.alternateTitle.replace("\n", " • "),
+                                                            color = LXTextSecondary,
+                                                            fontSize = 11.sp,
+                                                            maxLines = if (isExpanded) 3 else 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    FlowRow(
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        val formattedScore = formatScore(item.score)
+                                                        if (formattedScore != null) {
+                                                            Text(
+                                                                text = "★ $formattedScore",
+                                                                color = LXScoreGold,
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                maxLines = 1,
+                                                                softWrap = false
+                                                            )
+                                                        }
+                                                        if (!item.releaseYear.isNullOrBlank()) {
+                                                            Text(
+                                                                text = item.releaseYear,
+                                                                color = LXTextSecondary,
+                                                                fontSize = 11.sp,
+                                                                maxLines = 1,
+                                                                softWrap = false
+                                                            )
+                                                        }
+                                                        if (item.platforms.isNotEmpty()) {
+                                                            Surface(
+                                                                color = LXPrimaryGreen.copy(alpha = 0.15f),
+                                                                shape = RoundedCornerShape(4.dp)
+                                                            ) {
+                                                                Text(
+                                                                    text = item.platforms.take(2).joinToString(", ") + if (item.platforms.size > 2) " +${item.platforms.size - 2}" else "",
+                                                                    color = LXPrimaryGreen,
+                                                                    fontSize = 10.sp,
+                                                                    fontWeight = FontWeight.SemiBold,
+                                                                    maxLines = 1,
+                                                                    softWrap = false,
+                                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                Column(
+                                                    horizontalAlignment = Alignment.End,
+                                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                                ) {
+                                                    Button(
+                                                        onClick = { onSelectGame(item) },
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = LXPrimaryGreen,
+                                                            contentColor = LXBackgroundBlack
+                                                        ),
+                                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        modifier = Modifier.height(28.dp)
+                                                    ) {
+                                                        Text("Apply", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    }
+
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                    ) {
+                                                        var showCardGameMenu by remember { mutableStateOf(false) }
+                                                        if (openOptions.isNotEmpty()) {
+                                                            Box {
+                                                                IconButton(
+                                                                    onClick = {
+                                                                        if (openOptions.size > 1) {
+                                                                            showCardGameMenu = true
+                                                                        } else {
+                                                                            openExternalUrl(openOptions.first().url)
+                                                                        }
+                                                                    },
+                                                                    modifier = Modifier.size(26.dp)
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                                                        contentDescription = "Open",
+                                                                        tint = LXTextSecondary,
+                                                                        modifier = Modifier.size(16.dp)
+                                                                    )
+                                                                }
+
+                                                                if (openOptions.size > 1) {
+                                                                    DropdownMenu(
+                                                                        expanded = showCardGameMenu,
+                                                                        onDismissRequest = { showCardGameMenu = false },
+                                                                        modifier = Modifier.background(LXSurfaceElevated)
+                                                                    ) {
+                                                                        openOptions.forEachIndexed { index, option ->
+                                                                            if (index > 0) {
+                                                                                HorizontalDivider(color = LXBorder)
+                                                                            }
+                                                                            DropdownMenuItem(
+                                                                                text = {
+                                                                                    Column {
+                                                                                        Text(
+                                                                                            text = option.title,
+                                                                                            fontWeight = FontWeight.Bold,
+                                                                                            color = Color(option.color),
+                                                                                            fontSize = 12.sp
+                                                                                        )
+                                                                                        Text(
+                                                                                            text = option.subtitle,
+                                                                                            fontSize = 10.sp,
+                                                                                            color = LXTextSecondary
+                                                                                        )
+                                                                                    }
+                                                                                },
+                                                                                leadingIcon = {
+                                                                                    Icon(
+                                                                                        Icons.AutoMirrored.Filled.OpenInNew,
+                                                                                        contentDescription = null,
+                                                                                        tint = Color(option.color),
+                                                                                        modifier = Modifier.size(14.dp)
+                                                                                    )
+                                                                                },
+                                                                                onClick = {
+                                                                                    showCardGameMenu = false
+                                                                                    openExternalUrl(option.url)
+                                                                                }
+                                                                            )
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        IconButton(
+                                                            onClick = { expandedItemKey = if (isExpanded) null else itemKey },
+                                                            modifier = Modifier.size(26.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                                                contentDescription = if (isExpanded) "Collapse" else "Expand details",
+                                                                tint = LXPrimaryGreen,
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // Expanded details
+                                            if (isExpanded) {
+                                                HorizontalDivider(color = LXBorder.copy(alpha = 0.6f))
+                                                Column(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    if (item.platforms.isNotEmpty()) {
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Text("Platforms:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = LXTextSecondary)
+                                                            Text(item.platforms.joinToString(", "), fontSize = 11.sp, color = LXTextPrimary)
+                                                        }
+                                                    }
+                                                    if (item.genres.isNotEmpty()) {
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Text("Genres:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = LXTextSecondary)
+                                                            Text(item.genres.joinToString(", "), fontSize = 11.sp, color = LXTextPrimary)
+                                                        }
+                                                    }
+                                                    if (!item.summary.isNullOrBlank()) {
+                                                        Spacer(modifier = Modifier.height(2.dp))
+                                                        Column(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .background(LXBackgroundBlack, RoundedCornerShape(6.dp))
+                                                                .padding(8.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = "Summary",
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = LXPrimaryGreen
+                                                            )
+                                                            Spacer(modifier = Modifier.height(4.dp))
+                                                            Text(
+                                                                text = item.summary,
+                                                                fontSize = 11.sp,
+                                                                color = LXTextPrimary.copy(alpha = 0.9f),
+                                                                lineHeight = 16.sp
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     } else if (syncState.selectedSource != ExternalDbSource.TMDB) {
                         if (syncState.malResults.isEmpty()) {

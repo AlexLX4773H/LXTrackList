@@ -60,6 +60,7 @@ object OriginalLanguageRegistry {
             SearchCategory.MOVIES -> listOf("en", "ja", "ko", "th", "zh", "fr", "es", "de", "hi", "ml", "ta", "te")
             SearchCategory.TV_SHOWS -> listOf("en", "th", "ja", "ko", "zh", "es", "fr", "de", "hi")
             SearchCategory.BOOKS -> listOf("en", "ja", "fr", "es", "de", "zh", "it", "ru")
+            SearchCategory.GAMES -> listOf("en", "ja", "ko", "zh", "fr", "de", "es")
         }
         return codes.mapNotNull { findByCode(it) }
     }
@@ -79,7 +80,8 @@ object OriginalLanguageRegistry {
             }
             SearchCategory.MOVIES,
             SearchCategory.TV_SHOWS,
-            SearchCategory.BOOKS -> {
+            SearchCategory.BOOKS,
+            SearchCategory.GAMES -> {
                 ALL_LANGUAGES
             }
         }

@@ -49,6 +49,7 @@ class SyncForegroundService : Service() {
             return JikanSyncManager.syncState.value.isRunning ||
                    TmdbSyncManager.syncState.value.isRunning ||
                    BookSyncManager.syncState.value.isRunning ||
+                   GameSyncManager.syncState.value.isRunning ||
                    TachiyomiResolverManager.resolveState.value.isRunning ||
                    MalSyncManager.syncState.value.isRunning
         }
@@ -109,6 +110,7 @@ class SyncForegroundService : Service() {
                 JikanSyncManager.cancelSync(ctx)
                 TmdbSyncManager.cancelSync(ctx)
                 BookSyncManager.cancelSync(ctx)
+                GameSyncManager.cancelSync(ctx)
                 TachiyomiResolverManager.cancelResolution(ctx)
                 MalSyncManager.cancelSync()
                 stop(ctx)
@@ -180,13 +182,10 @@ class SyncForegroundService : Service() {
         observerJob?.cancel()
         observerJob = serviceScope.launch {
             combine(
-                JikanSyncManager.syncState,
-                TmdbSyncManager.syncState,
-                BookSyncManager.syncState,
-                TachiyomiResolverManager.resolveState,
-                MalSyncManager.syncState
-            ) { jikan, tmdb, book, tachi, mal ->
-                SyncCombinedState(jikan, tmdb, book, tachi, mal)
+                combine(JikanSyncManager.syncState, TmdbSyncManager.syncState, BookSyncManager.syncState) { j, t, b -> Triple(j, t, b) },
+                combine(GameSyncManager.syncState, TachiyomiResolverManager.resolveState, MalSyncManager.syncState) { g, r, m -> Triple(g, r, m) }
+            ) { (jikan, tmdb, book), (game, tachi, mal) ->
+                SyncCombinedState(jikan, tmdb, book, game, tachi, mal)
             }.collect { combined ->
                 if (!combined.isAnyRunning) {
                     // Small grace delay to avoid flickering between sequential jobs
@@ -207,6 +206,7 @@ class SyncForegroundService : Service() {
         if (combined.jikan.isRunning) runningList.add("Anime")
         if (combined.tmdb.isRunning) runningList.add("Movies & TV")
         if (combined.book.isRunning) runningList.add("Books")
+        if (combined.game.isRunning) runningList.add("Games")
         if (combined.tachi.isRunning) runningList.add("Tachiyomi IDs")
         if (combined.mal.isRunning) runningList.add("MAL Account")
 
@@ -241,6 +241,14 @@ class SyncForegroundService : Service() {
                     progress = b.completedCount
                     maxProgress = b.totalCount
                     indeterminate = b.totalCount == 0
+                }
+                combined.game.isRunning -> {
+                    val g = combined.game
+                    title = "Syncing Video Games (${g.completedCount}/${g.totalCount})"
+                    content = if (g.currentTitle.isNotBlank()) "Fetching: ${g.currentTitle}" else g.statusMessage ?: "Updating game entries..."
+                    progress = g.completedCount
+                    maxProgress = g.totalCount
+                    indeterminate = g.totalCount == 0
                 }
                 combined.tachi.isRunning -> {
                     val r = combined.tachi
@@ -278,6 +286,11 @@ class SyncForegroundService : Service() {
                 parts.add("Books: ${combined.book.completedCount}/${combined.book.totalCount}")
                 totalComp += combined.book.completedCount
                 totalMax += combined.book.totalCount
+            }
+            if (combined.game.isRunning) {
+                parts.add("Games: ${combined.game.completedCount}/${combined.game.totalCount}")
+                totalComp += combined.game.completedCount
+                totalMax += combined.game.totalCount
             }
             if (combined.tachi.isRunning) {
                 parts.add("IDs: ${combined.tachi.completedCount}/${combined.tachi.totalCount}")
@@ -363,10 +376,11 @@ class SyncForegroundService : Service() {
         val jikan: JikanSyncProgress,
         val tmdb: TmdbSyncProgress,
         val book: BookSyncProgress,
+        val game: GameSyncProgress,
         val tachi: TachiyomiResolveProgress,
         val mal: MalSyncProgress
     ) {
         val isAnyRunning: Boolean
-            get() = jikan.isRunning || tmdb.isRunning || book.isRunning || tachi.isRunning || mal.isRunning
+            get() = jikan.isRunning || tmdb.isRunning || book.isRunning || game.isRunning || tachi.isRunning || mal.isRunning
     }
 }

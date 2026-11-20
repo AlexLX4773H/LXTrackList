@@ -426,6 +426,32 @@ fun MediaCard(
                                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    if (entry.mediaType == MediaType.GAME) {
+                                        val platforms = entry.getGamePlatformList()
+                                        if (platforms.isNotEmpty()) {
+                                            val firstTwo = platforms.take(2).joinToString(", ")
+                                            val extra = if (platforms.size > 2) " +${platforms.size - 2}" else ""
+                                            Text(
+                                                text = "🎮 $firstTwo$extra",
+                                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                                color = colors.primary,
+                                                modifier = Modifier
+                                                    .background(colors.primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                        if (entry.isGameFranchise) {
+                                            Text(
+                                                text = "SERIES",
+                                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                                color = androidx.compose.ui.graphics.Color(0xFF8B5CF6),
+                                                modifier = Modifier
+                                                    .background(androidx.compose.ui.graphics.Color(0xFF8B5CF6).copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                    .padding(horizontal = 5.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+
                                     if (!entry.customCategory.isNullOrBlank()) {
                                         Text(
                                             text = entry.customCategory,
@@ -438,7 +464,7 @@ fun MediaCard(
                                     }
 
                                     if (entry.isNotYetAiredOrPublished) {
-                                        val nyaLabel = if (entry.mediaType == MediaType.GAME) "NYR" else if (entry.mediaType.isWatchType) "NYA" else "NYP"
+                                        val nyaLabel = if (entry.mediaType == MediaType.GAME) "UNRELEASED" else if (entry.mediaType.isWatchType) "NYA" else "NYP"
                                         Text(
                                             text = nyaLabel,
                                             style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),

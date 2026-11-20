@@ -1,5 +1,7 @@
 package com.lx.tracklist
 
+import com.lx.tracklist.data.exporter.JsonExporter
+import com.lx.tracklist.data.importer.JsonImporter
 import com.lx.tracklist.data.model.GameSeriesItem
 import com.lx.tracklist.data.model.GameSeriesItemStatus
 import com.lx.tracklist.data.model.MediaEntry
@@ -252,5 +254,117 @@ class GameEntryTest {
         )
 
         assertFalse(released.isNotYetAiredOrPublished)
+    }
+
+    @Test
+    fun testJsonExportImportRoundTripForGames() {
+        val seriesItems = listOf(
+            GameSeriesItem(id = "101", order = 1, title = "Dark Souls", status = GameSeriesItemStatus.COMPLETED, releaseYear = "2011"),
+            GameSeriesItem(id = "102", order = 2, title = "Dark Souls II", status = GameSeriesItemStatus.SKIPPED, releaseYear = "2014"),
+            GameSeriesItem(id = "103", order = 3, title = "Dark Souls III", status = GameSeriesItemStatus.PLAYING, releaseYear = "2016")
+        )
+        val seriesJson = MediaEntry.formatGameSeriesEntries(seriesItems)
+
+        val franchiseEntry = MediaEntry(
+            id = 1L,
+            title = "Dark Souls Series",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.WATCHING,
+            gamePlatforms = "PC (Steam), PlayStation 4, Xbox One",
+            isGameFranchise = true,
+            gameSeriesEntriesJson = seriesJson,
+            trackingUnit = TrackingUnit.PERCENTAGE,
+            gameProgressPercent = 33
+        )
+
+        val customUnitEntry = MediaEntry(
+            id = 2L,
+            title = "Elden Ring",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.WATCHING,
+            gamePlatforms = "PC (Steam)",
+            isGameFranchise = false,
+            trackingUnit = TrackingUnit.CUSTOM,
+            customUnitLabel = "Hours",
+            customUnitCurrent = 120,
+            customUnitTotal = 150
+        )
+
+        val originalEntries = listOf(franchiseEntry, customUnitEntry)
+
+        // 1. Export to JSON
+        val exportedJson = JsonExporter.exportToJson(originalEntries)
+        assertTrue(exportedJson.contains("Dark Souls Series"))
+        assertTrue(exportedJson.contains("Elden Ring"))
+        assertTrue(exportedJson.contains("PC (Steam)"))
+        assertTrue(exportedJson.contains("gamePlatforms"))
+        assertTrue(exportedJson.contains("isGameFranchise"))
+
+        // 2. Import from JSON stream
+        val importedEntries = JsonImporter.parse(exportedJson.byteInputStream(Charsets.UTF_8))
+        assertEquals(2, importedEntries.size)
+
+        // Verify franchise entry
+        val importedFranchise = importedEntries.first { it.id == 1L }
+        assertEquals("Dark Souls Series", importedFranchise.title)
+        assertEquals(MediaType.GAME, importedFranchise.mediaType)
+        assertEquals(MediaStatus.WATCHING, importedFranchise.status)
+        assertTrue(importedFranchise.isGameFranchise)
+        assertEquals("PC (Steam), PlayStation 4, Xbox One", importedFranchise.gamePlatforms)
+        assertEquals(33, importedFranchise.gameProgressPercent)
+        val parsedSeries = importedFranchise.getGameSeriesEntries()
+        assertEquals(3, parsedSeries.size)
+        assertEquals(GameSeriesItemStatus.COMPLETED, parsedSeries[0].status)
+        assertEquals(GameSeriesItemStatus.SKIPPED, parsedSeries[1].status)
+        assertEquals(GameSeriesItemStatus.PLAYING, parsedSeries[2].status)
+
+        // Verify custom units entry
+        val importedCustom = importedEntries.first { it.id == 2L }
+        assertEquals("Elden Ring", importedCustom.title)
+        assertEquals(MediaType.GAME, importedCustom.mediaType)
+        assertFalse(importedCustom.isGameFranchise)
+        assertEquals("PC (Steam)", importedCustom.gamePlatforms)
+        assertEquals(TrackingUnit.CUSTOM, importedCustom.trackingUnit)
+        assertEquals("Hours", importedCustom.customUnitLabel)
+        assertEquals(120, importedCustom.customUnitCurrent)
+        assertEquals(150, importedCustom.customUnitTotal)
+    }
+
+    @Test
+    fun testBackwardCompatibleJsonImportWithoutGameFields() {
+        // Legacy JSON without any of the new Room v18 game fields
+        val legacyJson = """
+            {
+                "app": "LX Track List",
+                "version": 1,
+                "exportedAt": 1700000000000,
+                "totalCount": 1,
+                "entries": [
+                    {
+                        "id": 99,
+                        "title": "Legacy Anime",
+                        "mediaType": "ANIME",
+                        "status": "COMPLETED",
+                        "currentEpisodes": 12,
+                        "totalEpisodes": 12
+                    }
+                ]
+            }
+        """.trimIndent()
+
+        val imported = JsonImporter.parse(legacyJson.byteInputStream(Charsets.UTF_8))
+        assertEquals(1, imported.size)
+        val entry = imported[0]
+        assertEquals("Legacy Anime", entry.title)
+        assertEquals(MediaType.ANIME, entry.mediaType)
+        assertEquals(12, entry.currentEpisodes)
+        // Verify default values for new game fields
+        assertEquals(null, entry.gamePlatforms)
+        assertFalse(entry.isGameFranchise)
+        assertEquals(null, entry.gameSeriesEntriesJson)
+        assertEquals(0, entry.gameProgressPercent)
+        assertEquals(null, entry.customUnitLabel)
+        assertEquals(0, entry.customUnitCurrent)
+        assertEquals(0, entry.customUnitTotal)
     }
 }

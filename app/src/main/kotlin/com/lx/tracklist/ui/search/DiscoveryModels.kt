@@ -96,6 +96,12 @@ enum class TmdbTvSort(val apiValue: String, val displayName: String) {
     RELEASE_DATE("first_air_date.desc", "Premiere Date")
 }
 
+enum class GameSortOrder(val apiValue: String, val displayName: String) {
+    POPULARITY("total_rating_count desc", "Most Popular"),
+    RATING("total_rating desc", "Highest Rated"),
+    RELEASE_DATE("first_release_date desc", "Release Date")
+}
+
 enum class AdultMode(val displayName: String) {
     OFF("Off"),
     INCLUDE("18+"),
@@ -650,6 +656,59 @@ sealed class DiscoveryFilter {
                 }
                 val langTag = formatLanguageLabel(originalLanguages)
                 return "$base$sortText$tagSummary$langTag$adultTag"
+            }
+    }
+
+    data class Game(
+        val mode: ContentDiscoveryMode = ContentDiscoveryMode.MOST_POPULAR,
+        val year: Int? = AnimeSeason.currentYear(),
+        val startYear: Int? = null,
+        val endYear: Int? = year,
+        val sortOrder: GameSortOrder = GameSortOrder.POPULARITY,
+        override val includedTags: Set<String> = emptySet(),
+        override val excludedTags: Set<String> = emptySet(),
+        override val adultMode: AdultMode = AdultMode.OFF,
+        override val originalLanguages: Set<String> = emptySet()
+    ) : DiscoveryFilter() {
+        constructor(
+            mode: ContentDiscoveryMode = ContentDiscoveryMode.MOST_POPULAR,
+            year: Int? = AnimeSeason.currentYear(),
+            startYear: Int? = null,
+            endYear: Int? = year,
+            sortOrder: GameSortOrder = GameSortOrder.POPULARITY,
+            includedTags: Set<String> = emptySet(),
+            excludedTags: Set<String> = emptySet(),
+            adultMode: AdultMode = AdultMode.OFF,
+            originalLanguage: String?
+        ) : this(
+            mode = mode,
+            year = year,
+            startYear = startYear,
+            endYear = endYear,
+            sortOrder = sortOrder,
+            includedTags = includedTags,
+            excludedTags = excludedTags,
+            adultMode = adultMode,
+            originalLanguages = originalLanguage?.let { setOf(it) } ?: emptySet()
+        )
+
+        val yearText: String
+            get() = when {
+                startYear != null && endYear != null && startYear != endYear -> "$startYear–$endYear"
+                endYear != null -> "$endYear"
+                year != null -> "$year"
+                startYear != null -> "$startYear"
+                else -> ""
+            }
+
+        override val label: String
+            get() {
+                val base = when (mode) {
+                    ContentDiscoveryMode.BY_YEAR -> "🎮 Games $yearText".trim()
+                    ContentDiscoveryMode.MOST_POPULAR -> "🔥 Most Popular Games"
+                }
+                val sortText = " • ${sortOrder.displayName}"
+                return "$base$sortText"
             }
     }
 }

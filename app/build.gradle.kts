@@ -44,10 +44,26 @@ android {
     val googleBooksApiKey = envProperties.getProperty("GOOGLE_BOOKS_API_KEY")
       ?: System.getenv("GOOGLE_BOOKS_API_KEY")
       ?: ""
+    val igdbClientId = envProperties.getProperty("IGDB_CLIENT_ID")
+      ?: System.getenv("IGDB_CLIENT_ID")
+      ?: ""
+    val igdbClientSecret = envProperties.getProperty("IGDB_CLIENT_SECRET")
+      ?: System.getenv("IGDB_CLIENT_SECRET")
+      ?: ""
+    val rawgApiKey = envProperties.getProperty("RAWG_API_KEY")
+      ?: System.getenv("RAWG_API_KEY")
+      ?: ""
+    val steamGridDbApiKey = envProperties.getProperty("STEAMGRIDDB_API_KEY")
+      ?: System.getenv("STEAMGRIDDB_API_KEY")
+      ?: ""
     buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"$tmdbReadToken\"")
     buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
     buildConfigField("String", "MAL_CLIENT_ID", "\"$malClientId\"")
     buildConfigField("String", "GOOGLE_BOOKS_API_KEY", "\"$googleBooksApiKey\"")
+    buildConfigField("String", "IGDB_CLIENT_ID", "\"$igdbClientId\"")
+    buildConfigField("String", "IGDB_CLIENT_SECRET", "\"$igdbClientSecret\"")
+    buildConfigField("String", "RAWG_API_KEY", "\"$rawgApiKey\"")
+    buildConfigField("String", "STEAMGRIDDB_API_KEY", "\"$steamGridDbApiKey\"")
   }
 
   signingConfigs {

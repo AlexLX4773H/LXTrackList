@@ -160,6 +160,7 @@ import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.BookSyncProgress
+import com.lx.tracklist.data.remote.GameSyncProgress
 import com.lx.tracklist.data.remote.JikanSyncProgress
 import com.lx.tracklist.data.remote.TachiyomiResolveProgress
 import com.lx.tracklist.data.remote.TmdbConfig
@@ -206,6 +207,7 @@ fun SettingsScreen(
     val jikanSyncState by viewModel.jikanSyncState.collectAsState()
     val tmdbSyncState by viewModel.tmdbSyncState.collectAsState()
     val bookSyncState by viewModel.bookSyncState.collectAsState()
+    val gameSyncState by viewModel.gameSyncState.collectAsState()
     val malSyncState by viewModel.malSyncState.collectAsState()
     val tachiyomiResolveState by viewModel.tachiyomiResolveState.collectAsState()
     val context = LocalContext.current
@@ -1116,6 +1118,7 @@ fun SettingsScreen(
                         jikanSyncState = jikanSyncState,
                         tmdbSyncState = tmdbSyncState,
                         bookSyncState = bookSyncState,
+                        gameSyncState = gameSyncState,
                         selectedSubMenu = currentSelection,
                         onSelectSubMenu = { activeSubMenu = it },
                         onDismissStatusMessage = { viewModel.clearStatusMessage() }
@@ -1156,6 +1159,7 @@ fun SettingsScreen(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
                             bookSyncState = bookSyncState,
+                            gameSyncState = gameSyncState,
                             tachiyomiResolveState = tachiyomiResolveState,
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
@@ -1172,6 +1176,11 @@ fun SettingsScreen(
                                 viewModel.startBookSync(context, force)
                             },
                             onCancelBookSync = { viewModel.cancelBookSync(context) },
+                            onStartGameSync = { force ->
+                                ensureNotificationPermission()
+                                viewModel.startGameSync(context, force)
+                            },
+                            onCancelGameSync = { viewModel.cancelGameSync(context) },
                             onStartTachiyomiResolution = {
                                 ensureNotificationPermission()
                                 viewModel.startTachiyomiResolution(context)
@@ -1253,6 +1262,7 @@ fun SettingsScreen(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
                             bookSyncState = bookSyncState,
+                            gameSyncState = gameSyncState,
                             selectedSubMenu = null,
                             onSelectSubMenu = { activeSubMenu = it },
                             onDismissStatusMessage = { viewModel.clearStatusMessage() },
@@ -1298,6 +1308,7 @@ fun SettingsScreen(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
                             bookSyncState = bookSyncState,
+                            gameSyncState = gameSyncState,
                             tachiyomiResolveState = tachiyomiResolveState,
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
@@ -1314,6 +1325,11 @@ fun SettingsScreen(
                                 viewModel.startBookSync(context, force)
                             },
                             onCancelBookSync = { viewModel.cancelBookSync(context) },
+                            onStartGameSync = { force ->
+                                ensureNotificationPermission()
+                                viewModel.startGameSync(context, force)
+                            },
+                            onCancelGameSync = { viewModel.cancelGameSync(context) },
                             onStartTachiyomiResolution = {
                                 ensureNotificationPermission()
                                 viewModel.startTachiyomiResolution(context)
@@ -1555,6 +1571,7 @@ private fun SettingsMainMenu(
     jikanSyncState: JikanSyncProgress,
     tmdbSyncState: TmdbSyncProgress,
     bookSyncState: BookSyncProgress,
+    gameSyncState: GameSyncProgress,
     selectedSubMenu: SettingsSubMenu?,
     onSelectSubMenu: (SettingsSubMenu) -> Unit,
     onDismissStatusMessage: () -> Unit = {},
@@ -1595,7 +1612,7 @@ private fun SettingsMainMenu(
             )
 
             // 2. External Sync Jobs (Jikan & TMDB metadata)
-            val isSyncing = jikanSyncState.isRunning || tmdbSyncState.isRunning || bookSyncState.isRunning
+            val isSyncing = jikanSyncState.isRunning || tmdbSyncState.isRunning || bookSyncState.isRunning || gameSyncState.isRunning
             SettingsMenuItem(
                 icon = Icons.Default.Sync,
                 iconBackgroundColor = Color(0xFF4DA8DA).copy(alpha = 0.15f),
@@ -3408,6 +3425,7 @@ private fun SyncJobsContent(
     jikanSyncState: JikanSyncProgress,
     tmdbSyncState: TmdbSyncProgress,
     bookSyncState: BookSyncProgress,
+    gameSyncState: GameSyncProgress,
     tachiyomiResolveState: TachiyomiResolveProgress,
     onStartJikanSync: (Boolean) -> Unit,
     onCancelJikanSync: () -> Unit,
@@ -3415,6 +3433,8 @@ private fun SyncJobsContent(
     onCancelTmdbSync: () -> Unit,
     onStartBookSync: (Boolean) -> Unit,
     onCancelBookSync: () -> Unit,
+    onStartGameSync: (Boolean) -> Unit,
+    onCancelGameSync: () -> Unit,
     onStartTachiyomiResolution: () -> Unit,
     onCancelTachiyomiResolution: () -> Unit,
     modifier: Modifier = Modifier
@@ -4459,6 +4479,12 @@ private fun SyncJobsContent(
                 }
             }
         }
+
+        GameSettingsCard(
+            gameSyncState = gameSyncState,
+            onStartSync = onStartGameSync,
+            onCancelSync = onCancelGameSync
+        )
 
         Spacer(modifier = Modifier.height(24.dp))
     }

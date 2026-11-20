@@ -976,5 +976,13 @@ data class MediaEntry(
             val cleaned = platforms.map { it.trim() }.filter { it.isNotBlank() }
             return if (cleaned.isEmpty()) null else cleaned.joinToString(", ")
         }
+
+        fun parseGamePlatforms(platformsString: String?): List<String> {
+            return platformsString
+                ?.split(",")
+                ?.map { it.trim() }
+                ?.filter { it.isNotBlank() }
+                ?: emptyList()
+        }
     }
 }

@@ -192,6 +192,9 @@ fun SearchScreen(
             onApplyBook = { bookFilter ->
                 viewModel.applyBookDiscoveryFilter(bookFilter, context)
             },
+            onApplyGame = { gameFilter ->
+                viewModel.applyGameDiscoveryFilter(gameFilter, context)
+            },
             onResetFilter = {
                 viewModel.clearDiscoveryFilter()
             }
@@ -203,13 +206,14 @@ fun SearchScreen(
             item = itemToAdd!!,
             customCategories = state.customCategories.filter { it.mediaType == itemToAdd!!.mediaType }.map { it.name },
             subCategories = state.subCategories.map { it.name },
-            onConfirm = { status, customCat, subCat ->
+            onConfirm = { status, customCat, subCat, asFranchise ->
                 viewModel.addToLibrary(
                     item = itemToAdd!!,
                     status = status,
                     customCategory = customCat,
                     subCategory = subCat,
-                    context = context
+                    context = context,
+                    asFranchise = asFranchise
                 )
                 itemToAdd = null
             },
@@ -299,6 +303,7 @@ fun SearchScreen(
                 SearchCategory.TV_SHOWS -> "Search TV shows on TMDB..."
                 SearchCategory.BOOKS -> "Search books by title, author, or ISBN..."
                 SearchCategory.LIGHT_NOVELS -> "Search light novels & web novels..."
+                SearchCategory.GAMES -> "Search games on IGDB / RAWG..."
             }
 
             if (isSlime) {
@@ -555,6 +560,7 @@ fun SearchScreen(
                         it.rawJikanDetails?.sourceProvider?.contains("AniList", ignoreCase = true) == true
                     }
                     val attributionText = when {
+                        state.selectedCategory == SearchCategory.GAMES -> "Results from IGDB (RAWG fallback)"
                         state.selectedCategory == SearchCategory.BOOKS -> "Results from Google Books (Open Library fallback)"
                         state.selectedCategory == SearchCategory.LIGHT_NOVELS -> "Results from AniList (Jikan/MAL fallback)"
                         hasMangaDex -> "Results from MangaDex (with MAL/AniList backup)"
@@ -620,6 +626,10 @@ fun SearchScreen(
                                     }
                                     is DiscoveryFilter.Tv -> when (filter.mode) {
                                         ContentDiscoveryMode.BY_YEAR -> Icons.Default.Tv
+                                        ContentDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
+                                    }
+                                    is DiscoveryFilter.Game -> when (filter.mode) {
+                                        ContentDiscoveryMode.BY_YEAR -> Icons.Default.SportsEsports
                                         ContentDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
                                     }
                                     is DiscoveryFilter.Manga -> when (filter.mode) {
@@ -731,6 +741,7 @@ fun SearchScreen(
                             imageVector = when (state.selectedCategory) {
                                 SearchCategory.MOVIES, SearchCategory.TV_SHOWS -> Icons.Default.Movie
                                 SearchCategory.BOOKS, SearchCategory.LIGHT_NOVELS -> Icons.Default.Book
+                                SearchCategory.GAMES -> Icons.Default.SportsEsports
                                 else -> Icons.Default.Search
                             },
                             contentDescription = null,
@@ -756,8 +767,8 @@ fun SearchScreen(
                             text = if (activeDiscovery != null) {
                                 "Try selecting another season, year, or sort order from the menu (☰)."
                             } else if (state.query.isBlank()) {
-                                val seasonalHint = if (state.selectedCategory in listOf(SearchCategory.ANIME, SearchCategory.MOVIES, SearchCategory.TV_SHOWS)) {
-                                    " Tap ☰ at the top left to explore seasonal & year lists."
+                                val seasonalHint = if (state.selectedCategory in listOf(SearchCategory.ANIME, SearchCategory.MOVIES, SearchCategory.TV_SHOWS, SearchCategory.GAMES)) {
+                                    " Tap ☰ at the top left to explore seasonal & discovery lists."
                                 } else ""
                                 "Type at least 2 characters to discover and add entries directly to your library.$seasonalHint"
                             } else {
@@ -953,6 +964,17 @@ private fun SearchResultCard(
                     } else {
                         item.statusText?.let { metaParts.add(it) }
                     }
+                    if (item.mediaType == MediaType.GAME && item.gamePlatforms.isNotEmpty()) {
+                        val platSummary = if (item.gamePlatforms.size <= 2) {
+                            item.gamePlatforms.joinToString(" • ")
+                        } else {
+                            "${item.gamePlatforms.take(2).joinToString(" • ")} +${item.gamePlatforms.size - 2}"
+                        }
+                        metaParts.add(platSummary)
+                    }
+                    if (item.mediaType == MediaType.GAME && item.isGameFranchise) {
+                        metaParts.add("Series")
+                    }
                     item.totalUnits?.takeIf { it > 0 }?.let {
                         val unitLabel = when (item.mediaType) {
                             MediaType.ANIME -> if (it == 1) "1 Ep" else "$it Eps"
@@ -1140,12 +1162,13 @@ private fun AddToLibraryDialog(
     item: SearchResultItem,
     customCategories: List<String>,
     subCategories: List<String>,
-    onConfirm: (MediaStatus, String?, String?) -> Unit,
+    onConfirm: (MediaStatus, String?, String?, Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     var selectedStatus by remember { mutableStateOf(MediaStatus.PLAN_TO_WATCH) }
     var selectedCustomCategory by remember { mutableStateOf<String?>(null) }
     var selectedSubCategory by remember { mutableStateOf<String?>(null) }
+    var isFranchiseMode by remember(item.externalId) { mutableStateOf(item.isGameFranchise) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1190,6 +1213,56 @@ private fun AddToLibraryDialog(
                             style = MaterialTheme.typography.bodySmall,
                             color = LXPrimaryGreen
                         )
+                    }
+                }
+
+                // Game Tracking Mode Selection
+                if (item.mediaType == MediaType.GAME) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Track As",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = LXTextSecondary
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (!isFranchiseMode) LXPrimaryGreen else LXSurfaceElevated,
+                                border = BorderStroke(1.dp, if (!isFranchiseMode) LXPrimaryGreen else LXBorder),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { isFranchiseMode = false }
+                            ) {
+                                Text(
+                                    text = "Standalone Game",
+                                    color = if (!isFranchiseMode) LXBackgroundBlack else LXTextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (!isFranchiseMode) FontWeight.Bold else FontWeight.Normal,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp)
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isFranchiseMode) Color(0xFF8B5CF6) else LXSurfaceElevated,
+                                border = BorderStroke(1.dp, if (isFranchiseMode) Color(0xFF8B5CF6) else LXBorder),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { isFranchiseMode = true }
+                            ) {
+                                Text(
+                                    text = "Franchise / Series",
+                                    color = if (isFranchiseMode) Color.White else LXTextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isFranchiseMode) FontWeight.Bold else FontWeight.Normal,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp)
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -1276,7 +1349,7 @@ private fun AddToLibraryDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onConfirm(selectedStatus, selectedCustomCategory, selectedSubCategory)
+                    onConfirm(selectedStatus, selectedCustomCategory, selectedSubCategory, isFranchiseMode)
                 },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = LXPrimaryGreen,
@@ -1641,7 +1714,9 @@ private fun SearchResultDetailSheet(
                             listOfNotNull(pages, vols, chs).joinToString(" • ").ifBlank { "Pages unknown" }
                         }
                         MediaType.GAME -> {
-                            null
+                            val plats = if (item.gamePlatforms.isNotEmpty()) item.gamePlatforms.joinToString(" • ") else null
+                            val franchiseText = if (item.isGameFranchise) "Franchise / Series" else null
+                            listOfNotNull(plats, franchiseText).joinToString(" • ").ifBlank { "Game" }
                         }
                     }
                     if (!unitsInfo.isNullOrBlank()) {

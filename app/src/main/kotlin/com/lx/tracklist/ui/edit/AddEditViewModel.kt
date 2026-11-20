@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.lx.tracklist.data.model.GameSeriesItem
+import com.lx.tracklist.data.model.GameSeriesItemStatus
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
@@ -11,6 +13,8 @@ import com.lx.tracklist.data.model.Priority
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.remote.AniListNovelApiClient
+import com.lx.tracklist.data.remote.GameMetadataManager
+import com.lx.tracklist.data.remote.GameSearchResult
 import com.lx.tracklist.data.remote.GoogleBooksApiClient
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanMediaDetails
@@ -49,6 +53,8 @@ enum class ExternalDbSource(val displayName: String, val shortName: String) {
     TMDB("The Movie Database (TMDB)", "TMDB"),
     GOOGLE_BOOKS("Google Books", "Google Books"),
     OPEN_LIBRARY("Open Library", "Open Library"),
+    IGDB("IGDB", "IGDB"),
+    RAWG("RAWG", "RAWG"),
     @Deprecated("Use ANILIST instead")
     ANILIST_NOVEL("AniList", "AniList")
 }
@@ -59,6 +65,7 @@ data class ExternalSyncUiState(
     val selectedSource: ExternalDbSource = ExternalDbSource.MAL,
     val malResults: List<JikanMediaDetails> = emptyList(),
     val tmdbResults: List<TmdbSearchResult> = emptyList(),
+    val gameResults: List<GameSearchResult> = emptyList(),
     val errorMessage: String? = null,
     val successMessage: String? = null
 )
@@ -118,6 +125,15 @@ data class AddEditUiState(
     val movieSeriesName: String = "",
     val movieSeriesNumber: Int? = null,
     val durationMinutes: Int? = null,
+
+    // Game fields
+    val gamePlatforms: String = "",
+    val isGameFranchise: Boolean = false,
+    val gameSeriesEntries: List<GameSeriesItem> = emptyList(),
+    val gameProgressPercent: Int = 0,
+    val customUnitLabel: String = "",
+    val customUnitCurrent: Int = 0,
+    val customUnitTotal: Int? = null,
 
     val isSaved: Boolean = false,
     val errorMessage: String? = null
@@ -238,6 +254,13 @@ class AddEditViewModel(
                             movieSeriesName = entry.movieSeriesName ?: "",
                             movieSeriesNumber = entry.movieSeriesNumber,
                             durationMinutes = entry.durationMinutes,
+                            gamePlatforms = entry.gamePlatforms ?: "",
+                            isGameFranchise = entry.isGameFranchise,
+                            gameSeriesEntries = entry.getGameSeriesEntries(),
+                            gameProgressPercent = entry.gameProgressPercent,
+                            customUnitLabel = entry.customUnitLabel ?: "",
+                            customUnitCurrent = entry.customUnitCurrent,
+                            customUnitTotal = entry.customUnitTotal.takeIf { it > 0 },
                             isSaved = false,
                             errorMessage = null
                         )
@@ -402,6 +425,70 @@ class AddEditViewModel(
     fun updateMovieSeriesNumber(value: Int?) = _uiState.update { it.copy(movieSeriesNumber = value) }
     fun updateDurationMinutes(value: Int?) = _uiState.update { it.copy(durationMinutes = value) }
 
+    fun updateGamePlatforms(value: String) = _uiState.update { it.copy(gamePlatforms = value) }
+    fun toggleGamePlatform(platform: String) {
+        _uiState.update { state ->
+            val currentList = MediaEntry.parseGamePlatforms(state.gamePlatforms).toMutableList()
+            val exists = currentList.any { it.equals(platform, ignoreCase = true) }
+            if (exists) {
+                currentList.removeAll { it.equals(platform, ignoreCase = true) }
+            } else {
+                currentList.add(platform)
+            }
+            state.copy(gamePlatforms = MediaEntry.formatGamePlatforms(currentList) ?: "")
+        }
+    }
+    fun updateIsGameFranchise(value: Boolean) = _uiState.update { it.copy(isGameFranchise = value) }
+    fun updateGameSeriesEntries(entries: List<GameSeriesItem>) = _uiState.update { it.copy(gameSeriesEntries = entries) }
+    fun updateGameSeriesItemStatus(index: Int, status: GameSeriesItemStatus) {
+        _uiState.update { state ->
+            val list = state.gameSeriesEntries.toMutableList()
+            if (index in list.indices) {
+                list[index] = list[index].copy(status = status)
+                state.copy(gameSeriesEntries = list)
+            } else state
+        }
+    }
+    fun addGameSeriesItem(title: String, platform: String? = null) {
+        val cleanTitle = title.trim()
+        if (cleanTitle.isBlank()) return
+        _uiState.update { state ->
+            val newItem = GameSeriesItem(
+                id = System.currentTimeMillis().toString(),
+                order = state.gameSeriesEntries.size + 1,
+                title = cleanTitle,
+                status = GameSeriesItemStatus.PLANNED,
+                platforms = platform?.let { listOf(it) } ?: emptyList()
+            )
+            state.copy(gameSeriesEntries = state.gameSeriesEntries + newItem)
+        }
+    }
+    fun removeGameSeriesItem(index: Int) {
+        _uiState.update { state ->
+            val list = state.gameSeriesEntries.toMutableList()
+            if (index in list.indices) {
+                list.removeAt(index)
+                val reordered = list.mapIndexed { idx, item -> item.copy(order = idx + 1) }
+                state.copy(gameSeriesEntries = reordered)
+            } else state
+        }
+    }
+    fun moveGameSeriesItem(fromIndex: Int, toIndex: Int) {
+        _uiState.update { state ->
+            val list = state.gameSeriesEntries.toMutableList()
+            if (fromIndex in list.indices && toIndex in list.indices && fromIndex != toIndex) {
+                val item = list.removeAt(fromIndex)
+                list.add(toIndex, item)
+                val reordered = list.mapIndexed { idx, itm -> itm.copy(order = idx + 1) }
+                state.copy(gameSeriesEntries = reordered)
+            } else state
+        }
+    }
+    fun updateGameProgressPercent(value: Int) = _uiState.update { it.copy(gameProgressPercent = value.coerceIn(0, 100)) }
+    fun updateCustomUnitLabel(value: String) = _uiState.update { it.copy(customUnitLabel = value) }
+    fun updateCustomUnitCurrent(value: Int) = _uiState.update { it.copy(customUnitCurrent = value.coerceAtLeast(0)) }
+    fun updateCustomUnitTotal(value: Int?) = _uiState.update { it.copy(customUnitTotal = value?.takeIf { it > 0 }) }
+
     fun saveEntry() {
         val s = _uiState.value
         if (s.title.isBlank()) {
@@ -473,6 +560,13 @@ class AddEditViewModel(
                 movieSeriesName = s.movieSeriesName.trim().ifBlank { null },
                 movieSeriesNumber = s.movieSeriesNumber,
                 durationMinutes = s.durationMinutes,
+                gamePlatforms = s.gamePlatforms.trim().ifBlank { null },
+                isGameFranchise = s.isGameFranchise,
+                gameSeriesEntriesJson = if (s.isGameFranchise) MediaEntry.formatGameSeriesEntries(s.gameSeriesEntries) else null,
+                gameProgressPercent = s.gameProgressPercent.coerceIn(0, 100),
+                customUnitLabel = s.customUnitLabel.trim().ifBlank { null },
+                customUnitCurrent = s.customUnitCurrent.coerceAtLeast(0),
+                customUnitTotal = s.customUnitTotal?.takeIf { it > 0 } ?: 0,
                 updatedAt = System.currentTimeMillis()
             )
 
@@ -495,6 +589,7 @@ class AddEditViewModel(
                     query = "",
                     malResults = emptyList(),
                     tmdbResults = emptyList(),
+                    gameResults = emptyList(),
                     errorMessage = "Please enter a title to search."
                 )
             }
@@ -513,6 +608,32 @@ class AddEditViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 when (source) {
+                    ExternalDbSource.IGDB, ExternalDbSource.RAWG -> {
+                        if (context == null) {
+                            _syncState.update {
+                                it.copy(
+                                    isSearching = false,
+                                    gameResults = emptyList(),
+                                    malResults = emptyList(),
+                                    tmdbResults = emptyList(),
+                                    errorMessage = "Context required for game search."
+                                )
+                            }
+                            return@launch
+                        }
+                        val res = GameMetadataManager.searchGames(context, cleanQuery, source = source.shortName, limit = 20)
+                        val list = res.getOrDefault(emptyList())
+                        val err = res.exceptionOrNull()?.message
+                        _syncState.update {
+                            it.copy(
+                                isSearching = false,
+                                gameResults = list,
+                                malResults = emptyList(),
+                                tmdbResults = emptyList(),
+                                errorMessage = if (list.isEmpty()) err ?: "No matches found on ${source.shortName} for '$cleanQuery'" else null
+                            )
+                        }
+                    }
                     ExternalDbSource.MAL -> {
                         val isManga = _uiState.value.mediaType == MediaType.MANGA ||
                                 _uiState.value.mediaType == MediaType.MANHWA ||
@@ -529,6 +650,7 @@ class AddEditViewModel(
                                 isSearching = false,
                                 malResults = items,
                                 tmdbResults = emptyList(),
+                                gameResults = emptyList(),
                                 errorMessage = if (items.isEmpty()) "No matches found on MyAnimeList for '$cleanQuery'" else null
                             )
                         }
@@ -561,6 +683,7 @@ class AddEditViewModel(
                                     isSearching = false,
                                     malResults = combined,
                                     tmdbResults = emptyList(),
+                                    gameResults = emptyList(),
                                     errorMessage = if (combined.isEmpty()) "No matches found on MangaDex / AniList for '$cleanQuery'" else null
                                 )
                             }
@@ -573,6 +696,7 @@ class AddEditViewModel(
                                     isSearching = false,
                                     tmdbResults = emptyList(),
                                     malResults = emptyList(),
+                                    gameResults = emptyList(),
                                     errorMessage = "TMDB Read Access Token is not configured. Please add your token in Settings > TMDB Sync."
                                 )
                             }
@@ -599,6 +723,7 @@ class AddEditViewModel(
                                     isSearching = false,
                                     tmdbResults = finalResults,
                                     malResults = emptyList(),
+                                    gameResults = emptyList(),
                                     errorMessage = if (finalResults.isEmpty()) "No matches found on TMDB for '$cleanQuery'" else null
                                 )
                             }
@@ -628,6 +753,7 @@ class AddEditViewModel(
                                     isSearching = false,
                                     malResults = combined,
                                     tmdbResults = emptyList(),
+                                    gameResults = emptyList(),
                                     errorMessage = if (combined.isEmpty()) "No matches found on Google Books / Open Library for '$cleanQuery'" else null
                                 )
                             }
@@ -641,6 +767,7 @@ class AddEditViewModel(
                                 isSearching = false,
                                 malResults = items,
                                 tmdbResults = emptyList(),
+                                gameResults = emptyList(),
                                 errorMessage = if (items.isEmpty()) "No matches found on Open Library for '$cleanQuery'" else null
                             )
                         }
@@ -680,6 +807,7 @@ class AddEditViewModel(
                                 isSearching = false,
                                 malResults = items,
                                 tmdbResults = emptyList(),
+                                gameResults = emptyList(),
                                 errorMessage = if (items.isEmpty()) "No matches found on AniList for '$cleanQuery'" else null
                             )
                         }
@@ -896,12 +1024,110 @@ class AddEditViewModel(
         }
     }
 
+    fun applySelectedGameResult(item: GameSearchResult, context: Context? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val fullDetails = if (context != null) {
+                GameMetadataManager.getGameDetails(context, item.externalId, item.externalSource).getOrNull()
+            } else null
+
+            withContext(Dispatchers.Main) {
+                _uiState.update { current ->
+                    val queryTitle = current.title.trim()
+                    val cleanedOriginalTitle = TachiyomiResolverManager.stripBracketedSuffixes(queryTitle).takeIf { it.isNotBlank() } ?: queryTitle
+                    val candidateTitle = (fullDetails?.title ?: item.title).trim().takeIf { it.isNotBlank() }
+
+                    val candidateAlts = mutableListOf<String>()
+                    fullDetails?.alternateTitles?.forEach { line ->
+                        val clean = line.trim()
+                        if (clean.isNotBlank() && !clean.equals(cleanedOriginalTitle, ignoreCase = true)) {
+                            candidateAlts.add(clean)
+                        }
+                    }
+                    if (!item.alternateTitle.isNullOrBlank() && !item.alternateTitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
+                        candidateAlts.add(item.alternateTitle.trim())
+                    }
+
+                    val currentAlts = (current.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() } + current.alternateTitles
+                    val extraAlts = if (candidateTitle != null && !candidateTitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
+                        listOf(candidateTitle)
+                    } else emptyList()
+
+                    val allAlts = (extraAlts + candidateAlts + currentAlts)
+                        .distinct()
+                        .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
+
+                    val baseDesc = if (current.description.isBlank() && !(fullDetails?.summary ?: item.summary).isNullOrBlank()) {
+                        (fullDetails?.summary ?: item.summary) ?: ""
+                    } else current.description
+
+                    // Platforms
+                    val remotePlatforms = (fullDetails?.platforms?.takeIf { it.isNotEmpty() } ?: item.platforms)
+                    val mergedPlatforms = if (current.gamePlatforms.isBlank()) {
+                        MediaEntry.formatGamePlatforms(remotePlatforms) ?: ""
+                    } else {
+                        val curList = MediaEntry.parseGamePlatforms(current.gamePlatforms).toMutableList()
+                        remotePlatforms.forEach { p ->
+                            if (!curList.any { it.equals(p, ignoreCase = true) }) curList.add(p)
+                        }
+                        MediaEntry.formatGamePlatforms(curList) ?: ""
+                    }
+
+                    // Franchise series entries if available and not yet set
+                    val franchiseItems = if (current.gameSeriesEntries.isEmpty() && !fullDetails?.collectionGames.isNullOrEmpty()) {
+                        fullDetails!!.collectionGames.mapIndexed { idx, cGame ->
+                            val isTarget = cGame.externalId == item.externalId || cGame.title.equals(item.title, ignoreCase = true)
+                            GameSeriesItem(
+                                id = cGame.externalId,
+                                order = idx + 1,
+                                title = cGame.title,
+                                releaseYear = cGame.releaseYear,
+                                coverUrl = cGame.coverUrl,
+                                status = if (isTarget) GameSeriesItemStatus.PLAYING else GameSeriesItemStatus.PLANNED,
+                                platforms = cGame.platforms
+                            )
+                        }
+                    } else current.gameSeriesEntries
+
+                    val isFranchise = current.isGameFranchise || franchiseItems.size > 1
+
+                    val newScore = fullDetails?.rating ?: item.score ?: current.externalScore
+                    val scoreSrc = fullDetails?.ratingSource ?: item.externalSource
+
+                    val releaseDate = fullDetails?.releaseDateMillis ?: item.releaseDateMillis ?: current.airedStartDate
+
+                    current.copy(
+                        title = cleanedOriginalTitle,
+                        alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
+                        alternateTitles = allAlts,
+                        mediaType = MediaType.GAME,
+                        coverImageUri = fullDetails?.coverUrl ?: item.coverUrl ?: current.coverImageUri,
+                        externalId = item.externalId,
+                        externalSource = item.externalSource,
+                        externalScore = newScore,
+                        externalScoreSource = scoreSrc,
+                        description = baseDesc,
+                        tags = (if (current.tags.isBlank()) {
+                            val g = fullDetails?.genres ?: item.genres
+                            if (g.isNotEmpty()) g.joinToString(", ") else current.tags
+                        } else current.tags) ?: "",
+                        airedStartDate = releaseDate,
+                        gamePlatforms = mergedPlatforms,
+                        isGameFranchise = isFranchise,
+                        gameSeriesEntries = franchiseItems
+                    )
+                }
+                _syncState.update { it.copy(successMessage = "Applied '${item.title}' from ${item.externalSource}!") }
+            }
+        }
+    }
+
     fun clearSyncMessage() {
         _syncState.update { it.copy(successMessage = null) }
     }
 
     companion object {
         fun getDefaultSourceForType(mediaType: MediaType): ExternalDbSource = when {
+            mediaType == MediaType.GAME -> ExternalDbSource.IGDB
             mediaType == MediaType.MANHWA -> ExternalDbSource.MANGADEX
             mediaType == MediaType.BOOK -> ExternalDbSource.GOOGLE_BOOKS
             mediaType == MediaType.MOVIE || mediaType == MediaType.SHOW -> ExternalDbSource.TMDB
