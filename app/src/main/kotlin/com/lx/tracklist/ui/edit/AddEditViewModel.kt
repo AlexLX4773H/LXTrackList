@@ -438,52 +438,6 @@ class AddEditViewModel(
             state.copy(gamePlatforms = MediaEntry.formatGamePlatforms(currentList) ?: "")
         }
     }
-    fun updateIsGameFranchise(value: Boolean) = _uiState.update { it.copy(isGameFranchise = value) }
-    fun updateGameSeriesEntries(entries: List<GameSeriesItem>) = _uiState.update { it.copy(gameSeriesEntries = entries) }
-    fun updateGameSeriesItemStatus(index: Int, status: GameSeriesItemStatus) {
-        _uiState.update { state ->
-            val list = state.gameSeriesEntries.toMutableList()
-            if (index in list.indices) {
-                list[index] = list[index].copy(status = status)
-                state.copy(gameSeriesEntries = list)
-            } else state
-        }
-    }
-    fun addGameSeriesItem(title: String, platform: String? = null) {
-        val cleanTitle = title.trim()
-        if (cleanTitle.isBlank()) return
-        _uiState.update { state ->
-            val newItem = GameSeriesItem(
-                id = System.currentTimeMillis().toString(),
-                order = state.gameSeriesEntries.size + 1,
-                title = cleanTitle,
-                status = GameSeriesItemStatus.PLANNED,
-                platforms = platform?.let { listOf(it) } ?: emptyList()
-            )
-            state.copy(gameSeriesEntries = state.gameSeriesEntries + newItem)
-        }
-    }
-    fun removeGameSeriesItem(index: Int) {
-        _uiState.update { state ->
-            val list = state.gameSeriesEntries.toMutableList()
-            if (index in list.indices) {
-                list.removeAt(index)
-                val reordered = list.mapIndexed { idx, item -> item.copy(order = idx + 1) }
-                state.copy(gameSeriesEntries = reordered)
-            } else state
-        }
-    }
-    fun moveGameSeriesItem(fromIndex: Int, toIndex: Int) {
-        _uiState.update { state ->
-            val list = state.gameSeriesEntries.toMutableList()
-            if (fromIndex in list.indices && toIndex in list.indices && fromIndex != toIndex) {
-                val item = list.removeAt(fromIndex)
-                list.add(toIndex, item)
-                val reordered = list.mapIndexed { idx, itm -> itm.copy(order = idx + 1) }
-                state.copy(gameSeriesEntries = reordered)
-            } else state
-        }
-    }
     fun updateGameProgressPercent(value: Int) = _uiState.update { it.copy(gameProgressPercent = value.coerceIn(0, 100)) }
     fun updateCustomUnitLabel(value: String) = _uiState.update { it.copy(customUnitLabel = value) }
     fun updateCustomUnitCurrent(value: Int) = _uiState.update { it.copy(customUnitCurrent = value.coerceAtLeast(0)) }
@@ -561,8 +515,8 @@ class AddEditViewModel(
                 movieSeriesNumber = s.movieSeriesNumber,
                 durationMinutes = s.durationMinutes,
                 gamePlatforms = s.gamePlatforms.trim().ifBlank { null },
-                isGameFranchise = s.isGameFranchise,
-                gameSeriesEntriesJson = if (s.isGameFranchise) MediaEntry.formatGameSeriesEntries(s.gameSeriesEntries) else null,
+                isGameFranchise = false,
+                gameSeriesEntriesJson = null,
                 gameProgressPercent = s.gameProgressPercent.coerceIn(0, 100),
                 customUnitLabel = s.customUnitLabel.trim().ifBlank { null },
                 customUnitCurrent = s.customUnitCurrent.coerceAtLeast(0),
@@ -1072,27 +1026,8 @@ class AddEditViewModel(
                         MediaEntry.formatGamePlatforms(curList) ?: ""
                     }
 
-                    // Franchise series entries if available and not yet set
-                    val franchiseItems = if (current.gameSeriesEntries.isEmpty() && !fullDetails?.collectionGames.isNullOrEmpty()) {
-                        fullDetails!!.collectionGames.mapIndexed { idx, cGame ->
-                            val isTarget = cGame.externalId == item.externalId || cGame.title.equals(item.title, ignoreCase = true)
-                            GameSeriesItem(
-                                id = cGame.externalId,
-                                order = idx + 1,
-                                title = cGame.title,
-                                releaseYear = cGame.releaseYear,
-                                coverUrl = cGame.coverUrl,
-                                status = if (isTarget) GameSeriesItemStatus.PLAYING else GameSeriesItemStatus.PLANNED,
-                                platforms = cGame.platforms
-                            )
-                        }
-                    } else current.gameSeriesEntries
-
-                    val isFranchise = current.isGameFranchise || franchiseItems.size > 1
-
                     val newScore = fullDetails?.rating ?: item.score ?: current.externalScore
                     val scoreSrc = fullDetails?.ratingSource ?: item.externalSource
-
                     val releaseDate = fullDetails?.releaseDateMillis ?: item.releaseDateMillis ?: current.airedStartDate
 
                     current.copy(
@@ -1112,8 +1047,8 @@ class AddEditViewModel(
                         } else current.tags) ?: "",
                         airedStartDate = releaseDate,
                         gamePlatforms = mergedPlatforms,
-                        isGameFranchise = isFranchise,
-                        gameSeriesEntries = franchiseItems
+                        isGameFranchise = false,
+                        gameSeriesEntries = emptyList()
                     )
                 }
                 _syncState.update { it.copy(successMessage = "Applied '${item.title}' from ${item.externalSource}!") }

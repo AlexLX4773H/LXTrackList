@@ -6,8 +6,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.lx.tracklist.data.model.CustomCategory
-import com.lx.tracklist.data.model.GameSeriesItem
-import com.lx.tracklist.data.model.GameSeriesItemStatus
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
@@ -78,7 +76,6 @@ data class SearchResultItem(
     val rawTmdbResult: TmdbSearchResult? = null,
     val rawGameResult: GameSearchResult? = null,
     val gamePlatforms: List<String> = emptyList(),
-    val isGameFranchise: Boolean = false,
     val imdbId: String? = null,
     val directMalId: Long? = null,
     val directAniListId: Long? = null,
@@ -851,8 +848,7 @@ class SearchViewModel(
                             statusText = if (game.releaseDateMillis != null && game.releaseDateMillis > System.currentTimeMillis()) "NYR" else "Game",
                             synopsis = game.summary,
                             rawGameResult = game,
-                            gamePlatforms = game.platforms,
-                            isGameFranchise = game.isCollectionFranchise
+                            gamePlatforms = game.platforms
                         )
                     }
                 }
@@ -1053,8 +1049,7 @@ class SearchViewModel(
                                     statusText = if (game.releaseDateMillis != null && game.releaseDateMillis > System.currentTimeMillis()) "NYR" else "Game",
                                     synopsis = game.summary,
                                     rawGameResult = game,
-                                    gamePlatforms = game.platforms,
-                                    isGameFranchise = game.isCollectionFranchise
+                                    gamePlatforms = game.platforms
                                 )
                             }
                         }
@@ -1370,8 +1365,7 @@ class SearchViewModel(
                                     statusText = if (game.releaseDateMillis != null && game.releaseDateMillis > System.currentTimeMillis()) "NYR" else "Game",
                                     synopsis = game.summary,
                                     rawGameResult = game,
-                                    gamePlatforms = game.platforms,
-                                    isGameFranchise = game.isCollectionFranchise
+                                    gamePlatforms = game.platforms
                                 )
                             }
                         }
@@ -1848,8 +1842,7 @@ class SearchViewModel(
                                 statusText = if (game.releaseDateMillis != null && game.releaseDateMillis > System.currentTimeMillis()) "NYR" else "Game",
                                 synopsis = game.summary,
                                 rawGameResult = game,
-                                gamePlatforms = game.platforms,
-                                isGameFranchise = game.isCollectionFranchise
+                                gamePlatforms = game.platforms
                             )
                         }
                     }
@@ -1897,8 +1890,7 @@ class SearchViewModel(
         status: MediaStatus,
         customCategory: String? = null,
         subCategory: String? = null,
-        context: Context? = null,
-        asFranchise: Boolean? = null
+        context: Context? = null
     ) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -1908,21 +1900,6 @@ class SearchViewModel(
                         GameMetadataManager.getGameDetails(context, item.externalId, item.externalSource).getOrNull()
                     } else null
                     val platforms = fullDetails?.platforms?.takeIf { it.isNotEmpty() } ?: item.gamePlatforms
-                    val franchiseMode = asFranchise ?: item.isGameFranchise
-                    val franchiseItems = if (franchiseMode && fullDetails != null && fullDetails.collectionGames.isNotEmpty()) {
-                        fullDetails.collectionGames.mapIndexed { idx, cGame ->
-                            val isTarget = cGame.externalId == fullDetails.externalId || cGame.title.equals(fullDetails.title, ignoreCase = true)
-                            GameSeriesItem(
-                                id = cGame.externalId,
-                                order = idx + 1,
-                                title = cGame.title,
-                                releaseYear = cGame.releaseYear,
-                                coverUrl = cGame.coverUrl,
-                                status = if (isTarget) GameSeriesItemStatus.PLAYING else GameSeriesItemStatus.PLANNED,
-                                platforms = cGame.platforms
-                            )
-                        }
-                    } else emptyList()
 
                     MediaEntry(
                         userId = targetUserId,
@@ -1942,8 +1919,8 @@ class SearchViewModel(
                         airedStartDate = fullDetails?.releaseDateMillis,
                         trackingUnit = TrackingUnit.PERCENTAGE,
                         gamePlatforms = MediaEntry.formatGamePlatforms(platforms),
-                        isGameFranchise = franchiseMode && franchiseItems.isNotEmpty(),
-                        gameSeriesEntriesJson = if (franchiseMode && franchiseItems.isNotEmpty()) MediaEntry.formatGameSeriesEntries(franchiseItems) else null,
+                        isGameFranchise = false,
+                        gameSeriesEntriesJson = null,
                         relatedEntriesJson = if (fullDetails != null && fullDetails.relatedItems.isNotEmpty()) com.google.gson.Gson().toJson(fullDetails.relatedItems) else null
                     )
                 } else if (item.externalSource == "TMDB") {

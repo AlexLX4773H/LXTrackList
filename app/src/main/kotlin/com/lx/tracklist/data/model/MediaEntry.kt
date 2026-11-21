@@ -382,13 +382,7 @@ data class MediaEntry(
                     .ifBlank { if (status == MediaStatus.COMPLETED) "Watched" else "Planned" }
             }
             MediaType.GAME -> {
-                if (isGameFranchise) {
-                    val items = getGameSeriesEntries()
-                    val active = items.filter { it.status != GameSeriesItemStatus.SKIPPED }
-                    val completed = items.count { it.status == GameSeriesItemStatus.COMPLETED }
-                    val skipped = items.count { it.status == GameSeriesItemStatus.SKIPPED }
-                    "$completed/${active.size} games" + if (skipped > 0) " ($skipped skipped)" else ""
-                } else if (trackingUnit == TrackingUnit.PERCENTAGE) {
+                if (trackingUnit == TrackingUnit.PERCENTAGE) {
                     "$gameProgressPercent%"
                 } else {
                     val label = customUnitLabel?.takeIf { it.isNotBlank() } ?: "Units"
@@ -432,20 +426,7 @@ data class MediaEntry(
                 } else 0f
             }
             MediaType.GAME -> {
-                if (isGameFranchise) {
-                    val items = getGameSeriesEntries()
-                    val active = items.filter { it.status != GameSeriesItemStatus.SKIPPED }
-                    if (active.isNotEmpty()) {
-                        val totalProg = active.sumOf { item ->
-                            when (item.status) {
-                                GameSeriesItemStatus.COMPLETED -> 1.0
-                                GameSeriesItemStatus.PLAYING -> (item.progressPercent.toDouble() / 100.0).coerceIn(0.0, 1.0)
-                                GameSeriesItemStatus.PLANNED, GameSeriesItemStatus.DROPPED, GameSeriesItemStatus.SKIPPED -> 0.0
-                            }
-                        }
-                        (totalProg / active.size).toFloat().coerceIn(0f, 1f)
-                    } else if (status == MediaStatus.COMPLETED) 1f else 0f
-                } else if (trackingUnit == TrackingUnit.PERCENTAGE) {
+                if (trackingUnit == TrackingUnit.PERCENTAGE) {
                     (gameProgressPercent / 100f).coerceIn(0f, 1f)
                 } else {
                     if (customUnitTotal > 0) (customUnitCurrent.toFloat() / customUnitTotal).coerceIn(0f, 1f)
@@ -584,32 +565,7 @@ data class MediaEntry(
                 )
             }
             MediaType.GAME -> {
-                if (isGameFranchise) {
-                    val items = getGameSeriesEntries()
-                    if (items.isNotEmpty()) {
-                        val nextItems = items.toMutableList()
-                        val targetIdx = nextItems.indexOfFirst { it.status != GameSeriesItemStatus.SKIPPED && it.status != GameSeriesItemStatus.COMPLETED }
-                        if (targetIdx != -1) {
-                            val target = nextItems[targetIdx]
-                            nextItems[targetIdx] = target.copy(status = GameSeriesItemStatus.COMPLETED, progressPercent = 100)
-                        }
-                        val allDone = nextItems.filter { it.status != GameSeriesItemStatus.SKIPPED }.all { it.status == GameSeriesItemStatus.COMPLETED }
-                        val newStatus = if (allDone) MediaStatus.COMPLETED else status
-                        val newRewatchCount = if (allDone && isRewatching) rewatchCount + 1 else rewatchCount
-                        val newIsRewatching = if (allDone) false else isRewatching
-                        copy(
-                            gameSeriesEntriesJson = formatGameSeriesEntries(nextItems),
-                            status = newStatus,
-                            rewatchCount = newRewatchCount,
-                            isRewatching = newIsRewatching,
-                            updatedAt = now,
-                            finishDate = if (newStatus == MediaStatus.COMPLETED && finishDate == null) now else finishDate
-                        )
-                    } else {
-                        val newStatus = if (status == MediaStatus.COMPLETED) MediaStatus.WATCHING else MediaStatus.COMPLETED
-                        copy(status = newStatus, updatedAt = now)
-                    }
-                } else if (trackingUnit == TrackingUnit.PERCENTAGE) {
+                if (trackingUnit == TrackingUnit.PERCENTAGE) {
                     val nextPercent = (gameProgressPercent + 5).coerceAtMost(100)
                     val isDone = nextPercent >= 100
                     val newStatus = if (isDone) MediaStatus.COMPLETED else status
@@ -695,24 +651,7 @@ data class MediaEntry(
                 updatedAt = now
             )
             MediaType.GAME -> {
-                if (isGameFranchise) {
-                    val items = getGameSeriesEntries()
-                    if (items.isNotEmpty()) {
-                        val nextItems = items.toMutableList()
-                        val targetIdx = nextItems.indexOfLast { it.status == GameSeriesItemStatus.COMPLETED }
-                        if (targetIdx != -1) {
-                            val target = nextItems[targetIdx]
-                            nextItems[targetIdx] = target.copy(status = GameSeriesItemStatus.PLAYING)
-                        }
-                        copy(
-                            gameSeriesEntriesJson = formatGameSeriesEntries(nextItems),
-                            status = if (status == MediaStatus.COMPLETED) MediaStatus.WATCHING else status,
-                            updatedAt = now
-                        )
-                    } else {
-                        copy(status = if (status == MediaStatus.COMPLETED) MediaStatus.WATCHING else status, updatedAt = now)
-                    }
-                } else if (trackingUnit == TrackingUnit.PERCENTAGE) {
+                if (trackingUnit == TrackingUnit.PERCENTAGE) {
                     val nextPercent = (gameProgressPercent - 5).coerceAtLeast(0)
                     copy(
                         gameProgressPercent = nextPercent,

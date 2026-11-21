@@ -440,16 +440,6 @@ fun MediaCard(
                                                     .padding(horizontal = 5.dp, vertical = 2.dp)
                                             )
                                         }
-                                        if (entry.isGameFranchise) {
-                                            Text(
-                                                text = "SERIES",
-                                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                                color = androidx.compose.ui.graphics.Color(0xFF8B5CF6),
-                                                modifier = Modifier
-                                                    .background(androidx.compose.ui.graphics.Color(0xFF8B5CF6).copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                                    .padding(horizontal = 5.dp, vertical = 2.dp)
-                                            )
-                                        }
                                     }
 
                                     if (!entry.customCategory.isNullOrBlank()) {

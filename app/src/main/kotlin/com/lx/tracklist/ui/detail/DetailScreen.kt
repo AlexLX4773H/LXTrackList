@@ -131,7 +131,6 @@ import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import com.lx.tracklist.R
-import com.lx.tracklist.data.model.GameSeriesItemStatus
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
@@ -638,9 +637,6 @@ fun DetailScreen(
                                 MetaChip(label = "Rewatched ${currentEntry.rewatchCount}x", color = LXScoreGold)
                             }
                             if (currentEntry.mediaType == MediaType.GAME) {
-                                if (currentEntry.isGameFranchise) {
-                                    MetaChip(label = "FRANCHISE", color = Color(0xFF8B5CF6))
-                                }
                                 currentEntry.getGamePlatformList().forEach { platform ->
                                     MetaChip(label = "🎮 $platform", color = LXPrimaryGreen)
                                 }
@@ -674,7 +670,6 @@ fun DetailScreen(
                             onDecrement = { viewModel.decrement() },
                             onSetProgress = { viewModel.setProgress(it) },
                             onSetShowProgress = { season, ep -> viewModel.setShowProgress(season, ep) },
-                            onUpdateGameSeriesStatus = { idx, st -> viewModel.updateGameSeriesItemStatus(idx, st) },
                             onStartRewatch = { showStartRewatchDialog = true },
                             onFinishRewatch = { viewModel.finishRewatch() },
                             onCancelRewatch = { viewModel.cancelRewatch() }
@@ -832,9 +827,6 @@ fun DetailScreen(
                                 MetaChip(label = "Rewatched ${currentEntry.rewatchCount}x", color = LXScoreGold)
                             }
                             if (currentEntry.mediaType == MediaType.GAME) {
-                                if (currentEntry.isGameFranchise) {
-                                    MetaChip(label = "FRANCHISE", color = Color(0xFF8B5CF6))
-                                }
                                 currentEntry.getGamePlatformList().forEach { platform ->
                                     MetaChip(label = "🎮 $platform", color = LXPrimaryGreen)
                                 }
@@ -860,7 +852,6 @@ fun DetailScreen(
                             onDecrement = { viewModel.decrement() },
                             onSetProgress = { viewModel.setProgress(it) },
                             onSetShowProgress = { season, ep -> viewModel.setShowProgress(season, ep) },
-                            onUpdateGameSeriesStatus = { idx, st -> viewModel.updateGameSeriesItemStatus(idx, st) },
                             onStartRewatch = { showStartRewatchDialog = true },
                             onFinishRewatch = { viewModel.finishRewatch() },
                             onCancelRewatch = { viewModel.cancelRewatch() }
@@ -1059,7 +1050,6 @@ private fun DetailProgressCard(
     onDecrement: () -> Unit,
     onSetProgress: (Int) -> Unit = {},
     onSetShowProgress: (Int, Int) -> Unit = { _, _ -> },
-    onUpdateGameSeriesStatus: (Int, GameSeriesItemStatus) -> Unit = { _, _ -> },
     onStartRewatch: () -> Unit,
     onFinishRewatch: () -> Unit,
     onCancelRewatch: () -> Unit
@@ -1150,11 +1140,7 @@ private fun DetailProgressCard(
             ProgressInfo(if (isDone) 1 else 0, 1, "1", "Film", if (isDone) "Watched" else "Plan to watch")
         }
         MediaType.GAME -> {
-            if (entry.isGameFranchise) {
-                val (completed, active, skipped) = entry.getFranchiseProgressSummary()
-                val desc = if (skipped > 0) "$completed/$active completed ($skipped skipped)" else "$completed/$active games completed"
-                ProgressInfo(completed, active, if (active > 0) "$active" else "?", "Games", desc)
-            } else if (entry.trackingUnit == TrackingUnit.CUSTOM) {
+            if (entry.trackingUnit == TrackingUnit.CUSTOM) {
                 val label = entry.customUnitLabel?.takeIf { it.isNotBlank() } ?: "Units"
                 val totalStr = if (entry.customUnitTotal > 0) "${entry.customUnitTotal}" else "?"
                 ProgressInfo(entry.customUnitCurrent, entry.customUnitTotal, totalStr, label, "$label completed")
@@ -1431,160 +1417,6 @@ private fun DetailProgressCard(
                             .clip(RoundedCornerShape(3.dp))
                             .background(LXPrimaryGreen)
                     )
-                }
-            }
-
-            // Franchise series breakdown (GAME with isGameFranchise only)
-            if (entry.mediaType == MediaType.GAME && entry.isGameFranchise) {
-                val series = remember(entry.gameSeriesEntriesJson) { entry.getGameSeriesEntries() }
-                if (series.isNotEmpty()) {
-                    var showFranchiseList by remember(entry.id) { mutableStateOf(true) }
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(LXSurfaceElevated)
-                            .border(1.dp, LXBorder.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
-                            .padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showFranchiseList = !showFranchiseList },
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Franchise Checklist (${series.size} installments)",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = LXTextPrimary
-                            )
-                            Icon(
-                                imageVector = if (showFranchiseList) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                contentDescription = if (showFranchiseList) "Hide checklist" else "Show checklist",
-                                tint = LXTextSecondary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        if (showFranchiseList) {
-                            HorizontalDivider(color = LXBorder.copy(alpha = 0.4f))
-                            series.forEachIndexed { index, sItem ->
-                                Surface(
-                                    color = LXBackgroundBlack,
-                                    shape = RoundedCornerShape(6.dp),
-                                    border = BorderStroke(1.dp, if (sItem.status == GameSeriesItemStatus.PLAYING) LXPrimaryGreen.copy(alpha = 0.5f) else LXBorder.copy(alpha = 0.4f)),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text(
-                                            text = "#${index + 1}",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = LXPrimaryGreen
-                                        )
-
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = sItem.title,
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Medium,
-                                                color = if (sItem.status == GameSeriesItemStatus.SKIPPED) LXTextSecondary else LXTextPrimary,
-                                                textDecoration = if (sItem.status == GameSeriesItemStatus.SKIPPED) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            if (sItem.platforms.isNotEmpty()) {
-                                                Text(
-                                                    text = sItem.platforms.joinToString(", "),
-                                                    fontSize = 10.sp,
-                                                    color = LXTextSecondary
-                                                )
-                                            }
-                                        }
-
-                                        var showSeriesStatusMenu by remember { mutableStateOf(false) }
-                                        Box {
-                                            Surface(
-                                                color = when (sItem.status) {
-                                                    GameSeriesItemStatus.COMPLETED -> LXPrimaryGreen.copy(alpha = 0.2f)
-                                                    GameSeriesItemStatus.PLAYING -> Color(0xFF2196F3).copy(alpha = 0.2f)
-                                                    GameSeriesItemStatus.SKIPPED -> LXTextSecondary.copy(alpha = 0.2f)
-                                                    GameSeriesItemStatus.DROPPED -> LXErrorRed.copy(alpha = 0.2f)
-                                                    else -> LXSurfaceElevated
-                                                },
-                                                shape = RoundedCornerShape(4.dp),
-                                                border = BorderStroke(1.dp, LXBorder),
-                                                modifier = Modifier.clickable { showSeriesStatusMenu = true }
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                                                ) {
-                                                    Text(
-                                                        text = when (sItem.status) {
-                                                            GameSeriesItemStatus.COMPLETED -> "Done"
-                                                            GameSeriesItemStatus.PLAYING -> "Playing"
-                                                            GameSeriesItemStatus.SKIPPED -> "Skip"
-                                                            GameSeriesItemStatus.DROPPED -> "Drop"
-                                                            else -> "Plan"
-                                                        },
-                                                        fontSize = 10.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = when (sItem.status) {
-                                                            GameSeriesItemStatus.COMPLETED -> LXPrimaryGreen
-                                                            GameSeriesItemStatus.PLAYING -> Color(0xFF64B5F6)
-                                                            GameSeriesItemStatus.SKIPPED -> LXTextSecondary
-                                                            GameSeriesItemStatus.DROPPED -> LXErrorRed
-                                                            else -> LXTextPrimary
-                                                        }
-                                                    )
-                                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = LXTextSecondary, modifier = Modifier.size(12.dp))
-                                                }
-                                            }
-
-                                            DropdownMenu(
-                                                expanded = showSeriesStatusMenu,
-                                                onDismissRequest = { showSeriesStatusMenu = false },
-                                                modifier = Modifier.background(LXSurfaceElevated)
-                                            ) {
-                                                GameSeriesItemStatus.values().forEach { st ->
-                                                    DropdownMenuItem(
-                                                        text = {
-                                                            Text(
-                                                                text = when (st) {
-                                                                    GameSeriesItemStatus.PLANNED -> "Planned"
-                                                                    GameSeriesItemStatus.PLAYING -> "Playing"
-                                                                    GameSeriesItemStatus.COMPLETED -> "Completed"
-                                                                    GameSeriesItemStatus.SKIPPED -> "Skipped"
-                                                                    GameSeriesItemStatus.DROPPED -> "Dropped"
-                                                                },
-                                                                fontSize = 12.sp,
-                                                                fontWeight = if (sItem.status == st) FontWeight.Bold else FontWeight.Normal,
-                                                                color = if (sItem.status == st) LXPrimaryGreen else LXTextPrimary
-                                                            )
-                                                        },
-                                                        onClick = {
-                                                            showSeriesStatusMenu = false
-                                                            onUpdateGameSeriesStatus(index, st)
-                                                        }
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
             }
 

@@ -124,8 +124,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import com.lx.tracklist.data.model.GameSeriesItem
-import com.lx.tracklist.data.model.GameSeriesItemStatus
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
@@ -1080,41 +1078,10 @@ fun AddEditScreen(
                             )
                         }
                         MediaType.GAME -> {
-                            // 1. Mode Switch: Standalone Game vs Franchise / Series
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                FilterChip(
-                                    selected = !state.isGameFranchise,
-                                    onClick = { viewModel.updateIsGameFranchise(false) },
-                                    label = { Text("🎮 Standalone Game", fontSize = 12.sp) },
-                                    modifier = Modifier.weight(1f),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = LXPrimaryGreen,
-                                        selectedLabelColor = LXBackgroundBlack,
-                                        containerColor = LXSurfaceElevated,
-                                        labelColor = LXTextSecondary
-                                    )
-                                )
-                                FilterChip(
-                                    selected = state.isGameFranchise,
-                                    onClick = { viewModel.updateIsGameFranchise(true) },
-                                    label = { Text("📚 Franchise / Series", fontSize = 12.sp) },
-                                    modifier = Modifier.weight(1f),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = LXPrimaryGreen,
-                                        selectedLabelColor = LXBackgroundBlack,
-                                        containerColor = LXSurfaceElevated,
-                                        labelColor = LXTextSecondary
-                                    )
-                                )
-                            }
-
-                            // 2. Platforms Section
+                            // Platforms Section
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text(
-                                    text = if (state.isGameFranchise) "Franchise Platforms" else "Platforms",
+                                    text = "Platforms",
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                     color = LXTextPrimary
                                 )
@@ -1157,9 +1124,8 @@ fun AddEditScreen(
                                 )
                             }
 
-                            if (!state.isGameFranchise) {
-                                // 3. Standalone Progress Tracking
-                                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
+                            // Progress Tracking
+                            HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
 
                                 Text(
                                     text = "Tracking Unit",
@@ -1344,241 +1310,6 @@ fun AddEditScreen(
                                         }
                                     }
                                 }
-                            } else {
-                                // 4. Franchise / Series Checklist Editor
-                                HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
-
-                                val seriesCount = state.gameSeriesEntries.size
-                                val completedCount = state.gameSeriesEntries.count { it.status == GameSeriesItemStatus.COMPLETED }
-                                val skippedCount = state.gameSeriesEntries.count { it.status == GameSeriesItemStatus.SKIPPED }
-                                val activeCount = seriesCount - skippedCount
-
-                                Surface(
-                                    color = LXSurfaceElevated,
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, LXBorder),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text(
-                                            text = "Franchise Progress: $completedCount/$activeCount played" + if (skippedCount > 0) " ($skippedCount skipped)" else "",
-                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = LXPrimaryGreen
-                                        )
-                                        Text(
-                                            text = "Skipped entries do not count against completion percentage.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = LXTextSecondary,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                }
-
-                                Text(
-                                    text = "Series Entries (${state.gameSeriesEntries.size})",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                    color = LXTextPrimary
-                                )
-
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    state.gameSeriesEntries.forEachIndexed { index, item ->
-                                        Surface(
-                                            color = LXSurfaceElevated,
-                                            shape = RoundedCornerShape(8.dp),
-                                            border = BorderStroke(1.dp, if (item.status == GameSeriesItemStatus.PLAYING) LXPrimaryGreen.copy(alpha = 0.7f) else LXBorder),
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(8.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                // Order badge
-                                                Surface(
-                                                    color = LXBackgroundBlack,
-                                                    shape = CircleShape,
-                                                    modifier = Modifier.size(24.dp)
-                                                ) {
-                                                    Box(contentAlignment = Alignment.Center) {
-                                                        Text(
-                                                            text = "${index + 1}",
-                                                            fontSize = 11.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = LXPrimaryGreen
-                                                        )
-                                                    }
-                                                }
-
-                                                // Title & Platform
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        text = item.title,
-                                                        fontSize = 12.sp,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = if (item.status == GameSeriesItemStatus.SKIPPED) LXTextSecondary else LXTextPrimary,
-                                                        textDecoration = if (item.status == GameSeriesItemStatus.SKIPPED) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                                                        maxLines = 2,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                    if (item.platforms.isNotEmpty()) {
-                                                        Text(
-                                                            text = item.platforms.joinToString(", "),
-                                                            fontSize = 10.sp,
-                                                            color = LXTextSecondary
-                                                        )
-                                                    }
-                                                }
-
-                                                // Status Dropdown
-                                                var showStatusMenu by remember { mutableStateOf(false) }
-                                                Box {
-                                                    Surface(
-                                                        color = when (item.status) {
-                                                            GameSeriesItemStatus.COMPLETED -> LXPrimaryGreen.copy(alpha = 0.2f)
-                                                            GameSeriesItemStatus.PLAYING -> Color(0xFF2196F3).copy(alpha = 0.2f)
-                                                            GameSeriesItemStatus.SKIPPED -> LXTextSecondary.copy(alpha = 0.2f)
-                                                            GameSeriesItemStatus.DROPPED -> LXErrorRed.copy(alpha = 0.2f)
-                                                            else -> LXBackgroundBlack
-                                                        },
-                                                        shape = RoundedCornerShape(4.dp),
-                                                        border = BorderStroke(1.dp, LXBorder),
-                                                        modifier = Modifier.clickable { showStatusMenu = true }
-                                                    ) {
-                                                        Row(
-                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                            horizontalArrangement = Arrangement.spacedBy(2.dp)
-                                                        ) {
-                                                            Text(
-                                                                text = when (item.status) {
-                                                                    GameSeriesItemStatus.COMPLETED -> "Done"
-                                                                    GameSeriesItemStatus.PLAYING -> "Playing"
-                                                                    GameSeriesItemStatus.SKIPPED -> "Skip"
-                                                                    GameSeriesItemStatus.DROPPED -> "Drop"
-                                                                    else -> "Plan"
-                                                                },
-                                                                fontSize = 11.sp,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = when (item.status) {
-                                                                    GameSeriesItemStatus.COMPLETED -> LXPrimaryGreen
-                                                                    GameSeriesItemStatus.PLAYING -> Color(0xFF64B5F6)
-                                                                    GameSeriesItemStatus.SKIPPED -> LXTextSecondary
-                                                                    GameSeriesItemStatus.DROPPED -> LXErrorRed
-                                                                    else -> LXTextPrimary
-                                                                }
-                                                            )
-                                                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = LXTextSecondary, modifier = Modifier.size(14.dp))
-                                                        }
-                                                    }
-
-                                                    DropdownMenu(
-                                                        expanded = showStatusMenu,
-                                                        onDismissRequest = { showStatusMenu = false },
-                                                        modifier = Modifier.background(LXSurfaceElevated)
-                                                    ) {
-                                                        GameSeriesItemStatus.values().forEach { st ->
-                                                            DropdownMenuItem(
-                                                                text = {
-                                                                    Text(
-                                                                        text = when (st) {
-                                                                            GameSeriesItemStatus.PLANNED -> "Planned"
-                                                                            GameSeriesItemStatus.PLAYING -> "Playing"
-                                                                            GameSeriesItemStatus.COMPLETED -> "Completed"
-                                                                            GameSeriesItemStatus.SKIPPED -> "Skipped"
-                                                                            GameSeriesItemStatus.DROPPED -> "Dropped"
-                                                                        },
-                                                                        fontSize = 12.sp,
-                                                                        fontWeight = if (item.status == st) FontWeight.Bold else FontWeight.Normal,
-                                                                        color = if (item.status == st) LXPrimaryGreen else LXTextPrimary
-                                                                    )
-                                                                },
-                                                                onClick = {
-                                                                    showStatusMenu = false
-                                                                    viewModel.updateGameSeriesItemStatus(index, st)
-                                                                }
-                                                            )
-                                                        }
-                                                    }
-                                                }
-
-                                                // Move Up / Down
-                                                IconButton(
-                                                    onClick = { viewModel.moveGameSeriesItem(index, index - 1) },
-                                                    enabled = index > 0,
-                                                    modifier = Modifier.size(24.dp)
-                                                ) {
-                                                    Icon(
-                                                        Icons.Default.ArrowUpward,
-                                                        contentDescription = "Move Up",
-                                                        tint = if (index > 0) LXTextPrimary else LXTextSecondary.copy(alpha = 0.3f),
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-                                                IconButton(
-                                                    onClick = { viewModel.moveGameSeriesItem(index, index + 1) },
-                                                    enabled = index < state.gameSeriesEntries.size - 1,
-                                                    modifier = Modifier.size(24.dp)
-                                                ) {
-                                                    Icon(
-                                                        Icons.Default.ArrowDownward,
-                                                        contentDescription = "Move Down",
-                                                        tint = if (index < state.gameSeriesEntries.size - 1) LXTextPrimary else LXTextSecondary.copy(alpha = 0.3f),
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-
-                                                // Delete
-                                                IconButton(
-                                                    onClick = { viewModel.removeGameSeriesItem(index) },
-                                                    modifier = Modifier.size(24.dp)
-                                                ) {
-                                                    Icon(
-                                                        Icons.Default.Delete,
-                                                        contentDescription = "Remove Game",
-                                                        tint = LXErrorRed.copy(alpha = 0.8f),
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Add Game to Series row
-                                    var newGameTitle by remember { mutableStateOf("") }
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        OutlinedTextField(
-                                            value = newGameTitle,
-                                            onValueChange = { newGameTitle = it },
-                                            placeholder = { Text("Game title to add...") },
-                                            singleLine = true,
-                                            modifier = Modifier.weight(1f),
-                                            colors = outlinedColors()
-                                        )
-                                        Button(
-                                            onClick = {
-                                                if (newGameTitle.isNotBlank()) {
-                                                    viewModel.addGameSeriesItem(newGameTitle)
-                                                    newGameTitle = ""
-                                                }
-                                            },
-                                            enabled = newGameTitle.isNotBlank(),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = LXPrimaryGreen,
-                                                contentColor = LXBackgroundBlack
-                                            ),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Text("+ Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                 }

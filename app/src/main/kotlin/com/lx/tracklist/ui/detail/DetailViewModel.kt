@@ -4,8 +4,6 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.lx.tracklist.data.model.GameSeriesItem
-import com.lx.tracklist.data.model.GameSeriesItemStatus
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
@@ -546,28 +544,6 @@ class DetailViewModel(
         }
     }
 
-    fun updateGameSeriesItemStatus(index: Int, newStatus: GameSeriesItemStatus) {
-        val cur = entry.value ?: return
-        val series = cur.getGameSeriesEntries().toMutableList()
-        if (index in series.indices) {
-            series[index] = series[index].copy(status = newStatus)
-            val updatedJson = MediaEntry.formatGameSeriesEntries(series)
-            val active = series.count { it.status != GameSeriesItemStatus.SKIPPED }
-            val completed = series.count { it.status == GameSeriesItemStatus.COMPLETED }
-            val isDone = active > 0 && completed >= active
-            val now = System.currentTimeMillis()
-            val finalStatus = if (isDone) MediaStatus.COMPLETED else if (completed > 0 && cur.status == MediaStatus.PLAN_TO_WATCH) MediaStatus.WATCHING else cur.status
-            viewModelScope.launch {
-                repository.update(cur.copy(
-                    gameSeriesEntriesJson = updatedJson,
-                    status = finalStatus,
-                    finishDate = if (isDone && cur.finishDate == null) now else cur.finishDate,
-                    updatedAt = now
-                ))
-            }
-        }
-    }
-
     fun updateStatus(newStatus: MediaStatus) {
         val cur = entry.value ?: return
         if (cur.status == newStatus) return
@@ -708,21 +684,6 @@ class DetailViewModel(
                             MediaEntry.formatGamePlatforms(curList)
                         }
 
-                        val franchiseItems = if (cur.isGameFranchise && cur.getGameSeriesEntries().isEmpty() && details.collectionGames.isNotEmpty()) {
-                            details.collectionGames.mapIndexed { idx, cGame ->
-                                val isTarget = cGame.externalId == details.externalId || cGame.title.equals(details.title, ignoreCase = true)
-                                GameSeriesItem(
-                                    id = cGame.externalId,
-                                    order = idx + 1,
-                                    title = cGame.title,
-                                    releaseYear = cGame.releaseYear,
-                                    coverUrl = cGame.coverUrl,
-                                    status = if (isTarget) GameSeriesItemStatus.PLAYING else GameSeriesItemStatus.PLANNED,
-                                    platforms = cGame.platforms
-                                )
-                            }
-                        } else cur.getGameSeriesEntries()
-
                         val updated = cur.copy(
                             externalId = details.externalId,
                             externalSource = details.externalSource,
@@ -734,7 +695,6 @@ class DetailViewModel(
                             tags = if (details.genres.isNotEmpty()) details.genres.joinToString(", ") else cur.tags,
                             description = details.summary?.takeIf { it.isNotBlank() } ?: cur.description,
                             gamePlatforms = mergedPlatforms,
-                            gameSeriesEntriesJson = if (cur.isGameFranchise && franchiseItems.isNotEmpty()) MediaEntry.formatGameSeriesEntries(franchiseItems) else cur.gameSeriesEntriesJson,
                             relatedEntriesJson = if (details.relatedItems.isNotEmpty()) com.google.gson.Gson().toJson(details.relatedItems) else cur.relatedEntriesJson,
                             updatedAt = now
                         )

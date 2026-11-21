@@ -206,14 +206,13 @@ fun SearchScreen(
             item = itemToAdd!!,
             customCategories = state.customCategories.filter { it.mediaType == itemToAdd!!.mediaType }.map { it.name },
             subCategories = state.subCategories.map { it.name },
-            onConfirm = { status, customCat, subCat, asFranchise ->
+            onConfirm = { status, customCat, subCat ->
                 viewModel.addToLibrary(
                     item = itemToAdd!!,
                     status = status,
                     customCategory = customCat,
                     subCategory = subCat,
-                    context = context,
-                    asFranchise = asFranchise
+                    context = context
                 )
                 itemToAdd = null
             },
@@ -972,9 +971,6 @@ private fun SearchResultCard(
                         }
                         metaParts.add(platSummary)
                     }
-                    if (item.mediaType == MediaType.GAME && item.isGameFranchise) {
-                        metaParts.add("Series")
-                    }
                     item.totalUnits?.takeIf { it > 0 }?.let {
                         val unitLabel = when (item.mediaType) {
                             MediaType.ANIME -> if (it == 1) "1 Ep" else "$it Eps"
@@ -1162,13 +1158,12 @@ private fun AddToLibraryDialog(
     item: SearchResultItem,
     customCategories: List<String>,
     subCategories: List<String>,
-    onConfirm: (MediaStatus, String?, String?, Boolean) -> Unit,
+    onConfirm: (MediaStatus, String?, String?) -> Unit,
     onDismiss: () -> Unit
 ) {
     var selectedStatus by remember { mutableStateOf(MediaStatus.PLAN_TO_WATCH) }
     var selectedCustomCategory by remember { mutableStateOf<String?>(null) }
     var selectedSubCategory by remember { mutableStateOf<String?>(null) }
-    var isFranchiseMode by remember(item.externalId) { mutableStateOf(item.isGameFranchise) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1213,56 +1208,6 @@ private fun AddToLibraryDialog(
                             style = MaterialTheme.typography.bodySmall,
                             color = LXPrimaryGreen
                         )
-                    }
-                }
-
-                // Game Tracking Mode Selection
-                if (item.mediaType == MediaType.GAME) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "Track As",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = LXTextSecondary
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (!isFranchiseMode) LXPrimaryGreen else LXSurfaceElevated,
-                                border = BorderStroke(1.dp, if (!isFranchiseMode) LXPrimaryGreen else LXBorder),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { isFranchiseMode = false }
-                            ) {
-                                Text(
-                                    text = "Standalone Game",
-                                    color = if (!isFranchiseMode) LXBackgroundBlack else LXTextPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (!isFranchiseMode) FontWeight.Bold else FontWeight.Normal,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp)
-                                )
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isFranchiseMode) Color(0xFF8B5CF6) else LXSurfaceElevated,
-                                border = BorderStroke(1.dp, if (isFranchiseMode) Color(0xFF8B5CF6) else LXBorder),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { isFranchiseMode = true }
-                            ) {
-                                Text(
-                                    text = "Franchise / Series",
-                                    color = if (isFranchiseMode) Color.White else LXTextPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isFranchiseMode) FontWeight.Bold else FontWeight.Normal,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp)
-                                )
-                            }
-                        }
                     }
                 }
 
@@ -1349,7 +1294,7 @@ private fun AddToLibraryDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onConfirm(selectedStatus, selectedCustomCategory, selectedSubCategory, isFranchiseMode)
+                    onConfirm(selectedStatus, selectedCustomCategory, selectedSubCategory)
                 },
                 colors = ButtonDefaults.buttonColors(
                     containerColor = LXPrimaryGreen,
@@ -1715,8 +1660,7 @@ private fun SearchResultDetailSheet(
                         }
                         MediaType.GAME -> {
                             val plats = if (item.gamePlatforms.isNotEmpty()) item.gamePlatforms.joinToString(" • ") else null
-                            val franchiseText = if (item.isGameFranchise) "Franchise / Series" else null
-                            listOfNotNull(plats, franchiseText).joinToString(" • ").ifBlank { "Game" }
+                            plats ?: "Game"
                         }
                     }
                     if (!unitsInfo.isNullOrBlank()) {

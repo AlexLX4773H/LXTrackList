@@ -156,62 +156,19 @@ class GameEntryTest {
     }
 
     @Test
-    fun testFranchiseProgressWithSkippedGames() {
-        // 4 games in franchise:
-        // Game 1: Skipped
-        // Game 2: Completed (100%)
-        // Game 3: Skipped
-        // Game 4: Playing at 50%
-        val entries = listOf(
-            GameSeriesItem(
-                id = "1",
-                order = 1,
-                title = "The Witcher",
-                status = GameSeriesItemStatus.SKIPPED
-            ),
-            GameSeriesItem(
-                id = "2",
-                order = 2,
-                title = "The Witcher 2: Assassins of Kings",
-                status = GameSeriesItemStatus.COMPLETED,
-                progressPercent = 100
-            ),
-            GameSeriesItem(
-                id = "3",
-                order = 3,
-                title = "The Witcher Adventure Game",
-                status = GameSeriesItemStatus.SKIPPED
-            ),
-            GameSeriesItem(
-                id = "4",
-                order = 4,
-                title = "The Witcher 3: Wild Hunt",
-                status = GameSeriesItemStatus.PLAYING,
-                progressPercent = 50
-            )
-        )
-
-        val franchise = MediaEntry(
-            title = "The Witcher Series",
+    fun testStandaloneGameAlwaysStandalone() {
+        val entry = MediaEntry(
+            title = "The Witcher 3: Wild Hunt",
             mediaType = MediaType.GAME,
             status = MediaStatus.WATCHING,
-            isGameFranchise = true,
-            gameSeriesEntriesJson = MediaEntry.formatGameSeriesEntries(entries)
+            trackingUnit = TrackingUnit.PERCENTAGE,
+            gameProgressPercent = 50,
+            gamePlatforms = "PC (Steam), PS5, Nintendo Switch"
         )
 
-        // Active non-skipped count = 2 (Game 2 and Game 4).
-        // Completed count = 1.
-        // Skipped count = 2.
-        val (completed, active, skipped) = franchise.getFranchiseProgressSummary()
-        assertEquals(1, completed)
-        assertEquals(2, active)
-        assertEquals(2, skipped)
-
-        // Display string format: "1/2 games (2 skipped)"
-        assertEquals("1/2 games (2 skipped)", franchise.displayProgress)
-
-        // Progress fraction: (1.0 + 0.5) / 2 = 0.75f
-        assertEquals(0.75f, franchise.progressFraction, 0.001f)
+        assertFalse(entry.isGameFranchise)
+        assertEquals("50%", entry.displayProgress)
+        assertEquals(0.5f, entry.progressFraction, 0.001f)
     }
 
     @Test
