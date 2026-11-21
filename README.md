@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.6.6-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-0.6.7-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26--36)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Kotlin_2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
   <img src="https://img.shields.io/badge/UI-Jetpack_Compose_&_Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" />
@@ -17,21 +17,21 @@
 
 ---
 
-## 🚀 What's New in v0.6.6
+## 🚀 What's New in v0.6.7
 
-- **🎮 Platform-Specific Game Vector Icons**:
-  - Entity details now display authentic, themed vector icons for **PC** (desktop monitor), **PlayStation** (PS logo), **Xbox**, **Mobile** (smartphone), **Nintendo Switch** (Joy-Con), and **Retro** (arcade joystick), replacing generic controller icons.
-- **⚡ Compact Y-Axis Custom Units & Clean Presets**:
-  - In Edit Entity for Games, tracking units feature a vertically streamlined layout with reduced height, side-by-side inputs, and cleaned presets (removed redundant *Achievements* and *Bosses*).
-- **⏳ Universal NYA & NYP Release Countdowns**:
-  - Real-time release countdowns (e.g. `In 5d 10h`, `In 90d`) and contextual schedule badges (`Releasing`, `Publishing`, `Premiering`) now extend across **Movies**, **TV Shows**, **Video Games**, **Light Novels**, **Manga**, and **Manhwa**, matching the countdown banner used for Anime.
-- **🔍 Advanced Game Discovery (Full Parity with Movies Discovery)**:
-  - Added next-year preset selection chips (e.g. `2027`), `From ▾` / `To ▾` year range selectors, **Select & Exclude Tags** (IGDB genres), **Original Language** filters, and a **3-State 18+ Toggle Cycle** with compact vertical sizing.
-- **📊 Streamlined Stats Screen & Complete Analytics Engine**:
-  - Removed the duplicate "Left" metric from the top card header row to prevent mean score text wrapping.
-  - Highlighted **"To Complete"** in electric neon green (`LXPrimaryGreen`) in the bottom breakdown column.
-  - Decreased typography sizing across status and metric rows for crisp, collision-free rendering on all screen sizes.
-  - Added a comprehensive documentation section and reference table explaining exact formulas for time spent, remaining completion time, rewatch/reread multipliers, and mean scores across all categories.
+- **🎯 Compact & Vertically Optimized Edit Entry Pages**:
+  - Streamlined vertical Y-axis height, padding, and layout density across all media categories (Anime, Manga, Manhwa, Movies, TV Shows, Books, Games, Custom Media) to drastically reduce scrolling.
+  - Pixel-perfect, consistent 32.dp height for the game progress tracking field, matching adjacent `-5%`, `-1%`, `+1%`, `+5%` stepper buttons with a clean, dead-centered numeric display and smooth tap-to-edit focus.
+- **🌐 Integrated Game Open Launchers (IGDB, RAWG, Steam, SteamGridDB)**:
+  - Added dedicated "Open ▾" actions for Games across the Foreign Database section in Edit Entry, the expanded cards in the "Sync from External DB" dialog, and search result preview cards.
+- **🏷️ Strict Multi-Tag `AND` Filtering & Exclusions**:
+  - Multiple tag selection in Game Discovery now enforces true `AND` logic (e.g. Apicalypse `genres = [4,5]` and client-side `.all`), ensuring games contain all selected genres.
+  - Tag exclusions enforce `NOT ANY` (`genres != (id1, id2)` and client-side `.filterNot { any }`), strictly omitting any games tagged with excluded genres.
+- **🔞 Accurate 18+ Adult Content Discovery for Games**:
+  - Fixed "18+ Only" mode to query IGDB adult theme (`themes = (42)`) and RAWG adult flags (`tags=nsfw`, `esrb_rating=adults-only`), while family-safe mode strictly excludes them (`themes != (42)`).
+  - Cache keys dynamically incorporate the 18+ filter state for instant, distinct discovery results upon toggling.
+- **📂 Comprehensive CSV & JSON Import/Export Samples**:
+  - Added small, fully documented sample schemas for CSV inputs, JSON backups, and JSON library exports, including cross-platform game tracking records.
 
 ---
 
@@ -452,6 +452,16 @@ The JSON importer accepts either a backup wrapper object or a raw JSON array of 
       "trackingUnit": "CHAPTERS",
       "isFavorite": true,
       "tags": "dark fantasy, seinen"
+    },
+    {
+      "title": "Portal 2",
+      "mediaType": "GAME",
+      "status": "COMPLETED",
+      "score": 10,
+      "gamePlatforms": "PC, Xbox, PS",
+      "gameProgressPercent": 100,
+      "isFavorite": true,
+      "tags": "puzzle, sci-fi, comedy"
     }
   ]
 }
@@ -468,7 +478,7 @@ When exporting your library from **Settings > Backup & Restore > Export**, the a
   "app": "LX Track List",
   "version": 1,
   "exportedAt": 1732233600000,
-  "totalCount": 2,
+  "totalCount": 3,
   "entries": [
     {
       "id": 1,
@@ -509,6 +519,27 @@ When exporting your library from **Settings > Backup & Restore > Export**, the a
       "tags": "sci-fi, adventure",
       "priority": "MEDIUM",
       "createdAt": 1709500000000,
+      "updatedAt": 1732233600000
+    },
+    {
+      "id": 3,
+      "userId": 0,
+      "title": "Portal 2",
+      "mediaType": "GAME",
+      "status": "COMPLETED",
+      "score": 10,
+      "gamePlatforms": "PC, Xbox, PS",
+      "gameTrackingUnit": "PERCENTAGE",
+      "gameProgressPercent": 100,
+      "replayCount": 2,
+      "isReplaying": false,
+      "isFavorite": true,
+      "isExternallyTracked": true,
+      "externalId": "72",
+      "externalSource": "IGDB",
+      "tags": "puzzle, sci-fi, platformer",
+      "priority": "HIGH",
+      "createdAt": 1710000000000,
       "updatedAt": 1732233600000
     }
   ]
