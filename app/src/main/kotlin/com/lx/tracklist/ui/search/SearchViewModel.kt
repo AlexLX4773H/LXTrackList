@@ -820,7 +820,7 @@ class SearchViewModel(
     fun applyGameDiscoveryFilter(filter: DiscoveryFilter.Game, context: Context? = null) {
         searchJob?.cancel()
         val yearPart = filter.year?.toString() ?: filter.endYear?.toString() ?: "ALL"
-        activeSearchKey = "DISCOVER:GAME:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguages.sorted()}"
+        activeSearchKey = "DISCOVER:GAME:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.GAMES,

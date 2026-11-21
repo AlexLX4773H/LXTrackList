@@ -101,7 +101,8 @@ object GameMetadataManager {
                 endYear = eYear,
                 limit = limit,
                 includedTags = includedTags,
-                excludedTags = excludedTags
+                excludedTags = excludedTags,
+                adultMode = adultMode
             )
             if (rawgRes.isSuccess && rawgRes.getOrDefault(emptyList()).isNotEmpty()) {
                 return rawgRes

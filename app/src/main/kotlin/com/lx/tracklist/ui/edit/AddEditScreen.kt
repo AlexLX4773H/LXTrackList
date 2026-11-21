@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -107,12 +108,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -1310,38 +1313,71 @@ fun AddEditScreen(
                                         OutlinedButton(
                                             onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent - 5) },
                                             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                                            modifier = Modifier.height(30.dp)
+                                            modifier = Modifier.height(32.dp)
                                         ) {
                                             Text("-5%", fontSize = 11.sp)
                                         }
                                         OutlinedButton(
                                             onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent - 1) },
                                             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                                            modifier = Modifier.height(30.dp)
+                                            modifier = Modifier.height(32.dp)
                                         ) {
                                             Text("-1%", fontSize = 11.sp)
                                         }
-                                        OutlinedTextField(
-                                            value = state.gameProgressPercent.toString(),
-                                            onValueChange = { viewModel.updateGameProgressPercent(it.toIntOrNull() ?: 0) },
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                            singleLine = true,
-                                            maxLines = 1,
-                                            modifier = Modifier.weight(1f),
-                                            colors = outlinedColors(),
-                                            suffix = { Text("%", color = LXTextSecondary) }
-                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(32.dp)
+                                                .background(LXSurfaceElevated, RoundedCornerShape(6.dp))
+                                                .border(1.dp, LXBorder, RoundedCornerShape(6.dp)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.Center,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 4.dp)
+                                            ) {
+                                                BasicTextField(
+                                                    value = if (state.gameProgressPercent >= 0) state.gameProgressPercent.toString() else "",
+                                                    onValueChange = {
+                                                        val num = it.toIntOrNull()
+                                                        if (num != null) viewModel.updateGameProgressPercent(num.coerceIn(0, 100))
+                                                        else if (it.isEmpty()) viewModel.updateGameProgressPercent(0)
+                                                    },
+                                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                                        color = LXTextPrimary,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 13.sp,
+                                                        textAlign = TextAlign.Center
+                                                    ),
+                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                    singleLine = true,
+                                                    maxLines = 1,
+                                                    cursorBrush = SolidColor(LXPrimaryGreen),
+                                                    modifier = Modifier.width(IntrinsicSize.Min)
+                                                )
+                                                Text(
+                                                    text = "%",
+                                                    color = LXTextSecondary,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    modifier = Modifier.padding(start = 2.dp)
+                                                )
+                                            }
+                                        }
                                         OutlinedButton(
                                             onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent + 1) },
                                             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                                            modifier = Modifier.height(30.dp)
+                                            modifier = Modifier.height(32.dp)
                                         ) {
                                             Text("+1%", fontSize = 11.sp)
                                         }
                                         OutlinedButton(
                                             onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent + 5) },
                                             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                                            modifier = Modifier.height(30.dp)
+                                            modifier = Modifier.height(32.dp)
                                         ) {
                                             Text("+5%", fontSize = 11.sp)
                                         }
@@ -1636,8 +1672,12 @@ fun AddEditScreen(
                                 onDismissRequest = { databaseSourceExpanded = false },
                                 modifier = Modifier.background(LXSurfaceElevated)
                             ) {
-                                val allSources = remember(state.externalSource) {
-                                    val list = mutableListOf("MAL", "MangaDex", "AniList", "Kitsu", "TMDB", "IMDb", "TVDb", "Tachiyomi")
+                                val allSources = remember(state.externalSource, state.mediaType) {
+                                    val list = if (state.mediaType == MediaType.GAME) {
+                                        mutableListOf("IGDB", "RAWG", "Steam", "GOG", "Epic Games")
+                                    } else {
+                                        mutableListOf("MAL", "MangaDex", "AniList", "Kitsu", "TMDB", "IMDb", "TVDb", "Tachiyomi")
+                                    }
                                     if (state.externalSource.isNotBlank() && !list.contains(state.externalSource)) {
                                         list.add(0, state.externalSource)
                                     }
@@ -1802,6 +1842,60 @@ fun AddEditScreen(
                                 .fillMaxHeight(),
                             colors = outlinedColors()
                         )
+                    }
+
+                    if (state.mediaType == MediaType.GAME && (state.title.isNotBlank() || state.externalId.isNotBlank())) {
+                        val uriHandler = LocalUriHandler.current
+                        var showGameOpenMenu by remember { mutableStateOf(false) }
+                        val gameOpenOptions = remember(state.title, state.externalId, state.externalSource) {
+                            ExternalLinkHelper.buildGameOpenOptions(
+                                title = state.title,
+                                externalId = state.externalId.ifBlank { null },
+                                externalSource = state.externalSource.ifBlank { "IGDB" },
+                                webUrl = null
+                            )
+                        }
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { showGameOpenMenu = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(34.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, LXBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Open in External DB (IGDB / RAWG / Steam) ▾", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+
+                            DropdownMenu(
+                                expanded = showGameOpenMenu,
+                                onDismissRequest = { showGameOpenMenu = false },
+                                modifier = Modifier.background(LXSurfaceElevated)
+                            ) {
+                                gameOpenOptions.forEachIndexed { index, option ->
+                                    if (index > 0) HorizontalDivider(color = LXBorder)
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text(option.title, fontWeight = FontWeight.Bold, color = Color(option.color), fontSize = 12.sp)
+                                                Text(option.subtitle, fontSize = 10.sp, color = LXTextSecondary)
+                                            }
+                                        },
+                                        leadingIcon = {
+                                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = Color(option.color), modifier = Modifier.size(14.dp))
+                                        },
+                                        onClick = {
+                                            showGameOpenMenu = false
+                                            ExternalLinkHelper.openUrlSafely(option.url, uriHandler, context)
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -3280,6 +3374,109 @@ private fun ExternalDbSyncDialog(
                                                                 fontSize = 11.sp,
                                                                 color = LXTextPrimary.copy(alpha = 0.9f),
                                                                 lineHeight = 16.sp
+                                                            )
+                                                        }
+                                                    }
+
+                                                    Spacer(modifier = Modifier.height(2.dp))
+
+                                                    // Bottom expanded actions for Games
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        if (openOptions.isNotEmpty()) {
+                                                            var showExpandedGameMenu by remember { mutableStateOf(false) }
+                                                            Box(modifier = Modifier.weight(1.35f)) {
+                                                                OutlinedButton(
+                                                                    onClick = {
+                                                                        if (openOptions.size > 1) {
+                                                                            showExpandedGameMenu = true
+                                                                        } else {
+                                                                            openExternalUrl(openOptions.first().url)
+                                                                        }
+                                                                    },
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .heightIn(min = 34.dp),
+                                                                    shape = RoundedCornerShape(6.dp),
+                                                                    border = BorderStroke(1.dp, LXBorder),
+                                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                                                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                                                                ) {
+                                                                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                                    Text(
+                                                                        text = if (openOptions.size > 1) "Open ▾" else "Open",
+                                                                        fontSize = 11.sp,
+                                                                        fontWeight = FontWeight.Medium,
+                                                                        maxLines = 1,
+                                                                        softWrap = false,
+                                                                        overflow = TextOverflow.Ellipsis
+                                                                    )
+                                                                }
+
+                                                                if (openOptions.size > 1) {
+                                                                    DropdownMenu(
+                                                                        expanded = showExpandedGameMenu,
+                                                                        onDismissRequest = { showExpandedGameMenu = false },
+                                                                        modifier = Modifier.background(LXSurfaceElevated)
+                                                                    ) {
+                                                                        openOptions.forEachIndexed { index, option ->
+                                                                            if (index > 0) {
+                                                                                HorizontalDivider(color = LXBorder)
+                                                                            }
+                                                                            DropdownMenuItem(
+                                                                                text = {
+                                                                                    Column {
+                                                                                        Text(
+                                                                                            text = option.title,
+                                                                                            fontWeight = FontWeight.Bold,
+                                                                                            color = Color(option.color),
+                                                                                            fontSize = 12.sp
+                                                                                        )
+                                                                                        Text(
+                                                                                            text = option.subtitle,
+                                                                                            fontSize = 10.sp,
+                                                                                            color = LXTextSecondary
+                                                                                        )
+                                                                                    }
+                                                                                },
+                                                                                leadingIcon = {
+                                                                                    Icon(
+                                                                                        Icons.AutoMirrored.Filled.OpenInNew,
+                                                                                        contentDescription = null,
+                                                                                        tint = Color(option.color),
+                                                                                        modifier = Modifier.size(14.dp)
+                                                                                    )
+                                                                                },
+                                                                                onClick = {
+                                                                                    showExpandedGameMenu = false
+                                                                                    openExternalUrl(option.url)
+                                                                                }
+                                                                            )
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+
+                                                        Button(
+                                                            onClick = { onSelectGame(item) },
+                                                            modifier = Modifier
+                                                                .weight(1f)
+                                                                .heightIn(min = 34.dp),
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen),
+                                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = "Apply",
+                                                                color = LXBackgroundBlack,
+                                                                fontSize = 12.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                maxLines = 1
                                                             )
                                                         }
                                                     }

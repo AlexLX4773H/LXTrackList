@@ -1938,6 +1938,12 @@ private fun SearchResultDetailSheet(
                         directSiteUrl = item.rawJikanDetails?.url ?: item.rawJikanDetails?.webUrl,
                         webUrl = item.webUrl
                     )
+                    item.mediaType == MediaType.GAME -> ExternalLinkHelper.buildGameOpenOptions(
+                        title = item.title,
+                        externalId = item.externalId,
+                        externalSource = item.externalSource,
+                        webUrl = item.webUrl
+                    )
                     else -> item.webUrl?.let {
                         listOf(ExternalLinkHelper.ExternalOpenOption("Open in Browser", it, it))
                     } ?: emptyList()

@@ -261,19 +261,30 @@ class GameRemoteClientTest {
     @Test
     fun testIgdbDiscoverApicalypseQueryWithGenres() {
         val query = IgdbApiClient.buildDiscoverApicalypseQuery(
-            includedTags = setOf("Fighting"),
-            excludedTags = setOf("Racing")
+            includedTags = setOf("Fighting", "Shooter"),
+            excludedTags = setOf("Racing"),
+            adultMode = com.lx.tracklist.ui.search.AdultMode.OFF
         )
-        assertTrue("Query should include 'genres = (4)' for Fighting", query.contains("genres = (4)"))
+        // Square brackets [] indicate AND condition (must contain both genres 4 and 5)
+        assertTrue("Query should include 'genres = [4,5]' for Fighting AND Shooter", query.contains("genres = [4,5]") || query.contains("genres = [5,4]"))
+        // Parentheses () indicate NOT ANY (must not contain genre 10)
         assertTrue("Query should include 'genres != (10)' for Racing", query.contains("genres != (10)"))
+        assertTrue("Query should exclude erotic theme for AdultMode.OFF", query.contains("themes != (42)"))
+
+        val adultOnlyQuery = IgdbApiClient.buildDiscoverApicalypseQuery(
+            adultMode = com.lx.tracklist.ui.search.AdultMode.ONLY
+        )
+        assertTrue("Query should require erotic theme for AdultMode.ONLY", adultOnlyQuery.contains("themes = (42)"))
     }
 
     @Test
     fun testRawgDiscoverUrlWithGenres() {
         val url = RawgApiClient.buildDiscoverUrl(
             apiKey = "test_key",
-            includedTags = setOf("Fighting")
+            includedTags = setOf("Fighting"),
+            adultMode = com.lx.tracklist.ui.search.AdultMode.ONLY
         )
         assertTrue("URL should include '&genres=fighting'", url.contains("&genres=fighting"))
+        assertTrue("URL should include '&tags=nsfw' for AdultMode.ONLY", url.contains("&tags=nsfw"))
     }
 }

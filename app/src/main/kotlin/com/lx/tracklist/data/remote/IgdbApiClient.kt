@@ -209,11 +209,20 @@ object IgdbApiClient {
             tag.toIntOrNull() ?: GameTagRegistry.findGenre(tag)?.igdbId
         }.distinct()
 
+        // Square brackets [id1, id2] enforce AND logic in Apicalypse (must contain ALL specified genres)
         if (includedGenreIds.isNotEmpty()) {
-            whereConditions.add("genres = (${includedGenreIds.joinToString(",")})")
+            whereConditions.add("genres = [${includedGenreIds.joinToString(",")}]")
         }
+        // Parentheses (id1, id2) enforce NOT ANY in Apicalypse (must not contain ANY of the excluded genres)
         if (excludedGenreIds.isNotEmpty()) {
             whereConditions.add("genres != (${excludedGenreIds.joinToString(",")})")
+        }
+
+        // Adult mode filtering (Theme 42 is 'Erotic' in IGDB)
+        when (adultMode) {
+            AdultMode.ONLY -> whereConditions.add("themes = (42)")
+            AdultMode.OFF -> whereConditions.add("themes != (42)")
+            AdultMode.INCLUDE -> { /* No restriction */ }
         }
 
         val whereClause = "where " + whereConditions.joinToString(" & ") + ";"
@@ -255,12 +264,16 @@ object IgdbApiClient {
             var list = parseSearchResultsJson(jsonStr)
             if (includedTags.isNotEmpty()) {
                 list = list.filter { item ->
-                    item.genres.any { g -> includedTags.any { inc -> inc.equals(g, ignoreCase = true) } }
+                    includedTags.all { inc ->
+                        item.genres.any { g -> inc.equals(g, ignoreCase = true) }
+                    }
                 }
             }
             if (excludedTags.isNotEmpty()) {
                 list = list.filterNot { item ->
-                    item.genres.any { g -> excludedTags.any { exc -> exc.equals(g, ignoreCase = true) } }
+                    excludedTags.any { exc ->
+                        item.genres.any { g -> exc.equals(g, ignoreCase = true) }
+                    }
                 }
             }
             list

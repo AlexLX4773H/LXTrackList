@@ -8,6 +8,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
+import com.lx.tracklist.ui.search.AdultMode
 import com.lx.tracklist.ui.search.GameTagRegistry
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -54,7 +55,7 @@ object RawgApiClient {
     }
 
     /**
-     * Builds the RAWG discover games request URL with dates and genre parameters.
+     * Builds the RAWG discover games request URL with dates, genre, and adult parameters.
      */
     fun buildDiscoverUrl(
         apiKey: String,
@@ -63,7 +64,8 @@ object RawgApiClient {
         endYear: Int? = null,
         limit: Int = 20,
         includedTags: Set<String> = emptySet(),
-        excludedTags: Set<String> = emptySet()
+        excludedTags: Set<String> = emptySet(),
+        adultMode: AdultMode = AdultMode.OFF
     ): String {
         val sYear = startYear ?: year
         val eYear = endYear ?: year
@@ -81,7 +83,13 @@ object RawgApiClient {
             "&genres=${rawgSlugs.joinToString(",")}"
         } else ""
 
-        return "$BASE_URL/games?key=$apiKey&ordering=-added$datesParam$genresParam&page_size=$limit"
+        val adultParam = when (adultMode) {
+            AdultMode.ONLY -> "&tags=nsfw"
+            AdultMode.OFF -> ""
+            AdultMode.INCLUDE -> ""
+        }
+
+        return "$BASE_URL/games?key=$apiKey&ordering=-added$datesParam$genresParam$adultParam&page_size=$limit"
     }
 
     suspend fun discoverGames(
@@ -91,7 +99,8 @@ object RawgApiClient {
         endYear: Int? = null,
         limit: Int = 20,
         includedTags: Set<String> = emptySet(),
-        excludedTags: Set<String> = emptySet()
+        excludedTags: Set<String> = emptySet(),
+        adultMode: AdultMode = AdultMode.OFF
     ): Result<List<GameSearchResult>> {
         val apiKey = GameApiConfig.getRawgApiKey(context)
         if (apiKey.isBlank()) {
@@ -104,7 +113,8 @@ object RawgApiClient {
             endYear = endYear,
             limit = limit,
             includedTags = includedTags,
-            excludedTags = excludedTags
+            excludedTags = excludedTags,
+            adultMode = adultMode
         )
         val request = Request.Builder().url(url).build()
 
@@ -117,12 +127,16 @@ object RawgApiClient {
             var list = parseSearchResultsJson(body)
             if (includedTags.isNotEmpty()) {
                 list = list.filter { item ->
-                    item.genres.any { g -> includedTags.any { inc -> inc.equals(g, ignoreCase = true) } }
+                    includedTags.all { inc ->
+                        item.genres.any { g -> inc.equals(g, ignoreCase = true) }
+                    }
                 }
             }
             if (excludedTags.isNotEmpty()) {
                 list = list.filterNot { item ->
-                    item.genres.any { g -> excludedTags.any { exc -> exc.equals(g, ignoreCase = true) } }
+                    excludedTags.any { exc ->
+                        item.genres.any { g -> exc.equals(g, ignoreCase = true) }
+                    }
                 }
             }
             Result.success(list)
