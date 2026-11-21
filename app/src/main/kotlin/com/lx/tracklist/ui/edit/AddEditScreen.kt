@@ -1245,7 +1245,7 @@ fun AddEditScreen(
                                     }
                                 } else {
                                     // Custom Units Mode
-                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                         Text(
                                             text = "Unit Presets",
                                             style = MaterialTheme.typography.bodySmall,
@@ -1256,7 +1256,7 @@ fun AddEditScreen(
                                         }
                                         FlowRow(
                                             horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
                                             unitPresets.forEach { preset ->
                                                 val isSelected = state.customUnitLabel.equals(preset, ignoreCase = true)
@@ -1278,18 +1278,21 @@ fun AddEditScreen(
                                             value = state.customUnitLabel,
                                             onValueChange = { viewModel.updateCustomUnitLabel(it) },
                                             label = { Text("Unit Name (e.g. Levels, Cities, Quests)") },
+                                            singleLine = true,
                                             modifier = Modifier.fillMaxWidth(),
                                             colors = outlinedColors()
                                         )
 
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             OutlinedTextField(
                                                 value = state.customUnitCurrent.toString(),
                                                 onValueChange = { viewModel.updateCustomUnitCurrent(it.toIntOrNull() ?: 0) },
-                                                label = { Text("Current ${state.customUnitLabel.ifBlank { "Progress" }}") },
+                                                label = { Text("Current Progress", maxLines = 1) },
+                                                singleLine = true,
                                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                                 modifier = Modifier.weight(1f),
                                                 colors = outlinedColors()
@@ -1297,8 +1300,9 @@ fun AddEditScreen(
                                             OutlinedTextField(
                                                 value = state.customUnitTotal?.toString() ?: "",
                                                 onValueChange = { viewModel.updateCustomUnitTotal(it.toIntOrNull()) },
-                                                label = { Text("Total Target (optional)") },
+                                                label = { Text("Total Target (optional)", maxLines = 1) },
                                                 placeholder = { Text("None") },
+                                                singleLine = true,
                                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                                 modifier = Modifier.weight(1f),
                                                 colors = outlinedColors()
@@ -1388,8 +1392,9 @@ fun AddEditScreen(
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    val isGame = state.mediaType == MediaType.GAME
                     Text(
-                        text = "Rewatch Details",
+                        text = if (isGame) "Replay Details" else "Rewatch Details",
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                         color = LXPrimaryGreen
                     )
@@ -1399,8 +1404,16 @@ fun AddEditScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Currently Rewatching?", color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
-                            Text("Flag that you are re-experiencing this title", color = LXTextSecondary, style = MaterialTheme.typography.bodySmall)
+                            Text(
+                                text = if (isGame) "Currently Replaying?" else "Currently Rewatching?",
+                                color = LXTextPrimary,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = if (isGame) "Flag that you are re-playing this title" else "Flag that you are re-experiencing this title",
+                                color = LXTextSecondary,
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
                         Switch(
                             checked = state.isRewatching,
@@ -1414,8 +1427,9 @@ fun AddEditScreen(
                     OutlinedTextField(
                         value = if (state.rewatchCount > 0) state.rewatchCount.toString() else "",
                         onValueChange = { viewModel.updateRewatchCount(it.toIntOrNull() ?: 0) },
-                        label = { Text("Times Rewatched / Re-read") },
+                        label = { Text(if (isGame) "Times Replayed" else "Times Rewatched / Re-read") },
                         placeholder = { Text("0") },
+                        singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                         colors = outlinedColors()

@@ -598,6 +598,8 @@ class DetailViewModel(
                 currentChapters = 0,
                 currentVolumes = 0,
                 currentPages = 0,
+                gameProgressPercent = 0,
+                customUnitCurrent = 0,
                 startDate = now,
                 finishDate = null,
                 updatedAt = now
@@ -625,6 +627,8 @@ class DetailViewModel(
                 currentEpisodes = targetEpisodes,
                 currentChapters = if (cur.totalChapters > 0) cur.totalChapters else cur.currentChapters,
                 currentVolumes = if (cur.totalVolumes > 0) cur.totalVolumes else cur.currentVolumes,
+                gameProgressPercent = if (cur.mediaType == MediaType.GAME) 100 else cur.gameProgressPercent,
+                customUnitCurrent = if (cur.mediaType == MediaType.GAME && (cur.customUnitTotal ?: 0) > 0) (cur.customUnitTotal ?: cur.customUnitCurrent) else cur.customUnitCurrent,
                 finishDate = now,
                 updatedAt = now
             )

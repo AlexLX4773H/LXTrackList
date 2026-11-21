@@ -6,6 +6,8 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLEncoder
@@ -32,10 +34,10 @@ object SteamGridDbApiClient {
     /**
      * Searches for a game by title to get its SteamGridDB internal ID.
      */
-    suspend fun searchByTitle(context: Context, title: String): Result<List<SgdbSearchResult>> {
+    suspend fun searchByTitle(context: Context, title: String): Result<List<SgdbSearchResult>> = withContext(Dispatchers.IO) {
         val apiKey = GameApiConfig.getSteamGridDbApiKey(context)
         if (apiKey.isBlank()) {
-            return Result.failure(IllegalStateException("SteamGridDB API key is not configured."))
+            return@withContext Result.failure(IllegalStateException("SteamGridDB API key is not configured."))
         }
 
         val encodedTitle = URLEncoder.encode(title.trim(), "UTF-8")
@@ -45,11 +47,11 @@ object SteamGridDbApiClient {
             .addHeader("Authorization", "Bearer $apiKey")
             .build()
 
-        return try {
+        try {
             val response = httpClient.newCall(request).execute()
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
-                return Result.failure(Exception("SteamGridDB search error (HTTP ${response.code}): $body"))
+                return@withContext Result.failure(Exception("SteamGridDB search error (HTTP ${response.code}): $body"))
             }
             Result.success(parseSearchResultsJson(body))
         } catch (e: Exception) {
@@ -61,10 +63,10 @@ object SteamGridDbApiClient {
     /**
      * Fetches vertical portrait grids (600x900) for a given SteamGridDB game ID.
      */
-    suspend fun getPortraitGrids(context: Context, sgdbGameId: Long): Result<List<SteamGridPosterItem>> {
+    suspend fun getPortraitGrids(context: Context, sgdbGameId: Long): Result<List<SteamGridPosterItem>> = withContext(Dispatchers.IO) {
         val apiKey = GameApiConfig.getSteamGridDbApiKey(context)
         if (apiKey.isBlank()) {
-            return Result.failure(IllegalStateException("SteamGridDB API key is not configured."))
+            return@withContext Result.failure(IllegalStateException("SteamGridDB API key is not configured."))
         }
 
         val url = "$BASE_URL/grids/game/$sgdbGameId?dimensions=600x900&mimes=image/png,image/jpeg&types=static&nsfw=false&humor=false"
@@ -73,11 +75,11 @@ object SteamGridDbApiClient {
             .addHeader("Authorization", "Bearer $apiKey")
             .build()
 
-        return try {
+        try {
             val response = httpClient.newCall(request).execute()
             val body = response.body?.string().orEmpty()
             if (!response.isSuccessful) {
-                return Result.failure(Exception("SteamGridDB grids error (HTTP ${response.code}): $body"))
+                return@withContext Result.failure(Exception("SteamGridDB grids error (HTTP ${response.code}): $body"))
             }
             Result.success(parseGridsJson(body))
         } catch (e: Exception) {

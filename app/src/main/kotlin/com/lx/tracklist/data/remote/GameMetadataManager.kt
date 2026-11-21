@@ -2,6 +2,8 @@ package com.lx.tracklist.data.remote
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 object GameMetadataManager {
     private const val TAG = "GameMetadataManager"
@@ -113,18 +115,18 @@ object GameMetadataManager {
     /**
      * Searches SteamGridDB for vertical 600x900 custom box art posters.
      */
-    suspend fun searchSteamGridPosters(context: Context, title: String): Result<List<SteamGridPosterItem>> {
+    suspend fun searchSteamGridPosters(context: Context, title: String): Result<List<SteamGridPosterItem>> = withContext(Dispatchers.IO) {
         if (!GameApiConfig.isSteamGridDbConfigured(context)) {
-            return Result.failure(IllegalStateException("SteamGridDB API key is not configured."))
+            return@withContext Result.failure(IllegalStateException("SteamGridDB API key is not configured."))
         }
 
         val searchRes = SteamGridDbApiClient.searchByTitle(context, title)
-        val candidates = searchRes.getOrElse { return Result.failure(it) }
+        val candidates = searchRes.getOrElse { return@withContext Result.failure(it) }
         val bestMatch = candidates.firstOrNull { it.name.equals(title, ignoreCase = true) }
             ?: candidates.firstOrNull()
-            ?: return Result.failure(NoSuchElementException("No SteamGridDB game entry found for '$title'"))
+            ?: return@withContext Result.failure(NoSuchElementException("No SteamGridDB game entry found for '$title'"))
 
-        return SteamGridDbApiClient.getPortraitGrids(context, bestMatch.id)
+        SteamGridDbApiClient.getPortraitGrids(context, bestMatch.id)
     }
 
     /**

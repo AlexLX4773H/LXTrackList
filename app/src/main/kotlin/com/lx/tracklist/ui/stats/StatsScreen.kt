@@ -853,8 +853,13 @@ fun MalCategoryStatsCard(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     MalMetricRow(label = "Total Entries", value = summary.totalEntries.formatCommas())
+                    val rewatchStatLabel = when {
+                        summary.categoryKey.equals(MediaType.GAME.name, ignoreCase = true) -> "Replayed"
+                        isWatch -> "Rewatched"
+                        else -> "Reread"
+                    }
                     MalMetricRow(
-                        label = if (isWatch) "Rewatched" else "Reread",
+                        label = rewatchStatLabel,
                         value = summary.rewatchedCount.formatCommas()
                     )
                     if (isWatch) {

@@ -484,8 +484,9 @@ fun MediaCard(
                                     }
 
                                     if (entry.isRewatching) {
+                                        val rewatchText = if (entry.mediaType.isPlayType) "REPLAYING" else "REWATCHING"
                                         Text(
-                                            text = "REWATCHING",
+                                            text = rewatchText,
                                             style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
                                             color = colors.primary,
                                             maxLines = 1,

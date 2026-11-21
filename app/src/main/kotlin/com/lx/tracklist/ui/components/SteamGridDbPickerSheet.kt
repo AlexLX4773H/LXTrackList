@@ -71,7 +71,9 @@ import com.lx.tracklist.ui.theme.LXSurfaceBlack
 import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,7 +100,9 @@ fun SteamGridDbPickerSheet(
         isLoading = true
         errorMessage = null
         coroutineScope.launch {
-            val result = GameMetadataManager.searchSteamGridPosters(context, q)
+            val result = withContext(Dispatchers.IO) {
+                GameMetadataManager.searchSteamGridPosters(context, q)
+            }
             isLoading = false
             result.onSuccess { list ->
                 posters = list
@@ -106,7 +110,7 @@ fun SteamGridDbPickerSheet(
                     errorMessage = "No 600×900 vertical posters found on SteamGridDB for \"$q\"."
                 }
             }.onFailure { err ->
-                errorMessage = err.message ?: "Failed to query SteamGridDB."
+                errorMessage = err.message?.takeIf { it.isNotBlank() } ?: "Failed to query SteamGridDB."
             }
         }
     }

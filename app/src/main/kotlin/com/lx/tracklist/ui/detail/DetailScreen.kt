@@ -450,15 +450,6 @@ fun DetailScreen(
                 actions = {
                     entry?.let { e ->
                         // Refresh metadata button from external source
-                        if (e.mediaType == MediaType.GAME) {
-                            IconButton(onClick = { showSteamGridPicker = true }) {
-                                Icon(
-                                    imageVector = Icons.Default.Image,
-                                    contentDescription = "SteamGridDB Posters",
-                                    tint = LXPrimaryGreen
-                                )
-                            }
-                        }
                         IconButton(
                             onClick = { showRefreshConfirmDialog = true },
                             enabled = !isRefreshingMetadata
@@ -631,10 +622,12 @@ fun DetailScreen(
                                 MetaChip(label = "⏱️ ${currentEntry.episodeLengthMinutes} min/ep", color = LXPrimaryGreen)
                             }
                             if (currentEntry.isRewatching) {
-                                MetaChip(label = "REWATCHING", color = LXPrimaryGreen)
+                                val rewatchBadge = if (currentEntry.mediaType == MediaType.GAME) "REPLAYING" else "REWATCHING"
+                                MetaChip(label = rewatchBadge, color = LXPrimaryGreen)
                             }
                             if (currentEntry.rewatchCount > 0) {
-                                MetaChip(label = "Rewatched ${currentEntry.rewatchCount}x", color = LXScoreGold)
+                                val rewatchLabel = if (currentEntry.mediaType == MediaType.GAME) "Replayed" else "Rewatched"
+                                MetaChip(label = "$rewatchLabel ${currentEntry.rewatchCount}x", color = LXScoreGold)
                             }
                             if (currentEntry.mediaType == MediaType.GAME) {
                                 currentEntry.getGamePlatformList().forEach { platform ->
@@ -821,10 +814,12 @@ fun DetailScreen(
                                 MetaChip(label = "⏱️ ${currentEntry.episodeLengthMinutes} min/ep", color = LXPrimaryGreen)
                             }
                             if (currentEntry.isRewatching) {
-                                MetaChip(label = "REWATCHING", color = LXPrimaryGreen)
+                                val rewatchBadge = if (currentEntry.mediaType == MediaType.GAME) "REPLAYING" else "REWATCHING"
+                                MetaChip(label = rewatchBadge, color = LXPrimaryGreen)
                             }
                             if (currentEntry.rewatchCount > 0) {
-                                MetaChip(label = "Rewatched ${currentEntry.rewatchCount}x", color = LXScoreGold)
+                                val rewatchLabel = if (currentEntry.mediaType == MediaType.GAME) "Replayed" else "Rewatched"
+                                MetaChip(label = "$rewatchLabel ${currentEntry.rewatchCount}x", color = LXScoreGold)
                             }
                             if (currentEntry.mediaType == MediaType.GAME) {
                                 currentEntry.getGamePlatformList().forEach { platform ->
@@ -915,8 +910,17 @@ fun DetailScreen(
         val isReading = currentEntry.mediaType == MediaType.MANGA ||
                         currentEntry.mediaType == MediaType.MANHWA ||
                         currentEntry.mediaType == MediaType.BOOK
-        val actionName = if (isReading) "Re-read" else "Rewatch"
-        val actionVerb = if (isReading) "re-reading" else "rewatching"
+        val isGame = currentEntry.mediaType == MediaType.GAME
+        val actionName = when {
+            isGame -> "Replay"
+            isReading -> "Re-read"
+            else -> "Rewatch"
+        }
+        val actionVerb = when {
+            isGame -> "replaying"
+            isReading -> "re-reading"
+            else -> "rewatching"
+        }
 
         AlertDialog(
             onDismissRequest = { showStartRewatchDialog = false },
@@ -1251,8 +1255,9 @@ private fun DetailProgressCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(16.dp))
+                        val rewatchVerb = if (entry.mediaType == MediaType.GAME) "Replaying" else "Rewatching"
                         Text(
-                            text = "Rewatching${if (entry.rewatchCount > 0) " (#${entry.rewatchCount + 1})" else ""}",
+                            text = "$rewatchVerb${if (entry.rewatchCount > 0) " (#${entry.rewatchCount + 1})" else ""}",
                             color = LXPrimaryGreen,
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.labelMedium
@@ -1275,7 +1280,8 @@ private fun DetailProgressCard(
                             modifier = Modifier.height(28.dp),
                             shape = RoundedCornerShape(6.dp)
                         ) {
-                            Text("Finish Rewatch", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            val finishLabel = if (entry.mediaType == MediaType.GAME) "Finish Replay" else "Finish Rewatch"
+                            Text(finishLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1652,7 +1658,8 @@ private fun DetailProgressCard(
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(15.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Start Rewatch", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    val startLabel = if (entry.mediaType == MediaType.GAME) "Start Replay" else "Start Rewatch"
+                    Text(startLabel, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

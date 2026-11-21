@@ -921,7 +921,7 @@ fun LibraryScreen(
                                         DropdownMenuItem(
                                             text = {
                                                 Text(
-                                                    text = option.displayName,
+                                                    text = option.getDisplayLabel(state.selectedCategoryFilter),
                                                     color = if (isCurrent) Color(0xFFFC8181) else LXTextPrimary,
                                                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
                                                 )
@@ -1001,7 +1001,7 @@ fun LibraryScreen(
                                         DropdownMenuItem(
                                             text = {
                                                 Text(
-                                                    text = option.displayName,
+                                                    text = option.getDisplayLabel(state.selectedCategoryFilter),
                                                     color = if (isCurrent) Color(0xFF38BDF8) else LXTextPrimary,
                                                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
                                                 )
@@ -1081,7 +1081,7 @@ fun LibraryScreen(
                                         DropdownMenuItem(
                                             text = {
                                                 Text(
-                                                    text = option.displayName,
+                                                    text = option.getDisplayLabel(state.selectedCategoryFilter),
                                                     color = if (isCurrent) Color(0xFFFBBF24) else LXTextPrimary,
                                                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
                                                 )
@@ -1161,7 +1161,7 @@ fun LibraryScreen(
                                         DropdownMenuItem(
                                             text = {
                                                 Text(
-                                                    text = option.displayName,
+                                                    text = option.getDisplayLabel(state.selectedCategoryFilter),
                                                     color = if (isCurrent) Color(0xFF06B6D4) else LXTextPrimary,
                                                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
                                                 )
@@ -1242,7 +1242,7 @@ fun LibraryScreen(
                                         DropdownMenuItem(
                                             text = {
                                                 Text(
-                                                    text = option.displayName,
+                                                    text = option.getDisplayLabel(state.selectedCategoryFilter),
                                                     color = if (isCurrent) LXPrimaryGreen else LXTextPrimary,
                                                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
                                                 )

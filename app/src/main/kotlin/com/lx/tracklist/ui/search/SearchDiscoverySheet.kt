@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.Button
@@ -114,7 +115,7 @@ fun SearchDiscoverySheet(
     // Game state
     val gameFilter = activeFilter as? DiscoveryFilter.Game
     var selectedGameMode by remember {
-        mutableStateOf(gameFilter?.mode)
+        mutableStateOf(gameFilter?.mode ?: ContentDiscoveryMode.MOST_POPULAR)
     }
     var selectedGameYear by remember {
         mutableIntStateOf(gameFilter?.year ?: currentYear)
@@ -132,7 +133,7 @@ fun SearchDiscoverySheet(
     // Anime state
     val animeFilter = activeFilter as? DiscoveryFilter.Anime
     var selectedAnimeMode by remember {
-        mutableStateOf(animeFilter?.mode)
+        mutableStateOf(animeFilter?.mode ?: AnimeDiscoveryMode.SEASONAL)
     }
     var selectedSeason by remember {
         mutableStateOf(animeFilter?.season ?: AnimeSeason.current())
@@ -156,7 +157,7 @@ fun SearchDiscoverySheet(
     // Movie state
     val movieFilter = activeFilter as? DiscoveryFilter.Movie
     var selectedMovieMode by remember {
-        mutableStateOf(movieFilter?.mode)
+        mutableStateOf(movieFilter?.mode ?: TmdbDiscoveryMode.MOST_POPULAR)
     }
     var selectedMovieYear by remember {
         mutableIntStateOf(movieFilter?.year ?: currentYear)
@@ -183,7 +184,7 @@ fun SearchDiscoverySheet(
     // TV state
     val tvFilter = activeFilter as? DiscoveryFilter.Tv
     var selectedTvMode by remember {
-        mutableStateOf(tvFilter?.mode)
+        mutableStateOf(tvFilter?.mode ?: TmdbDiscoveryMode.MOST_POPULAR)
     }
     var selectedTvYear by remember {
         mutableIntStateOf(tvFilter?.year ?: currentYear)
@@ -210,7 +211,7 @@ fun SearchDiscoverySheet(
     // Manga state
     val mangaFilter = activeFilter as? DiscoveryFilter.Manga
     var selectedMangaMode by remember {
-        mutableStateOf(mangaFilter?.mode)
+        mutableStateOf(mangaFilter?.mode ?: ContentDiscoveryMode.MOST_POPULAR)
     }
     var selectedMangaStartYear by remember {
         mutableStateOf<Int?>(mangaFilter?.startYear ?: currentYear)
@@ -234,7 +235,7 @@ fun SearchDiscoverySheet(
     // Manhwa state
     val manhwaFilter = activeFilter as? DiscoveryFilter.Manhwa
     var selectedManhwaMode by remember {
-        mutableStateOf(manhwaFilter?.mode)
+        mutableStateOf(manhwaFilter?.mode ?: ContentDiscoveryMode.MOST_POPULAR)
     }
     var selectedManhwaStartYear by remember {
         mutableStateOf<Int?>(manhwaFilter?.startYear ?: currentYear)
@@ -258,7 +259,7 @@ fun SearchDiscoverySheet(
     // Light Novel state
     val lightNovelFilter = activeFilter as? DiscoveryFilter.LightNovel
     var selectedLightNovelMode by remember {
-        mutableStateOf(lightNovelFilter?.mode)
+        mutableStateOf(lightNovelFilter?.mode ?: ContentDiscoveryMode.MOST_POPULAR)
     }
     var selectedLightNovelStartYear by remember {
         mutableStateOf<Int?>(lightNovelFilter?.startYear ?: currentYear)
@@ -282,7 +283,7 @@ fun SearchDiscoverySheet(
     // Book state
     val bookFilter = activeFilter as? DiscoveryFilter.Book
     var selectedBookMode by remember {
-        mutableStateOf(bookFilter?.mode)
+        mutableStateOf(bookFilter?.mode ?: ContentDiscoveryMode.MOST_POPULAR)
     }
     var selectedBookStartYear by remember {
         mutableStateOf<Int?>(bookFilter?.startYear ?: currentYear)
@@ -374,10 +375,13 @@ fun SearchDiscoverySheet(
         SearchCategory.GAMES -> emptySet()
     }
 
-    BackHandler(enabled = showTagsSubMenu || showLanguageSubMenu) {
-        when {
-            showLanguageSubMenu -> showLanguageSubMenu = false
-            showTagsSubMenu -> showTagsSubMenu = false
+    val backDispatcherOwner = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current
+    if (backDispatcherOwner != null) {
+        BackHandler(enabled = showTagsSubMenu || showLanguageSubMenu) {
+            when {
+                showLanguageSubMenu -> showLanguageSubMenu = false
+                showTagsSubMenu -> showTagsSubMenu = false
+            }
         }
     }
 
@@ -1229,7 +1233,8 @@ fun SearchDiscoverySheet(
                                     TmdbDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
                                     null -> Icons.Default.Tv
                                 }
-                                else -> Icons.Default.Explore
+                                SearchCategory.GAMES -> Icons.Default.SportsEsports
+                                SearchCategory.MANGA, SearchCategory.MANHWA, SearchCategory.LIGHT_NOVELS, SearchCategory.BOOKS -> Icons.Default.Explore
                             },
                             contentDescription = null,
                             tint = LXPrimaryGreen,
@@ -1253,7 +1258,11 @@ fun SearchDiscoverySheet(
                                     TmdbDiscoveryMode.MOST_POPULAR -> "Most Popular TV Shows"
                                     null -> "Discover TV Shows"
                                 }
-                                else -> "Discover"
+                                SearchCategory.GAMES -> "Discover Games"
+                                SearchCategory.MANGA -> "Discover Manga"
+                                SearchCategory.MANHWA -> "Discover Manhwa"
+                                SearchCategory.LIGHT_NOVELS -> "Discover Light Novels"
+                                SearchCategory.BOOKS -> "Discover Books"
                             },
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             color = LXTextPrimary
@@ -1649,7 +1658,7 @@ fun SearchDiscoverySheet(
                             Button(
                                 onClick = {
                                     val filter = DiscoveryFilter.Anime(
-                                        mode = selectedAnimeMode!!,
+                                        mode = selectedAnimeMode ?: AnimeDiscoveryMode.SEASONAL,
                                         season = selectedSeason,
                                         year = selectedAnimeYear,
                                         sortOrder = selectedAnimeSort,
@@ -1667,7 +1676,7 @@ fun SearchDiscoverySheet(
                                     .fillMaxWidth()
                                     .height(42.dp)
                             ) {
-                                val modeText = when (selectedAnimeMode!!) {
+                                val modeText = when (selectedAnimeMode ?: AnimeDiscoveryMode.SEASONAL) {
                                     AnimeDiscoveryMode.SEASONAL -> "Explore ${selectedSeason.displayName} $selectedAnimeYear"
                                     AnimeDiscoveryMode.MOST_POPULAR -> "Explore Most Popular Anime"
                                 }
@@ -1895,7 +1904,7 @@ fun SearchDiscoverySheet(
                         Button(
                             onClick = {
                                 val filter = DiscoveryFilter.Movie(
-                                    mode = selectedMovieMode!!,
+                                    mode = selectedMovieMode ?: TmdbDiscoveryMode.MOST_POPULAR,
                                     year = if (selectedMovieMode == TmdbDiscoveryMode.BY_YEAR) selectedMovieYear else null,
                                     startYear = if (selectedMovieMode == TmdbDiscoveryMode.BY_YEAR) selectedMovieStartYear else null,
                                     endYear = if (selectedMovieMode == TmdbDiscoveryMode.BY_YEAR) selectedMovieEndYear else null,
@@ -1921,7 +1930,7 @@ fun SearchDiscoverySheet(
                                 selectedMovieEndYear != null -> "Up to $selectedMovieEndYear"
                                 else -> "$selectedMovieYear"
                             }
-                            val modeText = when (selectedMovieMode!!) {
+                            val modeText = when (selectedMovieMode ?: TmdbDiscoveryMode.MOST_POPULAR) {
                                 TmdbDiscoveryMode.BY_YEAR -> "Discover Movies $yearStr".trim()
                                 TmdbDiscoveryMode.MOST_POPULAR -> "Discover Most Popular Movies"
                             }
@@ -2149,7 +2158,7 @@ fun SearchDiscoverySheet(
                         Button(
                             onClick = {
                                 val filter = DiscoveryFilter.Tv(
-                                    mode = selectedTvMode!!,
+                                    mode = selectedTvMode ?: TmdbDiscoveryMode.MOST_POPULAR,
                                     year = if (selectedTvMode == TmdbDiscoveryMode.BY_YEAR) selectedTvYear else null,
                                     startYear = if (selectedTvMode == TmdbDiscoveryMode.BY_YEAR) selectedTvStartYear else null,
                                     endYear = if (selectedTvMode == TmdbDiscoveryMode.BY_YEAR) selectedTvEndYear else null,
@@ -2175,7 +2184,7 @@ fun SearchDiscoverySheet(
                                 selectedTvEndYear != null -> "Up to $selectedTvEndYear"
                                 else -> "$selectedTvYear"
                             }
-                            val modeText = when (selectedTvMode!!) {
+                            val modeText = when (selectedTvMode ?: TmdbDiscoveryMode.MOST_POPULAR) {
                                 TmdbDiscoveryMode.BY_YEAR -> "Discover TV Shows $yearStr".trim()
                                 TmdbDiscoveryMode.MOST_POPULAR -> "Discover Most Popular TV Shows"
                             }
@@ -2392,7 +2401,7 @@ fun SearchDiscoverySheet(
                         Button(
                             onClick = {
                                 val filter = DiscoveryFilter.Manga(
-                                    mode = selectedMangaMode!!,
+                                    mode = selectedMangaMode ?: ContentDiscoveryMode.MOST_POPULAR,
                                     startYear = if (selectedMangaMode == ContentDiscoveryMode.BY_YEAR) selectedMangaStartYear else null,
                                     endYear = if (selectedMangaMode == ContentDiscoveryMode.BY_YEAR) selectedMangaEndYear else null,
                                     sortOrder = selectedMangaSort,
@@ -2417,7 +2426,7 @@ fun SearchDiscoverySheet(
                                 selectedMangaEndYear != null -> "Up to $selectedMangaEndYear"
                                 else -> ""
                             }
-                            val modeText = when (selectedMangaMode!!) {
+                            val modeText = when (selectedMangaMode ?: ContentDiscoveryMode.MOST_POPULAR) {
                                 ContentDiscoveryMode.BY_YEAR -> "Discover Manga $yearStr".trim()
                                 ContentDiscoveryMode.MOST_POPULAR -> "Discover Most Popular Manga"
                             }
@@ -2634,7 +2643,7 @@ fun SearchDiscoverySheet(
                         Button(
                             onClick = {
                                 val filter = DiscoveryFilter.Manhwa(
-                                    mode = selectedManhwaMode!!,
+                                    mode = selectedManhwaMode ?: ContentDiscoveryMode.MOST_POPULAR,
                                     startYear = if (selectedManhwaMode == ContentDiscoveryMode.BY_YEAR) selectedManhwaStartYear else null,
                                     endYear = if (selectedManhwaMode == ContentDiscoveryMode.BY_YEAR) selectedManhwaEndYear else null,
                                     sortOrder = selectedManhwaSort,
@@ -2659,7 +2668,7 @@ fun SearchDiscoverySheet(
                                 selectedManhwaEndYear != null -> "Up to $selectedManhwaEndYear"
                                 else -> ""
                             }
-                            val modeText = when (selectedManhwaMode!!) {
+                            val modeText = when (selectedManhwaMode ?: ContentDiscoveryMode.MOST_POPULAR) {
                                 ContentDiscoveryMode.BY_YEAR -> "Discover Manhwa $yearStr".trim()
                                 ContentDiscoveryMode.MOST_POPULAR -> "Discover Most Popular Manhwa"
                             }
@@ -2876,7 +2885,7 @@ fun SearchDiscoverySheet(
                         Button(
                             onClick = {
                                 val filter = DiscoveryFilter.LightNovel(
-                                    mode = selectedLightNovelMode!!,
+                                    mode = selectedLightNovelMode ?: ContentDiscoveryMode.MOST_POPULAR,
                                     startYear = if (selectedLightNovelMode == ContentDiscoveryMode.BY_YEAR) selectedLightNovelStartYear else null,
                                     endYear = if (selectedLightNovelMode == ContentDiscoveryMode.BY_YEAR) selectedLightNovelEndYear else null,
                                     sortOrder = selectedLightNovelSort,
@@ -2901,7 +2910,7 @@ fun SearchDiscoverySheet(
                                 selectedLightNovelEndYear != null -> "Up to $selectedLightNovelEndYear"
                                 else -> ""
                             }
-                            val modeText = when (selectedLightNovelMode!!) {
+                            val modeText = when (selectedLightNovelMode ?: ContentDiscoveryMode.MOST_POPULAR) {
                                 ContentDiscoveryMode.BY_YEAR -> "Discover Light Novels $yearStr".trim()
                                 ContentDiscoveryMode.MOST_POPULAR -> "Discover Most Popular Light Novels"
                             }
@@ -3119,7 +3128,7 @@ fun SearchDiscoverySheet(
                         Button(
                             onClick = {
                                 val filter = DiscoveryFilter.Book(
-                                    mode = selectedBookMode!!,
+                                    mode = selectedBookMode ?: ContentDiscoveryMode.MOST_POPULAR,
                                     startYear = if (selectedBookMode == ContentDiscoveryMode.BY_YEAR) selectedBookStartYear else null,
                                     endYear = if (selectedBookMode == ContentDiscoveryMode.BY_YEAR) selectedBookEndYear else null,
                                     sortOrder = selectedBookSort,
@@ -3144,7 +3153,7 @@ fun SearchDiscoverySheet(
                                 selectedBookEndYear != null -> "Up to $selectedBookEndYear"
                                 else -> ""
                             }
-                            val modeText = when (selectedBookMode!!) {
+                            val modeText = when (selectedBookMode ?: ContentDiscoveryMode.MOST_POPULAR) {
                                 ContentDiscoveryMode.BY_YEAR -> "Discover Books $yearStr".trim()
                                 ContentDiscoveryMode.MOST_POPULAR -> "Discover Most Popular Books"
                             }

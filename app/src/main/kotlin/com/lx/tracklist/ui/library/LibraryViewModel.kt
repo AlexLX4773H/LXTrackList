@@ -34,7 +34,17 @@ enum class LibrarySortOption(val displayName: String) {
     SCORE_ASC("Lowest Score"),
     PROGRESS_DESC("Highest Progress"),
     PROGRESS_ASC("Lowest Progress"),
-    REWATCH_DESC("Most Re-watched/Re-read")
+    REWATCH_DESC("Most Re-watched/Re-read");
+
+    fun getDisplayLabel(mediaType: com.lx.tracklist.data.model.MediaType?): String = when (this) {
+        REWATCH_DESC -> when {
+            mediaType?.isPlayType == true -> "Most Replayed"
+            mediaType?.isReadType == true -> "Most Re-read"
+            mediaType?.isWatchType == true -> "Most Re-watched"
+            else -> "Most Re-watched/Replayed"
+        }
+        else -> displayName
+    }
 }
 
 enum class TagSelectionState {
