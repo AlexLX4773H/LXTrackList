@@ -2,11 +2,11 @@
 
 <p align="center">
   <strong>A fast, sleek, offline-first personal media tracking Android application.</strong><br>
-  Track Anime, Manga, Manhwa, Movies, TV Shows, Books, and Custom Media in one unified place.
+  Track Anime, Manga, Manhwa, Movies, TV Shows, Books, Games, and Custom Media in one unified place.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.5.16-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-0.6.5-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26--36)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Kotlin_2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
   <img src="https://img.shields.io/badge/UI-Jetpack_Compose_&_Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" />
@@ -72,6 +72,7 @@ Seamlessly open external media pages on authoritative platforms without screen c
 - **Centralized "Open ▾" Dropdown**:
   - Replaces messy separate platform buttons and ISP workaround rows with a sleek, consolidated dropdown menu across **Search & Discover**, **Edit Entity (Sync from External DB)**, and **Media Details**.
   - Automatically curates relevant platforms based on media category:
+    - **Video Games**: *IGDB*, *RAWG*, and *SteamGridDB*.
     - **Movies & TV Shows**: *The Movie Database (TMDB)*, *IMDb ⭐*, and *Rotten Tomatoes 🍅*.
     - **Anime**: *MyAnimeList (MAL)*, *AniList*, and *Kitsu*.
     - **Manga & Manhwa**: *MangaDex*, *MyAnimeList (MAL)*, *AniList*, and *Kitsu*.
@@ -93,6 +94,26 @@ Clear, accurate status tracking for upcoming and unreleased media:
     2. **Airing / Publishing**: Shows currently active, ongoing broadcasts and releases.
     3. **NYA / NYP**: Isolates upcoming titles that have not yet started broadcasting or publishing.
     4. **Finished**: Shows completed releases.
+
+### 🎮 Video Games & Interactive Media Tracking
+Comprehensive video game tracking with dedicated progress modes, platform icons, and rich metadata:
+- **Platform Badges with Dedicated Vector Icons**:
+  - Entity details showcase distinct, crisp vector icons tailored to each platform:
+    - **PC**: Desktop monitor display icon
+    - **PlayStation (PS)**: Authentic PlayStation logo icon
+    - **Xbox**: Official Xbox logo icon
+    - **Mobile**: Modern smartphone device icon
+    - **Nintendo Switch**: Iconic Switch Joy-Con icon
+    - **Retro**: Classic arcade joystick icon
+    - **Custom / Other**: Gamepad controller icon
+  - Color-tinted to match the active theme, replacing generic emojis.
+- **Dual Progress Tracking Modes**:
+  - **Percentage Mode (0–100%)**: Smooth slider with fine-grained `-5%`, `-1%`, `+1%`, and `+5%` stepper buttons, and automatic "Completed" milestone tag.
+  - **Compact Custom Units Mode**: Track game-specific milestones using progression metrics such as **Levels**, **Cities**, **Chapters**, **Missions**, **Hours**, and **Quests**, with optional target caps.
+- **Streamlined Edit UI**:
+  - Vertical-optimized, compact custom unit controls with quick preset chips and side-by-side progress and target inputs.
+- **IGDB, RAWG & SteamGridDB Metadata Integration**:
+  - Search, link, and synchronize game details, release dates, platforms, genres, IGDB/RAWG external critic ratings, and SteamGridDB cover/banner artwork.
 
 ### 🚀 In-App GitHub Releases & APK Auto-Updater
 Keep your app up to date effortlessly without opening a web browser:
@@ -124,10 +145,12 @@ Track each medium with metrics tailored to its natural progression:
 - **Light Novels**: First-class support with dedicated AniList `NOVEL` GraphQL integration. Automatically maps to authoritative MyAnimeList manga IDs (`idMal`) to prevent mismatching with doujinshis or unrelated manga adaptations.
 - **Movies & Live-Action TV Shows**: Track standalone movies or full cinematic franchises, runtime in minutes, TV seasons, and current episode progress.
 - **Books**: Track pages read, total chapters, volume progress, ISBN, and authors via Google Books and Open Library.
+- **Video Games**: Track game completion percentage (0–100%) or custom progress milestones (Levels, Cities, Chapters, Missions, Hours, Quests). Manage multi-platform libraries with distinct, themed vector icons (PC, PS, Xbox, Switch, Mobile, Retro), play dates, replay counts, and franchise series progression.
 - **Custom Categories & Subcategories**: Create custom categories (e.g., *Donghua*, *Web Novels*, *Podcasts*, *Documentaries*) with custom tracking units (Episodes, Chapters, Volumes, Pages) and badge accent colors.
 
 ### 🌐 Multi-Source External DB & Cascading Sync
-LX Track List integrates with 5 major metadata providers to enrich your library with covers, runtimes, episode counts, scores, and synopses:
+LX Track List integrates with major metadata providers to enrich your library with covers, runtimes, episode counts, scores, and synopses:
+- **IGDB & RAWG (Video Games)**: Direct game search, platform identification, release dates, IGDB/RAWG critic scores, and high-resolution cover/grid artwork via SteamGridDB.
 - **MyAnimeList (Jikan API & AniList GraphQL)**: Fast, keyless search and metadata synchronization for Anime and Manga.
 - **Direct ID Hydration & Robust Sync**: Background and batch synchronization jobs prioritize authoritative direct ID queries (`fetchAnimeDetailsById`, `fetchMangaDetailsById`) via Jikan API v4 and official MyAnimeList OAuth, preventing sync job failures when titles have pre-existing MAL IDs.
 - **Official MyAnimeList (MAL) 2-Way Sync**: Built-in OAuth2 authentication allows opt-in, live bi-directional sync of progress, scores, and watch/read statuses directly to your MyAnimeList account.
@@ -174,12 +197,13 @@ Never worry about duplicate entries when restoring backups after names or IDs ch
 
 ### ✏️ Context-Aware External DB Sync Dialog
 - When manually editing an entry, the **Sync from External DB** dialog automatically adapts its source chips to the item's media type:
+  - **Video Games**: Offers `IGDB` and `RAWG` (with SteamGridDB custom artwork).
   - **Manga / Manhwa**: Offers `MAL`, `MangaDex`, and `AniList`.
   - **Movies / TV Shows**: Offers `TMDB`, `IMDb`, and `Rotten Tomatoes`.
   - **Anime**: Offers `MAL`, `AniList`, and `TMDB`.
   - **Books**: Offers `MAL` (for Light Novels), `MangaDex`, `Google Books`, and `Open Library`.
 - Horizontally scrollable source pills with single-line enforcement prevent text wrapping.
-- Unified **"Open ▾"** button provides clean, one-tap access to TMDB, IMDb, Rotten Tomatoes, MAL, AniList, and Kitsu without cluttering the cards.
+- Unified **"Open ▾"** button provides clean, one-tap access to IGDB, RAWG, SteamGridDB, TMDB, IMDb, Rotten Tomatoes, MAL, AniList, and Kitsu without cluttering the cards.
 - Expandable result cards display high-res cover art, full synopsis, broadcast schedule, release year, ratings, and genre tags.
 
 ### 📊 Deep Statistics & Visual Analytics
