@@ -8,6 +8,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
+import com.lx.tracklist.ui.search.GameTagRegistry
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLEncoder
@@ -52,6 +53,37 @@ object RawgApiClient {
         }
     }
 
+    /**
+     * Builds the RAWG discover games request URL with dates and genre parameters.
+     */
+    fun buildDiscoverUrl(
+        apiKey: String,
+        year: Int? = null,
+        startYear: Int? = null,
+        endYear: Int? = null,
+        limit: Int = 20,
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet()
+    ): String {
+        val sYear = startYear ?: year
+        val eYear = endYear ?: year
+        val datesParam = if (sYear != null || eYear != null) {
+            val fromYr = sYear ?: 1970
+            val toYr = eYear ?: sYear ?: (Calendar.getInstance().get(Calendar.YEAR) + 1)
+            "&dates=$fromYr-01-01,$toYr-12-31"
+        } else ""
+
+        val rawgSlugs = includedTags.mapNotNull { tag ->
+            GameTagRegistry.findGenre(tag)?.rawgSlug ?: tag.trim().lowercase(Locale.ROOT).replace(" ", "-")
+        }.distinct()
+
+        val genresParam = if (rawgSlugs.isNotEmpty()) {
+            "&genres=${rawgSlugs.joinToString(",")}"
+        } else ""
+
+        return "$BASE_URL/games?key=$apiKey&ordering=-added$datesParam$genresParam&page_size=$limit"
+    }
+
     suspend fun discoverGames(
         context: Context,
         year: Int? = null,
@@ -65,14 +97,15 @@ object RawgApiClient {
         if (apiKey.isBlank()) {
             return Result.failure(IllegalStateException("RAWG API key is not configured."))
         }
-        val sYear = startYear ?: year
-        val eYear = endYear ?: year
-        val datesParam = if (sYear != null || eYear != null) {
-            val fromYr = sYear ?: 1970
-            val toYr = eYear ?: sYear ?: (java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) + 1)
-            "&dates=$fromYr-01-01,$toYr-12-31"
-        } else ""
-        val url = "$BASE_URL/games?key=$apiKey&ordering=-added$datesParam&page_size=$limit"
+        val url = buildDiscoverUrl(
+            apiKey = apiKey,
+            year = year,
+            startYear = startYear,
+            endYear = endYear,
+            limit = limit,
+            includedTags = includedTags,
+            excludedTags = excludedTags
+        )
         val request = Request.Builder().url(url).build()
 
         return try {

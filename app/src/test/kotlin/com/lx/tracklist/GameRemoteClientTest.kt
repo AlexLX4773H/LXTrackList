@@ -239,4 +239,41 @@ class GameRemoteClientTest {
         assertEquals("SteamGridDB", options[3].title)
         assertTrue(options[3].url.contains("steamgriddb.com"))
     }
+
+    @Test
+    fun testGameTagRegistryGenreLookup() {
+        val fighting = com.lx.tracklist.ui.search.GameTagRegistry.findGenre("Fighting")
+        assertNotNull(fighting)
+        assertEquals(4, fighting?.igdbId)
+        assertEquals("fighting", fighting?.rawgSlug)
+
+        val rpg = com.lx.tracklist.ui.search.GameTagRegistry.findGenre("Role-playing (RPG)")
+        assertNotNull(rpg)
+        assertEquals(12, rpg?.igdbId)
+        assertEquals("role-playing-games-rpg", rpg?.rawgSlug)
+
+        val rts = com.lx.tracklist.ui.search.GameTagRegistry.findGenre("Real Time Strategy (RTS)")
+        assertNotNull(rts)
+        assertEquals(11, rts?.igdbId)
+        assertEquals("strategy", rts?.rawgSlug)
+    }
+
+    @Test
+    fun testIgdbDiscoverApicalypseQueryWithGenres() {
+        val query = IgdbApiClient.buildDiscoverApicalypseQuery(
+            includedTags = setOf("Fighting"),
+            excludedTags = setOf("Racing")
+        )
+        assertTrue("Query should include 'genres = (4)' for Fighting", query.contains("genres = (4)"))
+        assertTrue("Query should include 'genres != (10)' for Racing", query.contains("genres != (10)"))
+    }
+
+    @Test
+    fun testRawgDiscoverUrlWithGenres() {
+        val url = RawgApiClient.buildDiscoverUrl(
+            apiKey = "test_key",
+            includedTags = setOf("Fighting")
+        )
+        assertTrue("URL should include '&genres=fighting'", url.contains("&genres=fighting"))
+    }
 }

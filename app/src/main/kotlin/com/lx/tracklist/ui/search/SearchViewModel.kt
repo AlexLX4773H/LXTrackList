@@ -444,6 +444,16 @@ class SearchViewModel(
         )
     }
 
+    fun removeGameTagFilter(tag: String, context: Context? = null) {
+        val currentFilter = _uiState.value.activeDiscoveryFilter as? DiscoveryFilter.Game ?: return
+        val newIncluded = currentFilter.includedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        val newExcluded = currentFilter.excludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        applyGameDiscoveryFilter(
+            currentFilter.copy(includedTags = newIncluded, excludedTags = newExcluded),
+            context = context
+        )
+    }
+
     fun removeTagFilter(tag: String, context: Context? = null) {
         when (_uiState.value.activeDiscoveryFilter) {
             is DiscoveryFilter.Anime -> removeAnimeTagFilter(tag)
@@ -453,7 +463,7 @@ class SearchViewModel(
             is DiscoveryFilter.Manhwa -> removeManhwaTagFilter(tag, context)
             is DiscoveryFilter.LightNovel -> removeLightNovelTagFilter(tag, context)
             is DiscoveryFilter.Book -> removeBookTagFilter(tag, context)
-            is DiscoveryFilter.Game -> {}
+            is DiscoveryFilter.Game -> removeGameTagFilter(tag, context)
             null -> {}
         }
     }
@@ -810,7 +820,7 @@ class SearchViewModel(
     fun applyGameDiscoveryFilter(filter: DiscoveryFilter.Game, context: Context? = null) {
         searchJob?.cancel()
         val yearPart = filter.year?.toString() ?: filter.endYear?.toString() ?: "ALL"
-        activeSearchKey = "DISCOVER:GAME:${filter.mode}:$yearPart:${filter.sortOrder}"
+        activeSearchKey = "DISCOVER:GAME:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.GAMES,
@@ -1353,17 +1363,21 @@ class SearchViewModel(
                         }
                         is DiscoveryFilter.Game -> {
                             val appContext = context ?: com.lx.tracklist.LXApplication.instance
-                            val list = GameMetadataManager.discoverGames(
-                                context = appContext,
-                                year = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.year else null,
-                                startYear = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.startYear else null,
-                                endYear = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.endYear else null,
-                                sort = activeFilter.sortOrder.apiValue,
-                                limit = 20,
-                                includedTags = activeFilter.includedTags,
-                                excludedTags = activeFilter.excludedTags,
-                                adultMode = activeFilter.adultMode
-                            ).getOrThrow()
+                            val list = if (query.isNotBlank()) {
+                                GameMetadataManager.searchGames(appContext, query, limit = 20).getOrThrow()
+                            } else {
+                                GameMetadataManager.discoverGames(
+                                    context = appContext,
+                                    year = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.year else null,
+                                    startYear = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.startYear else null,
+                                    endYear = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.endYear else null,
+                                    sort = activeFilter.sortOrder.apiValue,
+                                    limit = 20,
+                                    includedTags = activeFilter.includedTags,
+                                    excludedTags = activeFilter.excludedTags,
+                                    adultMode = activeFilter.adultMode
+                                ).getOrThrow()
+                            }
                             return@withContext list.map { game ->
                                 SearchResultItem(
                                     externalId = game.externalId,

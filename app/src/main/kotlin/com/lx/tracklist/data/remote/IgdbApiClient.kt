@@ -9,6 +9,7 @@ import com.google.gson.JsonObject
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.ui.search.AdultMode
+import com.lx.tracklist.ui.search.GameTagRegistry
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -167,10 +168,10 @@ object IgdbApiClient {
     }
 
     /**
-     * Discovers games on IGDB with optional year, year range, genres/tags, and sorting.
+     * Builds the Apicalypse query string for discovering games on IGDB, translating included and excluded
+     * genre tags into IGDB genre IDs for server-side filtering.
      */
-    suspend fun discoverGames(
-        context: Context,
+    fun buildDiscoverApicalypseQuery(
         year: Int? = null,
         startYear: Int? = null,
         endYear: Int? = null,
@@ -179,7 +180,7 @@ object IgdbApiClient {
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF
-    ): Result<List<GameSearchResult>> {
+    ): String {
         val sYear = startYear ?: year
         val eYear = endYear ?: year
         val whereConditions = mutableListOf("version_parent = null")
@@ -200,13 +201,54 @@ object IgdbApiClient {
             whereConditions.add("total_rating_count != null")
         }
 
+        val includedGenreIds = includedTags.mapNotNull { tag ->
+            tag.toIntOrNull() ?: GameTagRegistry.findGenre(tag)?.igdbId
+        }.distinct()
+
+        val excludedGenreIds = excludedTags.mapNotNull { tag ->
+            tag.toIntOrNull() ?: GameTagRegistry.findGenre(tag)?.igdbId
+        }.distinct()
+
+        if (includedGenreIds.isNotEmpty()) {
+            whereConditions.add("genres = (${includedGenreIds.joinToString(",")})")
+        }
+        if (excludedGenreIds.isNotEmpty()) {
+            whereConditions.add("genres != (${excludedGenreIds.joinToString(",")})")
+        }
+
         val whereClause = "where " + whereConditions.joinToString(" & ") + ";"
-        val apicalypse = """
+        return """
             fields name, alternative_names.name, first_release_date, cover.image_id, artworks.image_id, platforms.name, platforms.abbreviation, total_rating, summary, genres.name, collections.id, collections.name, franchises.id, franchises.name, game_type;
             $whereClause
             sort $sort;
             limit $limit;
         """.trimIndent()
+    }
+
+    /**
+     * Discovers games on IGDB with optional year, year range, genres/tags, and sorting.
+     */
+    suspend fun discoverGames(
+        context: Context,
+        year: Int? = null,
+        startYear: Int? = null,
+        endYear: Int? = null,
+        sort: String = "total_rating_count desc",
+        limit: Int = 20,
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet(),
+        adultMode: AdultMode = AdultMode.OFF
+    ): Result<List<GameSearchResult>> {
+        val apicalypse = buildDiscoverApicalypseQuery(
+            year = year,
+            startYear = startYear,
+            endYear = endYear,
+            sort = sort,
+            limit = limit,
+            includedTags = includedTags,
+            excludedTags = excludedTags,
+            adultMode = adultMode
+        )
 
         val result = executeApicalypseQuery(context, apicalypse)
         return result.map { jsonStr ->

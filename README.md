@@ -390,6 +390,133 @@ app/src/main/kotlin/com/lx/tracklist/
 
 ---
 
+## 📂 Import & Export Data Samples
+
+LX Track List supports flexible backup, restore, and migration workflows using standard JSON and CSV files. Below are small samples for loading/importing data into the app and the resulting output export.
+
+### 1. Sample Input CSV (`.csv`) for Load / Import
+
+The CSV importer supports standard headers (case-insensitive). Only `title` (or `name`) is required; all other fields are optional with smart defaults.
+
+```csv
+title,mediaType,status,score,currentEpisodes,totalEpisodes,currentChapters,totalChapters,notes,tags,subCategory
+"Frieren: Beyond Journey's End",ANIME,COMPLETED,10,28,28,0,0,"Masterpiece fantasy journey","fantasy, adventure",
+"Solo Leveling",MANHWA,WATCHING,9,0,0,150,200,"High action hunter story","action, fantasy","Webtoon"
+"Dune: Part Two",MOVIE,COMPLETED,9,0,0,0,0,"Epic sci-fi cinema","sci-fi, cinema",
+"Elden Ring",GAME,COMPLETED,10,0,0,0,0,"Completed 100% achievements","souls, rpg, goty",
+```
+
+> **Supported CSV Columns**:
+> - `title` / `name` *(Required)*
+> - `mediaType` / `category` (`ANIME`, `MANGA`, `MANHWA`, `MOVIE`, `SHOW`, `BOOK`, `GAME`)
+> - `status` (`WATCHING`, `COMPLETED`, `PLAN_TO_WATCH`, `ON_HOLD`, `DROPPED`)
+> - `score` / `rating` (0–10)
+> - `currentEpisodes` / `progress`, `totalEpisodes`
+> - `currentVolumes`, `totalVolumes`
+> - `currentChapters`, `totalChapters`
+> - `description` / `notes`, `user_comments`
+> - `tags`, `subCategory`
+> - `foreign_database_id`, `foreign_database_source` (e.g. `MAL`, `TMDB`)
+> - `runtime` / `duration` (in minutes)
+> - `rewatch_count`, `is_rewatching`
+
+### 2. Sample Input JSON (`.json`) for Load / Import
+
+The JSON importer accepts either a backup wrapper object or a raw JSON array of media items:
+
+```json
+{
+  "app": "LX Track List",
+  "version": 1,
+  "entries": [
+    {
+      "title": "Steins;Gate",
+      "alternateTitle": "シュタインズ・ゲート",
+      "mediaType": "ANIME",
+      "status": "COMPLETED",
+      "score": 10,
+      "currentEpisodes": 24,
+      "totalEpisodes": 24,
+      "isFavorite": true,
+      "description": "A scientist invents time travel through a microwave.",
+      "userComments": "One of my absolute favorite sci-fi series.",
+      "tags": "sci-fi, thriller, time-travel"
+    },
+    {
+      "title": "Berserk",
+      "mediaType": "MANGA",
+      "status": "WATCHING",
+      "score": 10,
+      "currentChapters": 375,
+      "totalChapters": 0,
+      "trackingUnit": "CHAPTERS",
+      "isFavorite": true,
+      "tags": "dark fantasy, seinen"
+    }
+  ]
+}
+```
+
+*(Note: Direct JSON arrays like `[ { "title": "...", "mediaType": "..." } ]` are also supported).*
+
+### 3. Sample Output Export (`.json`)
+
+When exporting your library from **Settings > Backup & Restore > Export**, the app outputs a structured, pretty-printed JSON file:
+
+```json
+{
+  "app": "LX Track List",
+  "version": 1,
+  "exportedAt": 1732233600000,
+  "totalCount": 2,
+  "entries": [
+    {
+      "id": 1,
+      "userId": 0,
+      "title": "Frieren: Beyond Journey's End",
+      "mediaType": "ANIME",
+      "status": "COMPLETED",
+      "score": 10,
+      "currentEpisodes": 28,
+      "totalEpisodes": 28,
+      "episodeLengthMinutes": 24,
+      "isFavorite": true,
+      "isExternallyTracked": true,
+      "externalId": "52991",
+      "externalSource": "MAL",
+      "description": "After the defeat of the Demon King, elf mage Frieren embarks on a journey.",
+      "tags": "fantasy, drama, adventure",
+      "priority": "HIGH",
+      "rewatchCount": 1,
+      "isRewatching": false,
+      "createdAt": 1705300000000,
+      "updatedAt": 1732233600000
+    },
+    {
+      "id": 2,
+      "userId": 0,
+      "title": "Dune: Part Two",
+      "mediaType": "MOVIE",
+      "status": "COMPLETED",
+      "score": 9,
+      "durationMinutes": 166,
+      "movieSeriesName": "Dune",
+      "movieSeriesNumber": 2,
+      "isFavorite": true,
+      "isExternallyTracked": false,
+      "externalId": "693134",
+      "externalSource": "TMDB",
+      "tags": "sci-fi, adventure",
+      "priority": "MEDIUM",
+      "createdAt": 1709500000000,
+      "updatedAt": 1732233600000
+    }
+  ]
+}
+```
+
+---
+
 ## 🤝 Contributing
 
 Contributions, bug reports, and feature requests are welcome!

@@ -62,8 +62,8 @@ fun GameDiscoveryContent(
     onOpenTags: () -> Unit,
     onRemoveIncludedTag: (String) -> Unit,
     onRemoveExcludedTag: (String) -> Unit,
-    selectedLanguages: Set<String>,
-    onOpenLanguages: () -> Unit,
+    selectedLanguages: Set<String> = emptySet(),
+    onOpenLanguages: () -> Unit = {},
     adultMode: AdultMode,
     onAdultModeChange: (AdultMode) -> Unit,
     onApply: () -> Unit
@@ -253,15 +253,7 @@ fun GameDiscoveryContent(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 5. Original Language Filter
-            LanguageFilterEntryCard(
-                selectedLanguages = selectedLanguages,
-                onClick = onOpenLanguages
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 6. 18+ Subtle Checkbox Toggle
+            // 5. 18+ Subtle Checkbox Toggle
             SubtleAdultFilterToggle(
                 adultMode = adultMode,
                 onModeChange = onAdultModeChange

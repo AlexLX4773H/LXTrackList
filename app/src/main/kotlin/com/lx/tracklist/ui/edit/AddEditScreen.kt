@@ -19,10 +19,12 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -263,8 +265,8 @@ fun AddEditScreen(
                     .fillMaxWidth()
                     .widthIn(max = 760.dp)
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
             if (state.errorMessage != null) {
                 Text(
@@ -291,7 +293,10 @@ fun AddEditScreen(
                 Box(modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(
                         onClick = { showSyncDropdown = true },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(38.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
                             containerColor = LXSurfaceElevated.copy(alpha = 0.5f),
                             contentColor = LXPrimaryGreen
@@ -581,7 +586,7 @@ fun AddEditScreen(
             // Alternate Titles (Support for multiple alternate titles)
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -593,12 +598,15 @@ fun AddEditScreen(
                         style = MaterialTheme.typography.titleSmall,
                         color = LXTextPrimary
                     )
-                    TextButton(onClick = { viewModel.addAlternateTitle() }) {
+                    TextButton(
+                        onClick = { viewModel.addAlternateTitle() },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
                         Text(
                             text = "+ Add Alternate Title",
                             color = LXPrimaryGreen,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                            fontSize = 12.sp
                         )
                     }
                 }
@@ -606,28 +614,32 @@ fun AddEditScreen(
                 if (state.alternateTitles.isEmpty()) {
                     OutlinedButton(
                         onClick = { viewModel.addAlternateTitle() },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(36.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
                         border = BorderStroke(1.dp, LXBorder),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("+ Add Alternate Title (e.g. Japanese, Korean)", color = LXTextPrimary)
+                        Icon(Icons.Default.Add, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("+ Add Alternate Title (e.g. Japanese, Korean)", color = LXTextPrimary, fontSize = 12.sp)
                     }
                 } else {
                     state.alternateTitles.forEachIndexed { index, altTitle ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             OutlinedTextField(
                                 value = altTitle,
                                 onValueChange = { viewModel.updateAlternateTitle(index, it) },
-                                label = { Text("Alternate Title ${index + 1}") },
+                                label = { Text("Alternate Title ${index + 1}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 placeholder = { Text("e.g. Shingeki no Kyojin, 進撃の巨人...") },
                                 singleLine = true,
+                                maxLines = 1,
                                 modifier = Modifier.weight(1f),
                                 colors = outlinedColors()
                             )
@@ -640,18 +652,19 @@ fun AddEditScreen(
             }
 
             // Status Chips
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Status", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)
                 CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
                     FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         MediaStatus.entries.forEach { st ->
                             FilterChip(
                                 selected = state.status == st,
                                 onClick = { viewModel.updateStatus(st) },
-                                label = { Text(st.getDisplayLabel(state.mediaType)) },
+                                label = { Text(st.getDisplayLabel(state.mediaType), fontSize = 12.sp) },
+                                modifier = Modifier.height(30.dp),
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = LXPrimaryGreen,
                                     selectedLabelColor = LXBackgroundBlack,
@@ -679,7 +692,7 @@ fun AddEditScreen(
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -688,7 +701,7 @@ fun AddEditScreen(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .height(32.dp)
+                                .height(30.dp)
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(if (state.score == s) LXScoreGold else LXSurfaceElevated)
                                 .clickable { viewModel.updateScore(if (state.score == s) null else s) },
@@ -712,8 +725,8 @@ fun AddEditScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
                         text = "Progress Tracking",
@@ -728,56 +741,80 @@ fun AddEditScreen(
                                 state.seasonEpisodes.getOrElse(state.currentSeasons - 1) { 0 }
                             } else 0
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Min),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 OutlinedTextField(
                                     value = if (state.currentEpisodes > 0) state.currentEpisodes.toString() else "",
                                     onValueChange = { viewModel.updateCurrentEpisodes(it.toIntOrNull() ?: 0) },
-                                    label = { Text(if (hasSeasonTracking) "Season Ep" else "Watched Ep") },
+                                    label = { Text(if (hasSeasonTracking) "Season Ep" else "Watched Ep", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    singleLine = true,
+                                    maxLines = 1,
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
                                     colors = outlinedColors()
                                 )
                                 if (state.isAiring) {
                                     OutlinedTextField(
                                         value = if (state.airedEpisodes > 0) state.airedEpisodes.toString() else "",
                                         onValueChange = { viewModel.updateAiredEpisodes(it.toIntOrNull() ?: 0) },
-                                        label = { Text("Aired Ep") },
+                                        label = { Text("Aired Ep", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        singleLine = true,
+                                        maxLines = 1,
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
                                         colors = outlinedColors()
                                     )
                                 }
                                 OutlinedTextField(
                                     value = if (state.totalEpisodes > 0) state.totalEpisodes.toString() else "",
                                     onValueChange = { viewModel.updateTotalEpisodes(it.toIntOrNull() ?: 0) },
-                                    label = { Text("Total Ep") },
+                                    label = { Text("Total Ep", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    singleLine = true,
+                                    maxLines = 1,
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
                                     colors = outlinedColors()
                                 )
                             }
 
                             if (state.mediaType == MediaType.SHOW) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(IntrinsicSize.Min),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     OutlinedTextField(
                                         value = state.currentSeasons.toString(),
                                         onValueChange = { viewModel.updateCurrentSeasons(it.toIntOrNull() ?: 1) },
-                                        label = { Text("Current Season") },
+                                        label = { Text("Current Season", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        singleLine = true,
+                                        maxLines = 1,
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
                                         colors = outlinedColors()
                                     )
                                     OutlinedTextField(
                                         value = state.totalSeasons.toString(),
                                         onValueChange = { viewModel.updateTotalSeasons(it.toIntOrNull() ?: 1) },
-                                        label = { Text("Total Seasons") },
+                                        label = { Text("Total Seasons", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        singleLine = true,
+                                        maxLines = 1,
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
                                         colors = outlinedColors()
                                     )
                                 }
@@ -793,7 +830,7 @@ fun AddEditScreen(
                                 }
 
                                 Surface(
-                                    shape = RoundedCornerShape(10.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     color = LXSurfaceElevated,
                                     border = BorderStroke(1.dp, LXBorder.copy(alpha = 0.7f)),
                                     modifier = Modifier.fillMaxWidth()
@@ -802,8 +839,8 @@ fun AddEditScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .animateContentSize()
-                                            .padding(10.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            .padding(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         Row(
                                             modifier = Modifier
@@ -841,7 +878,9 @@ fun AddEditScreen(
                                             val seasonIndices = (0 until displaySeasonCount).toList()
                                             seasonIndices.chunked(3).forEach { rowIndices ->
                                                 Row(
-                                                    modifier = Modifier.fillMaxWidth(),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(IntrinsicSize.Min),
                                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
                                                     rowIndices.forEach { sIdx ->
@@ -855,13 +894,18 @@ fun AddEditScreen(
                                                             label = {
                                                                 Text(
                                                                     text = "S${sIdx + 1} Eps",
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis,
                                                                     color = if (isCurSeason) LXPrimaryGreen else LXTextSecondary
                                                                 )
                                                             },
                                                             placeholder = { Text("?") },
                                                             singleLine = true,
+                                                            maxLines = 1,
                                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                            modifier = Modifier.weight(1f),
+                                                            modifier = Modifier
+                                                                .weight(1f)
+                                                                .fillMaxHeight(),
                                                             colors = outlinedColors()
                                                         )
                                                     }
@@ -885,8 +929,10 @@ fun AddEditScreen(
                             OutlinedTextField(
                                 value = if (state.episodeLengthMinutes != null && state.episodeLengthMinutes!! > 0) state.episodeLengthMinutes.toString() else "",
                                 onValueChange = { viewModel.updateEpisodeLengthMinutes(it.toIntOrNull()?.takeIf { len -> len > 0 }) },
-                                label = { Text("Episode Runtime (mins)") },
+                                label = { Text("Episode Runtime (mins)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 placeholder = { Text("e.g. 24") },
+                                singleLine = true,
+                                maxLines = 1,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = outlinedColors()
@@ -899,7 +945,9 @@ fun AddEditScreen(
                             )
 
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -916,18 +964,19 @@ fun AddEditScreen(
                         }
 
                         MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text("Tracking Unit", style = MaterialTheme.typography.bodyMedium, color = LXTextSecondary)
                                 CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
                                     FlowRow(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         TrackingUnit.entries.forEach { unit ->
                                             FilterChip(
                                                 selected = state.trackingUnit == unit,
                                                 onClick = { viewModel.updateTrackingUnit(unit) },
-                                                label = { Text(unit.displayName) },
+                                                label = { Text(unit.displayName, fontSize = 12.sp) },
+                                                modifier = Modifier.height(28.dp),
                                                 colors = FilterChipDefaults.filterChipColors(
                                                     selectedContainerColor = LXPrimaryGreen,
                                                     selectedLabelColor = LXBackgroundBlack,
@@ -942,33 +991,47 @@ fun AddEditScreen(
 
                             if (state.trackingUnit == TrackingUnit.CHAPTERS || state.trackingUnit == TrackingUnit.COMBINED) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(IntrinsicSize.Min),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     OutlinedTextField(
                                         value = if (state.currentChapters > 0) state.currentChapters.toString() else "",
                                         onValueChange = { viewModel.updateCurrentChapters(it.toIntOrNull() ?: 0) },
-                                        label = { Text("Read Chapters") },
+                                        label = { Text("Read Chapters", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        singleLine = true,
+                                        maxLines = 1,
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
                                         colors = outlinedColors()
                                     )
                                     if (state.isAiring) {
                                         OutlinedTextField(
                                             value = if (state.airedChapters > 0) state.airedChapters.toString() else "",
                                             onValueChange = { viewModel.updateAiredChapters(it.toIntOrNull() ?: 0) },
-                                            label = { Text("Aired Ch") },
+                                            label = { Text("Aired Ch", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                            singleLine = true,
+                                            maxLines = 1,
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                            modifier = Modifier.weight(1f),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight(),
                                             colors = outlinedColors()
                                         )
                                     }
                                     OutlinedTextField(
                                         value = if (state.totalChapters > 0) state.totalChapters.toString() else "",
                                         onValueChange = { viewModel.updateTotalChapters(it.toIntOrNull() ?: 0) },
-                                        label = { Text("Total Chapters") },
+                                        label = { Text("Total Chapters", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        singleLine = true,
+                                        maxLines = 1,
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
                                         colors = outlinedColors()
                                     )
                                 }
@@ -976,23 +1039,33 @@ fun AddEditScreen(
 
                             if (state.trackingUnit == TrackingUnit.VOLUMES || state.trackingUnit == TrackingUnit.COMBINED) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(IntrinsicSize.Min),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     OutlinedTextField(
                                         value = if (state.currentVolumes > 0) state.currentVolumes.toString() else "",
                                         onValueChange = { viewModel.updateCurrentVolumes(it.toIntOrNull() ?: 0) },
-                                        label = { Text("Read Volumes") },
+                                        label = { Text("Read Volumes", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        singleLine = true,
+                                        maxLines = 1,
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
                                         colors = outlinedColors()
                                     )
                                     OutlinedTextField(
                                         value = if (state.totalVolumes > 0) state.totalVolumes.toString() else "",
                                         onValueChange = { viewModel.updateTotalVolumes(it.toIntOrNull() ?: 0) },
-                                        label = { Text("Total Volumes") },
+                                        label = { Text("Total Volumes", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        singleLine = true,
+                                        maxLines = 1,
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
                                         colors = outlinedColors()
                                     )
                                 }
@@ -1000,30 +1073,42 @@ fun AddEditScreen(
 
                             if (state.trackingUnit == TrackingUnit.PAGES || state.trackingUnit == TrackingUnit.COMBINED) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(IntrinsicSize.Min),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     OutlinedTextField(
                                         value = if (state.currentPages > 0) state.currentPages.toString() else "",
                                         onValueChange = { viewModel.updateCurrentPages(it.toIntOrNull() ?: 0) },
-                                        label = { Text("Read Pages") },
+                                        label = { Text("Read Pages", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        singleLine = true,
+                                        maxLines = 1,
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
                                         colors = outlinedColors()
                                     )
                                     OutlinedTextField(
                                         value = if (state.totalPages > 0) state.totalPages.toString() else "",
                                         onValueChange = { viewModel.updateTotalPages(it.toIntOrNull() ?: 0) },
-                                        label = { Text("Total Pages") },
+                                        label = { Text("Total Pages", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        singleLine = true,
+                                        maxLines = 1,
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight(),
                                         colors = outlinedColors()
                                     )
                                 }
                             }
 
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -1041,22 +1126,32 @@ fun AddEditScreen(
 
                         MediaType.MOVIE -> {
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Min),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 OutlinedTextField(
                                     value = state.movieSeriesName,
                                     onValueChange = { viewModel.updateMovieSeriesName(it) },
-                                    label = { Text("Series / Franchise Name") },
-                                    modifier = Modifier.weight(1.5f),
+                                    label = { Text("Franchise / Series", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    singleLine = true,
+                                    maxLines = 1,
+                                    modifier = Modifier
+                                        .weight(1.5f)
+                                        .fillMaxHeight(),
                                     colors = outlinedColors()
                                 )
                                 OutlinedTextField(
                                     value = state.movieSeriesNumber?.toString() ?: "",
                                     onValueChange = { viewModel.updateMovieSeriesNumber(it.toIntOrNull()) },
-                                    label = { Text("Movie #") },
+                                    label = { Text("Movie #", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    maxLines = 1,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
                                     colors = outlinedColors()
                                 )
                             }
@@ -1064,8 +1159,10 @@ fun AddEditScreen(
                             OutlinedTextField(
                                 value = if (state.durationMinutes != null && state.durationMinutes!! > 0) state.durationMinutes.toString() else "",
                                 onValueChange = { viewModel.updateDurationMinutes(it.toIntOrNull()?.takeIf { len -> len > 0 }) },
-                                label = { Text("Movie Runtime (mins)") },
+                                label = { Text("Movie Runtime (mins)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 placeholder = { Text("e.g. 110") },
+                                singleLine = true,
+                                maxLines = 1,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = outlinedColors()
@@ -1079,7 +1176,7 @@ fun AddEditScreen(
                         }
                         MediaType.GAME -> {
                             // Platforms Section
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
                                     text = "Platforms",
                                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
@@ -1091,31 +1188,35 @@ fun AddEditScreen(
                                 val currentPlatforms = remember(state.gamePlatforms) {
                                     MediaEntry.parseGamePlatforms(state.gamePlatforms)
                                 }
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    presetPlatforms.forEach { platform ->
-                                        val isSelected = currentPlatforms.any { it.equals(platform, ignoreCase = true) }
-                                        FilterChip(
-                                            selected = isSelected,
-                                            onClick = { viewModel.toggleGamePlatform(platform) },
-                                            label = { Text(platform, fontSize = 11.sp) },
-                                            modifier = Modifier.height(28.dp),
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = LXPrimaryGreen,
-                                                selectedLabelColor = LXBackgroundBlack,
-                                                containerColor = LXSurfaceElevated,
-                                                labelColor = LXTextSecondary
+                                CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        presetPlatforms.forEach { platform ->
+                                            val isSelected = currentPlatforms.any { it.equals(platform, ignoreCase = true) }
+                                            FilterChip(
+                                                selected = isSelected,
+                                                onClick = { viewModel.toggleGamePlatform(platform) },
+                                                label = { Text(platform, fontSize = 11.sp) },
+                                                modifier = Modifier.height(26.dp),
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = LXPrimaryGreen,
+                                                    selectedLabelColor = LXBackgroundBlack,
+                                                    containerColor = LXSurfaceElevated,
+                                                    labelColor = LXTextSecondary
+                                                )
                                             )
-                                        )
+                                        }
                                     }
                                 }
                                 OutlinedTextField(
                                     value = state.gamePlatforms,
                                     onValueChange = { viewModel.updateGamePlatforms(it) },
-                                    label = { Text("Platform(s) (comma-separated or custom)") },
+                                    label = { Text("Platform(s) (comma-separated or custom)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                     placeholder = { Text("e.g. PC, PS, XBox, Switch, Mobile, Retro") },
+                                    singleLine = true,
+                                    maxLines = 1,
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = outlinedColors()
                                 )
@@ -1124,139 +1225,142 @@ fun AddEditScreen(
                             // Progress Tracking
                             HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
 
-                                Text(
-                                    text = "Tracking Unit",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                    color = LXTextPrimary
+                            Text(
+                                text = "Tracking Unit",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = LXTextPrimary
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FilterChip(
+                                    selected = state.trackingUnit != TrackingUnit.CUSTOM,
+                                    onClick = { viewModel.updateTrackingUnit(TrackingUnit.PERCENTAGE) },
+                                    label = { Text("Percentage (0..100%)", fontSize = 11.sp) },
+                                    modifier = Modifier.weight(1f).height(28.dp),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
                                 )
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    FilterChip(
-                                        selected = state.trackingUnit != TrackingUnit.CUSTOM,
-                                        onClick = { viewModel.updateTrackingUnit(TrackingUnit.PERCENTAGE) },
-                                        label = { Text("Percentage (0..100%)", fontSize = 11.sp) },
-                                        modifier = Modifier.weight(1f).height(32.dp),
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = LXPrimaryGreen,
-                                            selectedLabelColor = LXBackgroundBlack,
-                                            containerColor = LXSurfaceElevated,
-                                            labelColor = LXTextSecondary
-                                        )
+                                FilterChip(
+                                    selected = state.trackingUnit == TrackingUnit.CUSTOM,
+                                    onClick = { viewModel.updateTrackingUnit(TrackingUnit.CUSTOM) },
+                                    label = { Text("Custom Units", fontSize = 11.sp) },
+                                    modifier = Modifier.weight(1f).height(28.dp),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
                                     )
-                                    FilterChip(
-                                        selected = state.trackingUnit == TrackingUnit.CUSTOM,
-                                        onClick = { viewModel.updateTrackingUnit(TrackingUnit.CUSTOM) },
-                                        label = { Text("Custom Units", fontSize = 11.sp) },
-                                        modifier = Modifier.weight(1f).height(32.dp),
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = LXPrimaryGreen,
-                                            selectedLabelColor = LXBackgroundBlack,
-                                            containerColor = LXSurfaceElevated,
-                                            labelColor = LXTextSecondary
+                                )
+                            }
+
+                            if (state.trackingUnit != TrackingUnit.CUSTOM) {
+                                // Percentage Mode Slider & Controls
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Progress: ${state.gameProgressPercent}%",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = LXPrimaryGreen
                                         )
-                                    )
-                                }
-
-                                if (state.trackingUnit != TrackingUnit.CUSTOM) {
-                                    // Percentage Mode Slider & Controls
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = "Progress: ${state.gameProgressPercent}%",
-                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                                color = LXPrimaryGreen
-                                            )
-                                            if (state.gameProgressPercent >= 100) {
-                                                Surface(
-                                                    color = LXPrimaryGreen.copy(alpha = 0.15f),
-                                                    shape = RoundedCornerShape(4.dp)
-                                                ) {
-                                                    Text(
-                                                        text = "Completed",
-                                                        color = LXPrimaryGreen,
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        Slider(
-                                            value = state.gameProgressPercent.toFloat(),
-                                            onValueChange = { viewModel.updateGameProgressPercent(it.roundToInt()) },
-                                            valueRange = 0f..100f,
-                                            colors = SliderDefaults.colors(
-                                                thumbColor = LXPrimaryGreen,
-                                                activeTrackColor = LXPrimaryGreen,
-                                                inactiveTrackColor = LXBorder
-                                            ),
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            OutlinedButton(
-                                                onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent - 5) },
-                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                                modifier = Modifier.height(32.dp)
+                                        if (state.gameProgressPercent >= 100) {
+                                            Surface(
+                                                color = LXPrimaryGreen.copy(alpha = 0.15f),
+                                                shape = RoundedCornerShape(4.dp)
                                             ) {
-                                                Text("-5%", fontSize = 11.sp)
-                                            }
-                                            OutlinedButton(
-                                                onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent - 1) },
-                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                                modifier = Modifier.height(32.dp)
-                                            ) {
-                                                Text("-1%", fontSize = 11.sp)
-                                            }
-                                            OutlinedTextField(
-                                                value = state.gameProgressPercent.toString(),
-                                                onValueChange = { viewModel.updateGameProgressPercent(it.toIntOrNull() ?: 0) },
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                modifier = Modifier.weight(1f),
-                                                colors = outlinedColors(),
-                                                suffix = { Text("%", color = LXTextSecondary) }
-                                            )
-                                            OutlinedButton(
-                                                onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent + 1) },
-                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                                modifier = Modifier.height(32.dp)
-                                            ) {
-                                                Text("+1%", fontSize = 11.sp)
-                                            }
-                                            OutlinedButton(
-                                                onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent + 5) },
-                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                                modifier = Modifier.height(32.dp)
-                                            ) {
-                                                Text("+5%", fontSize = 11.sp)
+                                                Text(
+                                                    text = "Completed",
+                                                    color = LXPrimaryGreen,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
                                             }
                                         }
                                     }
-                                } else {
-                                    // Custom Units Mode
-                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text(
-                                            text = "Unit Presets",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = LXTextSecondary
-                                        )
-                                        val unitPresets = remember {
-                                            listOf("Levels", "Cities", "Chapters", "Missions", "Hours", "Quests")
+
+                                    Slider(
+                                        value = state.gameProgressPercent.toFloat(),
+                                        onValueChange = { viewModel.updateGameProgressPercent(it.roundToInt()) },
+                                        valueRange = 0f..100f,
+                                        colors = SliderDefaults.colors(
+                                            thumbColor = LXPrimaryGreen,
+                                            activeTrackColor = LXPrimaryGreen,
+                                            inactiveTrackColor = LXBorder
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent - 5) },
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(30.dp)
+                                        ) {
+                                            Text("-5%", fontSize = 11.sp)
                                         }
+                                        OutlinedButton(
+                                            onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent - 1) },
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(30.dp)
+                                        ) {
+                                            Text("-1%", fontSize = 11.sp)
+                                        }
+                                        OutlinedTextField(
+                                            value = state.gameProgressPercent.toString(),
+                                            onValueChange = { viewModel.updateGameProgressPercent(it.toIntOrNull() ?: 0) },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            singleLine = true,
+                                            maxLines = 1,
+                                            modifier = Modifier.weight(1f),
+                                            colors = outlinedColors(),
+                                            suffix = { Text("%", color = LXTextSecondary) }
+                                        )
+                                        OutlinedButton(
+                                            onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent + 1) },
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(30.dp)
+                                        ) {
+                                            Text("+1%", fontSize = 11.sp)
+                                        }
+                                        OutlinedButton(
+                                            onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent + 5) },
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(30.dp)
+                                        ) {
+                                            Text("+5%", fontSize = 11.sp)
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Custom Units Mode
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = "Unit Presets",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = LXTextSecondary
+                                    )
+                                    val unitPresets = remember {
+                                        listOf("Levels", "Cities", "Chapters", "Missions", "Hours", "Quests")
+                                    }
+                                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
                                         FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                                             verticalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
                                             unitPresets.forEach { preset ->
@@ -1265,7 +1369,7 @@ fun AddEditScreen(
                                                     selected = isSelected,
                                                     onClick = { viewModel.updateCustomUnitLabel(preset) },
                                                     label = { Text(preset, fontSize = 11.sp) },
-                                                    modifier = Modifier.height(28.dp),
+                                                    modifier = Modifier.height(26.dp),
                                                     colors = FilterChipDefaults.filterChipColors(
                                                         selectedContainerColor = LXPrimaryGreen,
                                                         selectedLabelColor = LXBackgroundBlack,
@@ -1275,43 +1379,53 @@ fun AddEditScreen(
                                                 )
                                             }
                                         }
+                                    }
 
+                                    OutlinedTextField(
+                                        value = state.customUnitLabel,
+                                        onValueChange = { viewModel.updateCustomUnitLabel(it) },
+                                        label = { Text("Unit Name (e.g. Levels, Chapters)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        singleLine = true,
+                                        maxLines = 1,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = outlinedColors()
+                                    )
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(IntrinsicSize.Min),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         OutlinedTextField(
-                                            value = state.customUnitLabel,
-                                            onValueChange = { viewModel.updateCustomUnitLabel(it) },
-                                            label = { Text("Unit Name (e.g. Levels, Chapters)") },
+                                            value = state.customUnitCurrent.toString(),
+                                            onValueChange = { viewModel.updateCustomUnitCurrent(it.toIntOrNull() ?: 0) },
+                                            label = { Text("Current Progress", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                             singleLine = true,
-                                            modifier = Modifier.fillMaxWidth(),
+                                            maxLines = 1,
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight(),
                                             colors = outlinedColors()
                                         )
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            OutlinedTextField(
-                                                value = state.customUnitCurrent.toString(),
-                                                onValueChange = { viewModel.updateCustomUnitCurrent(it.toIntOrNull() ?: 0) },
-                                                label = { Text("Current Progress", maxLines = 1) },
-                                                singleLine = true,
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                modifier = Modifier.weight(1f),
-                                                colors = outlinedColors()
-                                            )
-                                            OutlinedTextField(
-                                                value = state.customUnitTotal?.toString() ?: "",
-                                                onValueChange = { viewModel.updateCustomUnitTotal(it.toIntOrNull()) },
-                                                label = { Text("Total Target (optional)", maxLines = 1) },
-                                                placeholder = { Text("None") },
-                                                singleLine = true,
-                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                modifier = Modifier.weight(1f),
-                                                colors = outlinedColors()
-                                            )
-                                        }
+                                        OutlinedTextField(
+                                            value = state.customUnitTotal?.toString() ?: "",
+                                            onValueChange = { viewModel.updateCustomUnitTotal(it.toIntOrNull()) },
+                                            label = { Text("Total Target", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                            placeholder = { Text("Optional") },
+                                            singleLine = true,
+                                            maxLines = 1,
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight(),
+                                            colors = outlinedColors()
+                                        )
                                     }
                                 }
+                            }
                         }
                     }
                 }
@@ -1325,8 +1439,8 @@ fun AddEditScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
                         text = "Dates & Schedule",
@@ -1391,8 +1505,8 @@ fun AddEditScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     val isGame = state.mediaType == MediaType.GAME
                     Text(
@@ -1401,7 +1515,9 @@ fun AddEditScreen(
                         color = LXPrimaryGreen
                     )
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -1429,9 +1545,10 @@ fun AddEditScreen(
                     OutlinedTextField(
                         value = if (state.rewatchCount > 0) state.rewatchCount.toString() else "",
                         onValueChange = { viewModel.updateRewatchCount(it.toIntOrNull() ?: 0) },
-                        label = { Text(if (isGame) "Times Replayed" else "Times Rewatched / Re-read") },
+                        label = { Text(if (isGame) "Times Replayed" else "Times Rewatched / Re-read", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         placeholder = { Text("0") },
                         singleLine = true,
+                        maxLines = 1,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                         colors = outlinedColors()
@@ -1447,8 +1564,8 @@ fun AddEditScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1479,8 +1596,10 @@ fun AddEditScreen(
                     }
 
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         ExposedDropdownMenuBox(
                             expanded = databaseSourceExpanded && isForeignDbUnlocked,
@@ -1491,13 +1610,17 @@ fun AddEditScreen(
                                     databaseSourceExpanded = it
                                 }
                             },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
                         ) {
                             OutlinedTextField(
                                 value = state.externalSource.ifBlank { "None" },
                                 onValueChange = {},
                                 readOnly = true,
-                                label = { Text("Database Source") },
+                                singleLine = true,
+                                maxLines = 1,
+                                label = { Text("Database Source", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 trailingIcon = {
                                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = databaseSourceExpanded)
                                 },
@@ -1505,6 +1628,7 @@ fun AddEditScreen(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .fillMaxWidth()
+                                    .fillMaxHeight()
                             )
 
                             ExposedDropdownMenu(
@@ -1562,17 +1686,22 @@ fun AddEditScreen(
                                 else showForeignDbWarningDialog = true
                             },
                             readOnly = !isForeignDbUnlocked,
-                            label = { Text("Foreign Database ID") },
+                            label = { Text("Foreign Database ID", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             placeholder = { Text("e.g. 38101") },
                             singleLine = true,
-                            modifier = Modifier.weight(1.5f),
+                            maxLines = 1,
+                            modifier = Modifier
+                                .weight(1.5f)
+                                .fillMaxHeight(),
                             colors = outlinedColors()
                         )
                     }
 
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         ExposedDropdownMenuBox(
                             expanded = externalScoreSourceExpanded && isForeignDbUnlocked,
@@ -1583,13 +1712,17 @@ fun AddEditScreen(
                                     externalScoreSourceExpanded = it
                                 }
                             },
-                            modifier = Modifier.weight(1.2f)
+                            modifier = Modifier
+                                .weight(1.2f)
+                                .fillMaxHeight()
                         ) {
                             OutlinedTextField(
                                 value = state.externalScoreSource.ifBlank { "None" },
                                 onValueChange = {},
                                 readOnly = true,
-                                label = { Text("Score Source") },
+                                singleLine = true,
+                                maxLines = 1,
+                                label = { Text("Score Source", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 trailingIcon = {
                                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = externalScoreSourceExpanded)
                                 },
@@ -1597,6 +1730,7 @@ fun AddEditScreen(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .fillMaxWidth()
+                                    .fillMaxHeight()
                             )
 
                             ExposedDropdownMenu(
@@ -1658,11 +1792,14 @@ fun AddEditScreen(
                                 }
                             },
                             readOnly = !isForeignDbUnlocked,
-                            label = { Text("External Score") },
+                            label = { Text("External Score", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             placeholder = { Text("e.g. 8.5") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true,
-                            modifier = Modifier.weight(1.5f),
+                            maxLines = 1,
+                            modifier = Modifier
+                                .weight(1.5f)
+                                .fillMaxHeight(),
                             colors = outlinedColors()
                         )
                     }
@@ -1673,7 +1810,7 @@ fun AddEditScreen(
             if (state.mediaType == MediaType.GAME) {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
                         text = "Cover Image",
@@ -1692,7 +1829,7 @@ fun AddEditScreen(
                                 contentColor = LXScoreGold
                             ),
                             shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                         ) {
                             Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
@@ -1706,7 +1843,7 @@ fun AddEditScreen(
                                 contentColor = LXPrimaryGreen
                             ),
                             shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                         ) {
                             Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
@@ -1728,7 +1865,7 @@ fun AddEditScreen(
                             contentColor = LXPrimaryGreen
                         ),
                         shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
@@ -1750,12 +1887,12 @@ fun AddEditScreen(
                             color = if (isCoverImageError) LXErrorRed else LXBorder,
                             shape = RoundedCornerShape(8.dp)
                         )
-                        .padding(10.dp),
+                        .padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(60.dp)
+                            .size(52.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .border(
                                 width = 1.dp,
@@ -1779,11 +1916,11 @@ fun AddEditScreen(
                                 imageVector = Icons.Default.BrokenImage,
                                 contentDescription = "Image Failed to Load",
                                 tint = LXErrorRed,
-                                modifier = Modifier.size(26.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = if (isCoverImageError) "Cover preview (Failed to load)" else "Cover preview",
@@ -1824,8 +1961,9 @@ fun AddEditScreen(
                     isCoverImageError = false
                     viewModel.updateCoverUri(it)
                 },
-                label = { Text("Cover Image URL (or search above)") },
+                label = { Text("Cover Image URL (or search above)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 singleLine = true,
+                maxLines = 1,
                 isError = isCoverImageError,
                 supportingText = if (isCoverImageError) {
                     {
@@ -1890,8 +2028,9 @@ fun AddEditScreen(
             OutlinedTextField(
                 value = state.tags,
                 onValueChange = { viewModel.updateTags(it) },
-                label = { Text("Tags (comma-separated, e.g. action, isekai)") },
+                label = { Text("Tags (comma-separated, e.g. action, isekai)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 singleLine = true,
+                maxLines = 1,
                 modifier = Modifier.fillMaxWidth(),
                 colors = outlinedColors()
             )
@@ -1902,8 +2041,8 @@ fun AddEditScreen(
                 onValueChange = { viewModel.updateDescription(it) },
                 label = { Text("Description") },
                 placeholder = { Text("Overview, synopsis, or background details...") },
-                minLines = 3,
-                maxLines = 6,
+                minLines = 2,
+                maxLines = 5,
                 modifier = Modifier.fillMaxWidth(),
                 colors = outlinedColors()
             )
@@ -1914,8 +2053,8 @@ fun AddEditScreen(
                 onValueChange = { viewModel.updateUserComments(it) },
                 label = { Text("User Comments") },
                 placeholder = { Text("Your personal thoughts, reflections, or review...") },
-                minLines = 3,
-                maxLines = 6,
+                minLines = 2,
+                maxLines = 5,
                 modifier = Modifier.fillMaxWidth(),
                 colors = outlinedColors()
             )
@@ -1925,7 +2064,7 @@ fun AddEditScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { viewModel.updateIsFavorite(!state.isFavorite) }
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
@@ -1942,7 +2081,7 @@ fun AddEditScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { viewModel.updateIsExternallyTracked(!state.isExternallyTracked) }
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
@@ -2306,7 +2445,7 @@ fun AddEditScreen(
                 onClick = { viewModel.saveEntry() },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
+                    .height(48.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = LXPrimaryGreen,
                     contentColor = LXBackgroundBlack
@@ -2319,7 +2458,7 @@ fun AddEditScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -2366,7 +2505,7 @@ private fun AdaptiveDateRow(
         if (maxWidth < 280.dp) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 DatePickerField(
                     label = startLabel,
@@ -2383,20 +2522,26 @@ private fun AdaptiveDateRow(
             }
         } else {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 DatePickerField(
                     label = startLabel,
                     timestamp = startTimestamp,
                     onDateSelected = onStartDateSelected,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
                 )
                 DatePickerField(
                     label = endLabel,
                     timestamp = endTimestamp,
                     onDateSelected = onEndDateSelected,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
                 )
             }
         }
@@ -2448,7 +2593,7 @@ private fun DatePickerField(
 
     Surface(
         modifier = modifier
-            .height(56.dp)
+            .height(48.dp)
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = showDialog),
         shape = RoundedCornerShape(8.dp),
@@ -2461,14 +2606,14 @@ private fun DatePickerField(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = 10.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = Icons.Default.CalendarToday,
                 contentDescription = null,
                 tint = if (timestamp != null) LXPrimaryGreen else LXPrimaryGreen.copy(alpha = 0.7f),
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(16.dp)
             )
 
             Spacer(modifier = Modifier.width(8.dp))
@@ -2480,18 +2625,18 @@ private fun DatePickerField(
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Medium
                     ),
                     color = if (timestamp != null) LXPrimaryGreen else LXTextSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(1.dp))
                 Text(
                     text = displayValue.ifEmpty { "Select date" },
                     style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = if (timestamp != null) FontWeight.SemiBold else FontWeight.Normal
                     ),
                     color = if (timestamp != null) LXTextPrimary else LXTextSecondary.copy(alpha = 0.45f),
@@ -4066,8 +4211,8 @@ private fun CurrentPlaybackTimeSection(
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(LXSurfaceElevated)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -4076,7 +4221,7 @@ private fun CurrentPlaybackTimeSection(
         ) {
             Text(
                 text = "Current Watch Time (Optional)",
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 13.sp),
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 12.sp),
                 color = LXTextPrimary
             )
             if (currentTimeMinutes != null && currentTimeMinutes > 0) {
@@ -4095,12 +4240,6 @@ private fun CurrentPlaybackTimeSection(
             }
         }
 
-        Text(
-            text = "Track how much of the current episode or movie you have seen (e.g. 1/4, 1/2, or specific minutes).",
-            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-            color = LXTextSecondary
-        )
-
         OutlinedTextField(
             value = rawInput,
             onValueChange = { input ->
@@ -4108,11 +4247,12 @@ private fun CurrentPlaybackTimeSection(
                 val parsedMinutes = parseTimeToMinutes(input)
                 onUpdateTime(parsedMinutes)
             },
-            label = { Text("Watch Progress (minutes or mm:ss)") },
-            placeholder = { Text("e.g. 12 or 12:30 or 1h 15m") },
+            label = { Text("Watch Progress (minutes or mm:ss)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            placeholder = { Text("e.g. 15 or 12:30 or 1h 15m") },
             modifier = Modifier.fillMaxWidth(),
             colors = outlinedColors(),
-            singleLine = true
+            singleLine = true,
+            maxLines = 1
         )
 
         // Quick fractional presets if runtime is known
@@ -4145,6 +4285,7 @@ private fun CurrentPlaybackTimeSection(
                                 }
                             },
                             label = { Text(label, fontSize = 11.sp) },
+                            modifier = Modifier.height(26.dp),
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = LXPrimaryGreen,
                                 selectedLabelColor = LXBackgroundBlack,
@@ -4160,7 +4301,8 @@ private fun CurrentPlaybackTimeSection(
                                 rawInput = ""
                                 onUpdateTime(null)
                             },
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                            modifier = Modifier.height(26.dp)
                         ) {
                             Text("Clear", color = LXErrorRed, fontSize = 11.sp)
                         }
