@@ -2,6 +2,7 @@ package com.lx.tracklist.data.remote
 
 import android.content.Context
 import android.util.Log
+import com.lx.tracklist.ui.search.AdultMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -67,17 +68,41 @@ object GameMetadataManager {
     suspend fun discoverGames(
         context: Context,
         year: Int? = null,
+        startYear: Int? = null,
+        endYear: Int? = null,
         sort: String = "total_rating_count desc",
-        limit: Int = 20
+        limit: Int = 20,
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet(),
+        adultMode: AdultMode = AdultMode.OFF
     ): Result<List<GameSearchResult>> {
+        val sYear = startYear ?: year
+        val eYear = endYear ?: year
+
         if (GameApiConfig.isIgdbConfigured(context)) {
-            val res = IgdbApiClient.discoverGames(context, year = year, sort = sort, limit = limit)
+            val res = IgdbApiClient.discoverGames(
+                context = context,
+                startYear = sYear,
+                endYear = eYear,
+                sort = sort,
+                limit = limit,
+                includedTags = includedTags,
+                excludedTags = excludedTags,
+                adultMode = adultMode
+            )
             if (res.isSuccess && res.getOrDefault(emptyList()).isNotEmpty()) {
                 return res
             }
         }
         if (GameApiConfig.isRawgConfigured(context)) {
-            val rawgRes = RawgApiClient.discoverGames(context, year = year, limit = limit)
+            val rawgRes = RawgApiClient.discoverGames(
+                context = context,
+                startYear = sYear,
+                endYear = eYear,
+                limit = limit,
+                includedTags = includedTags,
+                excludedTags = excludedTags
+            )
             if (rawgRes.isSuccess && rawgRes.getOrDefault(emptyList()).isNotEmpty()) {
                 return rawgRes
             }

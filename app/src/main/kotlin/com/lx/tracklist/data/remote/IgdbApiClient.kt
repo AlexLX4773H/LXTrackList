@@ -8,6 +8,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
+import com.lx.tracklist.ui.search.AdultMode
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -166,25 +167,40 @@ object IgdbApiClient {
     }
 
     /**
-     * Discovers games on IGDB with optional year and sorting.
+     * Discovers games on IGDB with optional year, year range, genres/tags, and sorting.
      */
     suspend fun discoverGames(
         context: Context,
         year: Int? = null,
+        startYear: Int? = null,
+        endYear: Int? = null,
         sort: String = "total_rating_count desc",
-        limit: Int = 20
+        limit: Int = 20,
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet(),
+        adultMode: AdultMode = AdultMode.OFF
     ): Result<List<GameSearchResult>> {
-        val whereClause = if (year != null) {
+        val sYear = startYear ?: year
+        val eYear = endYear ?: year
+        val whereConditions = mutableListOf("version_parent = null")
+
+        if (sYear != null || eYear != null) {
+            val fromYr = sYear ?: 1970
+            val toYr = eYear ?: sYear ?: (Calendar.getInstance().get(Calendar.YEAR) + 1)
             val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
-                set(year, Calendar.JANUARY, 1, 0, 0, 0)
+                set(fromYr, Calendar.JANUARY, 1, 0, 0, 0)
+                set(Calendar.MILLISECOND, 0)
             }
             val startSec = cal.timeInMillis / 1000L
-            cal.set(year, Calendar.DECEMBER, 31, 23, 59, 59)
+            cal.set(toYr, Calendar.DECEMBER, 31, 23, 59, 59)
+            cal.set(Calendar.MILLISECOND, 999)
             val endSec = cal.timeInMillis / 1000L
-            "where version_parent = null & first_release_date >= $startSec & first_release_date <= $endSec;"
+            whereConditions.add("first_release_date >= $startSec & first_release_date <= $endSec")
         } else {
-            "where version_parent = null & total_rating_count != null;"
+            whereConditions.add("total_rating_count != null")
         }
+
+        val whereClause = "where " + whereConditions.joinToString(" & ") + ";"
         val apicalypse = """
             fields name, alternative_names.name, first_release_date, cover.image_id, artworks.image_id, platforms.name, platforms.abbreviation, total_rating, summary, genres.name, collections.id, collections.name, franchises.id, franchises.name, game_type;
             $whereClause
@@ -194,7 +210,18 @@ object IgdbApiClient {
 
         val result = executeApicalypseQuery(context, apicalypse)
         return result.map { jsonStr ->
-            parseSearchResultsJson(jsonStr)
+            var list = parseSearchResultsJson(jsonStr)
+            if (includedTags.isNotEmpty()) {
+                list = list.filter { item ->
+                    item.genres.any { g -> includedTags.any { inc -> inc.equals(g, ignoreCase = true) } }
+                }
+            }
+            if (excludedTags.isNotEmpty()) {
+                list = list.filterNot { item ->
+                    item.genres.any { g -> excludedTags.any { exc -> exc.equals(g, ignoreCase = true) } }
+                }
+            }
+            list
         }
     }
 

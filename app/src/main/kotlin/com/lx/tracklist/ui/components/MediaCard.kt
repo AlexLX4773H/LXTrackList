@@ -550,7 +550,9 @@ fun MediaCard(
                                 }
                             }
 
-                            if (entry.mediaType == com.lx.tracklist.data.model.MediaType.ANIME && (entry.isAiring || entry.isNotYetAiredOrPublished)) {
+                            val shouldShowAiringSchedule = entry.isNotYetAiredOrPublished ||
+                                    (entry.isAiring && (entry.mediaType == com.lx.tracklist.data.model.MediaType.ANIME || entry.mediaType == com.lx.tracklist.data.model.MediaType.SHOW))
+                            if (shouldShowAiringSchedule) {
                                 val airingCardText = entry.formatAiringCardText()
                                 if (!airingCardText.isNullOrBlank()) {
                                     Spacer(modifier = Modifier.height(3.dp))

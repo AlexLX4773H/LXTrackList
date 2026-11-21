@@ -1590,13 +1590,22 @@ private fun DetailProgressCard(
                         }
                     }
 
-                    if (entry.mediaType == MediaType.ANIME) {
+                    if (entry.isNotYetAiredOrPublished || (entry.isAiring && (entry.mediaType == MediaType.ANIME || entry.mediaType == MediaType.SHOW))) {
                         val scheduleStr = entry.formatAiringSchedule(short = false)
                         val countdownStr = entry.getTimeUntilNextEpisode(prefixIn = true)
                         if (!scheduleStr.isNullOrBlank() || !countdownStr.isNullOrBlank()) {
+                            val verb = when (entry.mediaType) {
+                                MediaType.MOVIE, MediaType.GAME -> "Releasing"
+                                MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "Publishing"
+                                MediaType.SHOW, MediaType.ANIME -> if (entry.isNotYetAiredOrPublished) "Premiering" else null
+                            }
                             val bannerText = when {
-                                !scheduleStr.isNullOrBlank() && !countdownStr.isNullOrBlank() -> "$scheduleStr • $countdownStr"
-                                !countdownStr.isNullOrBlank() -> "Next episode $countdownStr"
+                                !scheduleStr.isNullOrBlank() && !countdownStr.isNullOrBlank() -> {
+                                    if (verb != null) "$verb $scheduleStr • $countdownStr" else "$scheduleStr • $countdownStr"
+                                }
+                                !countdownStr.isNullOrBlank() -> {
+                                    if (verb != null) "$verb $countdownStr" else "Next episode $countdownStr"
+                                }
                                 else -> scheduleStr ?: ""
                             }
                             Row(
@@ -1810,24 +1819,82 @@ private fun DetailDatesCard(entry: MediaEntry) {
         ) {
             if (hasAiredData) {
                 if (entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.GAME) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Release Date", color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            text = airedStartStr ?: airedEndStr ?: "-",
-                            color = LXTextPrimary,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                    val isNya = entry.isNotYetAiredOrPublished
+                    val countdown = if (isNya) entry.getTimeUntilNextEpisode(prefixIn = true) else null
+                    if (isNya && !countdown.isNullOrBlank()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Release Date", color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = airedStartStr ?: airedEndStr ?: "-",
+                                    color = LXTextPrimary,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Releases", color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = countdown,
+                                    color = LXAiringBlue,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Release Date", color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = airedStartStr ?: airedEndStr ?: "-",
+                                color = LXTextPrimary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 } else if (entry.mediaType == MediaType.BOOK && (airedStartStr == airedEndStr || airedEndStr == null || airedStartStr == null)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Published Date", color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            text = airedStartStr ?: airedEndStr ?: "-",
-                            color = LXTextPrimary,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                    val isNyp = entry.isNotYetAiredOrPublished
+                    val countdown = if (isNyp) entry.getTimeUntilNextEpisode(prefixIn = true) else null
+                    if (isNyp && !countdown.isNullOrBlank()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Published Date", color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = airedStartStr ?: airedEndStr ?: "-",
+                                    color = LXTextPrimary,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Publishes", color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = countdown,
+                                    color = LXAiringBlue,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Published Date", color = LXPrimaryGreen, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = airedStartStr ?: airedEndStr ?: "-",
+                                color = LXTextPrimary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 } else {
                     val airedTitle = when (entry.mediaType) {
@@ -1851,7 +1918,7 @@ private fun DetailDatesCard(entry: MediaEntry) {
                             }
                         }
 
-                        if (entry.mediaType == MediaType.ANIME && (entry.isAiring || entry.isNotYetAiredOrPublished)) {
+                        if ((entry.mediaType == MediaType.ANIME || entry.mediaType == MediaType.SHOW) && (entry.isAiring || entry.isNotYetAiredOrPublished)) {
                             val localSchedule = entry.formatAiringSchedule(short = false)
                             val countdown = entry.getTimeUntilNextEpisode(prefixIn = true)
                             if (!localSchedule.isNullOrBlank() || !countdown.isNullOrBlank()) {
@@ -1867,7 +1934,7 @@ private fun DetailDatesCard(entry: MediaEntry) {
                                 ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                         Text(
-                                            text = "Broadcast Schedule",
+                                            text = if (entry.isNotYetAiredOrPublished) "Premiere Date" else "Broadcast Schedule",
                                             color = LXTextSecondary,
                                             style = MaterialTheme.typography.labelSmall
                                         )
@@ -1877,7 +1944,7 @@ private fun DetailDatesCard(entry: MediaEntry) {
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.Bold
                                         )
-                                        if (!entry.broadcastTime.isNullOrBlank() && entry.broadcastTime != localSchedule) {
+                                        if (entry.mediaType == MediaType.ANIME && !entry.broadcastTime.isNullOrBlank() && entry.broadcastTime != localSchedule) {
                                             Text(
                                                 text = "MAL: ${entry.broadcastTime}",
                                                 color = LXTextSecondary.copy(alpha = 0.7f),
@@ -1891,7 +1958,54 @@ private fun DetailDatesCard(entry: MediaEntry) {
                                             verticalArrangement = Arrangement.spacedBy(2.dp)
                                         ) {
                                             Text(
-                                                text = "Next Episode",
+                                                text = if (entry.isNotYetAiredOrPublished) "Premieres" else "Next Episode",
+                                                color = LXTextSecondary,
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                            Text(
+                                                text = countdown,
+                                                color = LXPrimaryGreen,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else if ((entry.mediaType == MediaType.MANGA || entry.mediaType == MediaType.MANHWA) && entry.isNotYetAiredOrPublished) {
+                            val localSchedule = entry.formatAiringSchedule(short = false)
+                            val countdown = entry.getTimeUntilNextEpisode(prefixIn = true)
+                            if (!localSchedule.isNullOrBlank() || !countdown.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(LXSurfaceElevated)
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = "Publication Date",
+                                            color = LXTextSecondary,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                        Text(
+                                            text = localSchedule ?: "-",
+                                            color = LXAiringBlue,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    if (!countdown.isNullOrBlank()) {
+                                        Column(
+                                            horizontalAlignment = Alignment.End,
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            Text(
+                                                text = "Publishes",
                                                 color = LXTextSecondary,
                                                 style = MaterialTheme.typography.labelSmall
                                             )

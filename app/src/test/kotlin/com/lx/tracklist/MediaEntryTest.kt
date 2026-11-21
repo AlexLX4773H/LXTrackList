@@ -609,5 +609,121 @@ class MediaEntryTest {
         org.junit.Assert.assertNull(finishedAnime.formatAiringSchedule())
         org.junit.Assert.assertNull(finishedAnime.getTimeUntilNextEpisode())
         org.junit.Assert.assertNull(finishedAnime.formatAiringCardText())
+
+        val releasedMovie = MediaEntry(
+            title = "Avengers: Endgame",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.COMPLETED,
+            airedStartDate = System.currentTimeMillis() - 365L * 24 * 60 * 60 * 1000L
+        )
+        org.junit.Assert.assertFalse(releasedMovie.isNotYetAiredOrPublished)
+        org.junit.Assert.assertNull(releasedMovie.getComputedNextAiringEpoch())
+        org.junit.Assert.assertNull(releasedMovie.formatAiringSchedule())
+        org.junit.Assert.assertNull(releasedMovie.getTimeUntilNextEpisode())
+        org.junit.Assert.assertNull(releasedMovie.formatAiringCardText())
+    }
+
+    @Test
+    fun testMovieNyaCountdownAndSchedule() {
+        val now = System.currentTimeMillis()
+        val futureReleaseDate = now + 100L * 24 * 60 * 60 * 1000L + 60_000L
+
+        val nyaMovie = MediaEntry(
+            title = "Avengers: Doomsday",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.PLAN_TO_WATCH,
+            airedStartDate = futureReleaseDate
+        )
+
+        org.junit.Assert.assertTrue(nyaMovie.isNotYetAiredOrPublished)
+        assertEquals(futureReleaseDate, nyaMovie.getComputedNextAiringEpoch())
+
+        val shortSchedule = nyaMovie.formatAiringSchedule(short = true)
+        org.junit.Assert.assertNotNull(shortSchedule)
+        org.junit.Assert.assertTrue(shortSchedule!!.isNotBlank())
+
+        val countdown = nyaMovie.getTimeUntilNextEpisode()
+        org.junit.Assert.assertNotNull(countdown)
+        assertEquals("In 100d", countdown)
+
+        val cardText = nyaMovie.formatAiringCardText()
+        org.junit.Assert.assertNotNull(cardText)
+        assertEquals("$shortSchedule • In 100d", cardText)
+
+        // Close release countdown (e.g. 5 days 10 hours)
+        val closeReleaseDate = now + (5L * 24 * 60 * 60 * 1000L) + (10L * 60 * 60 * 1000L) + 60_000L
+        val closeMovie = MediaEntry(
+            title = "Soon Movie",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.PLAN_TO_WATCH,
+            airedStartDate = closeReleaseDate
+        )
+        assertEquals("In 5d 10h", closeMovie.getTimeUntilNextEpisode())
+    }
+
+    @Test
+    fun testAllMediaTypesNyaAndNypCountdownAndSchedule() {
+        val now = System.currentTimeMillis()
+        val futureDate = now + 90L * 24 * 60 * 60 * 1000L + 60_000L
+
+        // 1. Unreleased Video Game
+        val unreleasedGame = MediaEntry(
+            title = "Grand Theft Auto VI",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.PLAN_TO_WATCH,
+            airedStartDate = futureDate
+        )
+        org.junit.Assert.assertTrue(unreleasedGame.isNotYetAiredOrPublished)
+        assertEquals(futureDate, unreleasedGame.getComputedNextAiringEpoch())
+        assertEquals("In 90d", unreleasedGame.getTimeUntilNextEpisode())
+        org.junit.Assert.assertTrue(unreleasedGame.formatAiringCardText()!!.endsWith("• In 90d"))
+
+        // 2. Unreleased TV Show
+        val unreleasedShow = MediaEntry(
+            title = "House of the Dragon Season 3",
+            mediaType = MediaType.SHOW,
+            status = MediaStatus.PLAN_TO_WATCH,
+            airedStartDate = futureDate
+        )
+        org.junit.Assert.assertTrue(unreleasedShow.isNotYetAiredOrPublished)
+        assertEquals(futureDate, unreleasedShow.getComputedNextAiringEpoch())
+        assertEquals("In 90d", unreleasedShow.getTimeUntilNextEpisode())
+        org.junit.Assert.assertTrue(unreleasedShow.formatAiringCardText()!!.endsWith("• In 90d"))
+
+        // 3. Unreleased Manga
+        val unreleasedManga = MediaEntry(
+            title = "Future Manga",
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.PLAN_TO_WATCH,
+            airedStartDate = futureDate
+        )
+        org.junit.Assert.assertTrue(unreleasedManga.isNotYetAiredOrPublished)
+        assertEquals(futureDate, unreleasedManga.getComputedNextAiringEpoch())
+        assertEquals("In 90d", unreleasedManga.getTimeUntilNextEpisode())
+        org.junit.Assert.assertTrue(unreleasedManga.formatAiringCardText()!!.endsWith("• In 90d"))
+
+        // 4. Unreleased Manhwa
+        val unreleasedManhwa = MediaEntry(
+            title = "Future Manhwa",
+            mediaType = MediaType.MANHWA,
+            status = MediaStatus.PLAN_TO_WATCH,
+            airedStartDate = futureDate
+        )
+        org.junit.Assert.assertTrue(unreleasedManhwa.isNotYetAiredOrPublished)
+        assertEquals(futureDate, unreleasedManhwa.getComputedNextAiringEpoch())
+        assertEquals("In 90d", unreleasedManhwa.getTimeUntilNextEpisode())
+        org.junit.Assert.assertTrue(unreleasedManhwa.formatAiringCardText()!!.endsWith("• In 90d"))
+
+        // 5. Unreleased Book / Light Novel
+        val unreleasedBook = MediaEntry(
+            title = "Future Light Novel",
+            mediaType = MediaType.BOOK,
+            status = MediaStatus.PLAN_TO_WATCH,
+            airedStartDate = futureDate
+        )
+        org.junit.Assert.assertTrue(unreleasedBook.isNotYetAiredOrPublished)
+        assertEquals(futureDate, unreleasedBook.getComputedNextAiringEpoch())
+        assertEquals("In 90d", unreleasedBook.getTimeUntilNextEpisode())
+        org.junit.Assert.assertTrue(unreleasedBook.formatAiringCardText()!!.endsWith("• In 90d"))
     }
 }

@@ -324,4 +324,19 @@ class GameEntryTest {
         assertEquals(0, entry.customUnitCurrent)
         assertEquals(0, entry.customUnitTotal)
     }
+
+    @Test
+    fun testGameTagRegistry() {
+        val genres = com.lx.tracklist.ui.search.GameTagRegistry.gameGenres
+        assertTrue(genres.isNotEmpty())
+        assertTrue(genres.any { it.name.equals("Role-playing (RPG)", ignoreCase = true) })
+        assertTrue(genres.any { it.name.equals("Action", ignoreCase = true) })
+
+        val filtered = com.lx.tracklist.ui.search.GameTagRegistry.filterGameGenres("role")
+        assertEquals(1, filtered.size)
+        assertEquals("Role-playing (RPG)", filtered[0].name)
+
+        val nonExistent = com.lx.tracklist.ui.search.GameTagRegistry.filterGameGenres("xyznonexistent")
+        assertTrue(nonExistent.isEmpty())
+    }
 }

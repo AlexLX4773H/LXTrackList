@@ -129,6 +129,15 @@ fun SearchDiscoverySheet(
     var selectedGameSort by remember {
         mutableStateOf(gameFilter?.sortOrder ?: GameSortOrder.POPULARITY)
     }
+    var selectedGameLanguages by remember {
+        mutableStateOf(gameFilter?.originalLanguages?.takeIf { it.isNotEmpty() } ?: gameFilter?.originalLanguage?.let { setOf(it) } ?: emptySet())
+    }
+    var gameIncludedTags by remember {
+        mutableStateOf(gameFilter?.includedTags ?: emptySet())
+    }
+    var gameExcludedTags by remember {
+        mutableStateOf(gameFilter?.excludedTags ?: emptySet())
+    }
 
     // Anime state
     val animeFilter = activeFilter as? DiscoveryFilter.Anime
@@ -323,7 +332,7 @@ fun SearchDiscoverySheet(
         SearchCategory.MANHWA -> selectedManhwaLanguages
         SearchCategory.LIGHT_NOVELS -> selectedLightNovelLanguages
         SearchCategory.BOOKS -> selectedBookLanguages
-        SearchCategory.GAMES -> emptySet()
+        SearchCategory.GAMES -> selectedGameLanguages
     }
 
     fun setCategoryLanguages(languages: Set<String>) {
@@ -335,7 +344,7 @@ fun SearchDiscoverySheet(
             SearchCategory.MANHWA -> selectedManhwaLanguages = languages
             SearchCategory.LIGHT_NOVELS -> selectedLightNovelLanguages = languages
             SearchCategory.BOOKS -> selectedBookLanguages = languages
-            SearchCategory.GAMES -> {}
+            SearchCategory.GAMES -> selectedGameLanguages = languages
         }
     }
 
@@ -361,7 +370,7 @@ fun SearchDiscoverySheet(
         SearchCategory.MANHWA -> manhwaIncludedTags
         SearchCategory.LIGHT_NOVELS -> lightNovelIncludedTags
         SearchCategory.BOOKS -> bookIncludedTags
-        SearchCategory.GAMES -> emptySet()
+        SearchCategory.GAMES -> gameIncludedTags
     }
 
     val activeExcludedTags: Set<String> = when (category) {
@@ -372,7 +381,7 @@ fun SearchDiscoverySheet(
         SearchCategory.MANHWA -> manhwaExcludedTags
         SearchCategory.LIGHT_NOVELS -> lightNovelExcludedTags
         SearchCategory.BOOKS -> bookExcludedTags
-        SearchCategory.GAMES -> emptySet()
+        SearchCategory.GAMES -> gameExcludedTags
     }
 
     val backDispatcherOwner = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current
@@ -514,7 +523,24 @@ fun SearchDiscoverySheet(
                     }
                 }
             }
-            SearchCategory.GAMES -> {}
+            SearchCategory.GAMES -> {
+                val isInc = gameIncludedTags.any { it.equals(clean, ignoreCase = true) }
+                val isExc = gameExcludedTags.any { it.equals(clean, ignoreCase = true) }
+                when {
+                    !isInc && !isExc -> {
+                        gameIncludedTags = gameIncludedTags + clean
+                        gameExcludedTags = gameExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                    isInc -> {
+                        gameIncludedTags = gameIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        gameExcludedTags = gameExcludedTags + clean
+                    }
+                    else -> {
+                        gameIncludedTags = gameIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        gameExcludedTags = gameExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                }
+            }
         }
     }
 
@@ -557,7 +583,10 @@ fun SearchDiscoverySheet(
                 bookIncludedTags = emptySet()
                 bookExcludedTags = emptySet()
             }
-            SearchCategory.GAMES -> {}
+            SearchCategory.GAMES -> {
+                gameIncludedTags = emptySet()
+                gameExcludedTags = emptySet()
+            }
         }
     }
 
@@ -761,7 +790,9 @@ fun SearchDiscoverySheet(
                         SearchCategory.BOOKS -> BookTagRegistry.filterBookGenres(tagSearchQuery).map {
                             TagDisplayItem(it.name, "Genre")
                         }
-                        SearchCategory.GAMES -> emptyList()
+                        SearchCategory.GAMES -> GameTagRegistry.filterGameGenres(tagSearchQuery).map {
+                            TagDisplayItem(it.name, "Genre")
+                        }
                     }
                 }
 
@@ -3176,21 +3207,39 @@ fun SearchDiscoverySheet(
                         currentYear = currentYear,
                         selectedGameMode = selectedGameMode,
                         onSelectGameMode = { selectedGameMode = it },
-                        selectedGameYear = selectedGameYear,
-                        onSelectGameYear = { yr ->
-                            selectedGameYear = yr
-                            selectedGameStartYear = yr
-                            selectedGameEndYear = yr
+                        selectedGameStartYear = selectedGameStartYear,
+                        selectedGameEndYear = selectedGameEndYear,
+                        onRangeChange = { s, e ->
+                            selectedGameStartYear = s
+                            selectedGameEndYear = e
+                            selectedGameYear = e ?: (s ?: currentYear)
                         },
                         selectedGameSort = selectedGameSort,
                         onSelectGameSort = { selectedGameSort = it },
+                        gameIncludedTags = gameIncludedTags,
+                        gameExcludedTags = gameExcludedTags,
+                        onOpenTags = { showTagsSubMenu = true },
+                        onRemoveIncludedTag = { tag ->
+                            gameIncludedTags = gameIncludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+                        },
+                        onRemoveExcludedTag = { tag ->
+                            gameExcludedTags = gameExcludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+                        },
+                        selectedLanguages = selectedGameLanguages,
+                        onOpenLanguages = { showLanguageSubMenu = true },
+                        adultMode = adultMode,
+                        onAdultModeChange = { adultMode = it },
                         onApply = {
                             val filter = DiscoveryFilter.Game(
                                 mode = selectedGameMode ?: ContentDiscoveryMode.MOST_POPULAR,
-                                year = if (selectedGameMode == ContentDiscoveryMode.BY_YEAR) selectedGameYear else null,
+                                year = if (selectedGameMode == ContentDiscoveryMode.BY_YEAR) (selectedGameEndYear ?: selectedGameStartYear ?: currentYear) else null,
                                 startYear = if (selectedGameMode == ContentDiscoveryMode.BY_YEAR) selectedGameStartYear else null,
                                 endYear = if (selectedGameMode == ContentDiscoveryMode.BY_YEAR) selectedGameEndYear else null,
-                                sortOrder = selectedGameSort
+                                sortOrder = selectedGameSort,
+                                includedTags = gameIncludedTags,
+                                excludedTags = gameExcludedTags,
+                                adultMode = adultMode,
+                                originalLanguages = selectedGameLanguages
                             )
                             onApplyGame(filter)
                             onDismiss()
@@ -3206,7 +3255,7 @@ fun SearchDiscoverySheet(
 }
 
 @Composable
-private fun SearchTagBadge(
+internal fun SearchTagBadge(
     label: String,
     isIncluded: Boolean,
     onRemove: () -> Unit,
@@ -3298,7 +3347,7 @@ private fun SeasonSelectorBox(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SubtleAdultFilterToggle(
+internal fun SubtleAdultFilterToggle(
     adultMode: AdultMode,
     onModeChange: (AdultMode) -> Unit,
     modifier: Modifier = Modifier
@@ -3344,7 +3393,7 @@ private fun SubtleAdultFilterToggle(
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-private fun YearRangeSelector(
+internal fun YearRangeSelector(
     startYear: Int?,
     endYear: Int?,
     onRangeChange: (Int?, Int?) -> Unit,
@@ -3593,7 +3642,7 @@ private fun TriStateTagCheckbox(
 }
 
 @Composable
-private fun LanguageFilterEntryCard(
+internal fun LanguageFilterEntryCard(
     selectedLanguages: Set<String>,
     onClick: () -> Unit,
     modifier: Modifier = Modifier

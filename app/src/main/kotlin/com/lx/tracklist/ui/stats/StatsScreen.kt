@@ -69,6 +69,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -686,54 +687,34 @@ fun MalCategoryStatsCard(
                 }
             }
 
-            // Days & Mean Score Header Row (Days Spent, Days to Complete, Mean Score)
+            // Days & Mean Score Header Row (Days Spent and Mean Score)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Days: ",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = LXTextSecondary
-                        )
-                        Text(
-                            text = String.format(Locale.US, "%.1f", summary.daysSpent),
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextPrimary
-                        )
-                    }
-
-                    if (summary.daysRemaining > 0) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Left: ",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = LXTextSecondary
-                            )
-                            Text(
-                                text = String.format(Locale.US, "%.1f d", summary.daysRemaining),
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = LXPrimaryGreen
-                            )
-                        }
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Days: ",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                        color = LXTextSecondary
+                    )
+                    Text(
+                        text = String.format(Locale.US, "%.1f", summary.daysSpent),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp),
+                        color = LXTextPrimary
+                    )
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "Mean Score: ",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                         color = LXTextSecondary
                     )
                     Text(
                         text = if (summary.meanScore > 0) String.format(Locale.US, "%.2f", summary.meanScore) else "0.00",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp),
                         color = if (summary.meanScore > 0) LXScoreGold else LXTextPrimary
                     )
                 }
@@ -873,7 +854,8 @@ fun MalCategoryStatsCard(
                     if (summary.daysRemaining > 0) {
                         MalMetricRow(
                             label = "To Complete",
-                            value = String.format(Locale.US, "%.1f d", summary.daysRemaining)
+                            value = String.format(Locale.US, "%.1f d", summary.daysRemaining),
+                            valueColor = LXPrimaryGreen
                         )
                     }
                 }
@@ -891,30 +873,38 @@ private fun MalStatusRow(color: Color, label: String, count: Int) {
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.weight(1f, fill = false)
         ) {
             Box(
                 modifier = Modifier
-                    .size(10.dp)
+                    .size(8.dp)
                     .clip(CircleShape)
                     .background(color)
             )
             Text(
                 text = label,
                 color = LXTextPrimary,
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
         Text(
             text = count.formatCommas(),
             color = LXTextPrimary,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp),
+            maxLines = 1
         )
     }
 }
 
 @Composable
-private fun MalMetricRow(label: String, value: String) {
+private fun MalMetricRow(
+    label: String,
+    value: String,
+    valueColor: Color = LXTextPrimary
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -923,12 +913,15 @@ private fun MalMetricRow(label: String, value: String) {
         Text(
             text = label,
             color = LXTextSecondary,
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Text(
             text = value,
-            color = LXTextPrimary,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+            color = valueColor,
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.5.sp),
+            maxLines = 1
         )
     }
 }

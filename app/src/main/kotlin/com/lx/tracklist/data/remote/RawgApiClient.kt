@@ -55,13 +55,23 @@ object RawgApiClient {
     suspend fun discoverGames(
         context: Context,
         year: Int? = null,
-        limit: Int = 20
+        startYear: Int? = null,
+        endYear: Int? = null,
+        limit: Int = 20,
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet()
     ): Result<List<GameSearchResult>> {
         val apiKey = GameApiConfig.getRawgApiKey(context)
         if (apiKey.isBlank()) {
             return Result.failure(IllegalStateException("RAWG API key is not configured."))
         }
-        val datesParam = if (year != null) "&dates=$year-01-01,$year-12-31" else ""
+        val sYear = startYear ?: year
+        val eYear = endYear ?: year
+        val datesParam = if (sYear != null || eYear != null) {
+            val fromYr = sYear ?: 1970
+            val toYr = eYear ?: sYear ?: (java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) + 1)
+            "&dates=$fromYr-01-01,$toYr-12-31"
+        } else ""
         val url = "$BASE_URL/games?key=$apiKey&ordering=-added$datesParam&page_size=$limit"
         val request = Request.Builder().url(url).build()
 
@@ -71,7 +81,18 @@ object RawgApiClient {
             if (!response.isSuccessful) {
                 return Result.failure(Exception("RAWG API error (HTTP ${response.code}): $body"))
             }
-            Result.success(parseSearchResultsJson(body))
+            var list = parseSearchResultsJson(body)
+            if (includedTags.isNotEmpty()) {
+                list = list.filter { item ->
+                    item.genres.any { g -> includedTags.any { inc -> inc.equals(g, ignoreCase = true) } }
+                }
+            }
+            if (excludedTags.isNotEmpty()) {
+                list = list.filterNot { item ->
+                    item.genres.any { g -> excludedTags.any { exc -> exc.equals(g, ignoreCase = true) } }
+                }
+            }
+            Result.success(list)
         } catch (e: Exception) {
             Log.e(TAG, "Error discovering RAWG games", e)
             Result.failure(e)

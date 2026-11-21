@@ -747,31 +747,40 @@ data class MediaEntry(
     }
 
     fun getComputedNextAiringEpoch(): Long? {
-        if (mediaType != MediaType.ANIME || (!isAiring && !isNotYetAiredOrPublished)) return null
         val now = System.currentTimeMillis()
 
-        // 1. If nextAiringEpoch is explicitly available, use it (roll forward if elapsed)
-        if (nextAiringEpoch != null && nextAiringEpoch > 0L) {
-            var epoch = nextAiringEpoch
-            while (epoch <= now) {
-                epoch += 7L * 24 * 60 * 60 * 1000L
-            }
-            return epoch
+        // 1. Any entry that is not yet aired / published / released
+        if (isNotYetAiredOrPublished) {
+            val epoch = nextAiringEpoch?.takeIf { it > now }
+                ?: airedStartDate?.takeIf { it > now }
+            if (epoch != null) return epoch
         }
 
-        // 2. If broadcastTime string is available (e.g. "Sundays at 00:00 (JST)")
-        if (!broadcastTime.isNullOrBlank()) {
-            val parsed = parseBroadcastToNextEpoch(broadcastTime, now)
-            if (parsed != null) return parsed
-        }
-
-        // 3. Fallback: project from airedStartDate
-        if (airedStartDate != null && airedStartDate > 0L) {
-            var epoch = airedStartDate
-            while (epoch <= now) {
-                epoch += 7L * 24 * 60 * 60 * 1000L
+        // 2. Airing episodic media (Anime or TV Show)
+        if (isAiring && (mediaType == MediaType.ANIME || mediaType == MediaType.SHOW)) {
+            // Explicit next airing epoch (roll forward weekly if elapsed)
+            if (nextAiringEpoch != null && nextAiringEpoch > 0L) {
+                var epoch = nextAiringEpoch
+                while (epoch <= now) {
+                    epoch += 7L * 24 * 60 * 60 * 1000L
+                }
+                return epoch
             }
-            return epoch
+
+            // Broadcast time string (e.g. "Sundays at 00:00 (JST)")
+            if (!broadcastTime.isNullOrBlank()) {
+                val parsed = parseBroadcastToNextEpoch(broadcastTime, now)
+                if (parsed != null) return parsed
+            }
+
+            // Fallback: project weekly from airedStartDate
+            if (airedStartDate != null && airedStartDate > 0L) {
+                var epoch = airedStartDate
+                while (epoch <= now) {
+                    epoch += 7L * 24 * 60 * 60 * 1000L
+                }
+                return epoch
+            }
         }
 
         return null
@@ -782,8 +791,18 @@ data class MediaEntry(
         timeZone: TimeZone = TimeZone.getDefault(),
         includeTimeZone: Boolean = !short
     ): String? {
-        if (mediaType != MediaType.ANIME || (!isAiring && !isNotYetAiredOrPublished)) return null
         val nextEpoch = getComputedNextAiringEpoch() ?: return null
+
+        val isCalendarDate = isNotYetAiredOrPublished || (mediaType != MediaType.ANIME && mediaType != MediaType.SHOW)
+        if (isCalendarDate) {
+            val pattern = if (short) "MMM d, yyyy" else "MMMM d, yyyy"
+            val effectiveTz = if (timeZone == TimeZone.getDefault()) TimeZone.getTimeZone("UTC") else timeZone
+            val sdf = SimpleDateFormat(pattern, Locale.getDefault()).apply {
+                this.timeZone = effectiveTz
+            }
+            return sdf.format(Date(nextEpoch))
+        }
+
         val pattern = when {
             short && includeTimeZone -> "EEE HH:mm z"
             short && !includeTimeZone -> "EEE HH:mm"
@@ -797,16 +816,22 @@ data class MediaEntry(
     }
 
     fun getTimeUntilNextEpisode(prefixIn: Boolean = true): String? {
-        if (mediaType != MediaType.ANIME || (!isAiring && !isNotYetAiredOrPublished)) return null
         val nextEpoch = getComputedNextAiringEpoch() ?: return null
         val now = System.currentTimeMillis()
         val diff = nextEpoch - now
-        if (diff <= 0) return "Airing now"
+        if (diff <= 0) {
+            return when (mediaType) {
+                MediaType.MOVIE, MediaType.GAME -> "Releasing today"
+                MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "Publishing today"
+                MediaType.SHOW, MediaType.ANIME -> if (isNotYetAiredOrPublished) "Premieres today" else "Airing now"
+            }
+        }
 
         val totalHours = TimeUnit.MILLISECONDS.toHours(diff)
         val days = totalHours / 24
         val hours = totalHours % 24
         val timeStr = when {
+            days > 30 -> "${days}d"
             days > 0 && hours > 0 -> "${days}d ${hours}h"
             days > 0 -> "${days}d"
             hours > 0 -> "${hours}h"
@@ -819,7 +844,6 @@ data class MediaEntry(
     }
 
     fun formatAiringCardText(): String? {
-        if (mediaType != MediaType.ANIME || (!isAiring && !isNotYetAiredOrPublished)) return null
         val schedule = formatAiringSchedule(short = true, includeTimeZone = false)
         val countdown = getTimeUntilNextEpisode(prefixIn = true)
         return when {

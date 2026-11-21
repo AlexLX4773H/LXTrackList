@@ -83,11 +83,13 @@ Seamlessly open external media pages on authoritative platforms without screen c
   - LX Track List dynamically resolves the exact slug via Kitsu's official mappings endpoint (`/mappings?filter[externalSite]=myanimelist&include=item`) using the MAL ID, or queries Kitsu's search API.
   - Features an in-memory resolution cache for instant subsequent launches and a guaranteed safe Google site search fallback (`site:kitsu.app/anime ...`) if an entry is unlisted, completely eliminating 404 dead ends.
 
-### ⏳ "NYA" (Not Yet Aired) & "NYP" (Not Yet Published) Tracking
-Clear, accurate status tracking for upcoming and unreleased media:
+### ⏳ Universal "NYA" (Not Yet Aired) & "NYP" (Not Yet Published) Tracking
+Clear, accurate status tracking for upcoming and unreleased media across all entertainment categories:
 - **Distinct Status Badges**:
   - Prevents unreleased media from being ambiguously labeled as "Airing" or "Publishing".
-  - Shows **"NYA"** (Not Yet Aired) for Anime episodes and **"NYP"** (Not Yet Published) for Manga/Manhwa chapters and volumes when release dates are in the future or no episodes/chapters have dropped yet.
+  - Displays **"NYA"** (Not Yet Aired) for Anime and TV Show episodes and upcoming Movies, **"UNRELEASED"** for upcoming Video Games, and **"NYP"** (Not Yet Published) for Manga, Manhwa, Light Novels, and Books.
+- **Universal Release Countdowns & Schedule Banners**:
+  - For unreleased titles across **TV Shows**, **Video Games**, **Movies**, **Light Novels**, **Manga**, and **Manhwa**, automatically calculates and displays the release/premiere/publication date and remaining countdown (e.g. `Nov 15, 2027 • In 358d`) directly on library cards and in detail views, matching the real-time countdown banner used for Anime broadcasts.
 - **Advanced Airing Status Filter**:
   - Filter your library with dedicated 4-mode toggles in the Advanced Filter Sheet:
     1. **All**: Shows all entries.
@@ -96,7 +98,11 @@ Clear, accurate status tracking for upcoming and unreleased media:
     4. **Finished**: Shows completed releases.
 
 ### 🎮 Video Games & Interactive Media Tracking
-Comprehensive video game tracking with dedicated progress modes, platform icons, and rich metadata:
+Comprehensive video game tracking with dedicated progress modes, platform icons, rich metadata, and advanced discovery:
+- **Advanced Game Discovery (Search & Discover)**:
+  - **Next Year & Range Selection**: Quick preset chips for next year (e.g. `2027`), current year (`2026`), and previous year (`2025`), alongside custom `From ▾` and `To ▾` year range pickers, matching Movies discovery.
+  - **Game Genre Filtering**: Integrated **Select & Exclude Tags** sub-menu powered by `GameTagRegistry` supporting inclusion (✓) and exclusion (✕) across standard IGDB genres (Action, RPG, Strategy, Visual Novel, etc.).
+  - **Original Language & 3-State 18+ Cycle**: Filter discoveries by language, and cycle through Off, Include 18+, and 18+ Only modes with compact, vertically optimized UI sizing.
 - **Platform Badges with Dedicated Vector Icons**:
   - Entity details showcase distinct, crisp vector icons tailored to each platform:
     - **PC**: Desktop monitor display icon
@@ -207,8 +213,31 @@ Never worry about duplicate entries when restoring backups after names or IDs ch
 - Expandable result cards display high-res cover art, full synopsis, broadcast schedule, release year, ratings, and genre tags.
 
 ### 📊 Deep Statistics & Visual Analytics
-- Comprehensive distribution breakdown across statuses (*Watching/Reading*, *Completed*, *On-Hold*, *Dropped*, *Plan to Watch/Read*).
-- Category distributions, rating score charts, and cumulative counts of consumed episodes, chapters, volumes, and pages.
+Gain full visibility into your media consumption habits with precision calculations, proportional status distributions, and interactive score histograms:
+- **Comprehensive Status Distribution**: Visual proportional stacked bar charts and breakdown grids across statuses (*Watching/Reading*, *Plan to Watch/Read*, *Completed*, *On-Hold*, *Dropped*) styled with authentic MAL/AniList theme tokens.
+- **Precision Time Tracking**: Converts total consumed minutes into exact 24-hour days (`Days Spent = Total Minutes / 1440.0`), alongside estimated days remaining to finish your backlog (`To Complete`).
+- **Unskewed Mean Scores & 10-Point Score Distribution**: Interactive 10-bar frequency histograms (Scores 1–10) with peak detection, percentage tooltips, and an arithmetic mean score that strictly excludes unrated entries (`score == 0` or unrated) to prevent skewing.
+- **Multi-Category Metric Breakdown**: Dedicated metrics tailored to each medium (Episodes, Chapters, Volumes, Pages, or Playtime Hours).
+
+#### 🧮 How Statistics, Time & Rewatches Are Calculated
+
+| Category | Primary Progress Units | Standard Consumption Rate | Time Spent Formula (`Days = Minutes / 1440`) | Remaining Time Formula ("To Complete") | Rewatch / Reread Multiplier |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Anime** | Episodes | Episode length (defaults to `24 min` if unlisted) | `(Watched Ep + (Rewatch × Total Ep)) × Ep Length` | `(Total Ep - Watched Ep) × Ep Length / 1440` (uncompleted titles) | Full rewatch cycles multiply total series episodes and add to total time |
+| **TV Shows** | Episodes & Seasons | Episode length (defaults to `24 min` if unlisted) | `(Watched Ep + (Rewatch × Total Ep)) × Ep Length` | `(Total Ep - Watched Ep) × Ep Length / 1440` (uncompleted titles) | Rewatches multiply full series episode count and append to watch time |
+| **Movies** | Minutes / Runtime | Exact movie runtime (defaults to `100 min` if unlisted) | `((1 if Completed else 0) + Rewatch) × Duration` | `(Duration - Watched Minutes) / 1440` (uncompleted titles) | Each rewatch adds the full film duration in minutes |
+| **Manga** | Chapters & Volumes | `5 min` per chapter (or `60 min` per volume) | `(Chapters + (Reread × Total Ch)) × 5 min` *(or Volumes × 60m)* | `(Total Ch - Read Ch) × 5 min / 1440` *(or Remaining Vol × 60m)* | Reread cycles multiply total chapter/volume count and accumulate reading time |
+| **Manhwa** | Chapters & Volumes | `5 min` per chapter (or `60 min` per volume) | `(Chapters + (Reread × Total Ch)) × 5 min` *(or Volumes × 60m)* | `(Total Ch - Read Ch) × 5 min / 1440` *(or Remaining Vol × 60m)* | Reread cycles multiply total chapter/volume count and accumulate reading time |
+| **Light Novels** | Pages, Chapters, Volumes | `1.5 min` per page (fallback: `10 min`/ch, `180 min`/vol) | `(Pages + (Reread × Total Pages)) × 1.5 min` | `(Total Pages - Read Pages) × 1.5 min / 1440` | Rereads multiply total pages (or chapters/volumes) into cumulative read time |
+| **Books** | Pages, Chapters, Volumes | `1.5 min` per page (fallback: `10 min`/ch, `180 min`/vol) | `(Pages + (Reread × Total Pages)) × 1.5 min` | `(Total Pages - Read Pages) × 1.5 min / 1440` | Rereads multiply total pages (or chapters/volumes) into cumulative read time |
+| **Video Games** | Custom Units & % | `60 min` per tracked unit when unit is set to `Hours` | `Tracked Hours × 60 min` | Tracks remaining custom unit target or % to 100% | Replay counter tracks total completed playthroughs ("Replayed") |
+| **Custom Categories**| Custom Units | Inherits Watch or Read rate depending on category type | Computed using respective Video or Reading formulas | Remaining units converted based on category type | Rewatch/reread multiplier mirrors primary media archetype |
+
+> **Key Analytics Rules**:
+> - **Days Spent Conversion**: All time calculations internally aggregate exact minutes and divide by **`1440.0`** ($24\text{ hours} \times 60\text{ minutes}$) to yield pure 24-hour days of non-stop consumption.
+> - **"To Complete" Remaining Time**: Computed strictly across active uncompleted entries (`Watching`, `Plan to Watch`, `On-Hold`). Entries marked `Completed` contribute 0 to remaining time.
+> - **Rewatch / Reread Accounting**: Rewatching or rereading an entry does not overwrite your original progress. Instead, every completed cycle increment (`rewatchCount`) multiplies the total episode/chapter/page/runtime count and accumulates into your total time spent, ensuring lifetime stats are never lost.
+> - **Fair Mean Score**: $\text{Mean Score} = \frac{\sum \text{Scores}}{\text{Count of Scored Entries}}$. Entries without a score or scored 0 are strictly excluded from the denominator so unrated backlog items never artificially depress your average.
 
 ### 🔄 Open Import & Export (Data Sovereignty)
 Your data belongs to you. You can export or import your collection at any time:

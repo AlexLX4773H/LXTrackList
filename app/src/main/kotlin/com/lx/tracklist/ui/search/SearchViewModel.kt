@@ -827,12 +827,16 @@ class SearchViewModel(
             try {
                 val results = withContext(Dispatchers.IO) {
                     val appContext = context ?: com.lx.tracklist.LXApplication.instance
-                    val y = if (filter.mode == ContentDiscoveryMode.BY_YEAR) (filter.year ?: filter.endYear) else null
                     val res = GameMetadataManager.discoverGames(
                         context = appContext,
-                        year = y,
+                        year = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.year else null,
+                        startYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.startYear else null,
+                        endYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.endYear else null,
                         sort = filter.sortOrder.apiValue,
-                        limit = 20
+                        limit = 20,
+                        includedTags = filter.includedTags,
+                        excludedTags = filter.excludedTags,
+                        adultMode = filter.adultMode
                     )
                     if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to discover games")
                     res.getOrDefault(emptyList()).map { game ->
@@ -1029,12 +1033,16 @@ class SearchViewModel(
                             list.mapIndexed { idx, b -> mapBookToSearchResult(b, currentState.results.size + idx) }
                         }
                         filter is DiscoveryFilter.Game -> {
-                            val y = if (filter.mode == ContentDiscoveryMode.BY_YEAR) (filter.year ?: filter.endYear) else null
                             val list = GameMetadataManager.discoverGames(
                                 context = context ?: com.lx.tracklist.LXApplication.instance,
-                                year = y,
+                                year = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.year else null,
+                                startYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.startYear else null,
+                                endYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.endYear else null,
                                 sort = filter.sortOrder.apiValue,
-                                limit = 20
+                                limit = 20,
+                                includedTags = filter.includedTags,
+                                excludedTags = filter.excludedTags,
+                                adultMode = filter.adultMode
                             ).getOrThrow()
                             list.map { game ->
                                 SearchResultItem(
@@ -1345,12 +1353,16 @@ class SearchViewModel(
                         }
                         is DiscoveryFilter.Game -> {
                             val appContext = context ?: com.lx.tracklist.LXApplication.instance
-                            val y = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) (activeFilter.year ?: activeFilter.endYear) else null
                             val list = GameMetadataManager.discoverGames(
                                 context = appContext,
-                                year = y,
+                                year = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.year else null,
+                                startYear = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.startYear else null,
+                                endYear = if (activeFilter.mode == ContentDiscoveryMode.BY_YEAR) activeFilter.endYear else null,
                                 sort = activeFilter.sortOrder.apiValue,
-                                limit = 20
+                                limit = 20,
+                                includedTags = activeFilter.includedTags,
+                                excludedTags = activeFilter.excludedTags,
+                                adultMode = activeFilter.adultMode
                             ).getOrThrow()
                             return@withContext list.map { game ->
                                 SearchResultItem(
