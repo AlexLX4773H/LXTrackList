@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.6.5-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-0.6.6-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26--36)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Kotlin_2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
   <img src="https://img.shields.io/badge/UI-Jetpack_Compose_&_Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" />
@@ -14,6 +14,24 @@
   <img src="https://img.shields.io/badge/Theme-OLED_Dark_&_Neon_Lime_/_Custom_Themes-A7EF60?style=flat-square" alt="Theme" />
   <img src="https://img.shields.io/badge/Privacy-100%25_Local_&_Offline_First-success?style=flat-square" alt="Privacy" />
 </p>
+
+---
+
+## 🚀 What's New in v0.6.6
+
+- **🎮 Platform-Specific Game Vector Icons**:
+  - Entity details now display authentic, themed vector icons for **PC** (desktop monitor), **PlayStation** (PS logo), **Xbox**, **Mobile** (smartphone), **Nintendo Switch** (Joy-Con), and **Retro** (arcade joystick), replacing generic controller icons.
+- **⚡ Compact Y-Axis Custom Units & Clean Presets**:
+  - In Edit Entity for Games, tracking units feature a vertically streamlined layout with reduced height, side-by-side inputs, and cleaned presets (removed redundant *Achievements* and *Bosses*).
+- **⏳ Universal NYA & NYP Release Countdowns**:
+  - Real-time release countdowns (e.g. `In 5d 10h`, `In 90d`) and contextual schedule badges (`Releasing`, `Publishing`, `Premiering`) now extend across **Movies**, **TV Shows**, **Video Games**, **Light Novels**, **Manga**, and **Manhwa**, matching the countdown banner used for Anime.
+- **🔍 Advanced Game Discovery (Full Parity with Movies Discovery)**:
+  - Added next-year preset selection chips (e.g. `2027`), `From ▾` / `To ▾` year range selectors, **Select & Exclude Tags** (IGDB genres), **Original Language** filters, and a **3-State 18+ Toggle Cycle** with compact vertical sizing.
+- **📊 Streamlined Stats Screen & Complete Analytics Engine**:
+  - Removed the duplicate "Left" metric from the top card header row to prevent mean score text wrapping.
+  - Highlighted **"To Complete"** in electric neon green (`LXPrimaryGreen`) in the bottom breakdown column.
+  - Decreased typography sizing across status and metric rows for crisp, collision-free rendering on all screen sizes.
+  - Added a comprehensive documentation section and reference table explaining exact formulas for time spent, remaining completion time, rewatch/reread multipliers, and mean scores across all categories.
 
 ---
 
