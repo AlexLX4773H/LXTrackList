@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -107,9 +108,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -1324,49 +1329,86 @@ fun AddEditScreen(
                                         ) {
                                             Text("-1%", fontSize = 11.sp)
                                         }
-                                        Box(
+                                        val focusRequester = remember { FocusRequester() }
+                                        val focusManager = LocalFocusManager.current
+                                        var isFocused by remember { mutableStateOf(false) }
+                                        var localText by remember { mutableStateOf(state.gameProgressPercent.toString()) }
+
+                                        LaunchedEffect(state.gameProgressPercent) {
+                                            if (!isFocused || localText.isEmpty()) {
+                                                if (localText.toIntOrNull() != state.gameProgressPercent) {
+                                                    localText = state.gameProgressPercent.toString()
+                                                }
+                                            } else if (localText.toIntOrNull() != state.gameProgressPercent) {
+                                                localText = state.gameProgressPercent.toString()
+                                            }
+                                        }
+
+                                        BasicTextField(
+                                            value = localText,
+                                            onValueChange = { input ->
+                                                val digits = input.filter { it.isDigit() }.take(3)
+                                                localText = digits
+                                                val num = digits.toIntOrNull()
+                                                if (num != null) {
+                                                    val clamped = num.coerceIn(0, 100)
+                                                    viewModel.updateGameProgressPercent(clamped)
+                                                } else if (digits.isEmpty()) {
+                                                    viewModel.updateGameProgressPercent(0)
+                                                }
+                                            },
+                                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                                color = LXTextPrimary,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                textAlign = TextAlign.Center
+                                            ),
+                                            keyboardOptions = KeyboardOptions(
+                                                keyboardType = KeyboardType.Number,
+                                                imeAction = ImeAction.Done
+                                            ),
+                                            keyboardActions = KeyboardActions(
+                                                onDone = {
+                                                    focusManager.clearFocus()
+                                                }
+                                            ),
+                                            singleLine = true,
+                                            maxLines = 1,
+                                            cursorBrush = SolidColor(LXPrimaryGreen),
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .height(32.dp)
                                                 .background(LXSurfaceElevated, RoundedCornerShape(6.dp))
-                                                .border(1.dp, LXBorder, RoundedCornerShape(6.dp)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.Center,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 4.dp)
-                                            ) {
-                                                BasicTextField(
-                                                    value = if (state.gameProgressPercent >= 0) state.gameProgressPercent.toString() else "",
-                                                    onValueChange = {
-                                                        val num = it.toIntOrNull()
-                                                        if (num != null) viewModel.updateGameProgressPercent(num.coerceIn(0, 100))
-                                                        else if (it.isEmpty()) viewModel.updateGameProgressPercent(0)
-                                                    },
-                                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                                        color = LXTextPrimary,
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 13.sp,
-                                                        textAlign = TextAlign.Center
-                                                    ),
-                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                                    singleLine = true,
-                                                    maxLines = 1,
-                                                    cursorBrush = SolidColor(LXPrimaryGreen),
-                                                    modifier = Modifier.width(IntrinsicSize.Min)
+                                                .border(
+                                                    width = if (isFocused) 1.5.dp else 1.dp,
+                                                    color = if (isFocused) LXPrimaryGreen else LXBorder,
+                                                    shape = RoundedCornerShape(6.dp)
                                                 )
-                                                Text(
-                                                    text = "%",
-                                                    color = LXTextSecondary,
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    modifier = Modifier.padding(start = 2.dp)
-                                                )
+                                                .focusRequester(focusRequester)
+                                                .onFocusChanged { focusState ->
+                                                    isFocused = focusState.isFocused
+                                                    if (!focusState.isFocused && localText.isEmpty()) {
+                                                        localText = state.gameProgressPercent.toString()
+                                                    }
+                                                },
+                                            decorationBox = { innerTextField ->
+                                                Box(
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    if (localText.isEmpty()) {
+                                                        Text(
+                                                            text = "0",
+                                                            color = LXTextSecondary.copy(alpha = 0.4f),
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 13.sp,
+                                                            textAlign = TextAlign.Center
+                                                        )
+                                                    }
+                                                    innerTextField()
+                                                }
                                             }
-                                        }
+                                        )
                                         OutlinedButton(
                                             onClick = { viewModel.updateGameProgressPercent(state.gameProgressPercent + 1) },
                                             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
