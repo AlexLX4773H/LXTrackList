@@ -78,6 +78,10 @@ jobs:
           TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}
           MAL_CLIENT_ID=${{ secrets.MAL_CLIENT_ID }}
           GOOGLE_BOOKS_API_KEY=${{ secrets.GOOGLE_BOOKS_API_KEY }}
+          IGDB_CLIENT_ID=${{ secrets.IGDB_CLIENT_ID }}
+          IGDB_CLIENT_SECRET=${{ secrets.IGDB_CLIENT_SECRET }}
+          RAWG_API_KEY=${{ secrets.RAWG_API_KEY }}
+          STEAMGRIDDB_API_KEY=${{ secrets.STEAMGRIDDB_API_KEY }}
           EOF
 
       - name: Prepare Signing Keystore
