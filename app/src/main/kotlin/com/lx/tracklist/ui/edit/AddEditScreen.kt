@@ -1086,11 +1086,7 @@ fun AddEditScreen(
                                     color = LXTextPrimary
                                 )
                                 val presetPlatforms = remember {
-                                    listOf(
-                                        "PC (Steam)", "PC (Epic)", "PC (GOG)", "PS5", "PS4",
-                                        "Xbox Series X|S", "Xbox One", "Nintendo Switch", "Switch 2",
-                                        "Steam Deck", "Android", "iOS", "Retro / Emulated"
-                                    )
+                                    MediaEntry.CANONICAL_GAME_PLATFORMS
                                 }
                                 val currentPlatforms = remember(state.gamePlatforms) {
                                     MediaEntry.parseGamePlatforms(state.gamePlatforms)
@@ -1118,7 +1114,7 @@ fun AddEditScreen(
                                     value = state.gamePlatforms,
                                     onValueChange = { viewModel.updateGamePlatforms(it) },
                                     label = { Text("Platform(s) (comma-separated or custom)") },
-                                    placeholder = { Text("e.g. PC (Steam), PS5, Nintendo Switch") },
+                                    placeholder = { Text("e.g. PC, PS, XBox, Switch, Mobile, Retro") },
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = outlinedColors()
                                 )
@@ -1658,38 +1654,69 @@ fun AddEditScreen(
             }
 
             // Cover Image Section with Web Search Button & Preview
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Cover Image", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (state.mediaType == MediaType.GAME) {
+            if (state.mediaType == MediaType.GAME) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Cover Image",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = LXTextPrimary
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Button(
                             onClick = { showSteamGridPicker = true },
+                            modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = LXScoreGold.copy(alpha = 0.15f),
                                 contentColor = LXScoreGold
                             ),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                         ) {
                             Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("SteamGridDB", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("SteamGridDB", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                        }
+                        Button(
+                            onClick = { showCoverSearchDialog = true },
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen.copy(alpha = 0.15f),
+                                contentColor = LXPrimaryGreen
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Search Web", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                         }
                     }
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Cover Image", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)
                     Button(
                         onClick = { showCoverSearchDialog = true },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = LXPrimaryGreen.copy(alpha = 0.15f),
                             contentColor = LXPrimaryGreen
                         ),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                     ) {
                         Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Search Web", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Search Web", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                     }
                 }
             }

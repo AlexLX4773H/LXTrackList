@@ -1159,7 +1159,6 @@ fun SettingsScreen(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
                             bookSyncState = bookSyncState,
-                            gameSyncState = gameSyncState,
                             tachiyomiResolveState = tachiyomiResolveState,
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
@@ -1176,11 +1175,6 @@ fun SettingsScreen(
                                 viewModel.startBookSync(context, force)
                             },
                             onCancelBookSync = { viewModel.cancelBookSync(context) },
-                            onStartGameSync = { force ->
-                                ensureNotificationPermission()
-                                viewModel.startGameSync(context, force)
-                            },
-                            onCancelGameSync = { viewModel.cancelGameSync(context) },
                             onStartTachiyomiResolution = {
                                 ensureNotificationPermission()
                                 viewModel.startTachiyomiResolution(context)
@@ -1308,7 +1302,6 @@ fun SettingsScreen(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
                             bookSyncState = bookSyncState,
-                            gameSyncState = gameSyncState,
                             tachiyomiResolveState = tachiyomiResolveState,
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
@@ -1325,11 +1318,6 @@ fun SettingsScreen(
                                 viewModel.startBookSync(context, force)
                             },
                             onCancelBookSync = { viewModel.cancelBookSync(context) },
-                            onStartGameSync = { force ->
-                                ensureNotificationPermission()
-                                viewModel.startGameSync(context, force)
-                            },
-                            onCancelGameSync = { viewModel.cancelGameSync(context) },
                             onStartTachiyomiResolution = {
                                 ensureNotificationPermission()
                                 viewModel.startTachiyomiResolution(context)
@@ -3425,7 +3413,6 @@ private fun SyncJobsContent(
     jikanSyncState: JikanSyncProgress,
     tmdbSyncState: TmdbSyncProgress,
     bookSyncState: BookSyncProgress,
-    gameSyncState: GameSyncProgress,
     tachiyomiResolveState: TachiyomiResolveProgress,
     onStartJikanSync: (Boolean) -> Unit,
     onCancelJikanSync: () -> Unit,
@@ -3433,8 +3420,6 @@ private fun SyncJobsContent(
     onCancelTmdbSync: () -> Unit,
     onStartBookSync: (Boolean) -> Unit,
     onCancelBookSync: () -> Unit,
-    onStartGameSync: (Boolean) -> Unit,
-    onCancelGameSync: () -> Unit,
     onStartTachiyomiResolution: () -> Unit,
     onCancelTachiyomiResolution: () -> Unit,
     modifier: Modifier = Modifier
@@ -4479,12 +4464,6 @@ private fun SyncJobsContent(
                 }
             }
         }
-
-        GameSettingsCard(
-            gameSyncState = gameSyncState,
-            onStartSync = onStartGameSync,
-            onCancelSync = onCancelGameSync
-        )
 
         Spacer(modifier = Modifier.height(24.dp))
     }

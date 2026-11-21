@@ -423,7 +423,8 @@ fun MediaCard(
                                 )
 
                                 Row(
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                    modifier = Modifier.weight(1f, fill = false),
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.End),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     if (entry.mediaType == MediaType.GAME) {
@@ -435,7 +436,10 @@ fun MediaCard(
                                                 text = "🎮 $firstTwo$extra",
                                                 style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
                                                 color = colors.primary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier
+                                                    .weight(1f, fill = false)
                                                     .background(colors.primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
                                                     .padding(horizontal = 5.dp, vertical = 2.dp)
                                             )
@@ -459,6 +463,8 @@ fun MediaCard(
                                             text = nyaLabel,
                                             style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
                                             color = androidx.compose.ui.graphics.Color(0xFFF59E0B),
+                                            maxLines = 1,
+                                            softWrap = false,
                                             modifier = Modifier
                                                 .background(androidx.compose.ui.graphics.Color(0xFFF59E0B).copy(alpha = 0.15f), RoundedCornerShape(4.dp))
                                                 .padding(horizontal = 5.dp, vertical = 2.dp)
@@ -469,6 +475,8 @@ fun MediaCard(
                                             text = airingLabel,
                                             style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
                                             color = colors.airingBlue,
+                                            maxLines = 1,
+                                            softWrap = false,
                                             modifier = Modifier
                                                 .background(colors.airingBlue.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
                                                 .padding(horizontal = 5.dp, vertical = 2.dp)
@@ -480,6 +488,8 @@ fun MediaCard(
                                             text = "REWATCHING",
                                             style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
                                             color = colors.primary,
+                                            maxLines = 1,
+                                            softWrap = false,
                                             modifier = Modifier
                                                 .background(colors.primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
                                                 .padding(horizontal = 5.dp, vertical = 2.dp)
@@ -503,14 +513,16 @@ fun MediaCard(
                                             Text(
                                                 text = "${entry.score}",
                                                 style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                                color = colors.scoreGold
+                                                color = colors.scoreGold,
+                                                maxLines = 1,
+                                                softWrap = false
                                             )
                                         }
                                     } else if (entry.externalScore != null && entry.externalScore > 0f) {
                                         val scoreStr = if (entry.externalScore % 1.0f == 0.0f) {
                                             entry.externalScore.toInt().toString()
                                         } else {
-                                            String.format(Locale.US, "%.2f", entry.externalScore).trimEnd('0').trimEnd('.')
+                                            String.format(Locale.US, "%.1f", entry.externalScore)
                                         }
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
@@ -528,7 +540,9 @@ fun MediaCard(
                                             Text(
                                                 text = scoreStr,
                                                 style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp, fontWeight = FontWeight.Normal),
-                                                color = colors.scoreGold.copy(alpha = 0.85f)
+                                                color = colors.scoreGold.copy(alpha = 0.85f),
+                                                maxLines = 1,
+                                                softWrap = false
                                             )
                                         }
                                     }

@@ -1106,6 +1106,28 @@ class FeaturesTest {
     }
 
     @Test
+    fun testRewatchingInclusionAndExclusionFilter() {
+        val e1 = MediaEntry(id = 1L, title = "Rewatching Show", mediaType = MediaType.SHOW, status = MediaStatus.WATCHING, isRewatching = true)
+        val e2 = MediaEntry(id = 2L, title = "Normal Show", mediaType = MediaType.SHOW, status = MediaStatus.WATCHING, isRewatching = false)
+
+        val entries = listOf(e1, e2)
+
+        // Include only rewatching
+        val onlyRewatching = entries.filter { it.isRewatching }
+        assertEquals(listOf(1L), onlyRewatching.map { it.id })
+
+        // Exclude rewatching
+        val excludeRewatching = entries.filter { !it.isRewatching }
+        assertEquals(listOf(2L), excludeRewatching.map { it.id })
+
+        // LibraryUiState helper
+        val uiState = com.lx.tracklist.ui.library.LibraryUiState(
+            rewatchingFilter = com.lx.tracklist.ui.library.InclusionFilterOption.INCLUDE_ONLY
+        )
+        assertTrue(uiState.onlyRewatching)
+    }
+
+    @Test
     fun testScoreDistributionCalculation() {
         val anime1 = MediaEntry(id = 1L, title = "A1", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, score = 10)
         val anime2 = MediaEntry(id = 2L, title = "A2", mediaType = MediaType.ANIME, status = MediaStatus.COMPLETED, score = 8)

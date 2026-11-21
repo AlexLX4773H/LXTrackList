@@ -71,6 +71,7 @@ import com.lx.tracklist.R
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
@@ -1700,6 +1701,7 @@ fun LibraryScreen(
                     state.includedTags.isNotEmpty() ||
                     state.excludedTags.isNotEmpty() ||
                     state.favoritesFilter != InclusionFilterOption.ALL ||
+                    state.rewatchingFilter != InclusionFilterOption.ALL ||
                     state.airingFilter != AiringFilterOption.ALL ||
                     state.externalTrackingFilter != InclusionFilterOption.ALL ||
                     state.coverImageFilter != CoverImageFilterOption.ALL
@@ -1806,6 +1808,24 @@ fun LibraryScreen(
                     }
 
                     val isReadType = state.selectedCategoryFilter?.isReadType == true
+                    val isPlayType = state.selectedCategoryFilter?.isPlayType == true
+                    val rewatchTerm = if (isReadType) "Rereading" else if (isPlayType) "Replaying" else "Rewatching"
+
+                    if (state.rewatchingFilter == InclusionFilterOption.INCLUDE_ONLY) {
+                        item {
+                            RemovableFilterBadge(
+                                label = "+$rewatchTerm",
+                                onRemove = { viewModel.setRewatchingFilter(InclusionFilterOption.ALL) }
+                            )
+                        }
+                    } else if (state.rewatchingFilter == InclusionFilterOption.EXCLUDE) {
+                        item {
+                            RemovableFilterBadge(
+                                label = "-$rewatchTerm",
+                                onRemove = { viewModel.setRewatchingFilter(InclusionFilterOption.ALL) }
+                            )
+                        }
+                    }
                     val airingFilterPrefix = if (isReadType) "Publishing" else "Airing"
                     val nyaPrefix = if (isReadType) "NYP" else "NYA"
                     when (state.airingFilter) {
@@ -3283,6 +3303,20 @@ private fun AdvancedFilterSheet(
                         icon = Icons.Default.Favorite,
                         state = state.favoritesFilter,
                         onClick = { viewModel.cycleFavoritesFilter() }
+                    )
+
+                    // Rewatching / Rereading / Replaying Filter
+                    val rewatchTitle = if (isReadType) "Rereading" else if (state.selectedCategoryFilter?.isPlayType == true) "Replaying" else "Rewatching"
+                    TriStateFilterRow(
+                        title = rewatchTitle,
+                        subtitle = when (state.rewatchingFilter) {
+                            InclusionFilterOption.ALL -> "Tap: Only $rewatchTitle → Exclude $rewatchTitle → Off"
+                            InclusionFilterOption.INCLUDE_ONLY -> "Showing Only $rewatchTitle"
+                            InclusionFilterOption.EXCLUDE -> "Excluding / Hiding $rewatchTitle"
+                        },
+                        icon = Icons.Default.Refresh,
+                        state = state.rewatchingFilter,
+                        onClick = { viewModel.cycleRewatchingFilter() }
                     )
 
                     // External Tracking Filter

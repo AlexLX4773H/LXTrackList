@@ -687,11 +687,7 @@ data class MediaEntry(
     }
 
     fun getGamePlatformList(): List<String> {
-        return gamePlatforms
-            ?.split(",")
-            ?.map { it.trim() }
-            ?.filter { it.isNotBlank() }
-            ?: emptyList()
+        return parseGamePlatforms(gamePlatforms)
     }
 
     fun getGameSeriesEntries(): List<GameSeriesItem> {
@@ -911,16 +907,43 @@ data class MediaEntry(
             return Gson().toJson(items)
         }
 
+        val CANONICAL_GAME_PLATFORMS = listOf("PC", "PS", "XBox", "Switch", "Mobile", "Retro")
+
+        fun canonicalizeGamePlatform(raw: String): String {
+            val lower = raw.trim().lowercase(Locale.US)
+            return when {
+                lower == "pc" || lower.contains("windows") || lower.contains("steam") || lower.contains("epic") || lower.contains("gog") || lower.contains("mac") || lower.contains("linux") || lower.contains("dos") -> "PC"
+                lower == "ps" || lower.contains("playstation") || lower.contains("ps5") || lower.contains("ps4") || lower.contains("ps3") || lower.contains("ps2") || lower.contains("ps1") || lower.contains("psx") || lower.contains("psp") || lower.contains("vita") -> "PS"
+                lower == "xbox" || lower.contains("xbox") -> "XBox"
+                lower == "switch" || lower.contains("switch") -> "Switch"
+                lower == "mobile" || lower.contains("android") || lower.contains("ios") || lower.contains("iphone") || lower.contains("ipad") || lower.contains("phone") -> "Mobile"
+                lower == "retro" || lower.contains("retro") || lower.contains("emulat") || lower.contains("arcade") || lower.contains("nes") || lower.contains("snes") || lower.contains("game boy") || lower.contains("gba") || lower.contains("gbc") || lower.contains("sega") || lower.contains("atari") || lower.contains("amiga") || lower.contains("commodore") || lower.contains("dreamcast") || lower.contains("gamecube") || lower.contains("nintendo 64") || lower.contains("n64") || lower.contains("wii") || lower.contains("ds") -> "Retro"
+                else -> {
+                    CANONICAL_GAME_PLATFORMS.firstOrNull { it.equals(raw.trim(), ignoreCase = true) } ?: raw.trim()
+                }
+            }
+        }
+
         fun formatGamePlatforms(platforms: List<String>): String? {
-            val cleaned = platforms.map { it.trim() }.filter { it.isNotBlank() }
-            return if (cleaned.isEmpty()) null else cleaned.joinToString(", ")
+            val canonicalList = platforms
+                .map { canonicalizeGamePlatform(it) }
+                .filter { it.isNotBlank() }
+                .distinct()
+            if (canonicalList.isEmpty()) return null
+            val sorted = canonicalList.sortedWith(Comparator { a, b ->
+                val idxA = CANONICAL_GAME_PLATFORMS.indexOf(a).let { if (it == -1) Int.MAX_VALUE else it }
+                val idxB = CANONICAL_GAME_PLATFORMS.indexOf(b).let { if (it == -1) Int.MAX_VALUE else it }
+                if (idxA != idxB) idxA.compareTo(idxB) else a.compareTo(b)
+            })
+            return sorted.joinToString(", ")
         }
 
         fun parseGamePlatforms(platformsString: String?): List<String> {
             return platformsString
                 ?.split(",")
-                ?.map { it.trim() }
+                ?.map { canonicalizeGamePlatform(it.trim()) }
                 ?.filter { it.isNotBlank() }
+                ?.distinct()
                 ?: emptyList()
         }
     }

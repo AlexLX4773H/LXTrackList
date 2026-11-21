@@ -182,12 +182,12 @@ class GameEntryTest {
 
         val platforms = entry.getGamePlatformList()
         assertEquals(3, platforms.size)
-        assertEquals("PC (Steam)", platforms[0])
-        assertEquals("PS5", platforms[1])
-        assertEquals("Xbox Series X|S", platforms[2])
+        assertEquals("PC", platforms[0])
+        assertEquals("PS", platforms[1])
+        assertEquals("XBox", platforms[2])
 
         val formatted = MediaEntry.formatGamePlatforms(listOf("PC (Steam)", "Nintendo Switch"))
-        assertEquals("PC (Steam), Nintendo Switch", formatted)
+        assertEquals("PC, Switch", formatted)
     }
 
     @Test

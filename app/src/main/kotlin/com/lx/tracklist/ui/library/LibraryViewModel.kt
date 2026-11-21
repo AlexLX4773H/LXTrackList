@@ -98,6 +98,7 @@ data class LibraryUiState(
     val availableTags: List<String> = emptyList(),
     val tagCounts: Map<String, Int> = emptyMap(),
     val favoritesFilter: InclusionFilterOption = InclusionFilterOption.ALL,
+    val rewatchingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val airingFilter: AiringFilterOption = AiringFilterOption.ALL,
     val externalTrackingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val validExternalIdFilter: InclusionFilterOption = InclusionFilterOption.ALL,
@@ -113,6 +114,7 @@ data class LibraryUiState(
 ) {
     val isSelectionMode: Boolean get() = selectedIds.isNotEmpty()
     val onlyFavorites: Boolean get() = favoritesFilter == InclusionFilterOption.INCLUDE_ONLY
+    val onlyRewatching: Boolean get() = rewatchingFilter == InclusionFilterOption.INCLUDE_ONLY
     val onlyAiring: Boolean get() = airingFilter == AiringFilterOption.AIRING_ONLY
     val onlyNya: Boolean get() = airingFilter == AiringFilterOption.NYA_ONLY
     val onlyExternallyTracked: Boolean get() = externalTrackingFilter == InclusionFilterOption.INCLUDE_ONLY
@@ -141,6 +143,7 @@ private data class LibraryFilterState(
     val includedTags: Set<String> = emptySet(),
     val excludedTags: Set<String> = emptySet(),
     val favoritesFilter: InclusionFilterOption = InclusionFilterOption.ALL,
+    val rewatchingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val airingFilter: AiringFilterOption = AiringFilterOption.ALL,
     val externalTrackingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val validExternalIdFilter: InclusionFilterOption = InclusionFilterOption.ALL,
@@ -160,6 +163,7 @@ private data class LibraryFilterState(
             if (minScore != null || onlyUnrated) count++
             if (includedTags.isNotEmpty() || excludedTags.isNotEmpty()) count++
             if (favoritesFilter != InclusionFilterOption.ALL) count++
+            if (rewatchingFilter != InclusionFilterOption.ALL) count++
             if (airingFilter != AiringFilterOption.ALL) count++
             if (externalTrackingFilter != InclusionFilterOption.ALL) count++
             if (validExternalIdFilter != InclusionFilterOption.ALL) count++
@@ -219,6 +223,17 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             }
             InclusionFilterOption.EXCLUDE -> {
                 list = list.filter { !it.isFavorite }
+            }
+        }
+
+        // 3b. Rewatching Filter (Tri-State: All / Include Only / Exclude)
+        when (filter.rewatchingFilter) {
+            InclusionFilterOption.ALL -> { /* no-op */ }
+            InclusionFilterOption.INCLUDE_ONLY -> {
+                list = list.filter { it.isRewatching }
+            }
+            InclusionFilterOption.EXCLUDE -> {
+                list = list.filter { !it.isRewatching }
             }
         }
 
@@ -343,6 +358,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             availableTags = allAvailableTags,
             tagCounts = tagCounts,
             favoritesFilter = filter.favoritesFilter,
+            rewatchingFilter = filter.rewatchingFilter,
             airingFilter = filter.airingFilter,
             externalTrackingFilter = filter.externalTrackingFilter,
             validExternalIdFilter = filter.validExternalIdFilter,
@@ -466,6 +482,10 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         _filterState.update { it.copy(favoritesFilter = it.favoritesFilter.next()) }
     }
 
+    fun cycleRewatchingFilter() {
+        _filterState.update { it.copy(rewatchingFilter = it.rewatchingFilter.next()) }
+    }
+
     fun cycleAiringFilter() {
         _filterState.update { it.copy(airingFilter = it.airingFilter.next()) }
     }
@@ -480,6 +500,10 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun setFavoritesFilter(option: InclusionFilterOption) {
         _filterState.update { it.copy(favoritesFilter = option) }
+    }
+
+    fun setRewatchingFilter(option: InclusionFilterOption) {
+        _filterState.update { it.copy(rewatchingFilter = option) }
     }
 
     fun setAiringFilter(option: AiringFilterOption) {
@@ -503,6 +527,8 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
     }
 
     fun toggleFavoritesFilter() = cycleFavoritesFilter()
+
+    fun toggleRewatchingFilter() = cycleRewatchingFilter()
 
     fun toggleAiringFilter() = cycleAiringFilter()
 
@@ -547,6 +573,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                 includedTags = emptySet(),
                 excludedTags = emptySet(),
                 favoritesFilter = InclusionFilterOption.ALL,
+                rewatchingFilter = InclusionFilterOption.ALL,
                 airingFilter = AiringFilterOption.ALL,
                 externalTrackingFilter = InclusionFilterOption.ALL,
                 validExternalIdFilter = InclusionFilterOption.ALL,
