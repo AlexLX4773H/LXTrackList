@@ -1101,6 +1101,7 @@ fun AddEditScreen(
                                             selected = isSelected,
                                             onClick = { viewModel.toggleGamePlatform(platform) },
                                             label = { Text(platform, fontSize = 11.sp) },
+                                            modifier = Modifier.height(28.dp),
                                             colors = FilterChipDefaults.filterChipColors(
                                                 selectedContainerColor = LXPrimaryGreen,
                                                 selectedLabelColor = LXBackgroundBlack,
@@ -1137,7 +1138,7 @@ fun AddEditScreen(
                                         selected = state.trackingUnit != TrackingUnit.CUSTOM,
                                         onClick = { viewModel.updateTrackingUnit(TrackingUnit.PERCENTAGE) },
                                         label = { Text("Percentage (0..100%)", fontSize = 11.sp) },
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier.weight(1f).height(32.dp),
                                         colors = FilterChipDefaults.filterChipColors(
                                             selectedContainerColor = LXPrimaryGreen,
                                             selectedLabelColor = LXBackgroundBlack,
@@ -1149,7 +1150,7 @@ fun AddEditScreen(
                                         selected = state.trackingUnit == TrackingUnit.CUSTOM,
                                         onClick = { viewModel.updateTrackingUnit(TrackingUnit.CUSTOM) },
                                         label = { Text("Custom Units", fontSize = 11.sp) },
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier.weight(1f).height(32.dp),
                                         colors = FilterChipDefaults.filterChipColors(
                                             selectedContainerColor = LXPrimaryGreen,
                                             selectedLabelColor = LXBackgroundBlack,
@@ -1245,14 +1246,14 @@ fun AddEditScreen(
                                     }
                                 } else {
                                     // Custom Units Mode
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Text(
                                             text = "Unit Presets",
-                                            style = MaterialTheme.typography.bodySmall,
+                                            style = MaterialTheme.typography.labelSmall,
                                             color = LXTextSecondary
                                         )
                                         val unitPresets = remember {
-                                            listOf("Levels", "Cities", "Chapters", "Missions", "Bosses", "Hours", "Quests", "Achievements")
+                                            listOf("Levels", "Cities", "Chapters", "Missions", "Hours", "Quests")
                                         }
                                         FlowRow(
                                             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1264,6 +1265,7 @@ fun AddEditScreen(
                                                     selected = isSelected,
                                                     onClick = { viewModel.updateCustomUnitLabel(preset) },
                                                     label = { Text(preset, fontSize = 11.sp) },
+                                                    modifier = Modifier.height(28.dp),
                                                     colors = FilterChipDefaults.filterChipColors(
                                                         selectedContainerColor = LXPrimaryGreen,
                                                         selectedLabelColor = LXBackgroundBlack,
@@ -1277,7 +1279,7 @@ fun AddEditScreen(
                                         OutlinedTextField(
                                             value = state.customUnitLabel,
                                             onValueChange = { viewModel.updateCustomUnitLabel(it) },
-                                            label = { Text("Unit Name (e.g. Levels, Cities, Quests)") },
+                                            label = { Text("Unit Name (e.g. Levels, Chapters)") },
                                             singleLine = true,
                                             modifier = Modifier.fillMaxWidth(),
                                             colors = outlinedColors()
@@ -1285,7 +1287,7 @@ fun AddEditScreen(
 
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             OutlinedTextField(

@@ -631,7 +631,7 @@ fun DetailScreen(
                             }
                             if (currentEntry.mediaType == MediaType.GAME) {
                                 currentEntry.getGamePlatformList().forEach { platform ->
-                                    MetaChip(label = "🎮 $platform", color = LXPrimaryGreen)
+                                    GamePlatformChip(platform = platform, color = LXPrimaryGreen)
                                 }
                             }
                             if (currentEntry.isNotYetAiredOrPublished) {
@@ -823,7 +823,7 @@ fun DetailScreen(
                             }
                             if (currentEntry.mediaType == MediaType.GAME) {
                                 currentEntry.getGamePlatformList().forEach { platform ->
-                                    MetaChip(label = "🎮 $platform", color = LXPrimaryGreen)
+                                    GamePlatformChip(platform = platform, color = LXPrimaryGreen)
                                 }
                             }
                             if (currentEntry.isNotYetAiredOrPublished) {
@@ -2654,6 +2654,42 @@ private fun MetaChip(label: String, color: Color) {
     ) {
         Text(
             text = label,
+            color = color,
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+private fun getPlatformIconRes(platform: String): Int {
+    val lower = platform.trim().lowercase(Locale.US)
+    return when {
+        lower == "pc" || lower.contains("windows") || lower.contains("steam") || lower.contains("epic") || lower.contains("gog") || lower.contains("mac") || lower.contains("linux") || lower.contains("dos") || lower.contains("computer") -> R.drawable.ic_platform_pc
+        lower == "ps" || lower.contains("playstation") || lower.contains("ps5") || lower.contains("ps4") || lower.contains("ps3") || lower.contains("ps2") || lower.contains("ps1") || lower.contains("psx") || lower.contains("psp") || lower.contains("vita") || lower.contains("sony") -> R.drawable.ic_platform_ps
+        lower == "xbox" || lower.contains("xbox") || lower.contains("microsoft") -> R.drawable.ic_platform_xbox
+        lower == "switch" || lower.contains("switch") || lower.contains("nintendo") || lower.contains("wii") -> R.drawable.ic_platform_switch
+        lower == "mobile" || lower.contains("android") || lower.contains("ios") || lower.contains("iphone") || lower.contains("ipad") || lower.contains("phone") -> R.drawable.ic_platform_mobile
+        lower == "retro" || lower.contains("retro") || lower.contains("emulat") || lower.contains("arcade") || lower.contains("nes") || lower.contains("snes") || lower.contains("game boy") || lower.contains("gba") || lower.contains("gbc") || lower.contains("sega") || lower.contains("atari") -> R.drawable.ic_platform_retro
+        else -> R.drawable.ic_platform_default
+    }
+}
+
+@Composable
+private fun GamePlatformChip(platform: String, color: Color = LXPrimaryGreen) {
+    DetailPill(
+        backgroundColor = color.copy(alpha = 0.15f),
+        borderColor = color.copy(alpha = 0.4f)
+    ) {
+        Icon(
+            painter = painterResource(id = getPlatformIconRes(platform)),
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(13.dp)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = platform,
             color = color,
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
             maxLines = 1,
