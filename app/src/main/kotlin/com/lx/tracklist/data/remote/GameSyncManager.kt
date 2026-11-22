@@ -2,10 +2,15 @@ package com.lx.tracklist.data.remote
 
 import android.content.Context
 import android.util.Log
+import coil.Coil
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.google.gson.Gson
+import com.lx.tracklist.data.local.FailedCoverTracker
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.repository.MediaRepository
+import com.lx.tracklist.util.NotificationHelper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,10 +61,37 @@ object GameSyncManager {
         return src.equals("IGDB", ignoreCase = true) || src.equals("RAWG", ignoreCase = true) || src.isBlank()
     }
 
+    fun needsSync(entry: MediaEntry, forceRefresh: Boolean): Boolean {
+        if (forceRefresh) return true
+
+        val extId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()
+        if (extId.isNullOrBlank()) return true
+
+        val missingCover = entry.coverImageUri.isNullOrBlank() ||
+                entry.coverImageUri.startsWith("file:") ||
+                FailedCoverTracker.isEntryCoverBroken(entry)
+
+        val missingPlatforms = entry.gamePlatforms.isNullOrBlank()
+        val missingScore = entry.externalScore == null
+        val missingDuration = entry.durationMinutes == null || entry.durationMinutes == 0
+        val missingDates = entry.airedStartDate == null
+        val missingDescription = (entry.description ?: entry.notes).isNullOrBlank()
+        val missingRelated = entry.relatedEntriesJson.isNullOrBlank()
+
+        return missingCover ||
+                missingPlatforms ||
+                missingScore ||
+                missingDuration ||
+                missingDates ||
+                missingDescription ||
+                missingRelated
+    }
+
     suspend fun syncSingleEntry(
         context: Context,
         entry: MediaEntry,
-        repository: MediaRepository
+        repository: MediaRepository,
+        forceRefresh: Boolean = false
     ): Result<MediaEntry> {
         val extId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()
         val extSource = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim() ?: "IGDB"
@@ -85,14 +117,30 @@ object GameSyncManager {
             entry.relatedEntriesJson
         }
 
+        val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(entry)
         val coverUri = when {
-            !entry.coverImageUri.isNullOrBlank() && !entry.coverImageUri.startsWith("file:") -> entry.coverImageUri
+            forceRefresh && !details.coverUrl.isNullOrBlank() -> details.coverUrl
+            forceRefresh && !details.steamAppId.isNullOrBlank() -> GameMetadataManager.getSteamCdnPosterUrl(details.steamAppId)
+            !entry.coverImageUri.isNullOrBlank() && !entry.coverImageUri.startsWith("file:") && !isCoverBroken -> entry.coverImageUri
             !details.coverUrl.isNullOrBlank() -> details.coverUrl
             !details.steamAppId.isNullOrBlank() -> GameMetadataManager.getSteamCdnPosterUrl(details.steamAppId)
             else -> entry.coverImageUri
         }
 
-        val platformsStr = if (details.platforms.isNotEmpty() && entry.gamePlatforms.isNullOrBlank()) {
+        if (coverUri != entry.coverImageUri && !coverUri.isNullOrBlank()) {
+            FailedCoverTracker.markSuccess(entry.id, coverUri)
+            try {
+                val loader = Coil.imageLoader(context)
+                val req = ImageRequest.Builder(context)
+                    .data(coverUri)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .build()
+                loader.enqueue(req)
+            } catch (_: Exception) {}
+        }
+
+        val platformsStr = if (details.platforms.isNotEmpty() && (entry.gamePlatforms.isNullOrBlank() || forceRefresh)) {
             details.platforms.joinToString(", ")
         } else {
             entry.gamePlatforms
@@ -106,11 +154,12 @@ object GameSyncManager {
             coverImageUri = coverUri,
             gamePlatforms = platformsStr,
             relatedEntriesJson = relatedJson,
-            durationMinutes = if (entry.durationMinutes == null || entry.durationMinutes == 0) {
+            durationMinutes = if (entry.durationMinutes == null || entry.durationMinutes == 0 || forceRefresh) {
                 details.completionTimeMinutes ?: entry.durationMinutes
             } else entry.durationMinutes,
-            airedStartDate = details.releaseDateMillis ?: entry.airedStartDate,
-            description = if (entry.description.isNullOrBlank()) details.summary else entry.description,
+            airedStartDate = if (forceRefresh && details.releaseDateMillis != null) details.releaseDateMillis else (entry.airedStartDate ?: details.releaseDateMillis),
+            description = if (entry.description.isNullOrBlank() || forceRefresh) (details.summary ?: entry.description) else entry.description,
+            tags = if (entry.tags.isNullOrBlank() && details.genres.isNotEmpty()) details.genres.joinToString(", ") else entry.tags,
             updatedAt = System.currentTimeMillis()
         )
 
@@ -138,10 +187,21 @@ object GameSyncManager {
                 }
 
                 val targetEntries = allEntries.filter {
-                    isEligibleMediaForGame(it.mediaType) && (targetEntryIds == null || targetEntryIds.contains(it.id))
+                    isEligibleMediaForGame(it.mediaType) && needsSync(it, forceRefresh) && (targetEntryIds == null || targetEntryIds.contains(it.id))
                 }
                 if (targetEntries.isEmpty()) {
-                    _syncState.value = GameSyncProgress(isCompleted = true, statusMessage = "No game entries to sync.")
+                    val msg = "No game entries need syncing."
+                    _syncState.value = GameSyncProgress(isCompleted = true, statusMessage = msg)
+                    NotificationHelper.showGameSyncComplete(
+                        context = context,
+                        completed = 0,
+                        total = 0,
+                        updated = 0,
+                        failed = 0,
+                        lastError = null,
+                        isCancelled = false,
+                        profileName = profileName
+                    )
                     return@launch
                 }
 
@@ -166,7 +226,7 @@ object GameSyncManager {
                         )
                     }
 
-                    val res = syncSingleEntry(context, entry, repository)
+                    val res = syncSingleEntry(context, entry, repository, forceRefresh)
                     if (res.isSuccess) {
                         updated++
                     } else {
@@ -192,11 +252,42 @@ object GameSyncManager {
                         statusMessage = "Synced $updated games ($failed failed)"
                     )
                 }
+
+                NotificationHelper.showGameSyncComplete(
+                    context = context,
+                    completed = completed,
+                    total = targetEntries.size,
+                    updated = updated,
+                    failed = failed,
+                    lastError = null,
+                    isCancelled = false,
+                    profileName = profileName
+                )
             } catch (e: CancellationException) {
                 _syncState.update { it.copy(isRunning = false, statusMessage = "Sync canceled") }
+                NotificationHelper.showGameSyncComplete(
+                    context = context,
+                    completed = _syncState.value.completedCount,
+                    total = _syncState.value.totalCount,
+                    updated = _syncState.value.updatedCount,
+                    failed = _syncState.value.failedCount,
+                    lastError = "Sync canceled",
+                    isCancelled = true,
+                    profileName = profileName
+                )
             } catch (e: Exception) {
                 Log.e(TAG, "Library game sync error", e)
                 _syncState.update { it.copy(isRunning = false, lastErrorMessage = e.message) }
+                NotificationHelper.showGameSyncComplete(
+                    context = context,
+                    completed = _syncState.value.completedCount,
+                    total = _syncState.value.totalCount,
+                    updated = _syncState.value.updatedCount,
+                    failed = _syncState.value.failedCount,
+                    lastError = e.message,
+                    isCancelled = false,
+                    profileName = profileName
+                )
             } finally {
                 SyncForegroundService.checkAndStop(context)
             }

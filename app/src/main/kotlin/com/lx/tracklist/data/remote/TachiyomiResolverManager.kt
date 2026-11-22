@@ -112,6 +112,11 @@ object TachiyomiResolverManager {
 
     fun isEligibleForResolution(entry: MediaEntry): Boolean {
         if (entry.title.isBlank()) return false
+        if (entry.mediaType == MediaType.GAME) {
+            val hasValidGameSource = entry.externalSource.equals("IGDB", ignoreCase = true) ||
+                    entry.externalSource.equals("RAWG", ignoreCase = true)
+            return entry.externalId.isNullOrBlank() || !hasValidGameSource
+        }
         if (entry.mediaType == MediaType.BOOK) {
             val hasValidBookSource = entry.externalSource.equals("Google Books", ignoreCase = true) ||
                     entry.externalSource.equals("Open Library", ignoreCase = true) ||
@@ -340,6 +345,23 @@ object TachiyomiResolverManager {
         entryAltTitles: String? = null
     ): Boolean {
         val alt = candidate.subtitle?.takeIf { it.isNotBlank() && it != candidate.title }
+        return isConfidentExactMatch(queryTitle, candidate.title, alt, entryAltTitles)
+    }
+
+    fun isConfidentExactMatch(
+        queryTitle: String,
+        candidate: GameSearchResult,
+        entryAltTitles: String? = null
+    ): Boolean {
+        return isConfidentExactMatch(queryTitle, candidate.title, candidate.alternateTitle, entryAltTitles)
+    }
+
+    fun isConfidentExactMatch(
+        queryTitle: String,
+        candidate: GameDetails,
+        entryAltTitles: String? = null
+    ): Boolean {
+        val alt = candidate.alternateTitles.joinToString("\n").takeIf { it.isNotBlank() }
         return isConfidentExactMatch(queryTitle, candidate.title, alt, entryAltTitles)
     }
 
@@ -1060,6 +1082,9 @@ object TachiyomiResolverManager {
         context: Context?,
         skipExistingIdCheck: Boolean = false
     ): ResolutionOutcome {
+        if (entry.mediaType == MediaType.GAME) {
+            return matchAndResolveGame(entry, repository, context, skipExistingIdCheck)
+        }
         if (entry.mediaType == MediaType.BOOK) {
             return matchAndResolveBook(entry, repository, context, skipExistingIdCheck)
         }
@@ -1371,6 +1396,192 @@ object TachiyomiResolverManager {
                 title = entry.title,
                 externalId = entry.externalId,
                 reason = "No confident exact match found in Google Books, Open Library, or AniList Novels.",
+                evaluatedCandidates = evaluatedCandidateNames
+            )
+        )
+    }
+
+    private suspend fun matchAndResolveGame(
+        entry: MediaEntry,
+        repository: MediaRepository,
+        context: Context?,
+        skipExistingIdCheck: Boolean = false
+    ): ResolutionOutcome {
+        if (context == null) {
+            return ResolutionOutcome.Failed(
+                FailedItemReport(
+                    entryId = entry.id,
+                    title = entry.title,
+                    externalId = entry.externalId,
+                    errorMessage = "Context is null for Game resolution"
+                )
+            )
+        }
+
+        val queryTitle = entry.title.trim()
+        val cleanTitle = stripBracketedSuffixes(queryTitle).takeIf { it.isNotBlank() } ?: queryTitle
+        val evaluatedCandidateNames = mutableListOf<String>()
+        val combinedAltTitlesList = getCombinedAlternateTitles(entry)
+        val combinedAltTitlesStr = combinedAltTitlesList.joinToString("\n").takeIf { it.isNotBlank() }
+
+        val extIdStr = (entry.externalId ?: entry.foreignDatabaseId)?.trim()
+        val srcStr = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim()
+
+        var matchedDetails: GameDetails? = null
+
+        // 1. Try existing external ID if present
+        if (!skipExistingIdCheck && !extIdStr.isNullOrBlank()) {
+            val candidateRes = GameMetadataManager.getGameDetails(context, extIdStr, srcStr)
+            val candidate = candidateRes.getOrNull()
+            if (candidate != null) {
+                evaluatedCandidateNames.add("${candidate.externalSource}(ID): ${candidate.title}")
+                if (isConfidentExactMatch(queryTitle, candidate, combinedAltTitlesStr) ||
+                    isConfidentExactMatch(cleanTitle, candidate, combinedAltTitlesStr)
+                ) {
+                    matchedDetails = candidate
+                }
+            }
+        }
+
+        // Helper to search Game candidates via IGDB/RAWG
+        suspend fun searchGameSources(searchT: String): GameDetails? {
+            val cSearch = stripBracketedSuffixes(searchT).takeIf { it.isNotBlank() } ?: searchT.trim()
+            val rSearch = searchT.trim()
+
+            val searchResults = GameMetadataManager.searchGames(context, cSearch, limit = 5).getOrDefault(emptyList())
+            for (cand in searchResults) {
+                evaluatedCandidateNames.add("${cand.externalSource}: ${cand.title}")
+                if (isConfidentExactMatch(rSearch, cand, combinedAltTitlesStr) ||
+                    isConfidentExactMatch(queryTitle, cand, combinedAltTitlesStr) ||
+                    isConfidentExactMatch(cleanTitle, cand, combinedAltTitlesStr)
+                ) {
+                    val detailsRes = GameMetadataManager.getGameDetails(context, cand.externalId, cand.externalSource)
+                    val details = detailsRes.getOrNull()
+                    if (details != null) {
+                        return details
+                    }
+                }
+            }
+            return null
+        }
+
+        // 2. Search primary title
+        if (matchedDetails == null) {
+            matchedDetails = searchGameSources(cleanTitle)
+        }
+
+        // 3. Fallback to Alternate Titles (top 4 alternate titles)
+        if (matchedDetails == null && combinedAltTitlesList.isNotEmpty()) {
+            for (altTitle in combinedAltTitlesList.take(4)) {
+                delay(150L)
+                matchedDetails = searchGameSources(altTitle)
+                if (matchedDetails != null) break
+            }
+        }
+
+        if (matchedDetails != null) {
+            val game = matchedDetails
+            val cleanedOriginalTitle = stripBracketedSuffixes(entry.title).takeIf { it.isNotBlank() } ?: entry.title
+
+            val currentAlts = entry.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+            val gameAlts = game.alternateTitles.map { it.trim() }.filter { it.isNotBlank() && !it.equals(cleanedOriginalTitle, ignoreCase = true) }
+            val allAlts = (gameAlts + currentAlts).distinct().filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
+
+            val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(entry)
+            val needsPoster = entry.coverImageUri.isNullOrBlank() ||
+                    entry.coverImageUri.startsWith("file:") ||
+                    isCoverBroken
+
+            val bestPoster = when {
+                !game.coverUrl.isNullOrBlank() -> game.coverUrl
+                !game.steamAppId.isNullOrBlank() -> GameMetadataManager.getSteamCdnPosterUrl(game.steamAppId)
+                else -> null
+            }
+
+            val finalCover = if (needsPoster && !bestPoster.isNullOrBlank()) bestPoster else entry.coverImageUri
+            val coverUpdated = finalCover != entry.coverImageUri
+
+            if (coverUpdated && !finalCover.isNullOrBlank()) {
+                FailedCoverTracker.markSuccess(entry.id, finalCover)
+                try {
+                    val loader = Coil.imageLoader(context)
+                    val req = ImageRequest.Builder(context)
+                        .data(finalCover)
+                        .memoryCachePolicy(CachePolicy.ENABLED)
+                        .diskCachePolicy(CachePolicy.ENABLED)
+                        .build()
+                    loader.enqueue(req)
+                } catch (_: Exception) {}
+            }
+
+            val platformsStr = if (game.platforms.isNotEmpty() && entry.gamePlatforms.isNullOrBlank()) {
+                game.platforms.joinToString(", ")
+            } else {
+                entry.gamePlatforms
+            }
+
+            val relatedJson = if (game.relatedItems.isNotEmpty()) {
+                gson.toJson(game.relatedItems)
+            } else {
+                entry.relatedEntriesJson
+            }
+
+            val updatedEntry = entry.copy(
+                title = cleanedOriginalTitle,
+                alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
+                externalSource = game.externalSource,
+                externalId = game.externalId,
+                coverImageUri = finalCover,
+                gamePlatforms = platformsStr,
+                relatedEntriesJson = relatedJson,
+                durationMinutes = if (entry.durationMinutes == null || entry.durationMinutes == 0) {
+                    game.completionTimeMinutes ?: entry.durationMinutes
+                } else entry.durationMinutes,
+                airedStartDate = game.releaseDateMillis ?: entry.airedStartDate,
+                externalScore = game.rating ?: entry.externalScore,
+                externalScoreSource = game.ratingSource,
+                description = if ((entry.description ?: entry.notes).isNullOrBlank() && !game.summary.isNullOrBlank()) game.summary else (entry.description ?: entry.notes),
+                tags = if (entry.tags.isNullOrBlank() && game.genres.isNotEmpty()) game.genres.joinToString(", ") else entry.tags,
+                updatedAt = System.currentTimeMillis()
+            )
+
+            repository.update(updatedEntry)
+
+            val titleChanged = !cleanedOriginalTitle.equals(entry.title, ignoreCase = false)
+
+            val webUrl = if (game.externalSource.equals("RAWG", ignoreCase = true)) {
+                "https://rawg.io/games/${game.externalId}"
+            } else {
+                "https://www.igdb.com/games/${game.externalId}"
+            }
+
+            return ResolutionOutcome.Success(
+                ResolvedItemReport(
+                    entryId = entry.id,
+                    originalTitle = entry.title,
+                    resolvedTitle = cleanedOriginalTitle,
+                    isTitleChanged = titleChanged,
+                    alternateTitles = allAlts,
+                    originalSource = entry.externalSource,
+                    originalExternalId = entry.externalId,
+                    resolvedSource = game.externalSource,
+                    resolvedExternalId = game.externalId,
+                    webUrl = webUrl,
+                    coverUpdated = coverUpdated,
+                    newCoverUrl = if (coverUpdated) finalCover else null,
+                    totalChapters = null,
+                    totalVolumes = null,
+                    externalScore = updatedEntry.externalScore
+                )
+            )
+        }
+
+        return ResolutionOutcome.Skipped(
+            SkippedItemReport(
+                entryId = entry.id,
+                title = entry.title,
+                externalId = entry.externalId,
+                reason = if (evaluatedCandidateNames.isEmpty()) "No game candidates found via IGDB or RAWG" else "No candidates met exact confident match criteria",
                 evaluatedCandidates = evaluatedCandidateNames
             )
         )

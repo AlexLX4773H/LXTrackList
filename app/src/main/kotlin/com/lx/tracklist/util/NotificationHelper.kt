@@ -22,6 +22,7 @@ object NotificationHelper {
     const val CHANNEL_JIKAN_SYNC = "jikan_sync_channel"
     const val CHANNEL_TMDB_SYNC = "tmdb_sync_channel"
     const val CHANNEL_BOOK_SYNC = "book_sync_channel"
+    const val CHANNEL_GAME_SYNC = "game_sync_channel"
     const val CHANNEL_TACHIYOMI_RESOLVE = "tachiyomi_resolve_channel"
     const val CHANNEL_SYNC_SERVICE = "sync_service_channel"
 
@@ -29,6 +30,7 @@ object NotificationHelper {
     const val NOTIFICATION_ID_JIKAN = 47007
     const val NOTIFICATION_ID_TMDB = 47008
     const val NOTIFICATION_ID_BOOK = 47011
+    const val NOTIFICATION_ID_GAME = 47012
     const val NOTIFICATION_ID_TACHIYOMI = 47009
     const val NOTIFICATION_ID_SYNC_SERVICE = 47000
 
@@ -69,6 +71,14 @@ object NotificationHelper {
                 description = "Shows real-time progress and completion when syncing covers and metadata from Google Books and Open Library"
             }
 
+            val gameChannel = NotificationChannel(
+                CHANNEL_GAME_SYNC,
+                "Games Sync",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Shows real-time progress and completion when syncing covers and metadata from IGDB and RAWG"
+            }
+
             val tachiyomiChannel = NotificationChannel(
                 CHANNEL_TACHIYOMI_RESOLVE,
                 "Tachiyomi ID Resolution",
@@ -90,6 +100,7 @@ object NotificationHelper {
             manager.createNotificationChannel(jikanChannel)
             manager.createNotificationChannel(tmdbChannel)
             manager.createNotificationChannel(bookChannel)
+            manager.createNotificationChannel(gameChannel)
             manager.createNotificationChannel(tachiyomiChannel)
             manager.createNotificationChannel(syncServiceChannel)
         }
@@ -449,6 +460,60 @@ object NotificationHelper {
             getLargeIcon(context)?.let { builder.setLargeIcon(it) }
 
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_BOOK, builder.build())
+        } catch (_: Exception) {}
+    }
+
+    fun showGameSyncComplete(
+        context: Context,
+        completed: Int,
+        total: Int,
+        updated: Int,
+        failed: Int,
+        lastError: String?,
+        isCancelled: Boolean,
+        profileName: String? = null
+    ) {
+        if (!hasNotificationPermission(context)) return
+
+        try {
+            val pendingIntent = getMainActivityPendingIntent(context)
+            val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
+            val title: String
+            val content: String
+            val expanded: String
+
+            if (isCancelled) {
+                title = "${prefix}Games Sync Cancelled"
+                content = "$completed / $total completed ($updated updated)"
+                expanded = "Metadata sync was cancelled by user.\n• Profile: ${profileName ?: "Active"}\n• Processed: $completed / $total\n• Updated: $updated games"
+            } else if (total == 0) {
+                title = "${prefix}Games Sync"
+                content = if (lastError != null) lastError else "All game entries are already up to date"
+                expanded = if (lastError != null) lastError else "All game entries already have covers and details."
+            } else if (failed == 0) {
+                title = "${prefix}Games Sync Completed"
+                content = "Updated $updated games with covers & details"
+                expanded = "Successfully synced $total games for ${profileName ?: "profile"} from IGDB & RAWG!\n• Updated: $updated games with official covers, platforms, completion times & genres"
+            } else {
+                title = "${prefix}Games Sync Finished"
+                content = "$updated updated, $failed failed"
+                expanded = "Sync finished for ${profileName ?: "profile"} with issues:\n• Updated: $updated games\n• Failed: $failed games${if (!lastError.isNullOrBlank()) "\n• Note: $lastError" else ""}"
+            }
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_GAME_SYNC)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(title)
+                .setContentText(content)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
+                .setProgress(0, 0, false)
+                .setOngoing(false)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+            getLargeIcon(context)?.let { builder.setLargeIcon(it) }
+
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_GAME, builder.build())
         } catch (_: Exception) {}
     }
 

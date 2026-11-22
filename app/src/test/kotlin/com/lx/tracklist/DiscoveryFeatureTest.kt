@@ -3,8 +3,12 @@ package com.lx.tracklist
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.remote.GameDetails
+import com.lx.tracklist.data.remote.GameSearchResult
+import com.lx.tracklist.data.remote.GameSyncManager
 import com.lx.tracklist.data.remote.IgdbApiClient
 import com.lx.tracklist.data.remote.RawgApiClient
+import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.google.gson.JsonObject
 import com.lx.tracklist.util.DurationFormatter
@@ -1012,5 +1016,107 @@ class DiscoveryFeatureTest {
         val tvDetails = TmdbApiClient.parseTvDetails(tvJson, 1399L)
         assertEquals("en", tvDetails.originalLanguage)
         assertEquals("Game of Thrones", tvDetails.title)
+    }
+
+    @Test
+    fun testGameResolutionEligibility() {
+        val gameNoId = MediaEntry(
+            id = 1L,
+            userId = 1L,
+            title = "Half-Life 2",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.COMPLETED
+        )
+        assertTrue(TachiyomiResolverManager.isEligibleForResolution(gameNoId))
+
+        val gameWithCustomSource = MediaEntry(
+            id = 2L,
+            userId = 1L,
+            title = "Half-Life 2",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.COMPLETED,
+            externalId = "custom-123",
+            externalSource = "CUSTOM"
+        )
+        assertTrue(TachiyomiResolverManager.isEligibleForResolution(gameWithCustomSource))
+
+        val gameWithIgdb = MediaEntry(
+            id = 3L,
+            userId = 1L,
+            title = "Half-Life 2",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.COMPLETED,
+            externalId = "1942",
+            externalSource = "IGDB"
+        )
+        assertFalse(TachiyomiResolverManager.isEligibleForResolution(gameWithIgdb))
+
+        val gameWithRawg = MediaEntry(
+            id = 4L,
+            userId = 1L,
+            title = "Half-Life 2",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.COMPLETED,
+            externalId = "4200",
+            externalSource = "RAWG"
+        )
+        assertFalse(TachiyomiResolverManager.isEligibleForResolution(gameWithRawg))
+    }
+
+    @Test
+    fun testGameConfidentExactMatch() {
+        val candSearchResult = GameSearchResult(
+            externalId = "123",
+            title = "Portal 2",
+            alternateTitle = "Portal II",
+            externalSource = "IGDB"
+        )
+        assertTrue(TachiyomiResolverManager.isConfidentExactMatch("Portal 2", candSearchResult))
+        assertTrue(TachiyomiResolverManager.isConfidentExactMatch("Portal II", candSearchResult))
+        assertFalse(TachiyomiResolverManager.isConfidentExactMatch("Portal", candSearchResult))
+
+        val candDetails = GameDetails(
+            externalId = "456",
+            title = "Grand Theft Auto V",
+            alternateTitles = listOf("GTA 5", "GTA V"),
+            externalSource = "RAWG"
+        )
+        assertTrue(TachiyomiResolverManager.isConfidentExactMatch("Grand Theft Auto V", candDetails))
+        assertTrue(TachiyomiResolverManager.isConfidentExactMatch("GTA V", candDetails))
+        assertFalse(TachiyomiResolverManager.isConfidentExactMatch("Grand Theft Auto IV", candDetails))
+    }
+
+    @Test
+    fun testGameSyncNeedsSync() {
+        val fullyPopulated = MediaEntry(
+            id = 1L,
+            userId = 1L,
+            title = "Portal",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.COMPLETED,
+            externalId = "123",
+            externalSource = "IGDB",
+            coverImageUri = "https://images.igdb.com/portal.jpg",
+            gamePlatforms = "PC, PlayStation 3",
+            externalScore = 9.0f,
+            durationMinutes = 180,
+            airedStartDate = 1191974400000L,
+            description = "A puzzle-platform game.",
+            relatedEntriesJson = "[]"
+        )
+        assertFalse(GameSyncManager.needsSync(fullyPopulated, forceRefresh = false))
+        assertTrue(GameSyncManager.needsSync(fullyPopulated, forceRefresh = true))
+
+        val missingCover = fullyPopulated.copy(coverImageUri = null)
+        assertTrue(GameSyncManager.needsSync(missingCover, forceRefresh = false))
+
+        val missingPlatforms = fullyPopulated.copy(gamePlatforms = null)
+        assertTrue(GameSyncManager.needsSync(missingPlatforms, forceRefresh = false))
+
+        val missingScore = fullyPopulated.copy(externalScore = null)
+        assertTrue(GameSyncManager.needsSync(missingScore, forceRefresh = false))
+
+        val missingDuration = fullyPopulated.copy(durationMinutes = 0)
+        assertTrue(GameSyncManager.needsSync(missingDuration, forceRefresh = false))
     }
 }

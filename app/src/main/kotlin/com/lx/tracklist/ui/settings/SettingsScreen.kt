@@ -85,6 +85,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.TouchApp
@@ -160,6 +161,7 @@ import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.BookSyncProgress
+import com.lx.tracklist.data.remote.GameApiConfig
 import com.lx.tracklist.data.remote.GameSyncProgress
 import com.lx.tracklist.data.remote.JikanSyncProgress
 import com.lx.tracklist.data.remote.TachiyomiResolveProgress
@@ -1159,6 +1161,7 @@ fun SettingsScreen(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
                             bookSyncState = bookSyncState,
+                            gameSyncState = gameSyncState,
                             tachiyomiResolveState = tachiyomiResolveState,
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
@@ -1175,6 +1178,11 @@ fun SettingsScreen(
                                 viewModel.startBookSync(context, force)
                             },
                             onCancelBookSync = { viewModel.cancelBookSync(context) },
+                            onStartGameSync = { force ->
+                                ensureNotificationPermission()
+                                viewModel.startGameSync(context, force)
+                            },
+                            onCancelGameSync = { viewModel.cancelGameSync(context) },
                             onStartTachiyomiResolution = {
                                 ensureNotificationPermission()
                                 viewModel.startTachiyomiResolution(context)
@@ -1302,6 +1310,7 @@ fun SettingsScreen(
                             jikanSyncState = jikanSyncState,
                             tmdbSyncState = tmdbSyncState,
                             bookSyncState = bookSyncState,
+                            gameSyncState = gameSyncState,
                             tachiyomiResolveState = tachiyomiResolveState,
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
@@ -1318,6 +1327,11 @@ fun SettingsScreen(
                                 viewModel.startBookSync(context, force)
                             },
                             onCancelBookSync = { viewModel.cancelBookSync(context) },
+                            onStartGameSync = { force ->
+                                ensureNotificationPermission()
+                                viewModel.startGameSync(context, force)
+                            },
+                            onCancelGameSync = { viewModel.cancelGameSync(context) },
                             onStartTachiyomiResolution = {
                                 ensureNotificationPermission()
                                 viewModel.startTachiyomiResolution(context)
@@ -3413,6 +3427,7 @@ private fun SyncJobsContent(
     jikanSyncState: JikanSyncProgress,
     tmdbSyncState: TmdbSyncProgress,
     bookSyncState: BookSyncProgress,
+    gameSyncState: GameSyncProgress,
     tachiyomiResolveState: TachiyomiResolveProgress,
     onStartJikanSync: (Boolean) -> Unit,
     onCancelJikanSync: () -> Unit,
@@ -3420,6 +3435,8 @@ private fun SyncJobsContent(
     onCancelTmdbSync: () -> Unit,
     onStartBookSync: (Boolean) -> Unit,
     onCancelBookSync: () -> Unit,
+    onStartGameSync: (Boolean) -> Unit,
+    onCancelGameSync: () -> Unit,
     onStartTachiyomiResolution: () -> Unit,
     onCancelTachiyomiResolution: () -> Unit,
     modifier: Modifier = Modifier
@@ -3456,7 +3473,7 @@ private fun SyncJobsContent(
                     )
                 }
                 Text(
-                    text = "Automate fetching official high-resolution posters, runtimes, broadcast dates, season & episode counts, tags, and ratings from MyAnimeList (Jikan), MangaDex, AniList, The Movie Database (TMDB), Google Books, and Open Library.",
+                    text = "Automate fetching official high-resolution posters, runtimes, broadcast dates, season & episode counts, completion times, platforms, tags, and ratings from MyAnimeList (Jikan), MangaDex, AniList, The Movie Database (TMDB), Google Books, Open Library, IGDB, and RAWG.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
@@ -4303,6 +4320,240 @@ private fun SyncJobsContent(
             }
         }
 
+        // Games Sync Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SportsEsports,
+                            contentDescription = null,
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Games Sync",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    val isConfigured = GameApiConfig.isIgdbConfigured(LocalContext.current) || GameApiConfig.isRawgConfigured(LocalContext.current)
+                    if (gameSyncState.isRunning) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "SYNCING",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    } else if (isConfigured) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "CONNECTED",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "ONLINE",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Fetches official covers, platforms, completion times, release dates, genres, and ratings for Games from IGDB and RAWG.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                if (gameSyncState.isRunning) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (gameSyncState.totalCount > 0) {
+                                    "Progress (${gameSyncState.completedCount}/${gameSyncState.totalCount}) • ${gameSyncState.updatedCount} updated"
+                                } else {
+                                    gameSyncState.statusMessage ?: "Preparing sync..."
+                                },
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = LXTextPrimary
+                            )
+                            if (gameSyncState.totalCount > 0) {
+                                Text(
+                                    text = "${(gameSyncState.progressFraction * 100).toInt()}%",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXPrimaryGreen
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(LXBorder)
+                        ) {
+                            if (gameSyncState.totalCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(gameSyncState.progressFraction)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(LXPrimaryGreen)
+                                )
+                            } else {
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxSize(),
+                                    color = LXPrimaryGreen,
+                                    trackColor = LXBorder
+                                )
+                            }
+                        }
+
+                        if (gameSyncState.currentTitle.isNotBlank()) {
+                            Text(
+                                text = "Current: ${gameSyncState.currentTitle}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else if (!gameSyncState.statusMessage.isNullOrBlank() && gameSyncState.totalCount > 0) {
+                            Text(
+                                text = gameSyncState.statusMessage,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        if (gameSyncState.totalCount > 0) {
+                            Text(
+                                text = "Pending: ${gameSyncState.pendingCount} remaining${if (gameSyncState.failedCount > 0) " • ${gameSyncState.failedCount} failed" else ""}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            OutlinedButton(
+                                onClick = onCancelGameSync,
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXErrorRed),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, LXErrorRed.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Cancel Sync", fontSize = 12.sp, color = LXErrorRed)
+                            }
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { onStartGameSync(false) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Fetch Missing",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { onStartGameSync(true) },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Re-fetch All",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Tachiyomi ID Resolution Card
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -4358,7 +4609,7 @@ private fun SyncJobsContent(
                 }
 
                 Text(
-                    text = "Find and link official external IDs (MyAnimeList, MangaDex, AniList, Kitsu, TMDB, Google Books, Open Library) for Manga, Manhwa, Books, Novels, Movie, and TV Show entries. Only links when title match is exact and confident. Generates a full audit report in /LXTrackList/data.",
+                    text = "Find and link official external IDs (MyAnimeList, MangaDex, AniList, Kitsu, TMDB, Google Books, Open Library, IGDB, RAWG) for Manga, Manhwa, Books, Novels, Movie, TV Show, and Game entries. Only links when title match is exact and confident. Generates a full audit report in /LXTrackList/data.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
