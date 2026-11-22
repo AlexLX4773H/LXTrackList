@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.6.11-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-0.6.13-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26--36)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Kotlin_2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
   <img src="https://img.shields.io/badge/UI-Jetpack_Compose_&_Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" />
@@ -17,8 +17,22 @@
 
 ---
 
-## 🚀 What's New in v0.6.11
+## 🚀 What's New in v0.6.13
 
+- **🎬 Movies & TV Shows Studio & Publisher Metadata Integration**:
+  - Automatically extracts production companies (**Studio**) and broadcasting / streaming networks (**Publisher**) from The Movie Database (TMDB).
+  - Appends clean, formatted `Studio: ...` and `Publisher: ...` metadata to the overview across all pipelines: **Search & Discover** (`addToLibrary`), **Media Details** metadata refresh, **External Sync Jobs** (`TmdbSyncManager`), **ID Resolver** (`TachiyomiResolverManager`), and **Add / Edit Entity**.
+  - Search preview bottom sheets now feature dedicated **Studio** and **Publisher** metadata cards alongside clickable `#genre` tags and metadata-formatted synopses.
+  - Smart deduplication strips previous metadata lines to ensure clean, non-accumulating text across repeated syncs or refreshes.
+- **🎮 Video Games Studio, Publisher & Genre Metadata Integration**:
+  - Extracts developer (**Studio**) and publisher (**Publisher**) information from IGDB and RAWG and embeds them cleanly into game descriptions.
+  - Search bottom sheet previews now showcase all game **Genre & Tag chips** prior to adding the title to your library.
+  - Fully wired into Search additions, external sync jobs (`GameSyncManager`), ID resolution, and manual edits.
+- **🎮 Enhanced Game Related Entity Previews & Platform Badges**:
+  - Resolved an issue in the Media Details related items sheet where clicking a related game temporarily flashed "MAL ID"; now displays authoritative **IGDB ID** / external source badges from the start.
+  - Related game preview sheets now prominently render targeted **Platform badges** (PC, PlayStation, Xbox, Nintendo, Mobile, etc.).
+- **🛡️ App Startup & Stability Hardening**:
+  - Resolved startup crashes associated with game entities and related media entries, guaranteeing smooth application launches.
 - **🎮 Comprehensive Platform Filtering & Exclusion (Discover & Library)**:
   - Multi-select platform filtering with inclusion (`OR` condition) and exclusion (`✕`) in **Search & Discover** for video games across IGDB and RAWG.
   - Added dedicated **Platform Filter** into **Library Advanced Filters** specifically for Games, allowing you to slice your collection by platform combinations.
@@ -93,8 +107,9 @@ Discover what's airing, trending, and premiering directly inside the **Search & 
   - Uses language-native query resolution, Solr `*:*` wildcard base queries, multi-code terminology matching (`(language:chi OR language:zho)`), and explicit field hydration.
 - **Dynamic Apply Action (`✓`) in Submenus**:
   - Submenu headers in **Library (Tags Filter)** and **Search & Discover (Tags & Genres, Original Language)** dynamically morph the back arrow (`←`) into a prominent **Apply checkmark** (`✓`) whenever filters are selected.
-- **Rich TV Previews & Title Clipboard Copy**:
-  - TMDB TV show previews in Search automatically fetch authoritative season counts and total episodes (e.g. `3 Seasons • 24 Episodes • 57m/ep`), eliminating "Episodes unknown".
+- **Rich Movie & TV Previews with Studios, Publishers & Genre Chips**:
+  - TMDB Movie and TV previews in Search automatically display production studio and broadcasting network chips, clickable `#genre` tags, and metadata-formatted synopses in the bottom sheet.
+  - TMDB TV show previews automatically fetch authoritative season counts and total episodes (e.g. `3 Seasons • 24 Episodes • 57m/ep`), eliminating "Episodes unknown".
   - Long-pressing the primary or alternate title in the expanded search bottom sheet copies it straight to the clipboard with instant toast confirmation.
 - **Clean Discovery UI**:
   - Automatically hides external provider attribution notices during discovery browsing to keep the catalog clean and immersive.
@@ -161,6 +176,7 @@ Comprehensive video game tracking with dedicated progress modes, platform icons,
   - Smart duration formatting automatically scales very large playtimes and averages into readable human units (days, weeks, months, or years) without compressing UI stepper buttons.
 - **IGDB, RAWG & SteamGridDB Metadata Integration**:
   - Search, link, and synchronize game details, release dates, platforms, genres, IGDB/RAWG external critic ratings, community completion times, and SteamGridDB cover/banner artwork.
+  - **Studio & Publisher Auto-Enrichment**: Embeds developer (`Studio: ...`) and publisher (`Publisher: ...`) directly into game descriptions, displays genre `#tags` and metadata cards in search preview sheets, and displays platform badges in related game preview sheets.
 - **Dedicated External Games Sync Job**:
   - Full batch metadata synchronization in **Settings $\rightarrow$ External Sync Jobs** with status indicator, live progress bar, current game title, and cancel support.
 - **Automated "Resolve IDs" for Video Games**:
@@ -208,6 +224,7 @@ LX Track List integrates with major metadata providers to enrich your library wi
 - **Official MyAnimeList (MAL) 2-Way Sync**: Built-in OAuth2 authentication allows opt-in, live bi-directional sync of progress, scores, and watch/read statuses directly to your MyAnimeList account.
 - **Foreground Sync Service (`SyncForegroundService`)**: Runs intensive batch sync jobs (MAL, TMDB, MangaDex, Books, Games, and ID Resolution) as an Android Foreground Service with live progress notifications and battery optimization management.
 - **The Movie Database (TMDB)**: Direct search, seasonal discovery, high-resolution poster retrieval, release dates, runtimes, and season/episode breakdowns for Movies and TV Shows.
+  - **Studio & Publisher Metadata**: Automatically captures production companies (**Studio**) and networks (**Publisher**) into entry descriptions, formats search preview cards with metadata chips, and synchronizes across all update jobs.
   - **ISP Block Bypass**: Built-in DNS-over-HTTPS (DoH via Cloudflare & Google DNS) and automatic fallback routing (`api.themoviedb.org` $\leftrightarrow$ `api.tmdb.org`) ensures uninterrupted connectivity even on restricted networks.
 - **MangaDex API**: Full native integration for Manga, Manhwa, and Manhua with direct UUID linking and alternate title matching.
 - **Light Novel AniList & MAL Accurate Mapping**: Specialized `AniListNovelApiClient` queries AniList GraphQL strictly for Light Novels (`format: NOVEL`) and resolves the official MyAnimeList manga ID (`idMal`), guaranteeing that clicking "Open in MAL" navigates directly to the authentic Light Novel entry.
