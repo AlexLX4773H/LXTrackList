@@ -1046,6 +1046,7 @@ class AddEditViewModel(
                             if (g.isNotEmpty()) g.joinToString(", ") else current.tags
                         } else current.tags) ?: "",
                         airedStartDate = releaseDate,
+                        durationMinutes = fullDetails?.completionTimeMinutes ?: item.completionTimeMinutes ?: current.durationMinutes,
                         gamePlatforms = mergedPlatforms,
                         isGameFranchise = false,
                         gameSeriesEntries = emptyList()

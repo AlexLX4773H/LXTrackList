@@ -843,7 +843,14 @@ fun MalCategoryStatsCard(
                         value = summary.rewatchedCount.formatCommas()
                     )
                     if (summary.isGame) {
-                        // Games do not have episodes or chapters
+                        val hours = summary.daysSpent * 24.0
+                        if (hours > 0) {
+                            MalMetricRow(
+                                label = "Playtime",
+                                value = String.format(Locale.US, "%.1f hrs", hours),
+                                valueColor = LXPrimaryGreen
+                            )
+                        }
                     } else if (summary.isVideo) {
                         MalMetricRow(label = "Episodes", value = summary.episodesCount.formatCommas())
                     } else {
@@ -853,9 +860,14 @@ fun MalCategoryStatsCard(
                         }
                     }
                     if (summary.daysRemaining > 0) {
+                        val toCompleteValue = if (summary.isGame) {
+                            String.format(Locale.US, "%.1f hrs", summary.daysRemaining * 24.0)
+                        } else {
+                            String.format(Locale.US, "%.1f d", summary.daysRemaining)
+                        }
                         MalMetricRow(
                             label = "To Complete",
-                            value = String.format(Locale.US, "%.1f d", summary.daysRemaining),
+                            value = toCompleteValue,
                             valueColor = LXPrimaryGreen
                         )
                     }

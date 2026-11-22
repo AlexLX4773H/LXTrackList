@@ -129,7 +129,29 @@ object GameMetadataManager {
         } else {
             // Default to IGDB
             if (GameApiConfig.isIgdbConfigured(context)) {
-                IgdbApiClient.getGameDetails(context, externalId)
+                val igdbRes = IgdbApiClient.getGameDetails(context, externalId)
+                if (igdbRes.isSuccess) {
+                    val details = igdbRes.getOrThrow()
+                    if (details.completionTimeMinutes == null && GameApiConfig.isRawgConfigured(context)) {
+                        val rawgMatch = RawgApiClient.searchGames(context, details.title, limit = 1).getOrNull()?.firstOrNull()
+                        if (rawgMatch != null) {
+                            val rawgDetails = RawgApiClient.getGameDetails(context, rawgMatch.externalId).getOrNull()
+                            if (rawgDetails?.completionTimeMinutes != null) {
+                                return Result.success(
+                                    details.copy(
+                                        completionTimeMinutes = rawgDetails.completionTimeMinutes,
+                                        normalTimeMinutes = rawgDetails.normalTimeMinutes
+                                    )
+                                )
+                            }
+                        }
+                    }
+                    Result.success(details)
+                } else if (GameApiConfig.isRawgConfigured(context)) {
+                    RawgApiClient.getGameDetails(context, externalId)
+                } else {
+                    igdbRes
+                }
             } else if (GameApiConfig.isRawgConfigured(context)) {
                 RawgApiClient.getGameDetails(context, externalId)
             } else {

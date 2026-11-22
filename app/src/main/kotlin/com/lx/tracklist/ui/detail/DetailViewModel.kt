@@ -180,6 +180,7 @@ class DetailViewModel(
     )
 
     private var loadedForEntryId: Long? = null
+    private var checkedDurationForEntryId: Long? = null
 
     init {
         viewModelScope.launch {
@@ -190,7 +191,38 @@ class DetailViewModel(
                         _rawRelatedEntries.value = localRelated
                     }
                     loadRelatedEntries(currentEntry)
+                    checkAndFetchMissingGameCompletionTime(currentEntry)
                 }
+            }
+        }
+    }
+
+    fun checkAndFetchMissingGameCompletionTime(cur: MediaEntry, context: Context? = null) {
+        if (cur.mediaType != MediaType.GAME) return
+        if (cur.durationMinutes != null && cur.durationMinutes > 0) return
+        if (checkedDurationForEntryId == cur.id) return
+        checkedDurationForEntryId = cur.id
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val appContext = context ?: com.lx.tracklist.LXApplication.instance
+                val gameId = cur.externalId?.takeIf { it.isNotBlank() } ?: run {
+                    GameMetadataManager.searchGames(appContext, cur.title, limit = 1).getOrNull()?.firstOrNull()?.externalId
+                }
+                if (!gameId.isNullOrBlank()) {
+                    val details = GameMetadataManager.getGameDetails(appContext, gameId, cur.externalSource).getOrNull()
+                    val compMinutes = details?.completionTimeMinutes
+                    if (compMinutes != null && compMinutes > 0) {
+                        val latest = repository.getEntryByIdSync(cur.id) ?: cur
+                        val updated = latest.copy(
+                            durationMinutes = compMinutes,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                        repository.update(updated)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("DetailViewModel", "Could not auto-fetch game completion time: ${e.message}")
             }
         }
     }
@@ -698,6 +730,7 @@ class DetailViewModel(
                             externalScoreSource = details.ratingSource,
                             tags = if (details.genres.isNotEmpty()) details.genres.joinToString(", ") else cur.tags,
                             description = details.summary?.takeIf { it.isNotBlank() } ?: cur.description,
+                            durationMinutes = details.completionTimeMinutes ?: cur.durationMinutes,
                             gamePlatforms = mergedPlatforms,
                             relatedEntriesJson = if (details.relatedItems.isNotEmpty()) com.google.gson.Gson().toJson(details.relatedItems) else cur.relatedEntriesJson,
                             updatedAt = now

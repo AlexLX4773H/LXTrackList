@@ -209,6 +209,8 @@ object RawgApiClient {
 
             val platforms = parsePlatforms(obj.getAsJsonArray("platforms"))
             val genres = parseStringArray(obj.getAsJsonArray("genres"), "name")
+            val playtimeHours = obj.get("playtime")?.takeIf { !it.isJsonNull }?.asInt
+            val completionMinutes = if (playtimeHours != null && playtimeHours > 0) playtimeHours * 60 else null
 
             list.add(
                 GameSearchResult(
@@ -220,7 +222,8 @@ object RawgApiClient {
                     platforms = platforms,
                     genres = genres,
                     score = score,
-                    externalSource = "RAWG"
+                    externalSource = "RAWG",
+                    completionTimeMinutes = completionMinutes
                 )
             )
         }
@@ -250,6 +253,8 @@ object RawgApiClient {
         val themes = parseStringArray(obj.getAsJsonArray("tags"), "name")
 
         val score = (obj.get("rating")?.asFloat)?.let { it * 2f }
+        val playtimeHours = obj.get("playtime")?.takeIf { !it.isJsonNull }?.asInt
+        val completionMinutes = if (playtimeHours != null && playtimeHours > 0) playtimeHours * 60 else null
 
         // Related items from series and additions
         val related = mutableListOf<RelatedMediaItem>()
@@ -327,7 +332,9 @@ object RawgApiClient {
             themes = themes,
             rating = score,
             ratingSource = "RAWG",
-            relatedItems = related
+            relatedItems = related,
+            completionTimeMinutes = completionMinutes,
+            normalTimeMinutes = completionMinutes
         )
     }
 

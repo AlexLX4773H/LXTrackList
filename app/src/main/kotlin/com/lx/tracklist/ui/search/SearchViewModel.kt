@@ -1943,6 +1943,7 @@ class SearchViewModel(
                         tags = fullDetails?.genres?.joinToString(", "),
                         description = fullDetails?.summary ?: item.synopsis,
                         airedStartDate = fullDetails?.releaseDateMillis,
+                        durationMinutes = fullDetails?.completionTimeMinutes ?: item.durationMinutes,
                         trackingUnit = TrackingUnit.PERCENTAGE,
                         gamePlatforms = MediaEntry.formatGamePlatforms(platforms),
                         isGameFranchise = false,

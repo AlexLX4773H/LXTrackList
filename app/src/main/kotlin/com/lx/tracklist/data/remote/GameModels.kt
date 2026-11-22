@@ -17,7 +17,8 @@ data class GameSearchResult(
     val summary: String? = null,
     val isCollectionFranchise: Boolean = false,
     val collectionId: Long? = null,
-    val collectionName: String? = null
+    val collectionName: String? = null,
+    val completionTimeMinutes: Int? = null
 ) {
     val webUrl: String
         get() = if (externalSource.equals("RAWG", ignoreCase = true)) {
@@ -47,7 +48,9 @@ data class GameDetails(
     val collectionGames: List<GameSearchResult> = emptyList(),
     val franchiseName: String? = null,
     val relatedItems: List<RelatedMediaItem> = emptyList(),
-    val steamAppId: String? = null
+    val steamAppId: String? = null,
+    val completionTimeMinutes: Int? = null,
+    val normalTimeMinutes: Int? = null
 )
 
 data class SteamGridPosterItem(

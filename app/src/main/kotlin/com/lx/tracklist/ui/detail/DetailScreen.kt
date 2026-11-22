@@ -618,6 +618,11 @@ fun DetailScreen(
                                 val m = currentEntry.durationMinutes % 60
                                 val durStr = if (h > 0) "${h}h ${m}m" else "${m}m"
                                 MetaChip(label = "⏱️ $durStr", color = LXPrimaryGreen)
+                            } else if (currentEntry.mediaType == MediaType.GAME && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
+                                val h = currentEntry.durationMinutes / 60
+                                val m = currentEntry.durationMinutes % 60
+                                val durStr = if (h > 0 && m > 0) "${h}h ${m}m" else if (h > 0) "${h}h" else "${m}m"
+                                MetaChip(label = "⏱️ Avg 100%: $durStr", color = LXPrimaryGreen)
                             } else if (currentEntry.episodeLengthMinutes != null && currentEntry.episodeLengthMinutes > 0) {
                                 MetaChip(label = "⏱️ ${currentEntry.episodeLengthMinutes} min/ep", color = LXPrimaryGreen)
                             }
@@ -810,6 +815,11 @@ fun DetailScreen(
                                 val m = currentEntry.durationMinutes % 60
                                 val durStr = if (h > 0) "${h}h ${m}m" else "${m}m"
                                 MetaChip(label = "⏱️ $durStr", color = LXPrimaryGreen)
+                            } else if (currentEntry.mediaType == MediaType.GAME && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
+                                val h = currentEntry.durationMinutes / 60
+                                val m = currentEntry.durationMinutes % 60
+                                val durStr = if (h > 0 && m > 0) "${h}h ${m}m" else if (h > 0) "${h}h" else "${m}m"
+                                MetaChip(label = "⏱️ Avg 100%: $durStr", color = LXPrimaryGreen)
                             } else if (currentEntry.episodeLengthMinutes != null && currentEntry.episodeLengthMinutes > 0) {
                                 MetaChip(label = "⏱️ ${currentEntry.episodeLengthMinutes} min/ep", color = LXPrimaryGreen)
                             }
@@ -1348,6 +1358,24 @@ private fun DetailProgressCard(
                         }
                         Text(
                             text = "⏱️ Watched $timeStr",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                            color = LXPrimaryGreen
+                        )
+                    } else if (entry.mediaType == MediaType.GAME && entry.durationMinutes != null && entry.durationMinutes > 0) {
+                        Spacer(modifier = Modifier.height(3.dp))
+                        val h = entry.durationMinutes / 60
+                        val m = entry.durationMinutes % 60
+                        val durStr = if (h > 0 && m > 0) "${h}h ${m}m" else if (h > 0) "${h}h" else "${m}m"
+                        val progressPct = entry.gameProgressPercent.coerceIn(0, 100)
+                        val timeSpentMins = (progressPct / 100.0) * entry.durationMinutes
+                        val spentH = (timeSpentMins / 60.0).let { String.format(Locale.US, "%.1f", it) }
+                        val label = if (entry.status == MediaStatus.COMPLETED || progressPct >= 100) {
+                            "⏱️ 100% Avg: ~$durStr (in stats)"
+                        } else {
+                            "⏱️ Est: ~$spentH hrs spent / ~$durStr avg"
+                        }
+                        Text(
+                            text = label,
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
                             color = LXPrimaryGreen
                         )

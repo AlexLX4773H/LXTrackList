@@ -27,6 +27,7 @@ object IgdbApiClient {
     private const val TAG = "IgdbApiClient"
     private const val TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"
     private const val IGDB_API_URL = "https://api.igdb.com/v4/games"
+    private const val IGDB_TIME_TO_BEAT_URL = "https://api.igdb.com/v4/game_time_to_beats"
     private const val COVER_IMAGE_BASE = "https://images.igdb.com/igdb/image/upload/t_cover_big_2x"
     private const val ARTWORK_IMAGE_BASE = "https://images.igdb.com/igdb/image/upload/t_1080p"
 
@@ -102,9 +103,13 @@ object IgdbApiClient {
     }
 
     /**
-     * Executes an Apicalypse query against the IGDB games endpoint with automatic token refresh & rate limiting.
+     * Executes an Apicalypse query against an IGDB endpoint with automatic token refresh & rate limiting.
      */
-    private suspend fun executeApicalypseQuery(context: Context, query: String): Result<String> {
+    private suspend fun executeApicalypseQuery(
+        context: Context,
+        query: String,
+        endpointUrl: String = IGDB_API_URL
+    ): Result<String> {
         var token = ensureValidToken(context).getOrElse { return Result.failure(it) }
         val clientId = GameApiConfig.getIgdbClientId(context)
 
@@ -112,7 +117,7 @@ object IgdbApiClient {
             throttle()
             val requestBody = query.toRequestBody("text/plain".toMediaType())
             val request = Request.Builder()
-                .url(IGDB_API_URL)
+                .url(endpointUrl)
                 .addHeader("Client-ID", clientId)
                 .addHeader("Authorization", "Bearer $authToken")
                 .addHeader("Accept", "application/json")
@@ -304,7 +309,25 @@ object IgdbApiClient {
             if (array == null || array.size() == 0) {
                 throw NoSuchElementException("Game with IGDB ID $igdbId not found")
             }
-            parseGameDetailsJson(array.get(0).asJsonObject, igdbId)
+            val timeToBeat = try {
+                getTimeToBeat(context, igdbId).getOrNull()
+            } catch (_: Exception) {
+                null
+            }
+            parseGameDetailsJson(array.get(0).asJsonObject, igdbId, timeToBeat)
+        }
+    }
+
+    /**
+     * Fetches community time-to-beat metrics from IGDB (average 100% completion time, normal playthrough time).
+     */
+    suspend fun getTimeToBeat(context: Context, igdbId: String): Result<IgdbTimeToBeat?> {
+        val cleanId = igdbId.trim()
+        if (cleanId.isBlank() || !cleanId.all { it.isDigit() }) return Result.success(null)
+        val apicalypse = "fields game_id, hastily, normally, completely, count; where game_id = $cleanId; limit 1;"
+        val result = executeApicalypseQuery(context, apicalypse, endpointUrl = IGDB_TIME_TO_BEAT_URL)
+        return result.map { jsonStr ->
+            parseTimeToBeatJson(jsonStr)
         }
     }
 
@@ -371,7 +394,11 @@ object IgdbApiClient {
         return list
     }
 
-    fun parseGameDetailsJson(obj: JsonObject, targetId: String): GameDetails {
+    fun parseGameDetailsJson(
+        obj: JsonObject,
+        targetId: String,
+        timeToBeat: IgdbTimeToBeat? = null
+    ): GameDetails {
         val id = obj.get("id")?.asLong?.toString() ?: targetId
         val name = obj.get("name")?.asString.orEmpty()
 
@@ -472,8 +499,39 @@ object IgdbApiClient {
             collectionGames = collectionGames,
             franchiseName = franchiseName,
             relatedItems = relatedItems,
-            steamAppId = steamAppId
+            steamAppId = steamAppId,
+            completionTimeMinutes = timeToBeat?.averageCompletionMinutes,
+            normalTimeMinutes = timeToBeat?.normalMinutes
         )
+    }
+
+    fun parseTimeToBeatJson(jsonStr: String): IgdbTimeToBeat? {
+        val array = try {
+            gson.fromJson(jsonStr, JsonArray::class.java) ?: return null
+        } catch (_: Exception) {
+            return null
+        }
+        if (array.size() == 0) return null
+        val candidates = mutableListOf<IgdbTimeToBeat>()
+        for (elem in array) {
+            if (!elem.isJsonObject) continue
+            val obj = elem.asJsonObject
+            val gameId = obj.get("game_id")?.asLong ?: continue
+            val completely = obj.get("completely")?.takeIf { !it.isJsonNull }?.asLong ?: 0L
+            val normally = obj.get("normally")?.takeIf { !it.isJsonNull }?.asLong ?: 0L
+            val hastily = (obj.get("hastily") ?: obj.get("hastly"))?.takeIf { !it.isJsonNull }?.asLong ?: 0L
+            val count = obj.get("count")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+            candidates.add(
+                IgdbTimeToBeat(
+                    gameId = gameId,
+                    completelySeconds = completely,
+                    normallySeconds = normally,
+                    hastilySeconds = hastily,
+                    count = count
+                )
+            )
+        }
+        return candidates.maxByOrNull { it.count } ?: candidates.firstOrNull()
     }
 
     /**
@@ -637,4 +695,34 @@ object IgdbApiClient {
         cal.timeInMillis = millis
         return cal.get(Calendar.YEAR).toString()
     }
+}
+
+data class IgdbTimeToBeat(
+    val gameId: Long,
+    val completelySeconds: Long = 0L,
+    val normallySeconds: Long = 0L,
+    val hastilySeconds: Long = 0L,
+    val count: Int = 0
+) {
+    // Backward compatibility alias for any legacy callers
+    val hastlySeconds: Long
+        get() = hastilySeconds
+
+    /**
+     * Average time for 100% completion in minutes for average players (with fallbacks to normal and rush).
+     */
+    val averageCompletionMinutes: Int?
+        get() = when {
+            completelySeconds > 0 -> (completelySeconds / 60).toInt()
+            normallySeconds > 0 -> (normallySeconds / 60).toInt()
+            hastilySeconds > 0 -> (hastilySeconds / 60).toInt()
+            else -> null
+        }
+
+    val normalMinutes: Int?
+        get() = when {
+            normallySeconds > 0 -> (normallySeconds / 60).toInt()
+            hastilySeconds > 0 -> (hastilySeconds / 60).toInt()
+            else -> null
+        }
 }

@@ -287,4 +287,80 @@ class GameRemoteClientTest {
         assertTrue("URL should include '&genres=fighting'", url.contains("&genres=fighting"))
         assertTrue("URL should include '&tags=nsfw' for AdultMode.ONLY", url.contains("&tags=nsfw"))
     }
+
+    @Test
+    fun testIgdbTimeToBeatParsingAndFallbacks() {
+        // 1. Both 100% completion (completely) and normal playthrough present
+        val jsonWith100Pct = """
+            [
+              {
+                "id": 1234,
+                "game_id": 1942,
+                "completely": 622800,
+                "normally": 185400,
+                "hastily": 118800,
+                "count": 184
+              }
+            ]
+        """.trimIndent()
+
+        val parsed1 = IgdbApiClient.parseTimeToBeatJson(jsonWith100Pct)
+        assertNotNull(parsed1)
+        assertEquals(1942L, parsed1?.gameId)
+        assertEquals(622800L, parsed1?.completelySeconds)
+        // 622800 seconds / 60 = 10380 minutes (~173 hours)
+        assertEquals(10380, parsed1?.averageCompletionMinutes)
+        assertEquals(3090, parsed1?.normalMinutes) // 185400 / 60
+
+        // 2. Fallback when completely is 0 / absent: should fallback to normally
+        val jsonFallbackNormal = """
+            [
+              {
+                "id": 5678,
+                "game_id": 2000,
+                "completely": 0,
+                "normally": 72000,
+                "hastly": 36000,
+                "count": 10
+              }
+            ]
+        """.trimIndent()
+
+        val parsed2 = IgdbApiClient.parseTimeToBeatJson(jsonFallbackNormal)
+        assertNotNull(parsed2)
+        assertEquals(1200, parsed2?.averageCompletionMinutes) // 72000 / 60 = 1200 minutes (20 hours)
+
+        // 3. Fallback when normally is also 0: should fallback to hastly
+        val jsonFallbackHastly = """
+            [
+              {
+                "id": 9999,
+                "game_id": 3000,
+                "completely": 0,
+                "normally": 0,
+                "hastly": 18000,
+                "count": 2
+              }
+            ]
+        """.trimIndent()
+
+        val parsed3 = IgdbApiClient.parseTimeToBeatJson(jsonFallbackHastly)
+        assertNotNull(parsed3)
+        assertEquals(300, parsed3?.averageCompletionMinutes) // 18000 / 60 = 300 minutes (5 hours)
+    }
+
+    @Test
+    fun testRawgPlaytimeParsing() {
+        val detailJson = """
+            {
+              "id": 3498,
+              "name": "Grand Theft Auto V",
+              "playtime": 74,
+              "rating": 4.47
+            }
+        """.trimIndent()
+
+        val details = RawgApiClient.parseGameDetailsJson(detailJson, "3498")
+        assertEquals(74 * 60, details.completionTimeMinutes) // 74 hours * 60 = 4440 minutes
+    }
 }

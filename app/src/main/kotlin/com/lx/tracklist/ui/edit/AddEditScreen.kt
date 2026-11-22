@@ -1310,6 +1310,18 @@ fun AddEditScreen(
                                         modifier = Modifier.fillMaxWidth()
                                     )
 
+                                    if (state.durationMinutes != null && state.durationMinutes!! > 0) {
+                                        val h = state.durationMinutes!! / 60
+                                        val m = state.durationMinutes!! % 60
+                                        val durStr = if (h > 0 && m > 0) "${h}h ${m}m" else if (h > 0) "${h}h" else "${m}m"
+                                        Text(
+                                            text = "⏱️ Avg 100% Completion: ~$durStr",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = LXPrimaryGreen.copy(alpha = 0.9f)
+                                        )
+                                    }
+
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1504,6 +1516,28 @@ fun AddEditScreen(
                                     }
                                 }
                             }
+
+                            // Average Completion Time (Editable & Auto-Populated)
+                            OutlinedTextField(
+                                value = if (state.durationMinutes != null && state.durationMinutes!! > 0) {
+                                    val totalMins = state.durationMinutes!!
+                                    val h = totalMins / 60
+                                    val m = totalMins % 60
+                                    if (m == 0) "$h" else String.format(Locale.US, "%.1f", totalMins.toDouble() / 60.0)
+                                } else "",
+                                onValueChange = { input ->
+                                    val num = input.toDoubleOrNull()
+                                    val mins = num?.let { (it * 60).toInt().coerceAtLeast(0) }
+                                    viewModel.updateDurationMinutes(mins)
+                                },
+                                label = { Text("Avg 100% Completion (Hours)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                placeholder = { Text("e.g. 50 (auto-synced from IGDB/RAWG)") },
+                                singleLine = true,
+                                maxLines = 1,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = outlinedColors()
+                            )
                         }
                     }
                 }

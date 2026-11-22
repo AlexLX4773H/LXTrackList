@@ -175,10 +175,28 @@ fun calculateCategoryStatSummary(
                 }
             }
             MediaType.GAME -> {
-                val hours = if (entry.customUnitLabel?.trim()?.equals("Hours", ignoreCase = true) == true) {
+                val userHours = if (entry.customUnitLabel?.trim()?.equals("Hours", ignoreCase = true) == true) {
                     entry.customUnitCurrent.toDouble()
-                } else 0.0
-                totalMinutes += hours * 60.0
+                } else null
+
+                val avgCompletionMin = (entry.durationMinutes ?: 0).toDouble()
+
+                if (userHours != null && userHours > 0) {
+                    totalMinutes += userHours * 60.0
+                } else if (avgCompletionMin > 0) {
+                    val isDone = isCompleted || entry.gameProgressPercent >= 100
+                    val totalViews = (if (isDone) 1 else 0) + entry.rewatchCount
+                    val fraction = if (isDone) 1.0 else (entry.gameProgressPercent.coerceIn(0, 100) / 100.0)
+
+                    if (isDone) {
+                        totalMinutes += totalViews * avgCompletionMin
+                    } else {
+                        val replayedMinutes = entry.rewatchCount * avgCompletionMin
+                        val currentRunMinutes = fraction * avgCompletionMin
+                        totalMinutes += replayedMinutes + currentRunMinutes
+                        remainingMinutes += (1.0 - fraction) * avgCompletionMin
+                    }
+                }
             }
         }
     }

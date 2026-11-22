@@ -106,6 +106,9 @@ object GameSyncManager {
             coverImageUri = coverUri,
             gamePlatforms = platformsStr,
             relatedEntriesJson = relatedJson,
+            durationMinutes = if (entry.durationMinutes == null || entry.durationMinutes == 0) {
+                details.completionTimeMinutes ?: entry.durationMinutes
+            } else entry.durationMinutes,
             airedStartDate = details.releaseDateMillis ?: entry.airedStartDate,
             description = if (entry.description.isNullOrBlank()) details.summary else entry.description,
             updatedAt = System.currentTimeMillis()

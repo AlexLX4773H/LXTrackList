@@ -339,4 +339,69 @@ class GameEntryTest {
         val nonExistent = com.lx.tracklist.ui.search.GameTagRegistry.filterGameGenres("xyznonexistent")
         assertTrue(nonExistent.isEmpty())
     }
+
+    @Test
+    fun testGameCompletionStatsCalculation() {
+        // 1. 100% Completed Game with average completion time of 40 hours (2400 minutes)
+        val completedGame = MediaEntry(
+            title = "Elden Ring",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.COMPLETED,
+            gameProgressPercent = 100,
+            durationMinutes = 2400 // 40 hours
+        )
+
+        val summaryCompleted = com.lx.tracklist.ui.stats.calculateCategoryStatSummary(
+            entries = listOf(completedGame),
+            categoryKey = "GAME",
+            customCategories = emptyList()
+        )
+
+        // 2400 min / 1440 min/day = 1.6666... days (40 hours)
+        assertEquals(1.667, summaryCompleted.daysSpent, 0.01)
+        assertEquals(0.0, summaryCompleted.daysRemaining, 0.01)
+        assertTrue(summaryCompleted.isGame)
+
+        // 2. In-Progress Game at 50% progress with 40-hour average
+        val inProgressGame = MediaEntry(
+            title = "Cyberpunk 2077",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.WATCHING,
+            gameProgressPercent = 50,
+            durationMinutes = 2400
+        )
+
+        val summaryInProgress = com.lx.tracklist.ui.stats.calculateCategoryStatSummary(
+            entries = listOf(inProgressGame),
+            categoryKey = "GAME",
+            customCategories = emptyList()
+        )
+
+        // 50% of 2400 = 1200 min spent (0.833 days / 20 hours), 1200 min remaining
+        assertEquals(0.833, summaryInProgress.daysSpent, 0.01)
+        assertEquals(0.833, summaryInProgress.daysRemaining, 0.01)
+
+        // 3. Replayed Game: Completed + 1 replay = 2 full playthroughs (80 hours = 4800 minutes)
+        val replayedGame = completedGame.copy(rewatchCount = 1)
+        val summaryReplayed = com.lx.tracklist.ui.stats.calculateCategoryStatSummary(
+            entries = listOf(replayedGame),
+            categoryKey = "GAME",
+            customCategories = emptyList()
+        )
+        // 4800 / 1440 = 3.333 days (80 hours)
+        assertEquals(3.333, summaryReplayed.daysSpent, 0.01)
+
+        // 4. User manual "Hours" override: user explicitly logged 60 hours
+        val manualHoursGame = completedGame.copy(
+            customUnitLabel = "Hours",
+            customUnitCurrent = 60
+        )
+        val summaryManual = com.lx.tracklist.ui.stats.calculateCategoryStatSummary(
+            entries = listOf(manualHoursGame),
+            categoryKey = "GAME",
+            customCategories = emptyList()
+        )
+        // 60 hours * 60 min = 3600 min -> 3600 / 1440 = 2.5 days
+        assertEquals(2.5, summaryManual.daysSpent, 0.01)
+    }
 }
