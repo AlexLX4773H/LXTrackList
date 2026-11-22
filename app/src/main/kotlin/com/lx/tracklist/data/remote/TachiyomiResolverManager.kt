@@ -1540,7 +1540,7 @@ object TachiyomiResolverManager {
                 airedStartDate = game.releaseDateMillis ?: entry.airedStartDate,
                 externalScore = game.rating ?: entry.externalScore,
                 externalScoreSource = game.ratingSource,
-                description = if ((entry.description ?: entry.notes).isNullOrBlank() && !game.summary.isNullOrBlank()) game.summary else (entry.description ?: entry.notes),
+                description = if ((entry.description ?: entry.notes).isNullOrBlank() && !game.summary.isNullOrBlank()) game.buildDescriptionWithMetadata() else (entry.description ?: entry.notes),
                 tags = if (entry.tags.isNullOrBlank() && game.genres.isNotEmpty()) game.genres.joinToString(", ") else entry.tags,
                 updatedAt = System.currentTimeMillis()
             )

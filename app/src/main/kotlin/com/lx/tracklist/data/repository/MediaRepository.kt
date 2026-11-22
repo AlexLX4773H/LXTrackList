@@ -14,6 +14,7 @@ import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.BookMetadataManager
+import com.lx.tracklist.data.remote.GameMetadataManager
 import com.lx.tracklist.data.remote.GoogleBooksApiClient
 import com.lx.tracklist.data.remote.OpenLibraryApiClient
 import kotlinx.coroutines.CoroutineScope
@@ -999,23 +1000,32 @@ class MediaRepository(
                     isAiring = false
                 )
             } else if (item.mediaType == MediaType.GAME || item.externalSource in listOf("IGDB", "RAWG")) {
-                val releaseMillis = item.releaseYear?.trim()?.take(4)?.toIntOrNull()?.let { year ->
+                val fullGame = if (context != null) {
+                    GameMetadataManager.getGameDetails(context, item.externalId, item.externalSource).getOrNull()
+                } else null
+                val releaseMillis = fullGame?.releaseDateMillis ?: item.releaseYear?.trim()?.take(4)?.toIntOrNull()?.let { year ->
                     val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
                     cal.set(year, java.util.Calendar.JANUARY, 1, 0, 0, 0)
                     cal.timeInMillis
                 }
+                val platformsList = fullGame?.platforms?.takeIf { it.isNotEmpty() } ?: item.platforms.orEmpty()
                 MediaEntry(
                     userId = effectiveUserId,
-                    title = item.title,
+                    title = fullGame?.title ?: item.title,
+                    alternateTitle = fullGame?.alternateTitles?.firstOrNull(),
                     mediaType = MediaType.GAME,
                     status = status,
                     externalId = item.externalId,
                     externalSource = if (item.externalSource.isNotBlank()) item.externalSource else "IGDB",
-                    externalScore = item.score,
-                    externalScoreSource = if (item.externalSource.isNotBlank()) item.externalSource else "IGDB",
-                    coverImageUri = item.posterUrl,
+                    externalScore = fullGame?.rating ?: item.score,
+                    externalScoreSource = fullGame?.ratingSource ?: if (item.externalSource.isNotBlank()) item.externalSource else "IGDB",
+                    coverImageUri = fullGame?.coverUrl ?: item.posterUrl,
                     airedStartDate = releaseMillis,
-                    gamePlatforms = item.platforms.orEmpty().filter { it.isNotBlank() }.joinToString(", ").takeIf { it.isNotBlank() }
+                    gamePlatforms = MediaEntry.formatGamePlatforms(platformsList),
+                    tags = fullGame?.genres?.joinToString(", "),
+                    description = fullGame?.buildDescriptionWithMetadata(),
+                    durationMinutes = fullGame?.completionTimeMinutes,
+                    relatedEntriesJson = if (fullGame != null && fullGame.relatedItems.isNotEmpty()) com.google.gson.Gson().toJson(fullGame.relatedItems) else null
                 )
             } else if (item.externalSource.equals("TMDB", ignoreCase = true)) {
                 val tmdbId = item.externalId.toLongOrNull() ?: 0L

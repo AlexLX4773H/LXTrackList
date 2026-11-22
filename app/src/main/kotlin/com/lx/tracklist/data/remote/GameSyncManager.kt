@@ -158,7 +158,9 @@ object GameSyncManager {
                 details.completionTimeMinutes ?: entry.durationMinutes
             } else entry.durationMinutes,
             airedStartDate = if (forceRefresh && details.releaseDateMillis != null) details.releaseDateMillis else (entry.airedStartDate ?: details.releaseDateMillis),
-            description = if (entry.description.isNullOrBlank() || forceRefresh) (details.summary ?: entry.description) else entry.description,
+            description = if (entry.description.isNullOrBlank() || forceRefresh) {
+                details.buildDescriptionWithMetadata().takeIf { it.isNotBlank() } ?: entry.description
+            } else entry.description,
             tags = if (entry.tags.isNullOrBlank() && details.genres.isNotEmpty()) details.genres.joinToString(", ") else entry.tags,
             updatedAt = System.currentTimeMillis()
         )

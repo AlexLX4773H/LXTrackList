@@ -164,7 +164,7 @@ object IgdbApiClient {
         val offsetClause = if (offset > 0) "offset $offset;\n" else ""
         val apicalypse = """
             search "$cleanQuery";
-            fields name, alternative_names.name, first_release_date, cover.image_id, artworks.image_id, platforms.name, platforms.abbreviation, total_rating, summary, genres.name, collections.id, collections.name, franchises.id, franchises.name, game_type;
+            fields name, alternative_names.name, first_release_date, cover.image_id, artworks.image_id, platforms.name, platforms.abbreviation, total_rating, summary, genres.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher, collections.id, collections.name, franchises.id, franchises.name, game_type;
             where version_parent = null;
             limit $limit;
             $offsetClause
@@ -258,7 +258,7 @@ object IgdbApiClient {
         val offset = ((page - 1) * limit).coerceAtLeast(0)
         val offsetClause = if (offset > 0) "offset $offset;\n" else ""
         return """
-            fields name, alternative_names.name, first_release_date, cover.image_id, artworks.image_id, platforms.name, platforms.abbreviation, total_rating, summary, genres.name, collections.id, collections.name, franchises.id, franchises.name, game_type;
+            fields name, alternative_names.name, first_release_date, cover.image_id, artworks.image_id, platforms.name, platforms.abbreviation, total_rating, summary, genres.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher, collections.id, collections.name, franchises.id, franchises.name, game_type;
             $whereClause
             sort $sort;
             limit $limit;
@@ -334,6 +334,7 @@ object IgdbApiClient {
     suspend fun getGameDetails(context: Context, igdbId: String): Result<GameDetails> {
         val apicalypse = """
             fields name, alternative_names.name, first_release_date, cover.image_id, artworks.image_id, platforms.name, platforms.abbreviation, total_rating, summary, genres.name, themes.name,
+            involved_companies.company.name, involved_companies.developer, involved_companies.publisher,
             collections.id, collections.name, collections.games.id, collections.games.name, collections.games.first_release_date, collections.games.cover.image_id, collections.games.game_type, collections.games.total_rating, collections.games.platforms.name, collections.games.platforms.abbreviation,
             franchises.id, franchises.name,
             parent_game.id, parent_game.name, parent_game.first_release_date, parent_game.cover.image_id, parent_game.platforms.name, parent_game.platforms.abbreviation,
@@ -405,6 +406,7 @@ object IgdbApiClient {
 
             val platforms = parsePlatforms(obj.getAsJsonArray("platforms"))
             val genres = parseStringArray(obj.getAsJsonArray("genres"), "name")
+            val (developers, publishers) = parseInvolvedCompanies(obj.getAsJsonArray("involved_companies"))
 
             val score = obj.get("total_rating")?.asFloat?.let { it / 10f } // Normalize 0..100 to 0..10
             val summary = obj.get("summary")?.asString
@@ -425,6 +427,8 @@ object IgdbApiClient {
                     releaseYear = releaseYear,
                     platforms = platforms,
                     genres = genres,
+                    developers = developers,
+                    publishers = publishers,
                     score = score,
                     externalSource = "IGDB",
                     summary = summary,
@@ -460,6 +464,7 @@ object IgdbApiClient {
         val platforms = parsePlatforms(obj.getAsJsonArray("platforms"))
         val genres = parseStringArray(obj.getAsJsonArray("genres"), "name")
         val themes = parseStringArray(obj.getAsJsonArray("themes"), "name")
+        val (developers, publishers) = parseInvolvedCompanies(obj.getAsJsonArray("involved_companies"))
 
         val rating = obj.get("total_rating")?.asFloat?.let { it / 10f }
 
@@ -535,6 +540,8 @@ object IgdbApiClient {
             platforms = platforms,
             genres = genres,
             themes = themes,
+            developers = developers,
+            publishers = publishers,
             rating = rating,
             ratingSource = "IGDB",
             collectionId = colId,
@@ -742,6 +749,29 @@ object IgdbApiClient {
         val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
         cal.timeInMillis = millis
         return cal.get(Calendar.YEAR).toString()
+    }
+
+    fun parseInvolvedCompanies(array: JsonArray?): Pair<List<String>, List<String>> {
+        if (array == null) return Pair(emptyList(), emptyList())
+        val developers = mutableListOf<String>()
+        val publishers = mutableListOf<String>()
+        for (elem in array) {
+            if (!elem.isJsonObject) continue
+            val obj = elem.asJsonObject
+            val companyObj = obj.getAsJsonObject("company")
+            val companyName = companyObj?.get("name")?.asString?.trim()
+                ?: obj.get("name")?.asString?.trim()
+            if (companyName.isNullOrBlank()) continue
+            val isDev = obj.get("developer")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
+            val isPub = obj.get("publisher")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
+            if (isDev && !developers.contains(companyName)) {
+                developers.add(companyName)
+            }
+            if (isPub && !publishers.contains(companyName)) {
+                publishers.add(companyName)
+            }
+        }
+        return Pair(developers, publishers)
     }
 }
 

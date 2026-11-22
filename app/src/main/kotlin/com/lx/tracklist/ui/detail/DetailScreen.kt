@@ -3587,7 +3587,7 @@ private fun RelatedItemDetailSheet(
                     detailedInfo = RelatedDetailedInfo(
                         title = gDetails?.title ?: item.title,
                         alternateTitle = gDetails?.alternateTitles?.firstOrNull(),
-                        synopsis = gDetails?.summary,
+                        synopsis = gDetails?.buildDescriptionWithMetadata() ?: gDetails?.summary,
                         tags = gDetails?.genres?.joinToString(", "),
                         posterUrl = gDetails?.coverUrl ?: item.posterUrl,
                         score = gDetails?.rating ?: item.score,

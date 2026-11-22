@@ -7,6 +7,7 @@ import com.lx.tracklist.data.remote.GameMetadataManager
 import com.lx.tracklist.data.remote.IgdbApiClient
 import com.lx.tracklist.data.remote.RawgApiClient
 import com.lx.tracklist.data.remote.SteamGridDbApiClient
+import com.lx.tracklist.data.remote.buildGameDescriptionWithMetadata
 import com.lx.tracklist.util.ExternalLinkHelper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -428,5 +429,95 @@ class GameRemoteClientTest {
 
         val details = RawgApiClient.parseGameDetailsJson(detailJson, "3498")
         assertEquals(74 * 60, details.completionTimeMinutes) // 74 hours * 60 = 4440 minutes
+    }
+
+    @Test
+    fun testIgdbInvolvedCompaniesParsing() {
+        val arrayJson = """
+            [
+              {
+                "id": 1,
+                "developer": true,
+                "publisher": false,
+                "company": { "id": 101, "name": "Infinity Ward" }
+              },
+              {
+                "id": 2,
+                "developer": false,
+                "publisher": true,
+                "company": { "id": 102, "name": "Activision" }
+              }
+            ]
+        """.trimIndent()
+        val array = gson.fromJson(arrayJson, com.google.gson.JsonArray::class.java)
+        val (devs, pubs) = IgdbApiClient.parseInvolvedCompanies(array)
+
+        assertEquals(listOf("Infinity Ward"), devs)
+        assertEquals(listOf("Activision"), pubs)
+    }
+
+    @Test
+    fun testIgdbDetailsWithInvolvedCompaniesAndDescriptionBuilder() {
+        val detailsJson = """
+            {
+              "id": 100,
+              "name": "Call of Duty",
+              "summary": "First person shooter set during World War II.",
+              "genres": [ { "id": 5, "name": "Shooter" }, { "id": 1, "name": "Action" } ],
+              "involved_companies": [
+                {
+                  "developer": true,
+                  "publisher": false,
+                  "company": { "name": "Infinity Ward" }
+                },
+                {
+                  "developer": false,
+                  "publisher": true,
+                  "company": { "name": "Activision" }
+                }
+              ]
+            }
+        """.trimIndent()
+        val obj = gson.fromJson(detailsJson, JsonObject::class.java)
+        val details = IgdbApiClient.parseGameDetailsJson(obj, "100")
+
+        assertEquals(listOf("Infinity Ward"), details.developers)
+        assertEquals(listOf("Activision"), details.publishers)
+        assertEquals(listOf("Shooter", "Action"), details.genres)
+        assertEquals("Infinity Ward", details.developerString)
+        assertEquals("Activision", details.publisherString)
+
+        val builtDesc = details.buildDescriptionWithMetadata()
+        assertTrue(builtDesc.contains("First person shooter set during World War II."))
+        assertTrue(builtDesc.contains("Developer: Infinity Ward"))
+        assertTrue(builtDesc.contains("Publisher: Activision"))
+
+        // Test deduplication if called again on text that already contains metadata
+        val secondPass = buildGameDescriptionWithMetadata(builtDesc, details.developers, details.publishers)
+        assertEquals(builtDesc, secondPass)
+    }
+
+    @Test
+    fun testRawgDevelopersAndPublishersParsing() {
+        val detailJson = """
+            {
+              "id": 1234,
+              "name": "The Legend of Zelda: Breath of the Wild",
+              "description_raw": "Step into a world of discovery, exploration, and adventure.",
+              "genres": [ { "name": "Action" }, { "name": "RPG" } ],
+              "developers": [ { "name": "Nintendo EPD" } ],
+              "publishers": [ { "name": "Nintendo" } ]
+            }
+        """.trimIndent()
+
+        val details = RawgApiClient.parseGameDetailsJson(detailJson, "1234")
+        assertEquals(listOf("Nintendo EPD"), details.developers)
+        assertEquals(listOf("Nintendo"), details.publishers)
+        assertEquals(listOf("Action", "RPG"), details.genres)
+
+        val desc = details.buildDescriptionWithMetadata()
+        assertTrue(desc.contains("Step into a world of discovery, exploration, and adventure."))
+        assertTrue(desc.contains("Developer: Nintendo EPD"))
+        assertTrue(desc.contains("Publisher: Nintendo"))
     }
 }

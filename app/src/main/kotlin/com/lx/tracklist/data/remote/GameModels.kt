@@ -12,6 +12,8 @@ data class GameSearchResult(
     val releaseYear: String? = null,
     val platforms: List<String> = emptyList(),
     val genres: List<String> = emptyList(),
+    val developers: List<String> = emptyList(),
+    val publishers: List<String> = emptyList(),
     val score: Float? = null,
     val externalSource: String = "IGDB",
     val summary: String? = null,
@@ -28,6 +30,41 @@ data class GameSearchResult(
         }
 }
 
+fun buildGameDescriptionWithMetadata(
+    baseSummary: String?,
+    developers: List<String> = emptyList(),
+    publishers: List<String> = emptyList()
+): String {
+    val metaLines = mutableListOf<String>()
+    val devList = developers.filter { it.isNotBlank() }.distinct()
+    val pubList = publishers.filter { it.isNotBlank() }.distinct()
+
+    if (devList.isNotEmpty()) {
+        metaLines.add("Developer: ${devList.joinToString(", ")}")
+    }
+    if (pubList.isNotEmpty()) {
+        metaLines.add("Publisher: ${pubList.joinToString(", ")}")
+    }
+
+    var cleanSummary = baseSummary?.trim().orEmpty()
+    if (cleanSummary.isNotBlank()) {
+        cleanSummary = cleanSummary.lines().filterNot { line ->
+            val l = line.trim()
+            l.startsWith("Developer:", ignoreCase = true) ||
+            l.startsWith("Studio:", ignoreCase = true) ||
+            l.startsWith("Studio / Developer:", ignoreCase = true) ||
+            l.startsWith("Publisher:", ignoreCase = true)
+        }.joinToString("\n").trim()
+    }
+
+    val metaBlock = metaLines.joinToString("\n")
+    return when {
+        cleanSummary.isNotBlank() && metaBlock.isNotBlank() -> "$cleanSummary\n\n$metaBlock"
+        metaBlock.isNotBlank() -> metaBlock
+        else -> cleanSummary
+    }
+}
+
 data class GameDetails(
     val externalId: String,
     val externalSource: String = "IGDB",
@@ -41,6 +78,8 @@ data class GameDetails(
     val platforms: List<String> = emptyList(),
     val genres: List<String> = emptyList(),
     val themes: List<String> = emptyList(),
+    val developers: List<String> = emptyList(),
+    val publishers: List<String> = emptyList(),
     val rating: Float? = null,
     val ratingSource: String = "IGDB",
     val collectionId: Long? = null,
@@ -51,7 +90,17 @@ data class GameDetails(
     val steamAppId: String? = null,
     val completionTimeMinutes: Int? = null,
     val normalTimeMinutes: Int? = null
-)
+) {
+    val developerString: String
+        get() = developers.joinToString(", ")
+
+    val publisherString: String
+        get() = publishers.joinToString(", ")
+
+    fun buildDescriptionWithMetadata(): String {
+        return buildGameDescriptionWithMetadata(summary, developers, publishers)
+    }
+}
 
 data class SteamGridPosterItem(
     val id: Long,

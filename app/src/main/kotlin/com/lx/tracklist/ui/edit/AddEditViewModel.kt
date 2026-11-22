@@ -15,6 +15,7 @@ import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.remote.AniListNovelApiClient
 import com.lx.tracklist.data.remote.GameMetadataManager
 import com.lx.tracklist.data.remote.GameSearchResult
+import com.lx.tracklist.data.remote.buildGameDescriptionWithMetadata
 import com.lx.tracklist.data.remote.GoogleBooksApiClient
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanMediaDetails
@@ -1019,8 +1020,10 @@ class AddEditViewModel(
                         .distinct()
                         .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
 
-                    val baseDesc = if (current.description.isBlank() && !(fullDetails?.summary ?: item.summary).isNullOrBlank()) {
-                        (fullDetails?.summary ?: item.summary) ?: ""
+                    val descWithMeta = fullDetails?.buildDescriptionWithMetadata()
+                        ?: buildGameDescriptionWithMetadata(item.summary, item.developers, item.publishers)
+                    val baseDesc = if (current.description.isBlank() && descWithMeta.isNotBlank()) {
+                        descWithMeta
                     } else current.description
 
                     // Platforms

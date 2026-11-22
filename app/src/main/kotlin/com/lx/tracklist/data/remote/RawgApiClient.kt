@@ -239,6 +239,8 @@ object RawgApiClient {
 
             val platforms = parsePlatforms(obj.getAsJsonArray("platforms"))
             val genres = parseStringArray(obj.getAsJsonArray("genres"), "name")
+            val developers = parseStringArray(obj.getAsJsonArray("developers"), "name")
+            val publishers = parseStringArray(obj.getAsJsonArray("publishers"), "name")
             val playtimeHours = obj.get("playtime")?.takeIf { !it.isJsonNull }?.asInt
             val completionMinutes = if (playtimeHours != null && playtimeHours > 0) playtimeHours * 60 else null
 
@@ -251,6 +253,8 @@ object RawgApiClient {
                     releaseYear = releaseYear,
                     platforms = platforms,
                     genres = genres,
+                    developers = developers,
+                    publishers = publishers,
                     score = score,
                     externalSource = "RAWG",
                     completionTimeMinutes = completionMinutes
@@ -281,6 +285,8 @@ object RawgApiClient {
         val platforms = parsePlatforms(obj.getAsJsonArray("platforms"))
         val genres = parseStringArray(obj.getAsJsonArray("genres"), "name")
         val themes = parseStringArray(obj.getAsJsonArray("tags"), "name")
+        val developers = parseStringArray(obj.getAsJsonArray("developers"), "name")
+        val publishers = parseStringArray(obj.getAsJsonArray("publishers"), "name")
 
         val score = (obj.get("rating")?.asFloat)?.let { it * 2f }
         val playtimeHours = obj.get("playtime")?.takeIf { !it.isJsonNull }?.asInt
@@ -364,6 +370,8 @@ object RawgApiClient {
             platforms = platforms,
             genres = genres,
             themes = themes,
+            developers = developers,
+            publishers = publishers,
             rating = score,
             ratingSource = "RAWG",
             relatedItems = related,

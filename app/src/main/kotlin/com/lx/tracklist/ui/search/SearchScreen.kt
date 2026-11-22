@@ -122,9 +122,11 @@ import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.GoogleBooksApiClient
+import com.lx.tracklist.data.remote.GameMetadataManager
 import com.lx.tracklist.data.remote.OpenLibraryApiClient
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.TmdbConfig
+import com.lx.tracklist.data.remote.buildGameDescriptionWithMetadata
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.lx.tracklist.ui.components.UserAvatarButton
@@ -1354,6 +1356,15 @@ private fun SearchResultDetailSheet(
     var detailedEpisodes by remember(item.externalId) { mutableStateOf(item.totalUnits) }
     var detailedDuration by remember(item.externalId) { mutableStateOf(item.durationMinutes) }
     var detailedImdbId by remember(item.externalId) { mutableStateOf<String?>(item.imdbId) }
+    var detailedGameGenres by remember(item.externalId) {
+        mutableStateOf(item.gameGenres.takeIf { it.isNotEmpty() } ?: item.rawGameResult?.genres.orEmpty())
+    }
+    var detailedGameDevelopers by remember(item.externalId) {
+        mutableStateOf(item.gameDevelopers.takeIf { it.isNotEmpty() } ?: item.rawGameResult?.developers.orEmpty())
+    }
+    var detailedGamePublishers by remember(item.externalId) {
+        mutableStateOf(item.gamePublishers.takeIf { it.isNotEmpty() } ?: item.rawGameResult?.publishers.orEmpty())
+    }
     var isLoadingDetails by remember(item.externalId) { mutableStateOf(false) }
 
     LaunchedEffect(item.externalId) {
@@ -1445,6 +1456,30 @@ private fun SearchResultDetailSheet(
                     }
                 } catch (_: Exception) {}
                 isLoadingDetails = false
+            }
+        } else if (item.mediaType == MediaType.GAME) {
+            if (detailedGameDevelopers.isEmpty() || detailedGamePublishers.isEmpty() || detailedGameGenres.isEmpty() || detailedSynopsis.isNullOrBlank()) {
+                isLoadingDetails = true
+                withContext(Dispatchers.IO) {
+                    try {
+                        val gameDetails = GameMetadataManager.getGameDetails(context, item.externalId, item.externalSource).getOrNull()
+                        if (gameDetails != null) {
+                            if (detailedGameGenres.isEmpty() && gameDetails.genres.isNotEmpty()) {
+                                detailedGameGenres = gameDetails.genres
+                            }
+                            if (detailedGameDevelopers.isEmpty() && gameDetails.developers.isNotEmpty()) {
+                                detailedGameDevelopers = gameDetails.developers
+                            }
+                            if (detailedGamePublishers.isEmpty() && gameDetails.publishers.isNotEmpty()) {
+                                detailedGamePublishers = gameDetails.publishers
+                            }
+                            if (detailedSynopsis.isNullOrBlank() && !gameDetails.summary.isNullOrBlank()) {
+                                detailedSynopsis = gameDetails.summary
+                            }
+                        }
+                    } catch (_: Exception) {}
+                    isLoadingDetails = false
+                }
             }
         }
     }
@@ -1767,14 +1802,77 @@ private fun SearchResultDetailSheet(
                 }
             }
 
+            // Game Metadata Card (Studio / Developer, Publisher)
+            val displayGameDev = detailedGameDevelopers.takeIf { it.isNotEmpty() }?.joinToString(", ")
+            val displayGamePub = detailedGamePublishers.takeIf { it.isNotEmpty() }?.joinToString(", ")
+
+            if (item.mediaType == MediaType.GAME && (!displayGameDev.isNullOrBlank() || !displayGamePub.isNullOrBlank())) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, LXBorder)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (!displayGameDev.isNullOrBlank()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    text = "Studio / Developer:",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXPrimaryGreen
+                                )
+                                Text(
+                                    text = displayGameDev,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LXTextPrimary
+                                )
+                            }
+                        }
+                        if (!displayGamePub.isNullOrBlank()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    text = "Publisher:",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXTextSecondary
+                                )
+                                Text(
+                                    text = displayGamePub,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LXTextPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Tags / Genres
             val rawTags = item.rawJikanDetails?.tags
-            if (!rawTags.isNullOrBlank()) {
+            val displayTagsList: List<String> = when {
+                detailedGameGenres.isNotEmpty() -> detailedGameGenres
+                item.gameGenres.isNotEmpty() -> item.gameGenres
+                !item.rawGameResult?.genres.isNullOrEmpty() -> item.rawGameResult?.genres.orEmpty()
+                !rawTags.isNullOrBlank() -> rawTags.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                !item.rawBookDetails?.categories.isNullOrEmpty() -> item.rawBookDetails?.categories.orEmpty()
+                else -> emptyList()
+            }
+            if (displayTagsList.isNotEmpty()) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    rawTags.split(",").map { it.trim() }.filter { it.isNotBlank() }.forEach { tag ->
+                    displayTagsList.forEach { tag ->
                         Surface(
                             shape = RoundedCornerShape(4.dp),
                             color = LXSurfaceElevated,

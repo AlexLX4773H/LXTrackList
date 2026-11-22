@@ -729,7 +729,7 @@ class DetailViewModel(
                             externalScore = details.rating ?: cur.externalScore,
                             externalScoreSource = details.ratingSource,
                             tags = if (details.genres.isNotEmpty()) details.genres.joinToString(", ") else cur.tags,
-                            description = details.summary?.takeIf { it.isNotBlank() } ?: cur.description,
+                            description = details.buildDescriptionWithMetadata().takeIf { it.isNotBlank() } ?: cur.description,
                             durationMinutes = details.completionTimeMinutes ?: cur.durationMinutes,
                             gamePlatforms = mergedPlatforms,
                             relatedEntriesJson = if (details.relatedItems.isNotEmpty()) com.google.gson.Gson().toJson(details.relatedItems) else cur.relatedEntriesJson,
