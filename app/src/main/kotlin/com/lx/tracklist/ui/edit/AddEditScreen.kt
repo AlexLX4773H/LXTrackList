@@ -144,6 +144,7 @@ import com.lx.tracklist.data.remote.GameSearchResult
 import com.lx.tracklist.ui.components.CoverImageSearchDialog
 import com.lx.tracklist.ui.components.SteamGridDbPickerSheet
 import com.lx.tracklist.ui.components.UserAvatarButton
+import com.lx.tracklist.ui.search.OriginalLanguageRegistry
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.ThemeManager
 import com.lx.tracklist.ui.theme.LXBorder
@@ -189,6 +190,7 @@ fun AddEditScreen(
     var pendingSubCategoryChange by remember { mutableStateOf<PendingSubCategoryChange?>(null) }
     var isForeignDbUnlocked by remember { mutableStateOf(false) }
     var showForeignDbWarningDialog by remember { mutableStateOf(false) }
+    var showLanguagePickerDialog by remember { mutableStateOf(false) }
     var databaseSourceExpanded by remember { mutableStateOf(false) }
     var externalScoreSourceExpanded by remember { mutableStateOf(false) }
 
@@ -2171,6 +2173,17 @@ fun AddEditScreen(
                 )
             }
 
+            if (showLanguagePickerDialog) {
+                OriginalLanguagePickerDialog(
+                    currentLanguageCode = state.originalLanguage,
+                    mediaType = state.mediaType,
+                    onSelectLanguage = { code ->
+                        viewModel.updateOriginalLanguage(code)
+                    },
+                    onDismiss = { showLanguagePickerDialog = false }
+                )
+            }
+
             if (showExternalSyncDialog) {
                 ExternalDbSyncDialog(
                     isOpen = showExternalSyncDialog,
@@ -2608,6 +2621,62 @@ fun AddEditScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
+            }
+
+            // Original Language (Media categories only, exclude games)
+            if (state.mediaType != MediaType.GAME) {
+                val currentLangOpt = remember(state.originalLanguage) {
+                    OriginalLanguageRegistry.findByCode(state.originalLanguage)
+                }
+                val langDisplayText = remember(state.originalLanguage, currentLangOpt) {
+                    when {
+                        currentLangOpt != null -> "${currentLangOpt.flagEmoji} ${currentLangOpt.displayName} (${currentLangOpt.code})"
+                        !state.originalLanguage.isNullOrBlank() -> "🌐 ${state.originalLanguage}"
+                        else -> "None (Not specified)"
+                    }
+                }
+
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = langDisplayText,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Original Language (Optional)") },
+                        leadingIcon = {
+                            Text(
+                                text = currentLangOpt?.flagEmoji ?: "🌐",
+                                fontSize = 18.sp,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            if (!state.originalLanguage.isNullOrBlank()) {
+                                IconButton(onClick = { viewModel.updateOriginalLanguage(null) }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Clear Original Language",
+                                        tint = LXTextSecondary
+                                    )
+                                }
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Select Original Language",
+                                    tint = LXTextSecondary
+                                )
+                            }
+                        },
+                        colors = outlinedColors(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .padding(end = if (!state.originalLanguage.isNullOrBlank()) 48.dp else 0.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showLanguagePickerDialog = true }
+                    )
+                }
             }
 
             // Save Button

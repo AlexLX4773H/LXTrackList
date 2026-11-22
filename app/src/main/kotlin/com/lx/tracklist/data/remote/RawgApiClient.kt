@@ -32,14 +32,15 @@ object RawgApiClient {
             .build()
     }
 
-    suspend fun searchGames(context: Context, query: String, limit: Int = 20): Result<List<GameSearchResult>> {
+    suspend fun searchGames(context: Context, query: String, limit: Int = 20, page: Int = 1): Result<List<GameSearchResult>> {
         val apiKey = GameApiConfig.getRawgApiKey(context)
         if (apiKey.isBlank()) {
             return Result.failure(IllegalStateException("RAWG API key is not configured."))
         }
 
         val encodedQuery = URLEncoder.encode(query.trim(), "UTF-8")
-        val url = "$BASE_URL/games?key=$apiKey&search=$encodedQuery&page_size=$limit"
+        val pageParam = if (page > 1) "&page=$page" else ""
+        val url = "$BASE_URL/games?key=$apiKey&search=$encodedQuery&page_size=$limit$pageParam"
         val request = Request.Builder().url(url).build()
 
         return try {
@@ -64,6 +65,7 @@ object RawgApiClient {
         startYear: Int? = null,
         endYear: Int? = null,
         limit: Int = 20,
+        page: Int = 1,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
@@ -100,7 +102,8 @@ object RawgApiClient {
             AdultMode.INCLUDE -> ""
         }
 
-        return "$BASE_URL/games?key=$apiKey&ordering=-added$datesParam$genresParam$platformsParam$adultParam&page_size=$limit"
+        val pageParam = if (page > 1) "&page=$page" else ""
+        return "$BASE_URL/games?key=$apiKey&ordering=-added$datesParam$genresParam$platformsParam$adultParam&page_size=$limit$pageParam"
     }
 
     suspend fun discoverGames(
@@ -109,6 +112,7 @@ object RawgApiClient {
         startYear: Int? = null,
         endYear: Int? = null,
         limit: Int = 20,
+        page: Int = 1,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
@@ -125,6 +129,7 @@ object RawgApiClient {
             startYear = startYear,
             endYear = endYear,
             limit = limit,
+            page = page,
             includedTags = includedTags,
             excludedTags = excludedTags,
             adultMode = adultMode,

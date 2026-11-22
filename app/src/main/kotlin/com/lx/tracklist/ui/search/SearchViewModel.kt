@@ -1062,19 +1062,34 @@ class SearchViewModel(
                             list.mapIndexed { idx, b -> mapBookToSearchResult(b, currentState.results.size + idx) }
                         }
                         filter is DiscoveryFilter.Game -> {
-                            val list = GameMetadataManager.discoverGames(
-                                context = context ?: com.lx.tracklist.LXApplication.instance,
-                                year = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.year else null,
-                                startYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.startYear else null,
-                                endYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.endYear else null,
-                                sort = filter.sortOrder.apiValue,
-                                limit = 20,
-                                includedTags = filter.includedTags,
-                                excludedTags = filter.excludedTags,
-                                adultMode = filter.adultMode,
-                                includedPlatforms = filter.includedPlatforms,
-                                excludedPlatforms = filter.excludedPlatforms
-                            ).getOrThrow()
+                            val appContext = context ?: com.lx.tracklist.LXApplication.instance
+                            val rawList = if (query.isNotBlank()) {
+                                GameMetadataManager.searchGames(appContext, query, limit = 20, page = nextPage).getOrThrow()
+                            } else {
+                                GameMetadataManager.discoverGames(
+                                    context = appContext,
+                                    year = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.year else null,
+                                    startYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.startYear else null,
+                                    endYear = if (filter.mode == ContentDiscoveryMode.BY_YEAR) filter.endYear else null,
+                                    sort = filter.sortOrder.apiValue,
+                                    limit = 20,
+                                    page = nextPage,
+                                    includedTags = filter.includedTags,
+                                    excludedTags = filter.excludedTags,
+                                    adultMode = filter.adultMode,
+                                    includedPlatforms = filter.includedPlatforms,
+                                    excludedPlatforms = filter.excludedPlatforms
+                                ).getOrThrow()
+                            }
+                            val list = if (query.isNotBlank() && (filter.includedPlatforms.isNotEmpty() || filter.excludedPlatforms.isNotEmpty())) {
+                                rawList.filter { game ->
+                                    val incOk = if (filter.includedPlatforms.isNotEmpty()) GamePlatformRegistry.matchesAnyPlatform(filter.includedPlatforms, game.platforms) else true
+                                    val excOk = if (filter.excludedPlatforms.isNotEmpty()) !GamePlatformRegistry.isExcluded(filter.excludedPlatforms, game.platforms) else true
+                                    incOk && excOk
+                                }
+                            } else {
+                                rawList
+                            }
                             list.map { game ->
                                 SearchResultItem(
                                     externalId = game.externalId,
@@ -1108,6 +1123,73 @@ class SearchViewModel(
                             ).getOrThrow()
                             list.map { mapTmdbToSearchResult(it, isMovie = false) }
                         }
+                        currentState.selectedCategory == SearchCategory.GAMES && query.length >= 2 -> {
+                            val appContext = context ?: com.lx.tracklist.LXApplication.instance
+                            val list = GameMetadataManager.searchGames(appContext, query, limit = 20, page = nextPage).getOrThrow()
+                            list.map { game ->
+                                SearchResultItem(
+                                    externalId = game.externalId,
+                                    externalSource = game.externalSource,
+                                    mediaType = MediaType.GAME,
+                                    title = game.title,
+                                    alternateTitle = game.alternateTitle,
+                                    posterUrl = game.coverUrl,
+                                    releaseYear = game.releaseYear,
+                                    score = game.score,
+                                    statusText = if (game.releaseDateMillis != null && game.releaseDateMillis > System.currentTimeMillis()) "NYR" else "Game",
+                                    synopsis = game.summary,
+                                    rawGameResult = game,
+                                    gamePlatforms = game.platforms
+                                )
+                            }
+                        }
+                        currentState.selectedCategory == SearchCategory.ANIME && query.length >= 2 -> {
+                            val list = JikanApiClient.searchJikanMultiple(query, isManga = false, limit = 20, page = nextPage).getOrThrow()
+                            list.mapIndexed { idx, d -> mapJikanToSearchResult(d, currentState.results.size + idx, MediaType.ANIME) }
+                        }
+                        currentState.selectedCategory == SearchCategory.MANGA && query.length >= 2 -> {
+                            val list = JikanApiClient.searchJikanMultiple(query, isManga = true, limit = 20, page = nextPage).getOrThrow()
+                            list.mapIndexed { idx, d -> mapJikanToSearchResult(d, currentState.results.size + idx, MediaType.MANGA) }
+                        }
+                        currentState.selectedCategory == SearchCategory.MANHWA && query.length >= 2 -> {
+                            val list = JikanApiClient.queryAniListMultiple(query, isManga = true, subType = "manhwa", limit = 20, page = nextPage).getOrThrow()
+                            list.mapIndexed { idx, d -> mapJikanToSearchResult(d, currentState.results.size + idx, MediaType.MANHWA) }
+                        }
+                        currentState.selectedCategory == SearchCategory.LIGHT_NOVELS && query.length >= 2 -> {
+                            val list = BookMetadataManager.searchLightNovels(query, limit = 20, page = nextPage).getOrThrow()
+                            list.mapIndexed { idx, details ->
+                                val extSource = details.sourceProvider
+                                val extId = details.malId?.takeIf { it > 0 }?.toString()
+                                    ?: details.aniListId?.takeIf { it > 0 }?.toString()
+                                    ?: "ln_${details.title?.hashCode() ?: idx}_${currentState.results.size + idx}"
+                                val isNyp = (details.airedStartDate != null && details.airedStartDate > System.currentTimeMillis()) ||
+                                        (details.nextAiringEpoch != null && details.nextAiringEpoch > System.currentTimeMillis() && (details.airedEpisodes ?: 0) == 0)
+                                SearchResultItem(
+                                    externalId = extId,
+                                    externalSource = extSource,
+                                    mediaType = MediaType.BOOK,
+                                    title = details.title ?: "Unknown",
+                                    alternateTitle = details.alternateTitle,
+                                    posterUrl = details.posterUrl,
+                                    releaseYear = details.airedStartDate?.let { extractYear(it) },
+                                    originalLanguage = details.originalLanguage ?: "ja",
+                                    totalUnits = details.totalChapters,
+                                    totalVolumes = details.totalVolumes,
+                                    score = details.externalScore,
+                                    statusText = if (isNyp) "NYP" else "Light Novel",
+                                    synopsis = details.synopsis,
+                                    author = details.authors,
+                                    rawJikanDetails = details,
+                                    directMalId = details.malId?.takeIf { it > 0 },
+                                    directAniListId = details.aniListId?.takeIf { it > 0 },
+                                    directSiteUrl = details.url ?: details.webUrl
+                                )
+                            }
+                        }
+                        currentState.selectedCategory == SearchCategory.BOOKS && query.length >= 2 -> {
+                            val list = BookMetadataManager.searchBooks(query, context, limit = 20, page = nextPage).getOrThrow()
+                            list.mapIndexed { idx, b -> mapBookToSearchResult(b, currentState.results.size + idx) }
+                        }
                         else -> emptyList()
                     }
                 }
@@ -1117,7 +1199,7 @@ class SearchViewModel(
                     state.copy(
                         results = combinedResults,
                         currentPage = nextPage,
-                        canLoadMore = newItems.isNotEmpty() && newItems.size >= 15,
+                        canLoadMore = newItems.isNotEmpty() && combinedResults.size > state.results.size,
                         isLoadingMore = false
                     )
                 }
@@ -1914,7 +1996,7 @@ class SearchViewModel(
                         results = results,
                         isLoading = false,
                         currentPage = 1,
-                        canLoadMore = results.size >= 15,
+                        canLoadMore = results.size >= 10,
                         errorMessage = if (results.isEmpty()) "No results found for '$query'" else null
                     )
                 }
@@ -2002,7 +2084,8 @@ class SearchViewModel(
                             durationMinutes = fullDetails?.durationMinutes ?: item.durationMinutes,
                             tags = fullDetails?.tags,
                             description = fullDetails?.synopsis ?: item.synopsis,
-                            airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate
+                            airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate,
+                            originalLanguage = fullDetails?.originalLanguage ?: item.originalLanguage ?: item.rawTmdbResult?.originalLanguage
                         )
                     } else {
                         val fullDetails = TmdbApiClient.fetchTvDetails(tmdbId, context).getOrNull()
@@ -2026,7 +2109,8 @@ class SearchViewModel(
                             tags = fullDetails?.tags,
                             description = fullDetails?.synopsis ?: item.synopsis,
                             airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate,
-                            isAiring = fullDetails?.isAiring ?: false
+                            isAiring = fullDetails?.isAiring ?: false,
+                            originalLanguage = fullDetails?.originalLanguage ?: item.originalLanguage ?: item.rawTmdbResult?.originalLanguage
                         )
                     }
                 } else {
@@ -2070,7 +2154,8 @@ class SearchViewModel(
                         description = details?.synopsis ?: item.synopsis,
                         airedStartDate = startEpoch,
                         airedEndDate = endEpoch,
-                        isAiring = if (isBook) false else (details?.isAiring ?: false)
+                        isAiring = if (isBook) false else (details?.isAiring ?: false),
+                        originalLanguage = details?.originalLanguage ?: item.originalLanguage
                     )
                 }
 

@@ -1,7 +1,13 @@
 package com.lx.tracklist
 
+import com.lx.tracklist.data.model.MediaEntry
+import com.lx.tracklist.data.model.MediaStatus
+import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.remote.IgdbApiClient
 import com.lx.tracklist.data.remote.RawgApiClient
+import com.lx.tracklist.data.remote.TmdbApiClient
+import com.google.gson.JsonObject
+import com.lx.tracklist.util.DurationFormatter
 import com.lx.tracklist.ui.search.AdultMode
 import com.lx.tracklist.ui.search.AnimeDiscoveryMode
 import com.lx.tracklist.ui.search.AnimeSeason
@@ -711,6 +717,19 @@ class DiscoveryFeatureTest {
         assertTrue(otherPlatforms.any { it.id == "PS3" })
         assertTrue(otherPlatforms.any { it.id == "3DS" })
         assertTrue(otherPlatforms.any { it.id == "Retro" })
+        assertTrue(otherPlatforms.any { it.id == "Linux" })
+
+        // Linux platform in Other Platforms
+        val linux = GamePlatformRegistry.findOption("Linux")
+        assertNotNull(linux)
+        assertEquals("Other", linux?.category)
+        assertEquals("🐧", linux?.iconEmoji)
+        assertEquals(listOf(3), linux?.igdbPlatformIds)
+        assertEquals(listOf(6), linux?.rawgPlatformIds)
+        assertTrue(GamePlatformRegistry.matchesPlatform("Linux", "Linux"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("Linux", "SteamOS"))
+        assertTrue(GamePlatformRegistry.matchesAnyPlatform(setOf("Linux"), listOf("PlayStation 3", "Linux", "PC (Microsoft Windows)")))
+        assertFalse(GamePlatformRegistry.matchesPlatform("Linux", "PC (Microsoft Windows)"))
     }
 
     @Test
@@ -822,5 +841,176 @@ class DiscoveryFeatureTest {
         )
         assertTrue(rawgUrl.contains("&platforms="))
         assertTrue(rawgUrl.contains("4") && rawgUrl.contains("7"))
+    }
+
+    @Test
+    fun testDurationFormatterPlaytimeAndAverageTime() {
+        // Less than 24h
+        assertEquals("0.0 hrs", DurationFormatter.formatHours(0.0))
+        assertEquals("12.5 hrs", DurationFormatter.formatHours(12.5))
+        assertEquals("23.0 hrs", DurationFormatter.formatHours(23.0))
+
+        // Days (24h to 7d)
+        assertEquals("1.0 days", DurationFormatter.formatHours(24.0))
+        assertEquals("2.5 days", DurationFormatter.formatHours(60.0))
+        assertEquals("6.9 days", DurationFormatter.formatHours(165.6))
+
+        // Weeks (7d to ~30.4d)
+        assertEquals("1.0 wks", DurationFormatter.formatHours(168.0)) // 7 * 24
+        assertEquals("2.5 wks", DurationFormatter.formatHours(420.0))
+
+        // Months (~30.4d to 365.25d)
+        assertEquals("1.0 mos", DurationFormatter.formatHours(30.4375 * 24.0))
+        assertEquals("3.5 mos", DurationFormatter.formatHours(3.5 * 30.4375 * 24.0))
+
+        // Years (>= 365.25d)
+        assertEquals("1.0 yrs", DurationFormatter.formatHours(365.25 * 24.0))
+        assertEquals("2.5 yrs", DurationFormatter.formatHours(2.5 * 365.25 * 24.0))
+
+        // Minutes formatter (as used in game detail page for Baldur's Gate 3 ~5649h 38m)
+        val bg3Minutes = 5649 * 60 + 38
+        val bg3Formatted = DurationFormatter.formatMinutes(bg3Minutes)
+        assertTrue(bg3Formatted.endsWith("mos") || bg3Formatted.endsWith("yrs"))
+
+        // Small minutes (< 24h)
+        assertEquals("45m", DurationFormatter.formatMinutes(45))
+        assertEquals("2h 30m", DurationFormatter.formatMinutes(150))
+    }
+
+    @Test
+    fun testMediaEntryEffectiveLanguageAndRegistry() {
+        val entryWithExplicit = MediaEntry(
+            title = "Test Manga",
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.WATCHING,
+            originalLanguage = "ja"
+        )
+        assertEquals("ja", entryWithExplicit.getEffectiveLanguage())
+
+        val entryWithTag = MediaEntry(
+            title = "Korean Webtoon",
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.WATCHING,
+            tags = "Action, Korean, Webtoon"
+        )
+        assertEquals("ko", entryWithTag.getEffectiveLanguage())
+
+        val entryWithManhwaCategory = MediaEntry(
+            title = "Solo Leveling",
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.WATCHING,
+            customCategory = "Manhwa"
+        )
+        assertEquals("ko", entryWithManhwaCategory.getEffectiveLanguage())
+
+        val defaultAnime = MediaEntry(
+            title = "Anime Show",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.WATCHING
+        )
+        assertEquals("ja", defaultAnime.getEffectiveLanguage())
+
+        val defaultMovie = MediaEntry(
+            title = "Hollywood Movie",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.WATCHING
+        )
+        assertEquals("en", defaultMovie.getEffectiveLanguage())
+    }
+
+    @Test
+    fun testPlatformAndLanguageMatchingRules() {
+        // Platform matching OR condition
+        val pcSwitchFilter = setOf("PC", "Nintendo Switch")
+        assertTrue(GamePlatformRegistry.matchesAnyPlatform(pcSwitchFilter, listOf("PC (Microsoft Windows)")))
+        assertTrue(GamePlatformRegistry.matchesAnyPlatform(pcSwitchFilter, listOf("Nintendo Switch")))
+        assertFalse(GamePlatformRegistry.matchesAnyPlatform(pcSwitchFilter, listOf("PlayStation 5")))
+
+        // Platform exclusion
+        val mobileExc = setOf("Mobile (Android / iOS)")
+        assertTrue(GamePlatformRegistry.isExcluded(mobileExc, listOf("Android", "PC")))
+        assertFalse(GamePlatformRegistry.isExcluded(mobileExc, listOf("PC", "Nintendo Switch")))
+
+        // Language matching
+        val langFilter = setOf("ja", "ko")
+        assertTrue(OriginalLanguageRegistry.matchesAny(langFilter, "ja"))
+        assertTrue(OriginalLanguageRegistry.matchesAny(langFilter, "Japanese"))
+        assertTrue(OriginalLanguageRegistry.matchesAny(langFilter, "ko"))
+        assertFalse(OriginalLanguageRegistry.matchesAny(langFilter, "en"))
+    }
+
+    @Test
+    fun testOriginalLanguagePillAndRegistry() {
+        val zhOpt = OriginalLanguageRegistry.findByCode("zh")
+        assertNotNull(zhOpt)
+        assertEquals("Chinese", zhOpt?.displayName)
+        assertEquals("🇨🇳", zhOpt?.flagEmoji)
+        val zhLabel = if (zhOpt != null) "${zhOpt.flagEmoji} ${zhOpt.displayName}" else "🌐 zh"
+        assertEquals("🇨🇳 Chinese", zhLabel)
+
+        val jaOpt = OriginalLanguageRegistry.findByCode("ja")
+        assertNotNull(jaOpt)
+        assertEquals("Japanese", jaOpt?.displayName)
+        assertEquals("🇯🇵", jaOpt?.flagEmoji)
+        val jaLabel = if (jaOpt != null) "${jaOpt.flagEmoji} ${jaOpt.displayName}" else "🌐 ja"
+        assertEquals("🇯🇵 Japanese", jaLabel)
+
+        val koOpt = OriginalLanguageRegistry.findByCode("ko")
+        assertNotNull(koOpt)
+        assertEquals("Korean", koOpt?.displayName)
+        assertEquals("🇰🇷", koOpt?.flagEmoji)
+
+        // Custom / fallback language
+        val customOpt = OriginalLanguageRegistry.findByCode("custom-lang")
+        val customLabel = if (customOpt != null) "${customOpt.flagEmoji} ${customOpt.displayName}" else "🌐 custom-lang"
+        assertEquals("🌐 custom-lang", customLabel)
+    }
+
+    @Test
+    fun testOriginalLanguageSaveForMediaTypes() {
+        // Media entry for Manhwa with originalLanguage
+        val manhwaEntry = MediaEntry(
+            title = "I'm The Great Immortal",
+            mediaType = MediaType.MANHWA,
+            status = MediaStatus.PLAN_TO_WATCH,
+            originalLanguage = "zh"
+        )
+        assertEquals("zh", manhwaEntry.originalLanguage)
+
+        // Simulating save logic: games do not have originalLanguage persisted
+        val gameMediaType = MediaType.GAME
+        val originalLangInput = "ja"
+        val persistedGameLang = if (gameMediaType != MediaType.GAME) originalLangInput.trim().ifBlank { null } else null
+        assertEquals(null, persistedGameLang)
+
+        val animeMediaType = MediaType.ANIME
+        val persistedAnimeLang = if (animeMediaType != MediaType.GAME) originalLangInput.trim().ifBlank { null } else null
+        assertEquals("ja", persistedAnimeLang)
+    }
+
+    @Test
+    fun testTmdbDetailsOriginalLanguageExtraction() {
+        val movieJson = JsonObject().apply {
+            addProperty("id", 9659L)
+            addProperty("title", "Mad Max")
+            addProperty("original_language", "en")
+            addProperty("release_date", "1979-04-12")
+            addProperty("vote_average", 6.7f)
+            addProperty("runtime", 91)
+        }
+        val movieDetails = TmdbApiClient.parseMovieDetails(movieJson, 9659L)
+        assertEquals("en", movieDetails.originalLanguage)
+        assertEquals("Mad Max", movieDetails.title)
+
+        val tvJson = JsonObject().apply {
+            addProperty("id", 1399L)
+            addProperty("name", "Game of Thrones")
+            addProperty("original_language", "en")
+            addProperty("first_air_date", "2011-04-17")
+            addProperty("vote_average", 8.4f)
+        }
+        val tvDetails = TmdbApiClient.parseTvDetails(tvJson, 1399L)
+        assertEquals("en", tvDetails.originalLanguage)
+        assertEquals("Game of Thrones", tvDetails.title)
     }
 }

@@ -269,6 +269,17 @@ object GamePlatformRegistry {
             rawgPlatformIds = listOf(21, 3)
         ),
 
+        // Other Platforms
+        GamePlatformOption(
+            id = "Linux",
+            displayName = "Linux",
+            category = "Other",
+            iconEmoji = "🐧",
+            aliases = listOf("linux", "steamdeck", "steam deck", "steamos", "steam os", "gnu/linux", "ubuntu", "proton"),
+            igdbPlatformIds = listOf(3),
+            rawgPlatformIds = listOf(6)
+        ),
+
         // Retro / Other
         GamePlatformOption(
             id = "Retro",

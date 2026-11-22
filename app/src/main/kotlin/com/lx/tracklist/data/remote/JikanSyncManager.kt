@@ -825,6 +825,11 @@ object JikanSyncManager {
                     details.nextAiringEpoch
                 } else entry.nextAiringEpoch
 
+                val newOriginalLanguage = if (!details.originalLanguage.isNullOrBlank()) {
+                    if (details.originalLanguage != entry.originalLanguage) hasChanges = true
+                    details.originalLanguage
+                } else entry.originalLanguage
+
                 if (hasChanges) {
                     val updatedEntry = entry.copy(
                         userId = profileId,
@@ -848,6 +853,7 @@ object JikanSyncManager {
                         externalId = finalExternalId,
                         externalSource = finalExternalSource ?: entry.externalSource,
                         relatedEntriesJson = newRelatedJson,
+                        originalLanguage = newOriginalLanguage,
                         updatedAt = System.currentTimeMillis()
                     )
                     repository.update(updatedEntry)

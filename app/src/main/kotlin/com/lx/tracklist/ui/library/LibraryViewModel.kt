@@ -15,6 +15,8 @@ import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbSyncManager
 import com.lx.tracklist.data.repository.MediaRepository
+import com.lx.tracklist.ui.search.GamePlatformRegistry
+import com.lx.tracklist.ui.search.OriginalLanguageRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -25,6 +27,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 enum class LibrarySortOption(val displayName: String) {
     RECENTLY_UPDATED("Recently Updated"),
@@ -105,6 +108,9 @@ data class LibraryUiState(
     val onlyUnrated: Boolean = false,
     val includedTags: Set<String> = emptySet(),
     val excludedTags: Set<String> = emptySet(),
+    val includedPlatforms: Set<String> = emptySet(),
+    val excludedPlatforms: Set<String> = emptySet(),
+    val includedLanguages: Set<String> = emptySet(),
     val availableTags: List<String> = emptyList(),
     val tagCounts: Map<String, Int> = emptyMap(),
     val favoritesFilter: InclusionFilterOption = InclusionFilterOption.ALL,
@@ -140,6 +146,15 @@ data class LibraryUiState(
             else -> TagSelectionState.UNSELECTED
         }
     }
+
+    fun getPlatformState(platform: String): TagSelectionState {
+        val clean = platform.trim()
+        return when {
+            includedPlatforms.any { it.equals(clean, ignoreCase = true) } -> TagSelectionState.INCLUDED
+            excludedPlatforms.any { it.equals(clean, ignoreCase = true) } -> TagSelectionState.EXCLUDED
+            else -> TagSelectionState.UNSELECTED
+        }
+    }
 }
 
 private data class LibraryFilterState(
@@ -152,6 +167,9 @@ private data class LibraryFilterState(
     val onlyUnrated: Boolean = false,
     val includedTags: Set<String> = emptySet(),
     val excludedTags: Set<String> = emptySet(),
+    val includedPlatforms: Set<String> = emptySet(),
+    val excludedPlatforms: Set<String> = emptySet(),
+    val includedLanguages: Set<String> = emptySet(),
     val favoritesFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val rewatchingFilter: InclusionFilterOption = InclusionFilterOption.ALL,
     val airingFilter: AiringFilterOption = AiringFilterOption.ALL,
@@ -172,6 +190,8 @@ private data class LibraryFilterState(
             if (statusFilter != null) count++
             if (minScore != null || onlyUnrated) count++
             if (includedTags.isNotEmpty() || excludedTags.isNotEmpty()) count++
+            if (includedPlatforms.isNotEmpty() || excludedPlatforms.isNotEmpty()) count++
+            if (includedLanguages.isNotEmpty()) count++
             if (favoritesFilter != InclusionFilterOption.ALL) count++
             if (rewatchingFilter != InclusionFilterOption.ALL) count++
             if (airingFilter != AiringFilterOption.ALL) count++
@@ -321,6 +341,37 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             }
         }
 
+        // 6b. Platforms Filter (specifically for games)
+        if (filter.includedPlatforms.isNotEmpty()) {
+            list = list.filter { entry ->
+                if (entry.mediaType == MediaType.GAME) {
+                    GamePlatformRegistry.matchesAnyPlatform(filter.includedPlatforms, entry.getGamePlatformList())
+                } else {
+                    false
+                }
+            }
+        }
+        if (filter.excludedPlatforms.isNotEmpty()) {
+            list = list.filter { entry ->
+                if (entry.mediaType == MediaType.GAME) {
+                    !GamePlatformRegistry.isExcluded(filter.excludedPlatforms, entry.getGamePlatformList())
+                } else {
+                    true
+                }
+            }
+        }
+
+        // 6c. Original Language Filter (for all entities except games)
+        if (filter.includedLanguages.isNotEmpty()) {
+            list = list.filter { entry ->
+                if (entry.mediaType != MediaType.GAME) {
+                    OriginalLanguageRegistry.matchesAny(filter.includedLanguages, entry.getEffectiveLanguage())
+                } else {
+                    false
+                }
+            }
+        }
+
         // 6. Score Filter
         if (filter.onlyUnrated) {
             list = list.filter { it.score == null || it.score == 0 }
@@ -365,6 +416,9 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             onlyUnrated = filter.onlyUnrated,
             includedTags = filter.includedTags,
             excludedTags = filter.excludedTags,
+            includedPlatforms = filter.includedPlatforms,
+            excludedPlatforms = filter.excludedPlatforms,
+            includedLanguages = filter.includedLanguages,
             availableTags = allAvailableTags,
             tagCounts = tagCounts,
             favoritesFilter = filter.favoritesFilter,
@@ -488,6 +542,72 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
         _filterState.update { it.copy(includedTags = emptySet(), excludedTags = emptySet()) }
     }
 
+    fun cyclePlatformState(platform: String) {
+        _filterState.update { state ->
+            val cleanPlatform = platform.trim()
+            val isIncluded = state.includedPlatforms.any { it.equals(cleanPlatform, ignoreCase = true) }
+            val isExcluded = state.excludedPlatforms.any { it.equals(cleanPlatform, ignoreCase = true) }
+
+            when {
+                !isIncluded && !isExcluded -> {
+                    state.copy(
+                        includedPlatforms = state.includedPlatforms + cleanPlatform,
+                        excludedPlatforms = state.excludedPlatforms.filter { !it.equals(cleanPlatform, ignoreCase = true) }.toSet()
+                    )
+                }
+                isIncluded -> {
+                    state.copy(
+                        includedPlatforms = state.includedPlatforms.filter { !it.equals(cleanPlatform, ignoreCase = true) }.toSet(),
+                        excludedPlatforms = state.excludedPlatforms + cleanPlatform
+                    )
+                }
+                else -> {
+                    state.copy(
+                        includedPlatforms = state.includedPlatforms.filter { !it.equals(cleanPlatform, ignoreCase = true) }.toSet(),
+                        excludedPlatforms = state.excludedPlatforms.filter { !it.equals(cleanPlatform, ignoreCase = true) }.toSet()
+                    )
+                }
+            }
+        }
+    }
+
+    fun removePlatformFilter(platform: String) {
+        _filterState.update { state ->
+            val clean = platform.trim()
+            state.copy(
+                includedPlatforms = state.includedPlatforms.filter { !it.equals(clean, ignoreCase = true) }.toSet(),
+                excludedPlatforms = state.excludedPlatforms.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+            )
+        }
+    }
+
+    fun clearPlatformFilters() {
+        _filterState.update { it.copy(includedPlatforms = emptySet(), excludedPlatforms = emptySet()) }
+    }
+
+    fun toggleLanguageFilter(languageCode: String) {
+        _filterState.update { state ->
+            val cleanCode = languageCode.trim().lowercase(Locale.ROOT)
+            val newLanguages = if (state.includedLanguages.any { it.equals(cleanCode, ignoreCase = true) }) {
+                state.includedLanguages.filter { !it.equals(cleanCode, ignoreCase = true) }.toSet()
+            } else {
+                state.includedLanguages + cleanCode
+            }
+            state.copy(includedLanguages = newLanguages)
+        }
+    }
+
+    fun removeLanguageFilter(languageCode: String) {
+        _filterState.update { state ->
+            val cleanCode = languageCode.trim().lowercase(Locale.ROOT)
+            state.copy(includedLanguages = state.includedLanguages.filter { !it.equals(cleanCode, ignoreCase = true) }.toSet())
+        }
+    }
+
+    fun clearLanguageFilters() {
+        _filterState.update { it.copy(includedLanguages = emptySet()) }
+    }
+
     fun cycleFavoritesFilter() {
         _filterState.update { it.copy(favoritesFilter = it.favoritesFilter.next()) }
     }
@@ -582,6 +702,9 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                 onlyUnrated = false,
                 includedTags = emptySet(),
                 excludedTags = emptySet(),
+                includedPlatforms = emptySet(),
+                excludedPlatforms = emptySet(),
+                includedLanguages = emptySet(),
                 favoritesFilter = InclusionFilterOption.ALL,
                 rewatchingFilter = InclusionFilterOption.ALL,
                 airingFilter = AiringFilterOption.ALL,

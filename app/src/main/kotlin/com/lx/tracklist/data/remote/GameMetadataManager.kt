@@ -13,24 +13,24 @@ object GameMetadataManager {
      * Searches for games, prioritizing IGDB as primary and falling back to RAWG if unconfigured or no hits,
      * or routing directly if a specific source ("IGDB" or "RAWG") is specified.
      */
-    suspend fun searchGames(context: Context, query: String, source: String? = null, limit: Int = 20): Result<List<GameSearchResult>> {
+    suspend fun searchGames(context: Context, query: String, source: String? = null, limit: Int = 20, page: Int = 1): Result<List<GameSearchResult>> {
         val src = source?.trim()?.uppercase()
         if (src == "IGDB") {
             if (!GameApiConfig.isIgdbConfigured(context)) {
                 return Result.failure(IllegalStateException("IGDB credentials are not configured. Please add your Twitch Client ID and Secret in Settings."))
             }
-            return IgdbApiClient.searchGames(context, query, limit)
+            return IgdbApiClient.searchGames(context, query, limit, page)
         }
         if (src == "RAWG") {
             if (!GameApiConfig.isRawgConfigured(context)) {
                 return Result.failure(IllegalStateException("RAWG API key is not configured. Please add your RAWG API key in Settings."))
             }
-            return RawgApiClient.searchGames(context, query, limit)
+            return RawgApiClient.searchGames(context, query, limit, page)
         }
 
         // 1. Try IGDB primary
         if (GameApiConfig.isIgdbConfigured(context)) {
-            val igdbRes = IgdbApiClient.searchGames(context, query, limit)
+            val igdbRes = IgdbApiClient.searchGames(context, query, limit, page)
             if (igdbRes.isSuccess) {
                 val list = igdbRes.getOrDefault(emptyList())
                 if (list.isNotEmpty()) {
@@ -43,7 +43,7 @@ object GameMetadataManager {
 
         // 2. Fallback to RAWG
         if (GameApiConfig.isRawgConfigured(context)) {
-            val rawgRes = RawgApiClient.searchGames(context, query, limit)
+            val rawgRes = RawgApiClient.searchGames(context, query, limit, page)
             if (rawgRes.isSuccess) {
                 return rawgRes
             } else {
@@ -72,6 +72,7 @@ object GameMetadataManager {
         endYear: Int? = null,
         sort: String = "total_rating_count desc",
         limit: Int = 20,
+        page: Int = 1,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
@@ -88,6 +89,7 @@ object GameMetadataManager {
                 endYear = eYear,
                 sort = sort,
                 limit = limit,
+                page = page,
                 includedTags = includedTags,
                 excludedTags = excludedTags,
                 adultMode = adultMode,
@@ -104,6 +106,7 @@ object GameMetadataManager {
                 startYear = sYear,
                 endYear = eYear,
                 limit = limit,
+                page = page,
                 includedTags = includedTags,
                 excludedTags = excludedTags,
                 adultMode = adultMode,

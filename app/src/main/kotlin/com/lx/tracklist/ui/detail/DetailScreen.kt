@@ -1,5 +1,6 @@
 package com.lx.tracklist.ui.detail
 
+import com.lx.tracklist.util.DurationFormatter
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,6 +35,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -135,6 +138,7 @@ import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
+import com.lx.tracklist.ui.search.OriginalLanguageRegistry
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.GameMetadataManager
@@ -598,6 +602,13 @@ fun DetailScreen(
                             if (!currentEntry.subCategory.isNullOrBlank()) {
                                 MetaChip(label = currentEntry.subCategory, color = LXScoreGold)
                             }
+                            val displayLang = currentEntry.originalLanguage?.takeIf { it.isNotBlank() }
+                                ?: if (currentEntry.mediaType != MediaType.GAME) currentEntry.getEffectiveLanguage().takeIf { it.isNotBlank() } else null
+                            if (!displayLang.isNullOrBlank()) {
+                                val opt = OriginalLanguageRegistry.findByCode(displayLang)
+                                val label = if (opt != null) "${opt.flagEmoji} ${opt.displayName}" else "🌐 $displayLang"
+                                MetaChip(label = label, color = LXAiringBlue)
+                            }
                             StatusDropdownChip(
                                 status = currentEntry.status,
                                 mediaType = currentEntry.mediaType,
@@ -619,9 +630,7 @@ fun DetailScreen(
                                 val durStr = if (h > 0) "${h}h ${m}m" else "${m}m"
                                 MetaChip(label = "⏱️ $durStr", color = LXPrimaryGreen)
                             } else if (currentEntry.mediaType == MediaType.GAME && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
-                                val h = currentEntry.durationMinutes / 60
-                                val m = currentEntry.durationMinutes % 60
-                                val durStr = if (h > 0 && m > 0) "${h}h ${m}m" else if (h > 0) "${h}h" else "${m}m"
+                                val durStr = DurationFormatter.formatMinutes(currentEntry.durationMinutes)
                                 MetaChip(label = "⏱️ Avg 100%: $durStr", color = LXPrimaryGreen)
                             } else if (currentEntry.episodeLengthMinutes != null && currentEntry.episodeLengthMinutes > 0) {
                                 MetaChip(label = "⏱️ ${currentEntry.episodeLengthMinutes} min/ep", color = LXPrimaryGreen)
@@ -795,6 +804,13 @@ fun DetailScreen(
                             if (!currentEntry.subCategory.isNullOrBlank()) {
                                 MetaChip(label = currentEntry.subCategory, color = LXScoreGold)
                             }
+                            val displayLang = currentEntry.originalLanguage?.takeIf { it.isNotBlank() }
+                                ?: if (currentEntry.mediaType != MediaType.GAME) currentEntry.getEffectiveLanguage().takeIf { it.isNotBlank() } else null
+                            if (!displayLang.isNullOrBlank()) {
+                                val opt = OriginalLanguageRegistry.findByCode(displayLang)
+                                val label = if (opt != null) "${opt.flagEmoji} ${opt.displayName}" else "🌐 $displayLang"
+                                MetaChip(label = label, color = LXAiringBlue)
+                            }
                             StatusDropdownChip(
                                 status = currentEntry.status,
                                 mediaType = currentEntry.mediaType,
@@ -816,9 +832,7 @@ fun DetailScreen(
                                 val durStr = if (h > 0) "${h}h ${m}m" else "${m}m"
                                 MetaChip(label = "⏱️ $durStr", color = LXPrimaryGreen)
                             } else if (currentEntry.mediaType == MediaType.GAME && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
-                                val h = currentEntry.durationMinutes / 60
-                                val m = currentEntry.durationMinutes % 60
-                                val durStr = if (h > 0 && m > 0) "${h}h ${m}m" else if (h > 0) "${h}h" else "${m}m"
+                                val durStr = DurationFormatter.formatMinutes(currentEntry.durationMinutes)
                                 MetaChip(label = "⏱️ Avg 100%: $durStr", color = LXPrimaryGreen)
                             } else if (currentEntry.episodeLengthMinutes != null && currentEntry.episodeLengthMinutes > 0) {
                                 MetaChip(label = "⏱️ ${currentEntry.episodeLengthMinutes} min/ep", color = LXPrimaryGreen)
@@ -1305,6 +1319,8 @@ private fun DetailProgressCard(
             ) {
                 Column(
                     modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 12.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .clickable {
                             editSeasonInput = "${entry.currentSeasons}"
@@ -1363,21 +1379,21 @@ private fun DetailProgressCard(
                         )
                     } else if (entry.mediaType == MediaType.GAME && entry.durationMinutes != null && entry.durationMinutes > 0) {
                         Spacer(modifier = Modifier.height(3.dp))
-                        val h = entry.durationMinutes / 60
-                        val m = entry.durationMinutes % 60
-                        val durStr = if (h > 0 && m > 0) "${h}h ${m}m" else if (h > 0) "${h}h" else "${m}m"
+                        val durStr = DurationFormatter.formatMinutes(entry.durationMinutes)
                         val progressPct = entry.gameProgressPercent.coerceIn(0, 100)
                         val timeSpentMins = (progressPct / 100.0) * entry.durationMinutes
-                        val spentH = (timeSpentMins / 60.0).let { String.format(Locale.US, "%.1f", it) }
+                        val spentStr = DurationFormatter.formatHours(timeSpentMins / 60.0)
                         val label = if (entry.status == MediaStatus.COMPLETED || progressPct >= 100) {
                             "⏱️ 100% Avg: ~$durStr (in stats)"
                         } else {
-                            "⏱️ Est: ~$spentH hrs spent / ~$durStr avg"
+                            "⏱️ Est: ~$spentStr spent / ~$durStr avg"
                         }
                         Text(
                             text = label,
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
-                            color = LXPrimaryGreen
+                            color = LXPrimaryGreen,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -1385,6 +1401,7 @@ private fun DetailProgressCard(
                 if (!isMovie) {
                     val canDecrement = info.current > 0 || (hasSeasonTracking && entry.currentSeasons > 1)
                     Row(
+                        modifier = Modifier.wrapContentWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -1413,7 +1430,9 @@ private fun DetailProgressCard(
                             ),
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
                             shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier.height(40.dp)
+                            modifier = Modifier
+                                .height(40.dp)
+                                .defaultMinSize(minWidth = 56.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Add,

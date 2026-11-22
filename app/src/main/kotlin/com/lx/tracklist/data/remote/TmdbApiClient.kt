@@ -1161,6 +1161,9 @@ object TmdbApiClient {
             }
         }
 
+        val origLang = obj.get("original_language")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+            ?: obj.getAsJsonArray("spoken_languages")?.firstOrNull()?.asJsonObject?.get("iso_639_1")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+
         return TmdbMediaDetails(
             tmdbId = id,
             title = title,
@@ -1180,6 +1183,7 @@ object TmdbApiClient {
             type = "Movie",
             imdbId = imdbId,
             sourceProvider = "TMDB",
+            originalLanguage = origLang,
             relatedItems = recList.takeIf { it.isNotEmpty() },
             movieSeriesName = movieSeriesName
         )
@@ -1342,6 +1346,9 @@ object TmdbApiClient {
         val tvImdbId = obj.get("imdb_id")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
             ?: tvExtIdsObj?.get("imdb_id")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
 
+        val tvOrigLang = obj.get("original_language")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+            ?: obj.getAsJsonArray("spoken_languages")?.firstOrNull()?.asJsonObject?.get("iso_639_1")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+
         return TmdbMediaDetails(
             tmdbId = id,
             title = name,
@@ -1362,6 +1369,7 @@ object TmdbApiClient {
             type = "TV",
             imdbId = tvImdbId,
             sourceProvider = "TMDB",
+            originalLanguage = tvOrigLang,
             relatedItems = recList.takeIf { it.isNotEmpty() }
         )
     }

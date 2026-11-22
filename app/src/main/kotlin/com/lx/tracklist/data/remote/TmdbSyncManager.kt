@@ -665,6 +665,11 @@ object TmdbSyncManager {
                     entry.relatedEntriesJson
                 }
 
+                val newOriginalLanguage = if (!details.originalLanguage.isNullOrBlank()) {
+                    if (details.originalLanguage != entry.originalLanguage) hasChanges = true
+                    details.originalLanguage
+                } else entry.originalLanguage
+
                 if (hasChanges) {
                     val updatedEntry = entry.copy(
                         coverImageUri = finalCoverUri ?: entry.coverImageUri,
@@ -685,6 +690,7 @@ object TmdbSyncManager {
                         externalSource = finalExternalSource ?: entry.externalSource,
                         relatedEntriesJson = newRelatedJson,
                         movieSeriesName = if (entry.mediaType == MediaType.MOVIE && !details.movieSeriesName.isNullOrBlank()) details.movieSeriesName else entry.movieSeriesName,
+                        originalLanguage = newOriginalLanguage,
                         updatedAt = System.currentTimeMillis()
                     )
                     repository.update(updatedEntry.copy(userId = profileId))

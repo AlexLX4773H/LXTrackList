@@ -79,6 +79,7 @@ data class AddEditUiState(
     val mediaType: MediaType = MediaType.ANIME,
     val customCategory: String? = null,
     val subCategory: String? = null,
+    val originalLanguage: String? = null,
     val status: MediaStatus = MediaStatus.WATCHING,
     val score: Int? = null,
     val externalScore: Float? = null,
@@ -214,6 +215,7 @@ class AddEditViewModel(
                             mediaType = entry.mediaType,
                             customCategory = entry.customCategory,
                             subCategory = entry.subCategory,
+                            originalLanguage = entry.originalLanguage,
                             status = entry.status,
                             score = entry.score,
                             externalScore = entry.externalScore,
@@ -356,6 +358,10 @@ class AddEditViewModel(
 
     fun updateSubCategory(name: String?) = _uiState.update { it.copy(subCategory = name?.trim()?.ifBlank { null }) }
 
+    fun updateOriginalLanguage(languageCode: String?) = _uiState.update {
+        it.copy(originalLanguage = languageCode?.trim()?.ifBlank { null })
+    }
+
     fun addSubCategory(name: String) {
         val trimmed = name.trim()
         if (trimmed.isBlank()) return
@@ -474,6 +480,7 @@ class AddEditViewModel(
                 mediaType = s.mediaType,
                 customCategory = s.customCategory?.trim()?.ifBlank { null },
                 subCategory = s.subCategory?.trim()?.ifBlank { null },
+                originalLanguage = if (s.mediaType != MediaType.GAME) s.originalLanguage?.trim()?.ifBlank { null } else null,
                 status = s.status,
                 score = s.score,
                 externalScore = s.externalScore,
@@ -893,6 +900,7 @@ class AddEditViewModel(
                 airedChapters = if (!isVideo && item.airedChapters != null && item.airedChapters > 0 && current.airedChapters == 0) item.airedChapters else current.airedChapters,
                 totalVolumes = newTotalVolumes,
                 totalPages = newTotalPages,
+                originalLanguage = item.originalLanguage ?: current.originalLanguage,
                 trackingUnit = resolvedUnit
             )
         }
@@ -968,6 +976,7 @@ class AddEditViewModel(
                         episodeLengthMinutes = epLength,
                         totalEpisodes = if (!isMovie && fullDetails?.totalEpisodes != null && fullDetails.totalEpisodes > 0 && (current.totalEpisodes == 0 || ((fullDetails.totalSeasons ?: 0) > 1 && current.totalEpisodes <= 1))) fullDetails.totalEpisodes else current.totalEpisodes,
                         totalSeasons = if (!isMovie && fullDetails?.totalSeasons != null && fullDetails.totalSeasons > 0 && current.totalSeasons <= 1) fullDetails.totalSeasons else current.totalSeasons,
+                        originalLanguage = fullDetails?.originalLanguage ?: item.originalLanguage ?: current.originalLanguage,
                         seasonEpisodes = if (!isMovie && !fullDetails?.seasonEpisodes.isNullOrEmpty() && current.seasonEpisodes.all { it <= 0 }) {
                             fullDetails.seasonEpisodes.orEmpty()
                         } else current.seasonEpisodes

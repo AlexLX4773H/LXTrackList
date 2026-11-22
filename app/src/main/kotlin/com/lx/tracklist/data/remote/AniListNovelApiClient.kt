@@ -39,14 +39,15 @@ object AniListNovelApiClient {
 
     fun searchLightNovels(
         query: String,
-        limit: Int = 20
+        limit: Int = 20,
+        page: Int = 1
     ): Result<List<JikanMediaDetails>> {
         val cleanQuery = query.trim()
         if (cleanQuery.isBlank()) return Result.success(emptyList())
 
         val graphQlQuery = """
             query (${'$'}search: String, ${'$'}perPage: Int) {
-              Page(page: 1, perPage: ${'$'}perPage) {
+              Page(page: $page, perPage: ${'$'}perPage) {
                 media(search: ${'$'}search, type: MANGA, format: NOVEL) {
                   id
                   idMal

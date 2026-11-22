@@ -591,6 +591,11 @@ object BookSyncManager {
                 } catch (_: Exception) {}
             }
 
+            val newOriginalLanguage = if (!bookDetails.language.isNullOrBlank()) {
+                if (bookDetails.language != entry.originalLanguage) hasChanges = true
+                bookDetails.language
+            } else entry.originalLanguage
+
             if (hasChanges) {
                 val updatedEntry = entry.copy(
                     coverImageUri = finalCoverUri,
@@ -608,6 +613,7 @@ object BookSyncManager {
                     totalChapters = newTotalChapters,
                     trackingUnit = targetUnit,
                     relatedEntriesJson = relatedJson,
+                    originalLanguage = newOriginalLanguage,
                     updatedAt = System.currentTimeMillis()
                 )
                 repository.update(updatedEntry)

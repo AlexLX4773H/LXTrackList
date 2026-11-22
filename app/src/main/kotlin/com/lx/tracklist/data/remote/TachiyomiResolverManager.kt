@@ -1336,6 +1336,7 @@ object TachiyomiResolverManager {
                 externalScoreSource = if (book.averageScore != null) book.sourceProvider else entry.externalScoreSource,
                 description = if ((entry.description ?: entry.notes).isNullOrBlank() && !book.description.isNullOrBlank()) book.description else (entry.description ?: entry.notes),
                 tags = if (entry.tags.isNullOrBlank() && book.categories.isNotEmpty()) book.categories.joinToString(", ") else entry.tags,
+                originalLanguage = book.language ?: entry.originalLanguage,
                 updatedAt = System.currentTimeMillis()
             )
 
@@ -1445,6 +1446,7 @@ object TachiyomiResolverManager {
             tags = if (entry.tags.isNullOrBlank() && !matchDetails.tags.isNullOrBlank()) matchDetails.tags else entry.tags,
             description = finalDesc,
             isAiring = matchDetails.isAiring ?: entry.isAiring,
+            originalLanguage = matchDetails.originalLanguage ?: entry.originalLanguage,
             updatedAt = System.currentTimeMillis()
         )
 
@@ -1751,6 +1753,7 @@ object TachiyomiResolverManager {
             tags = if (entry.tags.isNullOrBlank() && !matchDetails.tags.isNullOrBlank()) matchDetails.tags else entry.tags,
             description = if ((entry.description ?: entry.notes).isNullOrBlank() && !matchDetails.synopsis.isNullOrBlank()) matchDetails.synopsis else (entry.description ?: entry.notes),
             isAiring = matchDetails.isAiring ?: entry.isAiring,
+            originalLanguage = matchDetails.originalLanguage ?: entry.originalLanguage,
             updatedAt = System.currentTimeMillis()
         )
 
@@ -1939,6 +1942,7 @@ object TachiyomiResolverManager {
             tags = if (entry.tags.isNullOrBlank() && !matchDetails.tags.isNullOrBlank()) matchDetails.tags else entry.tags,
             description = if ((entry.description ?: entry.notes).isNullOrBlank() && !matchDetails.synopsis.isNullOrBlank()) matchDetails.synopsis else (entry.description ?: entry.notes),
             isAiring = matchDetails.isAiring ?: entry.isAiring,
+            originalLanguage = matchDetails.originalLanguage ?: entry.originalLanguage,
             updatedAt = System.currentTimeMillis()
         )
 

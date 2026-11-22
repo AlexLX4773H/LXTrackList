@@ -114,7 +114,10 @@ data class MediaEntry(
 
     // User personal thoughts / comments about the entity
     @SerializedName("userComments")
-    val userComments: String? = null
+    val userComments: String? = null,
+
+    // Original language code (e.g. "ja", "ko", "zh", "en", "fr")
+    val originalLanguage: String? = null
 ) {
     // Backward compatibility reference for legacy callers
     @get:Ignore
@@ -688,6 +691,36 @@ data class MediaEntry(
 
     fun getGamePlatformList(): List<String> {
         return parseGamePlatforms(gamePlatforms)
+    }
+
+    fun getEffectiveLanguage(): String {
+        val lang = originalLanguage?.trim()?.lowercase(Locale.ROOT)
+        if (!lang.isNullOrBlank()) return lang
+
+        // 1. Tags scan for language names or codes
+        val allTags = getTagList()
+        for (tag in allTags) {
+            val opt = com.lx.tracklist.ui.search.OriginalLanguageRegistry.findByCode(tag)
+            if (opt != null) return opt.code
+        }
+
+        // 2. Custom Category / Sub Category heuristics
+        val catText = (customCategory.orEmpty() + " " + subCategory.orEmpty()).lowercase(Locale.ROOT)
+        when {
+            catText.contains("donghua") || catText.contains("manhua") || catText.contains("cdrama") || catText.contains("c-drama") || catText.contains("chinese") -> return "zh"
+            catText.contains("manhwa") || catText.contains("aeni") || catText.contains("kdrama") || catText.contains("k-drama") || catText.contains("korean") || catText.contains("webtoon") -> return "ko"
+            catText.contains("jdrama") || catText.contains("j-drama") || catText.contains("anime") || catText.contains("manga") || catText.contains("japanese") -> return "ja"
+        }
+
+        // 3. Fallback by MediaType
+        return when (mediaType) {
+            MediaType.ANIME -> "ja"
+            MediaType.MANGA -> "ja"
+            MediaType.MANHWA -> "ko"
+            MediaType.BOOK -> "en"
+            MediaType.MOVIE, MediaType.SHOW -> "en"
+            MediaType.GAME -> "en"
+        }
     }
 
     fun getGameSeriesEntries(): List<GameSeriesItem> {

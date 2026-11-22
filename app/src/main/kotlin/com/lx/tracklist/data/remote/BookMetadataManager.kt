@@ -116,7 +116,8 @@ object BookMetadataManager {
     fun searchBooks(
         query: String,
         context: Context? = null,
-        limit: Int = 20
+        limit: Int = 20,
+        page: Int = 1
     ): Result<List<BookDetails>> {
         val cleanQuery = query.trim()
         if (cleanQuery.isBlank()) return Result.success(emptyList())
@@ -139,7 +140,8 @@ object BookMetadataManager {
         }
 
         // Title / author / general text search
-        val googleRes = GoogleBooksApiClient.searchBooks(cleanQuery, context, limit)
+        val startIndex = ((page - 1) * limit).coerceAtLeast(0)
+        val googleRes = GoogleBooksApiClient.searchBooks(cleanQuery, context, limit, startIndex = startIndex)
         if (googleRes.isSuccess) {
             val list = googleRes.getOrDefault(emptyList())
             if (list.isNotEmpty()) {
@@ -165,13 +167,14 @@ object BookMetadataManager {
      */
     fun searchLightNovels(
         query: String,
-        limit: Int = 20
+        limit: Int = 20,
+        page: Int = 1
     ): Result<List<JikanMediaDetails>> {
         val cleanQuery = query.trim()
         if (cleanQuery.isBlank()) return Result.success(emptyList())
 
         Log.d(TAG, "Searching Light Novels on AniList for '$cleanQuery'")
-        val anilistRes = AniListNovelApiClient.searchLightNovels(cleanQuery, limit)
+        val anilistRes = AniListNovelApiClient.searchLightNovels(cleanQuery, limit, page)
         if (anilistRes.isSuccess) {
             val items = anilistRes.getOrDefault(emptyList())
             if (items.isNotEmpty()) {
@@ -184,7 +187,8 @@ object BookMetadataManager {
             queryTitle = cleanQuery,
             isManga = true,
             subType = "lightnovel",
-            limit = limit
+            limit = limit,
+            page = page
         )
 
         return if (jikanRes.isSuccess && jikanRes.getOrDefault(emptyList()).isNotEmpty()) {
@@ -195,7 +199,8 @@ object BookMetadataManager {
                 queryTitle = cleanQuery,
                 isManga = true,
                 subType = "novel",
-                limit = limit
+                limit = limit,
+                page = page
             )
         }
     }

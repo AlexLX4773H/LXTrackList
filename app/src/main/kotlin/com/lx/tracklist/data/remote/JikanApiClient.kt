@@ -773,6 +773,7 @@ object JikanApiClient {
         isManga: Boolean,
         subType: String? = null,
         limit: Int = 20,
+        page: Int = 1,
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<List<JikanMediaDetails>> {
         val cleanTitle = queryTitle.trim()
@@ -782,7 +783,8 @@ object JikanApiClient {
         val type = if (isManga || isManhwa) "manga" else "anime"
         val encodedQuery = URLEncoder.encode(cleanTitle, "UTF-8")
         val subTypeParam = if (!subType.isNullOrBlank()) "&type=$subType" else ""
-        val endpoint = "${baseUrl.trimEnd('/')}/$type?q=$encodedQuery&limit=$limit$subTypeParam"
+        val pageParam = if (page > 1) "&page=$page" else ""
+        val endpoint = "${baseUrl.trimEnd('/')}/$type?q=$encodedQuery&limit=$limit$subTypeParam$pageParam"
 
         try {
             val request = Request.Builder()
@@ -883,7 +885,8 @@ object JikanApiClient {
         searchTitle: String,
         isManga: Boolean,
         subType: String? = null,
-        limit: Int = 20
+        limit: Int = 20,
+        page: Int = 1
     ): Result<List<JikanMediaDetails>> {
         val cleanTitle = searchTitle.trim()
         if (cleanTitle.isBlank()) return Result.success(emptyList())
@@ -895,7 +898,7 @@ object JikanApiClient {
         val query = if (country != null) {
             """
             query (${'$'}search: String, ${'$'}type: MediaType, ${'$'}perPage: Int, ${'$'}country: CountryCode) {
-              Page(page: 1, perPage: ${'$'}perPage) {
+              Page(page: $page, perPage: ${'$'}perPage) {
                 media(search: ${'$'}search, type: ${'$'}type, countryOfOrigin: ${'$'}country) {
                   id
                   idMal
@@ -925,7 +928,7 @@ object JikanApiClient {
         } else {
             """
             query (${'$'}search: String, ${'$'}type: MediaType, ${'$'}perPage: Int) {
-              Page(page: 1, perPage: ${'$'}perPage) {
+              Page(page: $page, perPage: ${'$'}perPage) {
                 media(search: ${'$'}search, type: ${'$'}type) {
                   id
                   idMal

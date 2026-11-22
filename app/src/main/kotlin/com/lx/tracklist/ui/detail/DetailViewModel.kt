@@ -773,7 +773,8 @@ class DetailViewModel(
                                 coverUrl = lnItem.posterUrl,
                                 categories = lnItem.tags?.split(",")?.map { it.trim() } ?: emptyList(),
                                 averageScore = lnItem.externalScore,
-                                sourceProvider = lnItem.sourceProvider ?: "AniList"
+                                sourceProvider = lnItem.sourceProvider ?: "AniList",
+                                language = lnItem.originalLanguage
                             )
                         }
                     }
@@ -841,6 +842,7 @@ class DetailViewModel(
                             tags = bookDetails.buildTagsString().takeIf { it.isNotBlank() } ?: cur.tags,
                             description = (bookDetails.buildDescriptionWithMetadata()).takeIf { it.isNotBlank() } ?: (cur.description ?: cur.notes),
                             userComments = cur.userComments,
+                            originalLanguage = bookDetails.language ?: cur.originalLanguage,
                             externalId = bookDetails.id.takeIf { it.isNotBlank() } ?: cur.externalId,
                             externalSource = bookDetails.sourceProvider,
                             relatedEntriesJson = null,
@@ -928,6 +930,7 @@ class DetailViewModel(
                                 description = if (!details.synopsis.isNullOrBlank()) details.synopsis else (cur.description ?: cur.notes),
                                 userComments = cur.userComments,
                                 isAiring = details.isAiring ?: cur.isAiring,
+                                originalLanguage = details.originalLanguage ?: cur.originalLanguage,
                                 updatedAt = now
                             )
                             repository.update(updated)
@@ -1022,6 +1025,7 @@ class DetailViewModel(
                                 userComments = cur.userComments,
                                 isAiring = details.isAiring ?: cur.isAiring,
                                 relatedEntriesJson = relatedJson,
+                                originalLanguage = details.originalLanguage ?: cur.originalLanguage,
                                 updatedAt = now
                             )
                             repository.update(updated)
@@ -1080,6 +1084,7 @@ class DetailViewModel(
                                 isAiring = details.isAiring ?: cur.isAiring,
                                 relatedEntriesJson = relatedJson,
                                 movieSeriesName = seriesName,
+                                originalLanguage = details.originalLanguage ?: cur.originalLanguage ?: (if (cur.mediaType != MediaType.GAME) cur.getEffectiveLanguage() else null),
                                 updatedAt = now
                             )
                             repository.update(updated)

@@ -158,14 +158,17 @@ object IgdbApiClient {
     /**
      * Searches for games on IGDB.
      */
-    suspend fun searchGames(context: Context, query: String, limit: Int = 20): Result<List<GameSearchResult>> {
+    suspend fun searchGames(context: Context, query: String, limit: Int = 20, page: Int = 1): Result<List<GameSearchResult>> {
         val cleanQuery = query.trim().replace("\"", "\\\"")
+        val offset = ((page - 1) * limit).coerceAtLeast(0)
+        val offsetClause = if (offset > 0) "offset $offset;\n" else ""
         val apicalypse = """
             search "$cleanQuery";
             fields name, alternative_names.name, first_release_date, cover.image_id, artworks.image_id, platforms.name, platforms.abbreviation, total_rating, summary, genres.name, collections.id, collections.name, franchises.id, franchises.name, game_type;
             where version_parent = null;
             limit $limit;
-        """.trimIndent()
+            $offsetClause
+        """.trimIndent().trim()
 
         val result = executeApicalypseQuery(context, apicalypse)
         return result.map { jsonStr ->
@@ -183,6 +186,7 @@ object IgdbApiClient {
         endYear: Int? = null,
         sort: String = "total_rating_count desc",
         limit: Int = 20,
+        page: Int = 1,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
@@ -251,12 +255,15 @@ object IgdbApiClient {
         }
 
         val whereClause = "where " + whereConditions.joinToString(" & ") + ";"
+        val offset = ((page - 1) * limit).coerceAtLeast(0)
+        val offsetClause = if (offset > 0) "offset $offset;\n" else ""
         return """
             fields name, alternative_names.name, first_release_date, cover.image_id, artworks.image_id, platforms.name, platforms.abbreviation, total_rating, summary, genres.name, collections.id, collections.name, franchises.id, franchises.name, game_type;
             $whereClause
             sort $sort;
             limit $limit;
-        """.trimIndent()
+            $offsetClause
+        """.trimIndent().trim()
     }
 
     /**
@@ -269,6 +276,7 @@ object IgdbApiClient {
         endYear: Int? = null,
         sort: String = "total_rating_count desc",
         limit: Int = 20,
+        page: Int = 1,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
         adultMode: AdultMode = AdultMode.OFF,
@@ -281,6 +289,7 @@ object IgdbApiClient {
             endYear = endYear,
             sort = sort,
             limit = limit,
+            page = page,
             includedTags = includedTags,
             excludedTags = excludedTags,
             adultMode = adultMode,

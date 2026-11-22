@@ -1,5 +1,6 @@
 package com.lx.tracklist.ui.stats
 
+import com.lx.tracklist.util.DurationFormatter
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -848,7 +849,7 @@ fun MalCategoryStatsCard(
                         if (hours > 0) {
                             MalMetricRow(
                                 label = "Playtime",
-                                value = String.format(Locale.US, "%.1f hrs", hours),
+                                value = DurationFormatter.formatHours(hours),
                                 valueColor = LXPrimaryGreen
                             )
                         }
@@ -861,11 +862,7 @@ fun MalCategoryStatsCard(
                         }
                     }
                     if (summary.daysRemaining > 0) {
-                        val toCompleteValue = if (summary.isGame) {
-                            String.format(Locale.US, "%.1f hrs", summary.daysRemaining * 24.0)
-                        } else {
-                            String.format(Locale.US, "%.1f d", summary.daysRemaining)
-                        }
+                        val toCompleteValue = DurationFormatter.formatHours(summary.daysRemaining * 24.0)
                         MalMetricRow(
                             label = "To Complete",
                             value = toCompleteValue,
@@ -929,8 +926,10 @@ private fun MalMetricRow(
             color = LXTextSecondary,
             style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.5.sp),
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
         )
+        Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = value,
             color = valueColor,

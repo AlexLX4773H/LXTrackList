@@ -74,11 +74,16 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Tv
+import com.lx.tracklist.ui.search.GamePlatformsSubMenu
+import com.lx.tracklist.ui.search.OriginalLanguageRegistry
+import com.lx.tracklist.ui.search.SearchCategory
+import com.lx.tracklist.ui.search.SearchDiscoveryLanguageSubMenu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -2651,10 +2656,16 @@ private fun AdvancedFilterSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showTagsSubMenu by remember { mutableStateOf(false) }
+    var showPlatformsSubMenu by remember { mutableStateOf(false) }
+    var showLanguageSubMenu by remember { mutableStateOf(false) }
     var tagSearchQuery by remember { mutableStateOf("") }
 
-    BackHandler(enabled = showTagsSubMenu) {
-        showTagsSubMenu = false
+    BackHandler(enabled = showTagsSubMenu || showPlatformsSubMenu || showLanguageSubMenu) {
+        when {
+            showPlatformsSubMenu -> showPlatformsSubMenu = false
+            showLanguageSubMenu -> showLanguageSubMenu = false
+            showTagsSubMenu -> showTagsSubMenu = false
+        }
     }
 
     ModalBottomSheet(
@@ -2955,6 +2966,38 @@ private fun AdvancedFilterSheet(
 
                 Spacer(modifier = Modifier.height(16.dp))
             }
+        } else if (showPlatformsSubMenu) {
+            GamePlatformsSubMenu(
+                includedPlatforms = state.includedPlatforms,
+                excludedPlatforms = state.excludedPlatforms,
+                onCyclePlatform = { viewModel.cyclePlatformState(it) },
+                onClearAll = { viewModel.clearPlatformFilters() },
+                onDismiss = { showPlatformsSubMenu = false }
+            )
+        } else if (showLanguageSubMenu) {
+            val searchCat = when (state.selectedCategoryFilter) {
+                MediaType.ANIME -> SearchCategory.ANIME
+                MediaType.MANGA -> {
+                    val custom = state.selectedCustomCategoryFilter?.lowercase() ?: ""
+                    val sub = state.selectedSubCategoryFilter?.lowercase() ?: ""
+                    if (custom.contains("manhwa") || sub.contains("manhwa")) SearchCategory.MANHWA
+                    else if (custom.contains("novel") || sub.contains("novel")) SearchCategory.LIGHT_NOVELS
+                    else SearchCategory.MANGA
+                }
+                MediaType.MANHWA -> SearchCategory.MANHWA
+                MediaType.MOVIE -> SearchCategory.MOVIES
+                MediaType.SHOW -> SearchCategory.TV_SHOWS
+                MediaType.BOOK -> SearchCategory.BOOKS
+                MediaType.GAME -> SearchCategory.GAMES
+                null -> SearchCategory.MOVIES
+            }
+            SearchDiscoveryLanguageSubMenu(
+                category = searchCat,
+                currentSelectedLanguages = state.includedLanguages,
+                onToggleLanguage = { viewModel.toggleLanguageFilter(it) },
+                onClearAll = { viewModel.clearLanguageFilters() },
+                onDismiss = { showLanguageSubMenu = false }
+            )
         } else {
             // ================= MAIN ADVANCED FILTERS =================
             Column(
@@ -3261,6 +3304,274 @@ private fun AdvancedFilterSheet(
                                     label = "-$tag",
                                     onRemove = { viewModel.removeTagFilter(tag) }
                                 )
+                            }
+                        }
+                    }
+                }
+
+                // Platforms Filter Section (Specifically for Games or when viewing All)
+                val isGameCategory = state.selectedCategoryFilter == MediaType.GAME
+                val isAllCategories = state.selectedCategoryFilter == null
+                val showPlatformsFilter = isGameCategory || isAllCategories
+                val showLanguageFilter = state.selectedCategoryFilter != MediaType.GAME
+
+                if (showPlatformsFilter) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text("🎮", fontSize = 14.sp)
+                                Text(
+                                    text = if (isAllCategories) "Platforms Filter (Games)" else "Platforms Filter",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = LXTextSecondary
+                                )
+                            }
+
+                            if (state.includedPlatforms.isNotEmpty() || state.excludedPlatforms.isNotEmpty()) {
+                                TextButton(onClick = { viewModel.clearPlatformFilters() }) {
+                                    Text("Clear Platforms", color = LXErrorRed, fontSize = 12.sp)
+                                }
+                            }
+                        }
+
+                        // Clickable Card to open Platforms Sub-Menu
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { showPlatformsSubMenu = true },
+                            colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                            border = BorderStroke(
+                                1.dp,
+                                if (state.includedPlatforms.isNotEmpty() || state.excludedPlatforms.isNotEmpty()) LXPrimaryGreen.copy(alpha = 0.6f) else LXBorder
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(LXPrimaryGreen.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.SportsEsports,
+                                            contentDescription = null,
+                                            tint = LXPrimaryGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Select & Exclude Platforms",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
+                                            color = LXTextPrimary
+                                        )
+                                        val platSubtitle = when {
+                                            state.includedPlatforms.isEmpty() && state.excludedPlatforms.isEmpty() ->
+                                                "1 tap: [✓] Include • 2 taps: [✕] Exclude • 3 taps: Clear"
+                                            state.includedPlatforms.isNotEmpty() && state.excludedPlatforms.isNotEmpty() ->
+                                                "${state.includedPlatforms.size} included (✓) • ${state.excludedPlatforms.size} excluded (✕)"
+                                            state.includedPlatforms.isNotEmpty() ->
+                                                "${state.includedPlatforms.size} included (✓ OR condition)"
+                                            else ->
+                                                "${state.excludedPlatforms.size} excluded (✕)"
+                                        }
+                                        Text(
+                                            text = platSubtitle,
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                                            color = if (state.includedPlatforms.isNotEmpty() || state.excludedPlatforms.isNotEmpty()) LXPrimaryGreen else LXTextSecondary
+                                        )
+                                    }
+                                }
+
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                    contentDescription = "Open Platforms Filter",
+                                    tint = LXPrimaryGreen,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+
+                        // Active Platform Badges in Main Sheet
+                        if (state.includedPlatforms.isNotEmpty() || state.excludedPlatforms.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                state.includedPlatforms.forEach { platform ->
+                                    RemovableFilterBadge(
+                                        label = "+$platform",
+                                        onRemove = { viewModel.removePlatformFilter(platform) }
+                                    )
+                                }
+                                state.excludedPlatforms.forEach { platform ->
+                                    RemovableFilterBadge(
+                                        label = "-$platform",
+                                        onRemove = { viewModel.removePlatformFilter(platform) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Language Filter Section (For all entities except games)
+                if (showLanguageFilter) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text("🌐", fontSize = 14.sp)
+                                Text(
+                                    text = if (isAllCategories) "Original Language (Media)" else "Original Language",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = LXTextSecondary
+                                )
+                            }
+
+                            if (state.includedLanguages.isNotEmpty()) {
+                                TextButton(onClick = { viewModel.clearLanguageFilters() }) {
+                                    Text("Clear Languages", color = LXErrorRed, fontSize = 12.sp)
+                                }
+                            }
+                        }
+
+                        // Clickable Card to open Language Sub-Menu
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { showLanguageSubMenu = true },
+                            colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                            border = BorderStroke(
+                                1.dp,
+                                if (state.includedLanguages.isNotEmpty()) LXPrimaryGreen.copy(alpha = 0.6f) else LXBorder
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    val firstFlag = state.includedLanguages.firstOrNull()?.let {
+                                        OriginalLanguageRegistry.findByCode(it)?.flagEmoji
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(LXPrimaryGreen.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (firstFlag != null) {
+                                            Text(text = firstFlag, fontSize = 16.sp)
+                                        } else {
+                                            Text(text = "🌐", fontSize = 15.sp)
+                                        }
+                                    }
+                                    Column {
+                                        Text(
+                                            text = "Original Language",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
+                                            color = LXTextPrimary
+                                        )
+                                        val langSubtitle = when {
+                                            state.includedLanguages.isEmpty() -> "All Languages (Tap to filter)"
+                                            state.includedLanguages.size == 1 ->
+                                                OriginalLanguageRegistry.getDisplayWithFlag(state.includedLanguages.first()) ?: state.includedLanguages.first()
+                                            state.includedLanguages.size in 2..3 ->
+                                                state.includedLanguages.mapNotNull { OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it }.joinToString(", ")
+                                            else ->
+                                                "${state.includedLanguages.take(2).mapNotNull { OriginalLanguageRegistry.getDisplayWithFlag(it) ?: it }.joinToString(", ")} +${state.includedLanguages.size - 2}"
+                                        }
+                                        Text(
+                                            text = langSubtitle,
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                                            color = if (state.includedLanguages.isNotEmpty()) LXPrimaryGreen else LXTextSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    if (state.includedLanguages.isNotEmpty()) {
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = LXPrimaryGreen.copy(alpha = 0.15f)
+                                        ) {
+                                            Text(
+                                                text = if (state.includedLanguages.size == 1) {
+                                                    OriginalLanguageRegistry.findByCode(state.includedLanguages.first())?.displayName ?: state.includedLanguages.first()
+                                                } else {
+                                                    "${state.includedLanguages.size} (OR)"
+                                                },
+                                                color = LXPrimaryGreen,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                        contentDescription = "Open Language Filter",
+                                        tint = LXPrimaryGreen,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Active Language Badges in Main Sheet
+                        if (state.includedLanguages.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                state.includedLanguages.forEach { code ->
+                                    val display = OriginalLanguageRegistry.getDisplayWithFlag(code) ?: code
+                                    RemovableFilterBadge(
+                                        label = "+$display",
+                                        onRemove = { viewModel.removeLanguageFilter(code) }
+                                    )
+                                }
                             }
                         }
                     }

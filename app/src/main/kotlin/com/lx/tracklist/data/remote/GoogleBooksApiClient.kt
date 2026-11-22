@@ -106,7 +106,8 @@ object GoogleBooksApiClient {
     fun searchBooks(
         query: String,
         context: Context? = null,
-        limit: Int = 20
+        limit: Int = 20,
+        startIndex: Int = 0
     ): Result<List<BookDetails>> {
         val cleanQuery = query.trim()
         if (cleanQuery.isBlank()) return Result.success(emptyList())
@@ -118,7 +119,8 @@ object GoogleBooksApiClient {
 
         val apiKey = GoogleBooksConfig.getApiKey(context)
         val keyParam = if (apiKey.isNotBlank()) "&key=$apiKey" else ""
-        val endpoint = "$BASE_URL?q=$encodedQuery&maxResults=$clampedLimit$keyParam$FIELDS_PROJECTION"
+        val startParam = if (startIndex > 0) "&startIndex=$startIndex" else ""
+        val endpoint = "$BASE_URL?q=$encodedQuery$startParam&maxResults=$clampedLimit$keyParam$FIELDS_PROJECTION"
 
         return try {
             val request = Request.Builder()
