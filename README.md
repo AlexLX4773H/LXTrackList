@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.6.10-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-0.6.11-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26--36)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Kotlin_2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
   <img src="https://img.shields.io/badge/UI-Jetpack_Compose_&_Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" />
@@ -17,21 +17,34 @@
 
 ---
 
-## 🚀 What's New in v0.6.10
+## 🚀 What's New in v0.6.11
 
-- **⏱️ Community Average 100% Game Completion Time (IGDB & RAWG)**:
-  - Automatically queries IGDB's `game_time_to_beats` endpoint to fetch community-reported 100% completion times (`completely`, `normally`, and `hastily`), with automatic fallback to RAWG `playtime`.
-  - Auto-heals existing games upon viewing details or syncing, and allows manual editing via the "Avg 100% Completion (Hours)" input in Add/Edit.
-  - Displays formatted average completion time badges on game detail pages.
-- **📊 Proportional Playtime & Game Backlog Analytics**:
-  - The statistics engine calculates game playtime proportionally based on completion percentage: `((Progress % / 100.0) + Replay) × 100% Completion Time` (or tracked hours).
-  - Accurately converts total gaming time into 24-hour days spent and calculates estimated remaining time ("To Complete") needed to finish your active uncompleted game backlog.
-- **🎮 Authentic Gaming Terminology in Status Transition Dialogs**:
-  - Tapping increment (`+1%` / `+1`) on titles in "Plan to..." state now prompts with category-authentic terminology: "Change Status to Playing?" and "Keep as Plan to Play" for Games, matching "Reading" for Books/Manga and "Watching" for Videos.
-  - Library multi-select and bulk status dialogs now include "Watching / Reading / Playing" and "Plan to Watch / Read / Play".
-- **✨ Polished Status Breakdown & Score Graph UX**:
-  - Redesigned the footer of the "Completion & Status Breakdown" card on the Statistics screen: `Favorites` and `Scored: X/Y` now rest on their own spacious, balanced row.
-  - Placed the Score Distribution Graph action in a dedicated, full-width styled surface button with gold accents and forward chevron, completely resolving previous horizontal compression and text wrapping.
+- **🎮 Comprehensive Platform Filtering & Exclusion (Discover & Library)**:
+  - Multi-select platform filtering with inclusion (`OR` condition) and exclusion (`✕`) in **Search & Discover** for video games across IGDB and RAWG.
+  - Added dedicated **Platform Filter** into **Library Advanced Filters** specifically for Games, allowing you to slice your collection by platform combinations.
+  - Complete platform coverage with dedicated taxonomy: **PC**, **PlayStation** (PS5, PS4, PS3, PS2, PS1, Vita, PSP), **Xbox** (All, Series X/S, One, 360, Original), **Nintendo** (Switch, Wii U, Wii, GameCube, N64, 3DS, DS, GBA, SNES, NES), **Mobile** (Android, iOS), **Other** (Linux, macOS, Stadia), and **Retro / Classics**.
+  - Active platform filter chips appear in search results with one-tap dismissal.
+- **🌐 Library Advanced Filter Original Language Support**:
+  - Brought deep Original Language filtering into **Library Advanced Filters** for all media categories (except Games), matching the Search & Discover discovery engine.
+  - Filter your library by original spoken or published language with native script names, ISO codes, and flag emojis (e.g., 🇯🇵 Japanese, 🇰🇷 Korean, 🇨🇳 Chinese, 🇮🇳 Indian languages: Malayalam, Tamil, Telugu, Hindi, etc.).
+- **🗣️ Original Language Pill & Add/Edit Language Picker Dialog**:
+  - The Media Details header now prominently displays the entry's original language as a dedicated styled pill with its native script and country flag.
+  - Introduced an intuitive **Original Language Picker Dialog** in Add/Edit Entity with real-time search, organized category sections (Top Languages, Indian Languages, Other Languages), and instant selection.
+  - Auto-extracts and persists original language across all metadata refreshers: The Movie Database (TMDB Movies & TV Shows), MangaDex, MyAnimeList / Jikan / AniList, and Google Books / Open Library.
+- **🔄 Dedicated Games Sync Job in External Sync Jobs**:
+  - Added a dedicated **Games Sync** card to the **External Sync Jobs** screen under Settings with status badge indicator (`SYNCING`, `CONNECTED`, or `ONLINE`).
+  - Real-time progress monitoring featuring a live progress bar, completion percentage, current game title, pending/failed counts, and a **Cancel Sync** button.
+  - Provides both **Fetch Missing** (populates missing metadata/covers) and **Re-fetch All** (force-refreshes all fields, covers, platforms, and completion times).
+  - Integrated with `GameSyncManager`, `SyncForegroundService`, and system notification reporting.
+- **🔍 Automated "Resolve IDs" Engine Support for Video Games**:
+  - The universal ID Resolution Engine now evaluates unlinked or unverified game entries (`MediaType.GAME`).
+  - Employs strict, confident title matchers against IGDB and RAWG APIs to automatically resolve official external IDs, box art, Steam CDN poster fallbacks, platforms, community completion times, ratings, and release dates.
+  - Full audit reports generated and saved to `/LXTrackList/data/tachiyomi_resolve_report_*.json`.
+- **⏳ Smart Duration Formatting for Large Hours & Playtimes (`DurationFormatter`)**:
+  - Automatically converts large hour quantities into human-readable intervals (days, weeks, months, or years) across the **Statistics & Analytics** screen (Playtime, To Complete, Avg Time) and **Media Detail** pages.
+  - Resolved UI squeezing on game detail pages where large community average completion times compressed the progress stepper button.
+- **⚡ Search "Load More Results" Pagination Fix**:
+  - Fixed on-demand pagination in Search & Discover so that tapping "Load More Results" smoothly appends deeper paginated results without interruption.
 
 ---
 
@@ -59,7 +72,11 @@ Discover what's airing, trending, and premiering directly inside the **Search & 
   - When a seasonal or year filter is active, typing in the search bar scopes results strictly to that season or year (e.g. searching *"Frieren"* while filtered to *Fall 2023* searches within that season).
   - Clearing the search query instantly restores the full seasonal/year catalog.
 - **On-Demand "Load More" Pagination**:
-  - Clean, dedicated load-more button at the bottom of discovery and search result lists to paginate through deep archives.
+  - Clean, dedicated load-more button at the bottom of discovery and search result lists to smoothly paginate and append deeper archives.
+- **Game Platform Multi-Select & Exclusion (Discover Games)**:
+  - Multi-select platform filtering powered by `GamePlatformRegistry` with inclusion (`✓` - `OR` condition) and exclusion (`✕`) support across IGDB and RAWG.
+  - Comprehensive platform taxonomy: **PC**, **PlayStation** (PS5, PS4, PS3, PS2, PS1, Vita, PSP), **Xbox** (All, Series X/S, One, 360, Original), **Nintendo** (Switch, Wii U, Wii, GameCube, N64, 3DS, DS, GBA, SNES, NES), **Mobile** (Android & iOS), **Other** (Linux, macOS, Stadia), and **Retro / Classics**.
+  - Active platform filter chips appear directly beneath search bars with one-tap dismissal.
 - **Subtle 3-State 18+ Content Cycle**:
   - Compact, unobtrusive checkbox with a 3-state click cycle:
     1. **Off (Default)**: Strict family-safe content only (18+ excluded).
@@ -117,7 +134,8 @@ Clear, accurate status tracking for upcoming and unreleased media across all ent
 
 ### 🎮 Video Games & Interactive Media Tracking
 Comprehensive video game tracking with dedicated progress modes, platform icons, rich metadata, and advanced discovery:
-- **Advanced Game Discovery (Search & Discover)**:
+- **Advanced Game Discovery & Platform Filtering (Search & Discover)**:
+  - **Multi-Select Platform Filter & Exclusion**: Comprehensive sub-menu with inclusion (`✓` - `OR` condition) and exclusion (`✕`) across PC, PlayStation, Xbox, Nintendo, Mobile, Linux/macOS, and Retro platforms.
   - **Next Year & Range Selection**: Quick preset chips for next year (e.g. `2027`), current year (`2026`), and previous year (`2025`), alongside custom `From ▾` and `To ▾` year range pickers, matching Movies discovery.
   - **Game Genre Filtering**: Integrated **Select & Exclude Tags** sub-menu powered by `GameTagRegistry` supporting inclusion (✓) and exclusion (✕) across standard IGDB genres (Action, RPG, Strategy, Visual Novel, etc.).
   - **Original Language & 3-State 18+ Cycle**: Filter discoveries by language, and cycle through Off, Include 18+, and 18+ Only modes with compact, vertically optimized UI sizing.
@@ -134,13 +152,19 @@ Comprehensive video game tracking with dedicated progress modes, platform icons,
 - **Dual Progress Tracking Modes**:
   - **Percentage Mode (0–100%)**: Smooth slider with fine-grained `-5%`, `-1%`, `+1%`, and `+5%` stepper buttons, and automatic "Completed" milestone tag.
   - **Compact Custom Units Mode**: Track game-specific milestones using progression metrics such as **Levels**, **Cities**, **Chapters**, **Missions**, **Hours**, and **Quests**, with optional target caps.
-- **Streamlined Edit UI**:
+- **Streamlined Edit UI & Language Picker**:
   - Vertical-optimized, compact custom unit controls with quick preset chips and side-by-side progress and target inputs.
-- **Community Average 100% Completion Time**:
+  - Dedicated Original Language Picker dialog with instant search and regional groupings.
+- **Community Average 100% Completion Time & Smart Duration Formatter**:
   - Automatically queries IGDB's `game_time_to_beats` endpoint and RAWG `playtime` to retrieve typical 100% completion durations.
   - Auto-heals existing entries on detail screen visits, provides an editable "Avg 100% Completion (Hours)" input in Add/Edit, and displays completion badges on detail pages.
+  - Smart duration formatting automatically scales very large playtimes and averages into readable human units (days, weeks, months, or years) without compressing UI stepper buttons.
 - **IGDB, RAWG & SteamGridDB Metadata Integration**:
   - Search, link, and synchronize game details, release dates, platforms, genres, IGDB/RAWG external critic ratings, community completion times, and SteamGridDB cover/banner artwork.
+- **Dedicated External Games Sync Job**:
+  - Full batch metadata synchronization in **Settings $\rightarrow$ External Sync Jobs** with status indicator, live progress bar, current game title, and cancel support.
+- **Automated "Resolve IDs" for Video Games**:
+  - Automatically searches and matches unlinked or unverified game entries to official IGDB or RAWG entries using confident exact title matching.
 
 ### 🚀 In-App GitHub Releases & APK Auto-Updater
 Keep your app up to date effortlessly without opening a web browser:
@@ -178,10 +202,11 @@ Track each medium with metrics tailored to its natural progression:
 ### 🌐 Multi-Source External DB & Cascading Sync
 LX Track List integrates with major metadata providers to enrich your library with covers, runtimes, episode counts, scores, and synopses:
 - **IGDB & RAWG (Video Games)**: Direct game search, platform identification, release dates, IGDB/RAWG critic scores, community average 100% completion times (`game_time_to_beats`), and high-resolution cover/grid artwork via SteamGridDB.
+- **Dedicated External Games Sync Job**: Full batch sync job under **Settings $\rightarrow$ External Sync Jobs** with status badge (`SYNCING`, `CONNECTED`, `ONLINE`), live progress bar, current title, pending/failed counts, and cancellation. Supports both **Fetch Missing** and **Re-fetch All**.
 - **MyAnimeList (Jikan API & AniList GraphQL)**: Fast, keyless search and metadata synchronization for Anime and Manga.
 - **Direct ID Hydration & Robust Sync**: Background and batch synchronization jobs prioritize authoritative direct ID queries (`fetchAnimeDetailsById`, `fetchMangaDetailsById`) via Jikan API v4 and official MyAnimeList OAuth, preventing sync job failures when titles have pre-existing MAL IDs.
 - **Official MyAnimeList (MAL) 2-Way Sync**: Built-in OAuth2 authentication allows opt-in, live bi-directional sync of progress, scores, and watch/read statuses directly to your MyAnimeList account.
-- **Foreground Sync Service (`SyncForegroundService`)**: Runs intensive batch sync jobs (MAL, TMDB, MangaDex, Books, and ID Resolution) as an Android Foreground Service with live progress notifications and battery optimization management.
+- **Foreground Sync Service (`SyncForegroundService`)**: Runs intensive batch sync jobs (MAL, TMDB, MangaDex, Books, Games, and ID Resolution) as an Android Foreground Service with live progress notifications and battery optimization management.
 - **The Movie Database (TMDB)**: Direct search, seasonal discovery, high-resolution poster retrieval, release dates, runtimes, and season/episode breakdowns for Movies and TV Shows.
   - **ISP Block Bypass**: Built-in DNS-over-HTTPS (DoH via Cloudflare & Google DNS) and automatic fallback routing (`api.themoviedb.org` $\leftrightarrow$ `api.tmdb.org`) ensures uninterrupted connectivity even on restricted networks.
 - **MangaDex API**: Full native integration for Manga, Manhwa, and Manhua with direct UUID linking and alternate title matching.
@@ -190,11 +215,12 @@ LX Track List integrates with major metadata providers to enrich your library wi
 
 ### 🔍 Automated "Resolve IDs" Engine & Audit Reports
 Easily link unlinked entries, custom records, or Tachiyomi/Mihon imports to official databases:
-- **Universal Resolution**: Identifies entries lacking official database IDs across Manga, Manhwa, Books, Movies, and TV Shows.
+- **Universal Resolution**: Identifies entries lacking official database IDs across Manga, Manhwa, Books, Movies, TV Shows, and Video Games (IGDB & RAWG).
 - **High-Confidence Matching Engine**:
   - Punctuation-agnostic, accent-agnostic, and space-agnostic title matching (e.g. matching `"Never Die Extra"` with `"Neverdie Extra"`).
   - Automatically strips bracketed quality/source tags (e.g. `[Official]`, `[4K]`, `[HDR]`, `(2010)`, `(Webtoon)`).
   - Matches against candidate original titles (e.g. Japanese Kanji/Romaji, Korean Hangul) and alternative titles.
+- **Video Games Resolution Flow**: Automatically queries IGDB and RAWG APIs, extracts community completion times, platforms, genres, ratings, and release dates, and fetches high-res cover art with Steam CDN library poster fallback.
 - **Title Preservation**: Preserves the user's custom or recognizable title, while cataloging official canonical names and synonyms into `alternateTitle`.
 - **Persistent Audit Reports**: Generates comprehensive `.txt` and `.json` audit reports in `/LXTrackList/data/` detailing resolved, skipped, and unmatched entries.
 - **One-Tap Access**: Accessible directly from **Library Multi-Select** (`[ 🔍 Resolve IDs ]`) and **Settings**.
@@ -220,7 +246,7 @@ Never worry about duplicate entries when restoring backups after names or IDs ch
   - **Batch DB Sync**: Bulk **Fetch Missing**, **Re-fetch All**, or **Resolve IDs** with background notifications.
   - **Delete**: Bulk removal with confirmation.
 - **8 Dynamic Sort Options**: Sort by Title (A-Z, Z-A), Score, Progress, Recently Updated, Date Added, Start Date, or Finish Date.
-- **Granular Filters**: Filter simultaneously by Media Type, Status, Priority (Low, Medium, High), Airing Status (All, Airing/Publishing, NYA/NYP, Finished), Score, and Custom Categories.
+- **Granular Advanced Filters**: Filter simultaneously by Media Type, Status, Priority (Low, Medium, High), Airing Status (All, Airing/Publishing, NYA/NYP, Finished), Score, Custom Categories, **Game Platforms** (multi-select include/exclude for Games), and **Original Language** (native scripts and flag emojis for all media).
 
 ### ✏️ Context-Aware External DB Sync Dialog
 - When manually editing an entry, the **Sync from External DB** dialog automatically adapts its source chips to the item's media type:
@@ -236,7 +262,7 @@ Never worry about duplicate entries when restoring backups after names or IDs ch
 ### 📊 Deep Statistics & Visual Analytics
 Gain full visibility into your media consumption habits with precision calculations, proportional status distributions, and interactive score histograms:
 - **Comprehensive Status Distribution**: Visual proportional stacked bar charts and breakdown grids across statuses (*Watching/Reading/Playing*, *Plan to Watch/Read/Play*, *Completed*, *On-Hold*, *Dropped*) styled with authentic MAL/AniList theme tokens.
-- **Precision Time Tracking**: Converts total consumed minutes into exact 24-hour days (`Days Spent = Total Minutes / 1440.0`), alongside estimated days remaining to finish your backlog (`To Complete`).
+- **Precision Time Tracking & Dynamic Scaling (`DurationFormatter`)**: Converts total consumed minutes into exact 24-hour days (`Days Spent = Total Minutes / 1440.0`), alongside estimated days remaining to finish your backlog (`To Complete`). When hours become very large, values dynamically format into human intervals (days, weeks, months, years) without UI clipping.
 - **Unskewed Mean Scores & 10-Point Score Distribution**: Interactive 10-bar frequency histograms (Scores 1–10) with peak detection, percentage tooltips, and an arithmetic mean score that strictly excludes unrated entries (`score == 0` or unrated) to prevent skewing.
 - **Multi-Category Metric Breakdown**: Dedicated metrics tailored to each medium (Episodes, Chapters, Volumes, Pages, or Playtime Hours).
 
@@ -297,35 +323,49 @@ app/src/main/kotlin/com/lx/tracklist/
 │   ├── importer/          # MAL XML, Tachiyomi, CSV, and JSON parsers
 │   ├── local/             # Room Database, DAOs, TypeConverters, Cover Cache, StorageHelper
 │   ├── model/             # MediaEntry, UserProfile, CustomCategory, Enums
-│   ├── remote/            # Jikan, TMDB, MangaDex, AniList, Kitsu, and MAL OAuth clients
+│   ├── remote/            # Jikan, TMDB, MangaDex, AniList, Kitsu, Books, IGDB, RAWG, MAL OAuth clients
 │   │   ├── mal/           # MyAnimeList OAuth2 token store & 2-way sync manager
 │   │   ├── AniListNovelApiClient.kt # AniList Light Novel GraphQL & MAL ID mapping
 │   │   ├── AppUpdateChecker.kt     # GitHub Releases API client
 │   │   ├── AppUpdateDownloader.kt  # In-app APK downloader & installer
+│   │   ├── BookMetadataManager.kt  # Unified Google Books & Open Library manager
+│   │   ├── BookSyncManager.kt      # Books & Novels metadata batch sync manager
+│   │   ├── GameMetadataManager.kt  # Unified IGDB, RAWG & SteamGridDB manager
+│   │   ├── GameSyncManager.kt      # Video Game metadata & completion time sync manager
+│   │   ├── GoogleBooksApiClient.kt # Google Books API client with multi-code language routing
+│   │   ├── IgdbApiClient.kt        # IGDB Twitch OAuth API client (genres, platforms, time to beat)
 │   │   ├── JikanApiClient.kt       # Jikan v4 & AniList GraphQL seasonal client
 │   │   ├── KitsuApiClient.kt       # Kitsu JSON:API client & slug resolver
 │   │   ├── MangaDexApiClient.kt
+│   │   ├── OpenLibraryApiClient.kt # Open Library Covers & Works API client
+│   │   ├── RawgApiClient.kt        # RAWG Video Games Database API client
+│   │   ├── SteamGridDbApiClient.kt # SteamGridDB vertical box art client
 │   │   ├── SyncForegroundService.kt # Foreground service for uninterrupted sync
 │   │   ├── TmdbApiClient.kt        # TMDB API with DoH & ISP Block Bypass
-│   │   └── TachiyomiResolverManager.kt # Universal ID Resolution Engine
+│   │   ├── TmdbSyncManager.kt      # Movie & TV metadata batch sync manager
+│   │   └── TachiyomiResolverManager.kt # Universal ID Resolution Engine (Anime, Books, Movies, Games)
 │   └── repository/        # MediaRepository (Single source of truth & deduplication)
 ├── ui/
 │   ├── components/        # Reusable Compose widgets (MediaCard, Drawers, Sheets, FilterChips)
 │   ├── detail/            # Entry detail view, metadata refresh, and related media manager
-│   ├── edit/              # Add and edit media screen with ExternalDbSyncDialog
+│   ├── edit/              # Add and edit media screen with ExternalDbSyncDialog & Language Picker
+│   │   └── OriginalLanguagePickerDialog.kt # ISO 639 searchable dialog with regional groupings
 │   ├── home/              # Main dashboard with status tabs
-│   ├── library/           # Searchable library with multi-sort, NYA/NYP filters, and batch operations
+│   ├── library/           # Searchable library with multi-sort, NYA/NYP, Platform & Language filters
 │   ├── navigation/        # Compose Navigation graph and destinations
 │   ├── search/            # Unified local & multi-database search & Seasonal Discovery sheet
 │   │   ├── DiscoveryModels.kt          # Discovery filters, seasons, sort enums & 3-state adult modes
+│   │   ├── GamePlatformRegistry.kt     # Comprehensive gaming platforms taxonomy & IGDB/RAWG mapping
+│   │   ├── GamePlatformsSubMenu.kt     # Multi-select platform include (OR) / exclude submenu
 │   │   ├── OriginalLanguageRegistry.kt # ISO 639 language registry, multi-select matching & category filtering
-│   │   ├── SearchDiscoverySheet.kt     # Modal discovery sheet (Anime 2x2 grid, Movie/TV years, 18+ toggle, language filter)
-│   │   ├── SearchScreen.kt             # Search & Discover UI with scoped filters, rich TV previews & Load More footer
+│   │   ├── SearchDiscoveryLanguageSubMenu.kt # Discovery language picker with native script & flag badges
+│   │   ├── SearchDiscoverySheet.kt     # Modal discovery sheet (Anime 2x2, Movie/TV years, Games, 18+ toggle)
+│   │   ├── SearchScreen.kt             # Search & Discover UI with scoped filters, rich previews & Load More
 │   │   └── SearchViewModel.kt          # Paging, scoped seasonal search, and discovery state
 │   ├── settings/          # Data import/export, profile management, conflict resolution & updater
-│   ├── stats/             # Visualization charts and metrics
-│   └── theme/             # Material 3 colors, typography, and dark theme
-└── util/                  # ExternalLinkHelper, notification helpers, and system utilities
+│   ├── stats/             # Visualization charts, proportional status distribution & score histograms
+│   └── theme/             # Material 3 colors, typography, theme presets & custom accent picker
+└── util/                  # DurationFormatter, ExternalLinkHelper, notification helpers, system utilities
 ```
 
 ### Key Libraries
