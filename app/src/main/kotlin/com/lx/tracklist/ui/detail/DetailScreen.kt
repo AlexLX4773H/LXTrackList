@@ -351,8 +351,8 @@ fun DetailScreen(
 
     if (showChangeStatusOnIncrementDialog && entry != null) {
         val current = entry!!
-        val statusLabel = if (current.mediaType.isReadType) "Reading" else "Watching"
-        val planLabel = if (current.mediaType.isReadType) "Plan to Read" else "Plan to Watch"
+        val statusLabel = MediaStatus.WATCHING.getDisplayLabel(current.mediaType)
+        val planLabel = MediaStatus.PLAN_TO_WATCH.getDisplayLabel(current.mediaType)
 
         AlertDialog(
             onDismissRequest = { showChangeStatusOnIncrementDialog = false },

@@ -418,8 +418,8 @@ fun LibraryScreen(
                 ) {
                     MediaStatus.entries.forEach { st ->
                         val statusLabel = when (st) {
-                            MediaStatus.WATCHING -> "Watching / Reading"
-                            MediaStatus.PLAN_TO_WATCH -> "Plan to Watch / Read"
+                            MediaStatus.WATCHING -> "Watching / Reading / Playing"
+                            MediaStatus.PLAN_TO_WATCH -> "Plan to Watch / Read / Play"
                             MediaStatus.COMPLETED -> "Completed"
                             MediaStatus.ON_HOLD -> "On Hold"
                             MediaStatus.DROPPED -> "Dropped"
@@ -574,8 +574,8 @@ fun LibraryScreen(
 
     val targetIncrementEntry = entryToChangeStatusOnIncrement
     if (targetIncrementEntry != null) {
-        val statusLabel = if (targetIncrementEntry.mediaType.isReadType) "Reading" else "Watching"
-        val planLabel = if (targetIncrementEntry.mediaType.isReadType) "Plan to Read" else "Plan to Watch"
+        val statusLabel = MediaStatus.WATCHING.getDisplayLabel(targetIncrementEntry.mediaType)
+        val planLabel = MediaStatus.PLAN_TO_WATCH.getDisplayLabel(targetIncrementEntry.mediaType)
 
         AlertDialog(
             onDismissRequest = { entryToChangeStatusOnIncrement = null },

@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.6.7-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-0.6.10-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26--36)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Kotlin_2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
   <img src="https://img.shields.io/badge/UI-Jetpack_Compose_&_Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" />
@@ -17,24 +17,21 @@
 
 ---
 
-## 🚀 What's New in v0.6.7
+## 🚀 What's New in v0.6.10
 
-- **🎮 Authentic Gaming Terminology in Statistics & Analytics**:
-  - The Games statistics card and category distribution breakdown now use authentic gaming status labels: **"Playing"** (instead of "Reading") and **"Plan to Play"** (instead of "Plan to Read"), matching "Watching" for videos and "Reading" for books/manga.
-  - Automatically omitted irrelevant "Chapters" metric rows when viewing Games analytics.
-- **🎯 Compact & Vertically Optimized Edit Entry Pages**:
-  - Streamlined vertical Y-axis height, padding, and layout density across all media categories (Anime, Manga, Manhwa, Movies, TV Shows, Books, Games, Custom Media) to drastically reduce scrolling.
-  - Pixel-perfect, consistent 32.dp height for the game progress tracking field, matching adjacent `-5%`, `-1%`, `+1%`, `+5%` stepper buttons with a clean, dead-centered numeric display and smooth tap-to-edit focus.
-- **🌐 Integrated Game Open Launchers (IGDB, RAWG, Steam, SteamGridDB)**:
-  - Added dedicated "Open ▾" actions for Games across the Foreign Database section in Edit Entry, the expanded cards in the "Sync from External DB" dialog, and search result preview cards.
-- **🏷️ Strict Multi-Tag `AND` Filtering & Exclusions**:
-  - Multiple tag selection in Game Discovery now enforces true `AND` logic (e.g. Apicalypse `genres = [4,5]` and client-side `.all`), ensuring games contain all selected genres.
-  - Tag exclusions enforce `NOT ANY` (`genres != (id1, id2)` and client-side `.filterNot { any }`), strictly omitting any games tagged with excluded genres.
-- **🔞 Accurate 18+ Adult Content Discovery for Games**:
-  - Fixed "18+ Only" mode to query IGDB adult theme (`themes = (42)`) and RAWG adult flags (`tags=nsfw`, `esrb_rating=adults-only`), while family-safe mode strictly excludes them (`themes != (42)`).
-  - Cache keys dynamically incorporate the 18+ filter state for instant, distinct discovery results upon toggling.
-- **📂 Comprehensive CSV & JSON Import/Export Samples**:
-  - Added small, fully documented sample schemas for CSV inputs, JSON backups, and JSON library exports, including cross-platform game tracking records.
+- **⏱️ Community Average 100% Game Completion Time (IGDB & RAWG)**:
+  - Automatically queries IGDB's `game_time_to_beats` endpoint to fetch community-reported 100% completion times (`completely`, `normally`, and `hastily`), with automatic fallback to RAWG `playtime`.
+  - Auto-heals existing games upon viewing details or syncing, and allows manual editing via the "Avg 100% Completion (Hours)" input in Add/Edit.
+  - Displays formatted average completion time badges on game detail pages.
+- **📊 Proportional Playtime & Game Backlog Analytics**:
+  - The statistics engine calculates game playtime proportionally based on completion percentage: `((Progress % / 100.0) + Replay) × 100% Completion Time` (or tracked hours).
+  - Accurately converts total gaming time into 24-hour days spent and calculates estimated remaining time ("To Complete") needed to finish your active uncompleted game backlog.
+- **🎮 Authentic Gaming Terminology in Status Transition Dialogs**:
+  - Tapping increment (`+1%` / `+1`) on titles in "Plan to..." state now prompts with category-authentic terminology: "Change Status to Playing?" and "Keep as Plan to Play" for Games, matching "Reading" for Books/Manga and "Watching" for Videos.
+  - Library multi-select and bulk status dialogs now include "Watching / Reading / Playing" and "Plan to Watch / Read / Play".
+- **✨ Polished Status Breakdown & Score Graph UX**:
+  - Redesigned the footer of the "Completion & Status Breakdown" card on the Statistics screen: `Favorites` and `Scored: X/Y` now rest on their own spacious, balanced row.
+  - Placed the Score Distribution Graph action in a dedicated, full-width styled surface button with gold accents and forward chevron, completely resolving previous horizontal compression and text wrapping.
 
 ---
 
@@ -139,8 +136,11 @@ Comprehensive video game tracking with dedicated progress modes, platform icons,
   - **Compact Custom Units Mode**: Track game-specific milestones using progression metrics such as **Levels**, **Cities**, **Chapters**, **Missions**, **Hours**, and **Quests**, with optional target caps.
 - **Streamlined Edit UI**:
   - Vertical-optimized, compact custom unit controls with quick preset chips and side-by-side progress and target inputs.
+- **Community Average 100% Completion Time**:
+  - Automatically queries IGDB's `game_time_to_beats` endpoint and RAWG `playtime` to retrieve typical 100% completion durations.
+  - Auto-heals existing entries on detail screen visits, provides an editable "Avg 100% Completion (Hours)" input in Add/Edit, and displays completion badges on detail pages.
 - **IGDB, RAWG & SteamGridDB Metadata Integration**:
-  - Search, link, and synchronize game details, release dates, platforms, genres, IGDB/RAWG external critic ratings, and SteamGridDB cover/banner artwork.
+  - Search, link, and synchronize game details, release dates, platforms, genres, IGDB/RAWG external critic ratings, community completion times, and SteamGridDB cover/banner artwork.
 
 ### 🚀 In-App GitHub Releases & APK Auto-Updater
 Keep your app up to date effortlessly without opening a web browser:
@@ -177,7 +177,7 @@ Track each medium with metrics tailored to its natural progression:
 
 ### 🌐 Multi-Source External DB & Cascading Sync
 LX Track List integrates with major metadata providers to enrich your library with covers, runtimes, episode counts, scores, and synopses:
-- **IGDB & RAWG (Video Games)**: Direct game search, platform identification, release dates, IGDB/RAWG critic scores, and high-resolution cover/grid artwork via SteamGridDB.
+- **IGDB & RAWG (Video Games)**: Direct game search, platform identification, release dates, IGDB/RAWG critic scores, community average 100% completion times (`game_time_to_beats`), and high-resolution cover/grid artwork via SteamGridDB.
 - **MyAnimeList (Jikan API & AniList GraphQL)**: Fast, keyless search and metadata synchronization for Anime and Manga.
 - **Direct ID Hydration & Robust Sync**: Background and batch synchronization jobs prioritize authoritative direct ID queries (`fetchAnimeDetailsById`, `fetchMangaDetailsById`) via Jikan API v4 and official MyAnimeList OAuth, preventing sync job failures when titles have pre-existing MAL IDs.
 - **Official MyAnimeList (MAL) 2-Way Sync**: Built-in OAuth2 authentication allows opt-in, live bi-directional sync of progress, scores, and watch/read statuses directly to your MyAnimeList account.
@@ -251,7 +251,7 @@ Gain full visibility into your media consumption habits with precision calculati
 | **Manhwa** | Chapters & Volumes | `5 min` per chapter (or `60 min` per volume) | `(Chapters + (Reread × Total Ch)) × 5 min` *(or Volumes × 60m)* | `(Total Ch - Read Ch) × 5 min / 1440` *(or Remaining Vol × 60m)* | Reread cycles multiply total chapter/volume count and accumulate reading time |
 | **Light Novels** | Pages, Chapters, Volumes | `1.5 min` per page (fallback: `10 min`/ch, `180 min`/vol) | `(Pages + (Reread × Total Pages)) × 1.5 min` | `(Total Pages - Read Pages) × 1.5 min / 1440` | Rereads multiply total pages (or chapters/volumes) into cumulative read time |
 | **Books** | Pages, Chapters, Volumes | `1.5 min` per page (fallback: `10 min`/ch, `180 min`/vol) | `(Pages + (Reread × Total Pages)) × 1.5 min` | `(Total Pages - Read Pages) × 1.5 min / 1440` | Rereads multiply total pages (or chapters/volumes) into cumulative read time |
-| **Video Games** | Custom Units & % | `60 min` per tracked unit when unit is set to `Hours` | `Tracked Hours × 60 min` | Tracks remaining custom unit target or % to 100% | Replay counter tracks total completed playthroughs ("Replayed") |
+| **Video Games** | Custom Units & % | Average 100% completion time (IGDB/RAWG or manual hours) | `((Progress % / 100) + Replay) × Completion Time` *(or Hours × 60m)* | `((100 - Progress %) / 100) × Completion Time / 1440` (uncompleted titles) | Replay counter tracks total completed playthroughs ("Replayed") |
 | **Custom Categories**| Custom Units | Inherits Watch or Read rate depending on category type | Computed using respective Video or Reading formulas | Remaining units converted based on category type | Rewatch/reread multiplier mirrors primary media archetype |
 
 > **Key Analytics Rules**:

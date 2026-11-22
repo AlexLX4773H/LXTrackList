@@ -49,6 +49,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -1152,23 +1153,45 @@ private fun CategoryDistributionSheet(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Icon(Icons.Default.Favorite, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(16.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.Favorite, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(15.dp))
                                 Text("Favorites: ${activeSummary.favoritesCount}", color = LXTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             }
 
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Icon(Icons.Default.Star, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(16.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.Star, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(15.dp))
                                 Text("Scored: ${activeSummary.scoredCount}/${activeSummary.totalEntries}", color = LXTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             }
+                        }
 
-                            TextButton(
-                                onClick = {
-                                    onOpenScoreDistribution(selectedCategoryKey)
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        Surface(
+                            onClick = {
+                                onOpenScoreDistribution(selectedCategoryKey)
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            color = LXScoreGold.copy(alpha = 0.10f),
+                            border = BorderStroke(1.dp, LXScoreGold.copy(alpha = 0.35f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(38.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 12.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Score Graph →", color = LXScoreGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Icon(Icons.Default.Star, contentDescription = null, tint = LXScoreGold, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Score Distribution Graph", color = LXScoreGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                    contentDescription = null,
+                                    tint = LXScoreGold,
+                                    modifier = Modifier.size(11.dp)
+                                )
                             }
                         }
                     }
