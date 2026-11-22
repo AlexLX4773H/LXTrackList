@@ -26,6 +26,7 @@ data class CategoryStatSummary(
     val categoryKey: String,
     val displayName: String,
     val isVideo: Boolean,
+    val isGame: Boolean = false,
     val daysSpent: Double,
     val daysRemaining: Double = 0.0,
     val totalDays: Double = daysSpent + daysRemaining,
@@ -38,7 +39,25 @@ data class CategoryStatSummary(
     val chaptersCount: Int,
     val volumesCount: Int,
     val favoritesCount: Int
-)
+) {
+    fun getStatusLabel(status: MediaStatus): String {
+        return when (status) {
+            MediaStatus.WATCHING -> when {
+                isGame -> "Playing"
+                isVideo -> "Watching"
+                else -> "Reading"
+            }
+            MediaStatus.PLAN_TO_WATCH -> when {
+                isGame -> "Plan to Play"
+                isVideo -> "Plan to Watch"
+                else -> "Plan to Read"
+            }
+            MediaStatus.COMPLETED -> "Completed"
+            MediaStatus.ON_HOLD -> "On Hold"
+            MediaStatus.DROPPED -> "Dropped"
+        }
+    }
+}
 
 fun calculateCategoryStatSummary(
     entries: List<MediaEntry>,
@@ -77,6 +96,15 @@ fun calculateCategoryStatSummary(
     } else {
         val custom = customCategories.firstOrNull { it.name.equals(categoryKey, ignoreCase = true) }
         custom?.isWatchType ?: true
+    }
+
+    val isGame = if (categoryKey.equals("ALL", ignoreCase = true)) {
+        false
+    } else if (isStandardMediaType) {
+        val type = MediaType.valueOf(categoryKey.uppercase())
+        type == MediaType.GAME
+    } else {
+        categoryKey.equals(MediaType.GAME.name, ignoreCase = true) || categoryKey.equals("Games", ignoreCase = true)
     }
 
     var totalMinutes = 0.0
@@ -167,6 +195,7 @@ fun calculateCategoryStatSummary(
         categoryKey = categoryKey,
         displayName = displayName,
         isVideo = isVideo,
+        isGame = isGame,
         daysSpent = days,
         daysRemaining = daysRem,
         totalDays = days + daysRem,

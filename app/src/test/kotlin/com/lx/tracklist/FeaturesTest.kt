@@ -1243,6 +1243,20 @@ class FeaturesTest {
         assertFalse(mangaSummary.isVideo)
         // 370 ch * 5 min = 1850 min / 1440 = 1.2847 days
         assertEquals(1850.0 / 1440.0, mangaSummary.daysSpent, 0.01)
+
+        // Test Game Category Stats
+        val game1 = MediaEntry(id = 4L, title = "Portal 2", mediaType = MediaType.GAME, status = MediaStatus.WATCHING, score = 10, rewatchCount = 1)
+        val game2 = MediaEntry(id = 5L, title = "Half-Life", mediaType = MediaType.GAME, status = MediaStatus.PLAN_TO_WATCH, score = null)
+        val gameEntries = listOf(game1, game2)
+        val gameSummary = com.lx.tracklist.ui.stats.calculateCategoryStatSummary(gameEntries, "GAME", customCats)
+        assertEquals(2, gameSummary.totalEntries)
+        assertTrue(gameSummary.isGame)
+        assertFalse(gameSummary.isVideo)
+        assertEquals("Playing", gameSummary.getStatusLabel(MediaStatus.WATCHING))
+        assertEquals("Plan to Play", gameSummary.getStatusLabel(MediaStatus.PLAN_TO_WATCH))
+        assertEquals("Completed", gameSummary.getStatusLabel(MediaStatus.COMPLETED))
+        assertEquals("On Hold", gameSummary.getStatusLabel(MediaStatus.ON_HOLD))
+        assertEquals("Dropped", gameSummary.getStatusLabel(MediaStatus.DROPPED))
     }
 
     @Test

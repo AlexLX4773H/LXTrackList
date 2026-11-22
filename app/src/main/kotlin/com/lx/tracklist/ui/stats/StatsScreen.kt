@@ -789,7 +789,6 @@ fun MalCategoryStatsCard(
             }
 
             // 2-Column Breakdown (matching MAL Image 2)
-            val isWatch = summary.isVideo
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -801,12 +800,12 @@ fun MalCategoryStatsCard(
                 ) {
                     MalStatusRow(
                         color = Color(0xFF2ECC71),
-                        label = if (isWatch) "Watching" else "Reading",
+                        label = summary.getStatusLabel(MediaStatus.WATCHING),
                         count = watchingCount
                     )
                     MalStatusRow(
                         color = Color(0xFF7F8C8D),
-                        label = if (isWatch) "Plan to Watch" else "Plan to Read",
+                        label = summary.getStatusLabel(MediaStatus.PLAN_TO_WATCH),
                         count = planToCount
                     )
                     MalStatusRow(
@@ -828,22 +827,24 @@ fun MalCategoryStatsCard(
 
                 Spacer(modifier = Modifier.width(16.dp))
 
-                // Right Column: Summary metrics (Total Entries, Rewatched/Reread, Episodes/Chapters/Volumes)
+                // Right Column: Summary metrics (Total Entries, Rewatched/Reread/Replayed, Episodes/Chapters/Volumes)
                 Column(
                     modifier = Modifier.weight(0.9f),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     MalMetricRow(label = "Total Entries", value = summary.totalEntries.formatCommas())
                     val rewatchStatLabel = when {
-                        summary.categoryKey.equals(MediaType.GAME.name, ignoreCase = true) -> "Replayed"
-                        isWatch -> "Rewatched"
+                        summary.isGame -> "Replayed"
+                        summary.isVideo -> "Rewatched"
                         else -> "Reread"
                     }
                     MalMetricRow(
                         label = rewatchStatLabel,
                         value = summary.rewatchedCount.formatCommas()
                     )
-                    if (isWatch) {
+                    if (summary.isGame) {
+                        // Games do not have episodes or chapters
+                    } else if (summary.isVideo) {
                         MalMetricRow(label = "Episodes", value = summary.episodesCount.formatCommas())
                     } else {
                         MalMetricRow(label = "Chapters", value = summary.chaptersCount.formatCommas())
@@ -1096,13 +1097,7 @@ private fun CategoryDistributionSheet(
                                 MediaStatus.ON_HOLD -> Color(0xFFF1C40F)
                                 MediaStatus.DROPPED -> Color(0xFFE74C3C)
                             }
-                            val label = when (status) {
-                                MediaStatus.WATCHING -> if (activeSummary.isVideo) "Watching" else "Reading"
-                                MediaStatus.PLAN_TO_WATCH -> if (activeSummary.isVideo) "Plan to Watch" else "Plan to Read"
-                                MediaStatus.COMPLETED -> "Completed"
-                                MediaStatus.ON_HOLD -> "On Hold"
-                                MediaStatus.DROPPED -> "Dropped"
-                            }
+                            val label = activeSummary.getStatusLabel(status)
 
                             Column {
                                 Row(
