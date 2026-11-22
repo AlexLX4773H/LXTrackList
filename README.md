@@ -19,6 +19,9 @@
 
 ## 🚀 What's New in v0.6.7
 
+- **🎮 Authentic Gaming Terminology in Statistics & Analytics**:
+  - The Games statistics card and category distribution breakdown now use authentic gaming status labels: **"Playing"** (instead of "Reading") and **"Plan to Play"** (instead of "Plan to Read"), matching "Watching" for videos and "Reading" for books/manga.
+  - Automatically omitted irrelevant "Chapters" metric rows when viewing Games analytics.
 - **🎯 Compact & Vertically Optimized Edit Entry Pages**:
   - Streamlined vertical Y-axis height, padding, and layout density across all media categories (Anime, Manga, Manhwa, Movies, TV Shows, Books, Games, Custom Media) to drastically reduce scrolling.
   - Pixel-perfect, consistent 32.dp height for the game progress tracking field, matching adjacent `-5%`, `-1%`, `+1%`, `+5%` stepper buttons with a clean, dead-centered numeric display and smooth tap-to-edit focus.
@@ -232,7 +235,7 @@ Never worry about duplicate entries when restoring backups after names or IDs ch
 
 ### 📊 Deep Statistics & Visual Analytics
 Gain full visibility into your media consumption habits with precision calculations, proportional status distributions, and interactive score histograms:
-- **Comprehensive Status Distribution**: Visual proportional stacked bar charts and breakdown grids across statuses (*Watching/Reading*, *Plan to Watch/Read*, *Completed*, *On-Hold*, *Dropped*) styled with authentic MAL/AniList theme tokens.
+- **Comprehensive Status Distribution**: Visual proportional stacked bar charts and breakdown grids across statuses (*Watching/Reading/Playing*, *Plan to Watch/Read/Play*, *Completed*, *On-Hold*, *Dropped*) styled with authentic MAL/AniList theme tokens.
 - **Precision Time Tracking**: Converts total consumed minutes into exact 24-hour days (`Days Spent = Total Minutes / 1440.0`), alongside estimated days remaining to finish your backlog (`To Complete`).
 - **Unskewed Mean Scores & 10-Point Score Distribution**: Interactive 10-bar frequency histograms (Scores 1–10) with peak detection, percentage tooltips, and an arithmetic mean score that strictly excludes unrated entries (`score == 0` or unrated) to prevent skewing.
 - **Multi-Category Metric Breakdown**: Dedicated metrics tailored to each medium (Episodes, Chapters, Volumes, Pages, or Playtime Hours).
