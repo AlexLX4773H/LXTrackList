@@ -74,7 +74,9 @@ object GameMetadataManager {
         limit: Int = 20,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
-        adultMode: AdultMode = AdultMode.OFF
+        adultMode: AdultMode = AdultMode.OFF,
+        includedPlatforms: Set<String> = emptySet(),
+        excludedPlatforms: Set<String> = emptySet()
     ): Result<List<GameSearchResult>> {
         val sYear = startYear ?: year
         val eYear = endYear ?: year
@@ -88,7 +90,9 @@ object GameMetadataManager {
                 limit = limit,
                 includedTags = includedTags,
                 excludedTags = excludedTags,
-                adultMode = adultMode
+                adultMode = adultMode,
+                includedPlatforms = includedPlatforms,
+                excludedPlatforms = excludedPlatforms
             )
             if (res.isSuccess && res.getOrDefault(emptyList()).isNotEmpty()) {
                 return res
@@ -102,7 +106,9 @@ object GameMetadataManager {
                 limit = limit,
                 includedTags = includedTags,
                 excludedTags = excludedTags,
-                adultMode = adultMode
+                adultMode = adultMode,
+                includedPlatforms = includedPlatforms,
+                excludedPlatforms = excludedPlatforms
             )
             if (rawgRes.isSuccess && rawgRes.getOrDefault(emptyList()).isNotEmpty()) {
                 return rawgRes

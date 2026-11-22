@@ -9,6 +9,7 @@ import com.google.gson.JsonObject
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.ui.search.AdultMode
+import com.lx.tracklist.ui.search.GamePlatformRegistry
 import com.lx.tracklist.ui.search.GameTagRegistry
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -184,7 +185,9 @@ object IgdbApiClient {
         limit: Int = 20,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
-        adultMode: AdultMode = AdultMode.OFF
+        adultMode: AdultMode = AdultMode.OFF,
+        includedPlatforms: Set<String> = emptySet(),
+        excludedPlatforms: Set<String> = emptySet()
     ): String {
         val sYear = startYear ?: year
         val eYear = endYear ?: year
@@ -223,6 +226,23 @@ object IgdbApiClient {
             whereConditions.add("genres != (${excludedGenreIds.joinToString(",")})")
         }
 
+        val includedPlatformIds = includedPlatforms.flatMap { plat ->
+            plat.toIntOrNull()?.let { listOf(it) } ?: GamePlatformRegistry.findOption(plat)?.igdbPlatformIds ?: emptyList()
+        }.distinct()
+
+        val excludedPlatformIds = excludedPlatforms.flatMap { plat ->
+            plat.toIntOrNull()?.let { listOf(it) } ?: GamePlatformRegistry.findOption(plat)?.igdbPlatformIds ?: emptyList()
+        }.distinct()
+
+        // Parentheses (id1, id2) enforce OR/IN logic in Apicalypse (must contain ANY of specified platforms)
+        if (includedPlatformIds.isNotEmpty()) {
+            whereConditions.add("platforms = (${includedPlatformIds.joinToString(",")})")
+        }
+        // Parentheses (id1, id2) enforce NOT ANY in Apicalypse (must not contain ANY of the excluded platforms)
+        if (excludedPlatformIds.isNotEmpty()) {
+            whereConditions.add("platforms != (${excludedPlatformIds.joinToString(",")})")
+        }
+
         // Adult mode filtering (Theme 42 is 'Erotic' in IGDB)
         when (adultMode) {
             AdultMode.ONLY -> whereConditions.add("themes = (42)")
@@ -251,7 +271,9 @@ object IgdbApiClient {
         limit: Int = 20,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
-        adultMode: AdultMode = AdultMode.OFF
+        adultMode: AdultMode = AdultMode.OFF,
+        includedPlatforms: Set<String> = emptySet(),
+        excludedPlatforms: Set<String> = emptySet()
     ): Result<List<GameSearchResult>> {
         val apicalypse = buildDiscoverApicalypseQuery(
             year = year,
@@ -261,7 +283,9 @@ object IgdbApiClient {
             limit = limit,
             includedTags = includedTags,
             excludedTags = excludedTags,
-            adultMode = adultMode
+            adultMode = adultMode,
+            includedPlatforms = includedPlatforms,
+            excludedPlatforms = excludedPlatforms
         )
 
         val result = executeApicalypseQuery(context, apicalypse)
@@ -279,6 +303,16 @@ object IgdbApiClient {
                     excludedTags.any { exc ->
                         item.genres.any { g -> exc.equals(g, ignoreCase = true) }
                     }
+                }
+            }
+            if (includedPlatforms.isNotEmpty()) {
+                list = list.filter { item ->
+                    GamePlatformRegistry.matchesAnyPlatform(includedPlatforms, item.platforms)
+                }
+            }
+            if (excludedPlatforms.isNotEmpty()) {
+                list = list.filterNot { item ->
+                    GamePlatformRegistry.isExcluded(excludedPlatforms, item.platforms)
                 }
             }
             list

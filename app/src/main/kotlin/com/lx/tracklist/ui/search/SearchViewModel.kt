@@ -454,6 +454,23 @@ class SearchViewModel(
         )
     }
 
+    fun removeGamePlatformFilter(platform: String, context: Context? = null) {
+        val currentFilter = _uiState.value.activeDiscoveryFilter as? DiscoveryFilter.Game ?: return
+        val newIncluded = currentFilter.includedPlatforms.filter { !it.equals(platform, ignoreCase = true) }.toSet()
+        val newExcluded = currentFilter.excludedPlatforms.filter { !it.equals(platform, ignoreCase = true) }.toSet()
+        applyGameDiscoveryFilter(
+            currentFilter.copy(includedPlatforms = newIncluded, excludedPlatforms = newExcluded),
+            context = context
+        )
+    }
+
+    fun removePlatformFilter(platform: String, context: Context? = null) {
+        when (_uiState.value.activeDiscoveryFilter) {
+            is DiscoveryFilter.Game -> removeGamePlatformFilter(platform, context)
+            else -> {}
+        }
+    }
+
     fun removeTagFilter(tag: String, context: Context? = null) {
         when (_uiState.value.activeDiscoveryFilter) {
             is DiscoveryFilter.Anime -> removeAnimeTagFilter(tag)
@@ -820,7 +837,7 @@ class SearchViewModel(
     fun applyGameDiscoveryFilter(filter: DiscoveryFilter.Game, context: Context? = null) {
         searchJob?.cancel()
         val yearPart = filter.year?.toString() ?: filter.endYear?.toString() ?: "ALL"
-        activeSearchKey = "DISCOVER:GAME:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguages.sorted()}"
+        activeSearchKey = "DISCOVER:GAME:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguages.sorted()}:${filter.includedPlatforms.sorted()}:${filter.excludedPlatforms.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.GAMES,
@@ -846,7 +863,9 @@ class SearchViewModel(
                         limit = 20,
                         includedTags = filter.includedTags,
                         excludedTags = filter.excludedTags,
-                        adultMode = filter.adultMode
+                        adultMode = filter.adultMode,
+                        includedPlatforms = filter.includedPlatforms,
+                        excludedPlatforms = filter.excludedPlatforms
                     )
                     if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to discover games")
                     res.getOrDefault(emptyList()).map { game ->
@@ -1052,7 +1071,9 @@ class SearchViewModel(
                                 limit = 20,
                                 includedTags = filter.includedTags,
                                 excludedTags = filter.excludedTags,
-                                adultMode = filter.adultMode
+                                adultMode = filter.adultMode,
+                                includedPlatforms = filter.includedPlatforms,
+                                excludedPlatforms = filter.excludedPlatforms
                             ).getOrThrow()
                             list.map { game ->
                                 SearchResultItem(
@@ -1363,7 +1384,7 @@ class SearchViewModel(
                         }
                         is DiscoveryFilter.Game -> {
                             val appContext = context ?: com.lx.tracklist.LXApplication.instance
-                            val list = if (query.isNotBlank()) {
+                            val rawList = if (query.isNotBlank()) {
                                 GameMetadataManager.searchGames(appContext, query, limit = 20).getOrThrow()
                             } else {
                                 GameMetadataManager.discoverGames(
@@ -1375,8 +1396,19 @@ class SearchViewModel(
                                     limit = 20,
                                     includedTags = activeFilter.includedTags,
                                     excludedTags = activeFilter.excludedTags,
-                                    adultMode = activeFilter.adultMode
+                                    adultMode = activeFilter.adultMode,
+                                    includedPlatforms = activeFilter.includedPlatforms,
+                                    excludedPlatforms = activeFilter.excludedPlatforms
                                 ).getOrThrow()
+                            }
+                            val list = if (query.isNotBlank() && (activeFilter.includedPlatforms.isNotEmpty() || activeFilter.excludedPlatforms.isNotEmpty())) {
+                                rawList.filter { game ->
+                                    val incOk = if (activeFilter.includedPlatforms.isNotEmpty()) GamePlatformRegistry.matchesAnyPlatform(activeFilter.includedPlatforms, game.platforms) else true
+                                    val excOk = if (activeFilter.excludedPlatforms.isNotEmpty()) !GamePlatformRegistry.isExcluded(activeFilter.excludedPlatforms, game.platforms) else true
+                                    incOk && excOk
+                                }
+                            } else {
+                                rawList
                             }
                             return@withContext list.map { game ->
                                 SearchResultItem(

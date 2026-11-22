@@ -138,6 +138,12 @@ fun SearchDiscoverySheet(
     var gameExcludedTags by remember {
         mutableStateOf(gameFilter?.excludedTags ?: emptySet())
     }
+    var gameIncludedPlatforms by remember {
+        mutableStateOf(gameFilter?.includedPlatforms ?: emptySet())
+    }
+    var gameExcludedPlatforms by remember {
+        mutableStateOf(gameFilter?.excludedPlatforms ?: emptySet())
+    }
 
     // Anime state
     val animeFilter = activeFilter as? DiscoveryFilter.Anime
@@ -322,7 +328,7 @@ fun SearchDiscoverySheet(
     var selectedTagCategory by remember { mutableStateOf<AnimeTagCategory?>(null) }
     var showTagsSubMenu by remember { mutableStateOf(false) }
     var showLanguageSubMenu by remember { mutableStateOf(false) }
-    var languageSearchQuery by remember { mutableStateOf("") }
+    var showPlatformsSubMenu by remember { mutableStateOf(false) }
 
     val currentSelectedLanguages: Set<String> = when (category) {
         SearchCategory.ANIME -> selectedAnimeLanguages
@@ -386,12 +392,38 @@ fun SearchDiscoverySheet(
 
     val backDispatcherOwner = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current
     if (backDispatcherOwner != null) {
-        BackHandler(enabled = showTagsSubMenu || showLanguageSubMenu) {
+        BackHandler(enabled = showTagsSubMenu || showLanguageSubMenu || showPlatformsSubMenu) {
             when {
+                showPlatformsSubMenu -> showPlatformsSubMenu = false
                 showLanguageSubMenu -> showLanguageSubMenu = false
                 showTagsSubMenu -> showTagsSubMenu = false
             }
         }
+    }
+
+    fun cyclePlatform(platformName: String) {
+        val clean = platformName.trim()
+        val isInc = gameIncludedPlatforms.any { it.equals(clean, ignoreCase = true) }
+        val isExc = gameExcludedPlatforms.any { it.equals(clean, ignoreCase = true) }
+        when {
+            !isInc && !isExc -> {
+                gameIncludedPlatforms = gameIncludedPlatforms + clean
+                gameExcludedPlatforms = gameExcludedPlatforms.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+            }
+            isInc -> {
+                gameIncludedPlatforms = gameIncludedPlatforms.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                gameExcludedPlatforms = gameExcludedPlatforms + clean
+            }
+            else -> {
+                gameIncludedPlatforms = gameIncludedPlatforms.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                gameExcludedPlatforms = gameExcludedPlatforms.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+            }
+        }
+    }
+
+    fun clearGamePlatforms() {
+        gameIncludedPlatforms = emptySet()
+        gameExcludedPlatforms = emptySet()
     }
 
     fun cycleTag(tagName: String) {
@@ -930,307 +962,21 @@ fun SearchDiscoverySheet(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         } else if (showLanguageSubMenu) {
-            // ================= LANGUAGE SEPARATE PAGE =================
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                // Header Row
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                ) {
-                    val hasSelectedLanguages = currentSelectedLanguages.isNotEmpty()
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { showLanguageSubMenu = false }
-                            .padding(vertical = 4.dp, horizontal = 4.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (hasSelectedLanguages) Icons.Default.Check else Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = if (hasSelectedLanguages) "Apply" else "Back",
-                            tint = LXPrimaryGreen,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Original Language",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextPrimary
-                        )
-                    }
-
-                    if (hasSelectedLanguages) {
-                        TextButton(
-                            onClick = { clearCategoryLanguages() },
-                            modifier = Modifier.align(Alignment.CenterEnd),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text("Clear All", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                HorizontalDivider(color = LXBorder, thickness = 1.dp)
-
-                // Sub-menu Instructions & active status
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(LXSurfaceElevated)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(16.dp)
-                                .background(LXPrimaryGreen, RoundedCornerShape(3.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Check, contentDescription = null, tint = LXBackgroundBlack, modifier = Modifier.size(12.dp))
-                        }
-                        Text("Tap to select • Multi-select (OR)", fontSize = 11.sp, color = LXPrimaryGreen, fontWeight = FontWeight.Bold)
-                    }
-
-                    Text(
-                        text = when {
-                            currentSelectedLanguages.isEmpty() -> "All languages"
-                            currentSelectedLanguages.size == 1 -> OriginalLanguageRegistry.getDisplayWithFlag(currentSelectedLanguages.first()) ?: "1 selected"
-                            else -> "${currentSelectedLanguages.size} selected (OR)"
-                        },
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = if (currentSelectedLanguages.isNotEmpty()) LXPrimaryGreen else LXTextSecondary
-                    )
-                }
-
-                // Search Bar for Languages
-                OutlinedTextField(
-                    value = languageSearchQuery,
-                    onValueChange = { languageSearchQuery = it },
-                    placeholder = {
-                        Text(
-                            text = "Search language by name, native name, or code...",
-                            color = LXTextSecondary,
-                            fontSize = 13.sp
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = null, tint = LXTextSecondary, modifier = Modifier.size(18.dp))
-                    },
-                    trailingIcon = {
-                        if (languageSearchQuery.isNotBlank()) {
-                            IconButton(onClick = { languageSearchQuery = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear", tint = LXTextSecondary, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = LXPrimaryGreen,
-                        unfocusedBorderColor = LXBorder,
-                        focusedTextColor = LXTextPrimary,
-                        unfocusedTextColor = LXTextPrimary,
-                        cursorColor = LXPrimaryGreen
-                    ),
-                    shape = RoundedCornerShape(10.dp),
-                    singleLine = true
-                )
-
-                // Filtered Languages
-                val filteredLanguages = remember(languageSearchQuery, category) {
-                    val query = languageSearchQuery.trim()
-                    val available = OriginalLanguageRegistry.getAllLanguagesForCategory(category)
-                    if (query.isEmpty()) {
-                        val top = OriginalLanguageRegistry.getTopLanguagesForCategory(category)
-                        val others = OriginalLanguageRegistry.getOtherLanguagesForCategory(category)
-                        top to others
-                    } else {
-                        val matches = available.filter { lang ->
-                            lang.displayName.contains(query, ignoreCase = true) ||
-                            lang.nativeName.contains(query, ignoreCase = true) ||
-                            lang.code.equals(query, ignoreCase = true) ||
-                            lang.iso6392Codes.any { it.contains(query, ignoreCase = true) } ||
-                            lang.countryCodes.any { it.contains(query, ignoreCase = true) }
-                        }
-                        emptyList<LanguageOption>() to matches
-                    }
-                }
-
-                if (filteredLanguages.first.isEmpty() && filteredLanguages.second.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(LXSurfaceElevated)
-                            .padding(20.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "No languages matching \"$languageSearchQuery\"",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = LXTextSecondary
-                        )
-                    }
-                } else {
-                    // "All Languages" reset card at top if not searching
-                    if (languageSearchQuery.isBlank()) {
-                        val isAllSelected = currentSelectedLanguages.isEmpty()
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(
-                                    if (isAllSelected) LXPrimaryGreen.copy(alpha = 0.12f)
-                                    else LXSurfaceElevated
-                                )
-                                .border(
-                                    BorderStroke(
-                                        1.dp,
-                                        if (isAllSelected) LXPrimaryGreen.copy(alpha = 0.5f) else Color.Transparent
-                                    ),
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .clickable { clearCategoryLanguages() }
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Text(text = "🌐", fontSize = 22.sp)
-                                Column {
-                                    Text(
-                                        text = "All Languages",
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Medium
-                                        ),
-                                        color = if (isAllSelected) LXPrimaryGreen else LXTextPrimary
-                                    )
-                                    Text(
-                                        text = "Any country or origin",
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                        color = LXTextSecondary
-                                    )
-                                }
-                            }
-
-                            if (isAllSelected) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .background(LXPrimaryGreen, CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "Selected",
-                                        tint = LXBackgroundBlack,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                }
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .border(BorderStroke(1.5.dp, LXTextSecondary.copy(alpha = 0.4f)), CircleShape)
-                                )
-                            }
-                        }
-                    }
-
-                    // Top for this category
-                    if (filteredLanguages.first.isNotEmpty()) {
-                        Text(
-                            text = "Top for ${category.displayName}",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = LXTextSecondary,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            filteredLanguages.first.forEach { lang ->
-                                LanguageSelectRow(
-                                    language = lang,
-                                    isSelected = currentSelectedLanguages.any { OriginalLanguageRegistry.isSameLanguage(it, lang.code) },
-                                    onSelect = {
-                                        toggleCategoryLanguage(lang.code)
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    // Other / All languages
-                    if (filteredLanguages.second.isNotEmpty()) {
-                        if (filteredLanguages.first.isNotEmpty()) {
-                            Text(
-                                text = "Other Languages",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = LXTextSecondary,
-                                modifier = Modifier.padding(top = 8.dp)
-                            )
-                        }
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            filteredLanguages.second.forEach { lang ->
-                                LanguageSelectRow(
-                                    language = lang,
-                                    isSelected = currentSelectedLanguages.any { OriginalLanguageRegistry.isSameLanguage(it, lang.code) },
-                                    onSelect = {
-                                        toggleCategoryLanguage(lang.code)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Button(
-                    onClick = { showLanguageSubMenu = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                ) {
-                    val doneLabel = when {
-                        currentSelectedLanguages.isEmpty() -> "Done (All Languages)"
-                        currentSelectedLanguages.size == 1 -> "Done (${OriginalLanguageRegistry.getDisplayWithFlag(currentSelectedLanguages.first())})"
-                        else -> "Done (${currentSelectedLanguages.size} Languages - OR)"
-                    }
-                    Text(
-                        text = doneLabel,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-            }
+            SearchDiscoveryLanguageSubMenu(
+                category = category,
+                currentSelectedLanguages = currentSelectedLanguages,
+                onToggleLanguage = { toggleCategoryLanguage(it) },
+                onClearAll = { clearCategoryLanguages() },
+                onDismiss = { showLanguageSubMenu = false }
+            )
+        } else if (showPlatformsSubMenu) {
+            GamePlatformsSubMenu(
+                includedPlatforms = gameIncludedPlatforms,
+                excludedPlatforms = gameExcludedPlatforms,
+                onCyclePlatform = { cyclePlatform(it) },
+                onClearAll = { clearGamePlatforms() },
+                onDismiss = { showPlatformsSubMenu = false }
+            )
         } else {
             // ================= MAIN DISCOVERY SHEET =================
             Column(
@@ -3225,6 +2971,15 @@ fun SearchDiscoverySheet(
                         onRemoveExcludedTag = { tag ->
                             gameExcludedTags = gameExcludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
                         },
+                        gameIncludedPlatforms = gameIncludedPlatforms,
+                        gameExcludedPlatforms = gameExcludedPlatforms,
+                        onOpenPlatforms = { showPlatformsSubMenu = true },
+                        onRemoveIncludedPlatform = { platform ->
+                            gameIncludedPlatforms = gameIncludedPlatforms.filter { !it.equals(platform, ignoreCase = true) }.toSet()
+                        },
+                        onRemoveExcludedPlatform = { platform ->
+                            gameExcludedPlatforms = gameExcludedPlatforms.filter { !it.equals(platform, ignoreCase = true) }.toSet()
+                        },
                         selectedLanguages = selectedGameLanguages,
                         onOpenLanguages = { showLanguageSubMenu = true },
                         adultMode = adultMode,
@@ -3239,7 +2994,9 @@ fun SearchDiscoverySheet(
                                 includedTags = gameIncludedTags,
                                 excludedTags = gameExcludedTags,
                                 adultMode = adultMode,
-                                originalLanguages = selectedGameLanguages
+                                originalLanguages = selectedGameLanguages,
+                                includedPlatforms = gameIncludedPlatforms,
+                                excludedPlatforms = gameExcludedPlatforms
                             )
                             onApplyGame(filter)
                             onDismiss()
@@ -3590,7 +3347,7 @@ internal fun YearRangeSelector(
 }
 
 @Composable
-private fun TriStateTagCheckbox(
+internal fun TriStateTagCheckbox(
     state: TagSelectionState,
     modifier: Modifier = Modifier
 ) {
@@ -3736,79 +3493,6 @@ internal fun LanguageFilterEntryCard(
                     modifier = Modifier.size(14.dp)
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun LanguageSelectRow(
-    language: LanguageOption,
-    isSelected: Boolean,
-    onSelect: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (isSelected) LXPrimaryGreen.copy(alpha = 0.12f)
-                else LXSurfaceElevated
-            )
-            .border(
-                BorderStroke(
-                    1.dp,
-                    if (isSelected) LXPrimaryGreen.copy(alpha = 0.5f) else Color.Transparent
-                ),
-                RoundedCornerShape(8.dp)
-            )
-            .clickable { onSelect() }
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            Text(text = language.flagEmoji, fontSize = 22.sp)
-            Column {
-                Text(
-                    text = language.displayName,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                    ),
-                    color = if (isSelected) LXPrimaryGreen else LXTextPrimary
-                )
-                Text(
-                    text = "${language.nativeName} • ${language.code.uppercase(Locale.ROOT)}",
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                    color = LXTextSecondary
-                )
-            }
-        }
-
-        if (isSelected) {
-            Box(
-                modifier = Modifier
-                    .size(22.dp)
-                    .background(LXPrimaryGreen, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = "Selected",
-                    tint = LXBackgroundBlack,
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-        } else {
-            Box(
-                modifier = Modifier
-                    .size(22.dp)
-                    .border(BorderStroke(1.5.dp, LXTextSecondary.copy(alpha = 0.4f)), CircleShape)
-            )
         }
     }
 }

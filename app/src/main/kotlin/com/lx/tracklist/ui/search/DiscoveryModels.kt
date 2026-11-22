@@ -123,12 +123,22 @@ internal fun formatLanguageLabel(languages: Set<String>): String {
     }
 }
 
+internal fun formatPlatformLabel(platforms: Set<String>): String {
+    return when {
+        platforms.isEmpty() -> ""
+        platforms.size in 1..2 -> " • ${platforms.joinToString(", ")}"
+        else -> " • ${platforms.take(2).joinToString(", ")} +${platforms.size - 2}"
+    }
+}
+
 sealed class DiscoveryFilter {
     abstract val label: String
     abstract val adultMode: AdultMode
     abstract val includedTags: Set<String>
     abstract val excludedTags: Set<String>
     abstract val originalLanguages: Set<String>
+    open val includedPlatforms: Set<String> get() = emptySet()
+    open val excludedPlatforms: Set<String> get() = emptySet()
     open val originalLanguage: String? get() = originalLanguages.firstOrNull()
     val includeAdult: Boolean get() = adultMode != AdultMode.OFF
 
@@ -668,7 +678,9 @@ sealed class DiscoveryFilter {
         override val includedTags: Set<String> = emptySet(),
         override val excludedTags: Set<String> = emptySet(),
         override val adultMode: AdultMode = AdultMode.OFF,
-        override val originalLanguages: Set<String> = emptySet()
+        override val originalLanguages: Set<String> = emptySet(),
+        override val includedPlatforms: Set<String> = emptySet(),
+        override val excludedPlatforms: Set<String> = emptySet()
     ) : DiscoveryFilter() {
         constructor(
             mode: ContentDiscoveryMode = ContentDiscoveryMode.MOST_POPULAR,
@@ -689,7 +701,9 @@ sealed class DiscoveryFilter {
             includedTags = includedTags,
             excludedTags = excludedTags,
             adultMode = adultMode,
-            originalLanguages = originalLanguage?.let { setOf(it) } ?: emptySet()
+            originalLanguages = originalLanguage?.let { setOf(it) } ?: emptySet(),
+            includedPlatforms = emptySet(),
+            excludedPlatforms = emptySet()
         )
 
         val yearText: String
@@ -708,7 +722,19 @@ sealed class DiscoveryFilter {
                     ContentDiscoveryMode.MOST_POPULAR -> "🔥 Most Popular Games"
                 }
                 val sortText = " • ${sortOrder.displayName}"
-                return "$base$sortText"
+                val platText = formatPlatformLabel(includedPlatforms)
+                val tagsText = when {
+                    includedTags.isNotEmpty() && excludedTags.isNotEmpty() -> " • +${includedTags.size} / -${excludedTags.size} tags"
+                    includedTags.isNotEmpty() -> " • +${includedTags.size} tags"
+                    excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
+                    else -> ""
+                }
+                val adultText = when (adultMode) {
+                    AdultMode.OFF -> ""
+                    AdultMode.INCLUDE -> " • 18+"
+                    AdultMode.ONLY -> " • 18+ Only"
+                }
+                return "$base$sortText$platText$tagsText$adultText"
             }
     }
 }

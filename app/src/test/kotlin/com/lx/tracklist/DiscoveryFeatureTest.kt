@@ -1,5 +1,7 @@
 package com.lx.tracklist
 
+import com.lx.tracklist.data.remote.IgdbApiClient
+import com.lx.tracklist.data.remote.RawgApiClient
 import com.lx.tracklist.ui.search.AdultMode
 import com.lx.tracklist.ui.search.AnimeDiscoveryMode
 import com.lx.tracklist.ui.search.AnimeSeason
@@ -10,6 +12,9 @@ import com.lx.tracklist.ui.search.BookSortOrder
 import com.lx.tracklist.ui.search.BookTagRegistry
 import com.lx.tracklist.ui.search.ContentDiscoveryMode
 import com.lx.tracklist.ui.search.DiscoveryFilter
+import com.lx.tracklist.ui.search.GamePlatformOption
+import com.lx.tracklist.ui.search.GamePlatformRegistry
+import com.lx.tracklist.ui.search.GameSortOrder
 import com.lx.tracklist.ui.search.MangaSortOrder
 import com.lx.tracklist.ui.search.OriginalLanguageRegistry
 import com.lx.tracklist.ui.search.SearchCategory
@@ -659,5 +664,163 @@ class DiscoveryFeatureTest {
         assertEquals("🔥 Most Popular Movies • Most Popular • 🇹🇭 Thai, 🇰🇷 Korean", multiFilter.label)
         assertEquals("th", multiFilter.originalLanguage) // Backwards compatible first element getter
         assertEquals(setOf("th", "ko"), multiFilter.originalLanguages)
+    }
+
+    @Test
+    fun testGamePlatformRegistryOptionsAndLookup() {
+        // PC lookup
+        val pc = GamePlatformRegistry.findOption("PC")
+        assertNotNull(pc)
+        assertEquals("PC", pc?.id)
+        assertEquals("PC", pc?.displayName)
+        assertEquals("Popular", pc?.category)
+        assertTrue(pc?.igdbPlatformIds?.contains(6) == true)
+        assertTrue(pc?.rawgPlatformIds?.contains(4) == true)
+
+        // Switch lookup
+        val switchOpt = GamePlatformRegistry.findOption("Switch")
+        assertNotNull(switchOpt)
+        assertEquals("Switch", switchOpt?.id)
+        assertEquals("Nintendo Switch", switchOpt?.displayName)
+        assertEquals("Popular", switchOpt?.category)
+        assertTrue(switchOpt?.igdbPlatformIds?.contains(130) == true)
+        assertTrue(switchOpt?.rawgPlatformIds?.contains(7) == true)
+
+        // PS5 lookup
+        val ps5 = GamePlatformRegistry.findOption("PS5")
+        assertNotNull(ps5)
+        assertEquals("PlayStation 5", ps5?.displayName)
+
+        // Filter / Search platforms
+        val searchSwitch = GamePlatformRegistry.filterPlatforms("switch")
+        assertEquals(1, searchSwitch.size)
+        assertEquals("Nintendo Switch", searchSwitch.first().displayName)
+
+        val searchPlaystation = GamePlatformRegistry.filterPlatforms("playstation")
+        assertTrue(searchPlaystation.size >= 5)
+
+        val topPlatforms = GamePlatformRegistry.getTopPlatforms()
+        assertTrue(topPlatforms.any { it.id == "PC" })
+        assertTrue(topPlatforms.any { it.id == "Switch" })
+        assertTrue(topPlatforms.any { it.id == "PS5" })
+        assertTrue(topPlatforms.any { it.id == "Xbox Series" })
+        assertTrue(topPlatforms.any { it.id == "Android" })
+        assertTrue(topPlatforms.any { it.id == "iOS" })
+
+        val otherPlatforms = GamePlatformRegistry.getOtherPlatforms()
+        assertTrue(otherPlatforms.any { it.id == "PS3" })
+        assertTrue(otherPlatforms.any { it.id == "3DS" })
+        assertTrue(otherPlatforms.any { it.id == "Retro" })
+    }
+
+    @Test
+    fun testGamePlatformMatchingAndOrCondition() {
+        // 1. Single platform matching
+        assertTrue(GamePlatformRegistry.matchesPlatform("PC", "PC (Microsoft Windows)"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("PC", "PC"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("PC", "Windows"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("Switch", "Nintendo Switch"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("Switch", "Switch"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("PS5", "PlayStation 5"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("PS4", "PlayStation 4"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("Xbox Series", "Xbox Series X/S"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("Android", "Android"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("iOS", "iOS"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("Mobile", "Android"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("Mobile", "iOS"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("PS", "PlayStation 5"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("PS", "PlayStation 4"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("XBox", "Xbox Series X/S"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("XBox", "Xbox One"))
+
+        assertFalse(GamePlatformRegistry.matchesPlatform("PC", "PlayStation 5"))
+        assertFalse(GamePlatformRegistry.matchesPlatform("Switch", "Xbox One"))
+        assertFalse(GamePlatformRegistry.matchesPlatform("PS5", "Nintendo Switch"))
+
+        // 2. Multi-select OR condition
+        val orPlatforms = setOf("PC", "Switch")
+        // PC game -> matches (OR condition)
+        assertTrue(GamePlatformRegistry.matchesAnyPlatform(orPlatforms, listOf("PC (Microsoft Windows)")))
+        // Switch game -> matches (OR condition)
+        assertTrue(GamePlatformRegistry.matchesAnyPlatform(orPlatforms, listOf("Nintendo Switch")))
+        // Multi-platform game on PC & PS5 -> matches because it is on PC!
+        assertTrue(GamePlatformRegistry.matchesAnyPlatform(orPlatforms, listOf("PC", "PlayStation 5")))
+        // PS5 exclusive -> does NOT match PC OR Switch
+        assertFalse(GamePlatformRegistry.matchesAnyPlatform(orPlatforms, listOf("PlayStation 5")))
+        // Xbox exclusive -> does NOT match PC OR Switch
+        assertFalse(GamePlatformRegistry.matchesAnyPlatform(orPlatforms, listOf("Xbox Series X/S")))
+
+        // Empty filter matches any platforms
+        assertTrue(GamePlatformRegistry.matchesAnyPlatform(emptySet(), listOf("PlayStation 5")))
+        assertTrue(GamePlatformRegistry.matchesAnyPlatform(null, listOf("Xbox One")))
+    }
+
+    @Test
+    fun testGamePlatformExclusionCondition() {
+        val excluded = setOf("Mobile")
+        // Mobile-only game -> excluded
+        assertTrue(GamePlatformRegistry.isExcluded(excluded, listOf("Android")))
+        assertTrue(GamePlatformRegistry.isExcluded(excluded, listOf("iOS")))
+
+        // Multiplatform game including mobile -> excluded
+        assertTrue(GamePlatformRegistry.isExcluded(excluded, listOf("PC", "Android")))
+
+        // PC-only game -> NOT excluded
+        assertFalse(GamePlatformRegistry.isExcluded(excluded, listOf("PC (Microsoft Windows)")))
+        // Console game -> NOT excluded
+        assertFalse(GamePlatformRegistry.isExcluded(excluded, listOf("Nintendo Switch", "PlayStation 5")))
+
+        // Multiple exclusions
+        val multiExcluded = setOf("Mobile", "Retro")
+        assertTrue(GamePlatformRegistry.isExcluded(multiExcluded, listOf("Android")))
+        assertTrue(GamePlatformRegistry.isExcluded(multiExcluded, listOf("SNES")))
+        assertFalse(GamePlatformRegistry.isExcluded(multiExcluded, listOf("PC", "PlayStation 5")))
+    }
+
+    @Test
+    fun testGameDiscoveryFilterWithPlatformsAndLabels() {
+        val gameFilter = DiscoveryFilter.Game(
+            mode = ContentDiscoveryMode.MOST_POPULAR,
+            sortOrder = GameSortOrder.POPULARITY,
+            includedPlatforms = setOf("PC", "Switch"),
+            excludedPlatforms = setOf("Mobile")
+        )
+        assertEquals(setOf("PC", "Switch"), gameFilter.includedPlatforms)
+        assertEquals(setOf("Mobile"), gameFilter.excludedPlatforms)
+        assertEquals("🔥 Most Popular Games • Most Popular • PC, Switch", gameFilter.label)
+
+        val singlePlatformFilter = DiscoveryFilter.Game(
+            mode = ContentDiscoveryMode.BY_YEAR,
+            year = 2024,
+            sortOrder = GameSortOrder.RATING,
+            includedPlatforms = setOf("Switch")
+        )
+        assertEquals("🎮 Games 2024 • Highest Rated • Switch", singlePlatformFilter.label)
+    }
+
+    @Test
+    fun testIgdbAndRawgApiQueryWithPlatforms() {
+        // IGDB Apicalypse query with platforms OR condition and exclusion
+        val apicalypse = IgdbApiClient.buildDiscoverApicalypseQuery(
+            year = 2024,
+            sort = "total_rating_count desc",
+            includedPlatforms = setOf("PC", "Switch"),
+            excludedPlatforms = setOf("Mobile")
+        )
+        // Should contain platforms = (6, 14, 3, 130) or similar
+        assertTrue(apicalypse.contains("platforms = ("))
+        assertTrue(apicalypse.contains("6") && apicalypse.contains("130"))
+        // Should contain platforms != (34, 39)
+        assertTrue(apicalypse.contains("platforms != ("))
+        assertTrue(apicalypse.contains("34") && apicalypse.contains("39"))
+
+        // RAWG discover URL with platforms
+        val rawgUrl = RawgApiClient.buildDiscoverUrl(
+            apiKey = "test_key",
+            year = 2024,
+            includedPlatforms = setOf("PC", "Switch")
+        )
+        assertTrue(rawgUrl.contains("&platforms="))
+        assertTrue(rawgUrl.contains("4") && rawgUrl.contains("7"))
     }
 }

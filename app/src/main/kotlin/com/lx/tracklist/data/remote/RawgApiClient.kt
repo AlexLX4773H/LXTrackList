@@ -9,6 +9,7 @@ import com.google.gson.JsonObject
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.ui.search.AdultMode
+import com.lx.tracklist.ui.search.GamePlatformRegistry
 import com.lx.tracklist.ui.search.GameTagRegistry
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -65,7 +66,9 @@ object RawgApiClient {
         limit: Int = 20,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
-        adultMode: AdultMode = AdultMode.OFF
+        adultMode: AdultMode = AdultMode.OFF,
+        includedPlatforms: Set<String> = emptySet(),
+        excludedPlatforms: Set<String> = emptySet()
     ): String {
         val sYear = startYear ?: year
         val eYear = endYear ?: year
@@ -83,13 +86,21 @@ object RawgApiClient {
             "&genres=${rawgSlugs.joinToString(",")}"
         } else ""
 
+        val rawgPlatformIds = includedPlatforms.flatMap { plat ->
+            plat.toIntOrNull()?.let { listOf(it) } ?: GamePlatformRegistry.findOption(plat)?.rawgPlatformIds ?: emptyList()
+        }.distinct()
+
+        val platformsParam = if (rawgPlatformIds.isNotEmpty()) {
+            "&platforms=${rawgPlatformIds.joinToString(",")}"
+        } else ""
+
         val adultParam = when (adultMode) {
             AdultMode.ONLY -> "&tags=nsfw"
             AdultMode.OFF -> ""
             AdultMode.INCLUDE -> ""
         }
 
-        return "$BASE_URL/games?key=$apiKey&ordering=-added$datesParam$genresParam$adultParam&page_size=$limit"
+        return "$BASE_URL/games?key=$apiKey&ordering=-added$datesParam$genresParam$platformsParam$adultParam&page_size=$limit"
     }
 
     suspend fun discoverGames(
@@ -100,7 +111,9 @@ object RawgApiClient {
         limit: Int = 20,
         includedTags: Set<String> = emptySet(),
         excludedTags: Set<String> = emptySet(),
-        adultMode: AdultMode = AdultMode.OFF
+        adultMode: AdultMode = AdultMode.OFF,
+        includedPlatforms: Set<String> = emptySet(),
+        excludedPlatforms: Set<String> = emptySet()
     ): Result<List<GameSearchResult>> {
         val apiKey = GameApiConfig.getRawgApiKey(context)
         if (apiKey.isBlank()) {
@@ -114,7 +127,9 @@ object RawgApiClient {
             limit = limit,
             includedTags = includedTags,
             excludedTags = excludedTags,
-            adultMode = adultMode
+            adultMode = adultMode,
+            includedPlatforms = includedPlatforms,
+            excludedPlatforms = excludedPlatforms
         )
         val request = Request.Builder().url(url).build()
 
@@ -137,6 +152,16 @@ object RawgApiClient {
                     excludedTags.any { exc ->
                         item.genres.any { g -> exc.equals(g, ignoreCase = true) }
                     }
+                }
+            }
+            if (includedPlatforms.isNotEmpty()) {
+                list = list.filter { item ->
+                    GamePlatformRegistry.matchesAnyPlatform(includedPlatforms, item.platforms)
+                }
+            }
+            if (excludedPlatforms.isNotEmpty()) {
+                list = list.filterNot { item ->
+                    GamePlatformRegistry.isExcluded(excludedPlatforms, item.platforms)
                 }
             }
             Result.success(list)

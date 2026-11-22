@@ -676,7 +676,9 @@ fun SearchScreen(
 
                     val incTags = filter.includedTags
                     val excTags = filter.excludedTags
-                    if (incTags.isNotEmpty() || excTags.isNotEmpty()) {
+                    val incPlatforms = filter.includedPlatforms
+                    val excPlatforms = filter.excludedPlatforms
+                    if (incTags.isNotEmpty() || excTags.isNotEmpty() || incPlatforms.isNotEmpty() || excPlatforms.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(6.dp))
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -697,6 +699,24 @@ fun SearchScreen(
                                         label = "-$tag",
                                         isIncluded = false,
                                         onRemove = { viewModel.removeTagFilter(tag, context) }
+                                    )
+                                }
+                            }
+                            incPlatforms.forEach { platform ->
+                                item(key = "inc_plat_$platform") {
+                                    SearchFilterChipPill(
+                                        label = "+$platform",
+                                        isIncluded = true,
+                                        onRemove = { viewModel.removePlatformFilter(platform, context) }
+                                    )
+                                }
+                            }
+                            excPlatforms.forEach { platform ->
+                                item(key = "exc_plat_$platform") {
+                                    SearchFilterChipPill(
+                                        label = "-$platform",
+                                        isIncluded = false,
+                                        onRemove = { viewModel.removePlatformFilter(platform, context) }
                                     )
                                 }
                             }
