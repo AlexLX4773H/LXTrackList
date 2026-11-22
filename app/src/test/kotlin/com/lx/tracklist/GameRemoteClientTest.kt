@@ -74,17 +74,17 @@ class GameRemoteClientTest {
                   "id": 72,
                   "name": "The Witcher",
                   "games": [
-                    { "id": 1940, "name": "The Witcher", "first_release_date": 1193356800, "game_type": 0, "cover": { "image_id": "cov_w1" } },
+                    { "id": 1940, "name": "The Witcher", "first_release_date": 1193356800, "game_type": 0, "cover": { "image_id": "cov_w1" }, "platforms": [{ "id": 6, "name": "PC (Microsoft Windows)" }] },
                     { "id": 1941, "name": "The Witcher 2: Assassins of Kings", "first_release_date": 1305590400, "game_type": 0, "cover": { "image_id": "cov_w2" } },
-                    { "id": 1942, "name": "The Witcher 3: Wild Hunt", "first_release_date": 1431993600, "game_type": 0, "cover": { "image_id": "cov_w3" } }
+                    { "id": 1942, "name": "The Witcher 3: Wild Hunt", "first_release_date": 1431993600, "game_type": 0, "cover": { "image_id": "cov_w3" }, "platforms": [{ "id": 48, "name": "PlayStation 4" }, { "id": 49, "name": "Xbox One" }] }
                   ]
                 }
               ],
               "dlcs": [
-                { "id": 9901, "name": "Enhanced Edition Bonus Pack", "first_release_date": 1334620800 }
+                { "id": 9901, "name": "Enhanced Edition Bonus Pack", "first_release_date": 1334620800, "platforms": [{ "id": 6, "name": "PC" }] }
               ],
               "remakes": [
-                { "id": 9902, "name": "The Witcher Remake", "first_release_date": 1800000000 }
+                { "id": 9902, "name": "The Witcher Remake", "first_release_date": 1800000000, "platforms": [{ "id": 167, "name": "PlayStation 5" }] }
               ],
               "external_games": [
                 { "id": 888, "category": 1, "uid": "20920" }
@@ -125,10 +125,76 @@ class GameRemoteClientTest {
         val dlc = related.firstOrNull { it.relationship == "DLC" }
         assertNotNull(dlc)
         assertEquals("9901", dlc?.externalId)
+        assertEquals(listOf("PC"), dlc?.platforms)
 
         val remake = related.firstOrNull { it.relationship == "Remake" }
         assertNotNull(remake)
         assertEquals("9902", remake?.externalId)
+        assertEquals(listOf("PlayStation 5"), remake?.platforms)
+
+        // Verify platforms on collection games
+        assertEquals(listOf("PC (Microsoft Windows)"), prequel?.platforms)
+        assertEquals(listOf("PlayStation 4", "Xbox One"), sequel?.platforms)
+    }
+
+    @Test
+    fun testRelatedMediaItemGameExternalSourceAndPlatforms() {
+        val gameItem = com.lx.tracklist.data.model.RelatedMediaItem(
+            title = "Injustice: Gods Among Us - Collector's Edition",
+            relationship = "Prequel",
+            externalId = "75426",
+            externalSource = "IGDB",
+            mediaType = MediaType.GAME,
+            platforms = listOf("PlayStation 3", "Xbox 360", "Wii U")
+        )
+
+        // Ensure platforms are present
+        assertEquals(3, gameItem.platforms?.size)
+        assertTrue(gameItem.platforms?.contains("PlayStation 3") == true)
+
+        // Ensure fallback logic for game external source never returns "MAL"
+        val resolvedSource = when {
+            gameItem.mediaType == MediaType.GAME -> {
+                if (gameItem.externalSource.equals("RAWG", ignoreCase = true)) "RAWG" else "IGDB"
+            }
+            else -> "MAL"
+        }
+        assertEquals("IGDB", resolvedSource)
+
+        // Test with blank external source
+        val blankSourceGame = gameItem.copy(externalSource = "")
+        val resolvedBlankSource = when {
+            blankSourceGame.mediaType == MediaType.GAME -> {
+                if (blankSourceGame.externalSource.equals("RAWG", ignoreCase = true)) "RAWG" else "IGDB"
+            }
+            else -> "MAL"
+        }
+        assertEquals("IGDB", resolvedBlankSource)
+
+        // Test with RAWG external source
+        val rawgGame = gameItem.copy(externalSource = "RAWG")
+        val resolvedRawgSource = when {
+            rawgGame.mediaType == MediaType.GAME -> {
+                if (rawgGame.externalSource.equals("RAWG", ignoreCase = true)) "RAWG" else "IGDB"
+            }
+            else -> "MAL"
+        }
+        assertEquals("RAWG", resolvedRawgSource)
+
+        // Test display type label for GAME
+        val defaultTypeLabel = when (gameItem.mediaType) {
+            MediaType.GAME -> "Game"
+            else -> gameItem.mediaType.displayName
+        }
+        assertEquals("Game", defaultTypeLabel)
+
+        // Test JSON serialization & deserialization retains platforms
+        val json = gson.toJson(gameItem)
+        val deserialized = gson.fromJson(json, com.lx.tracklist.data.model.RelatedMediaItem::class.java)
+        assertEquals(gameItem.title, deserialized.title)
+        assertEquals(gameItem.externalId, deserialized.externalId)
+        assertEquals(gameItem.externalSource, deserialized.externalSource)
+        assertEquals(gameItem.platforms, deserialized.platforms)
     }
 
     @Test

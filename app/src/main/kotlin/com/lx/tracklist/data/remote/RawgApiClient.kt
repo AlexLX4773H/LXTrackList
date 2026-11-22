@@ -301,6 +301,7 @@ object RawgApiClient {
                         val sCover = sObj.get("background_image")?.asString
                         val sYear = sObj.get("released")?.asString?.take(4)
                         val sRating = sObj.get("rating")?.asFloat?.let { it * 2f }
+                        val sPlatforms = parsePlatforms(sObj.getAsJsonArray("platforms"))
 
                         related.add(
                             RelatedMediaItem(
@@ -311,7 +312,8 @@ object RawgApiClient {
                                 posterUrl = sCover,
                                 releaseYear = sYear,
                                 score = sRating,
-                                externalSource = "RAWG"
+                                externalSource = "RAWG",
+                                platforms = sPlatforms
                             )
                         )
                     }
@@ -331,6 +333,7 @@ object RawgApiClient {
                         val aName = aObj.get("name")?.asString ?: continue
                         val aCover = aObj.get("background_image")?.asString
                         val aYear = aObj.get("released")?.asString?.take(4)
+                        val aPlatforms = parsePlatforms(aObj.getAsJsonArray("platforms"))
 
                         related.add(
                             RelatedMediaItem(
@@ -340,7 +343,8 @@ object RawgApiClient {
                                 mediaType = MediaType.GAME,
                                 posterUrl = aCover,
                                 releaseYear = aYear,
-                                externalSource = "RAWG"
+                                externalSource = "RAWG",
+                                platforms = aPlatforms
                             )
                         )
                     }

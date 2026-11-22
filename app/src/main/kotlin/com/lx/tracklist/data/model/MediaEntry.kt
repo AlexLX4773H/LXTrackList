@@ -144,7 +144,10 @@ data class MediaEntry(
         if (relatedEntriesJson.isNullOrBlank()) return emptyList()
         return try {
             val type = object : TypeToken<List<RelatedMediaItem>>() {}.type
-            Gson().fromJson<List<RelatedMediaItem>>(relatedEntriesJson, type) ?: emptyList()
+            val list = Gson().fromJson<List<RelatedMediaItem>>(relatedEntriesJson, type) ?: emptyList()
+            list.map { item ->
+                if (item.platforms == null) item.copy(platforms = emptyList()) else item
+            }
         } catch (_: Exception) {
             emptyList()
         }

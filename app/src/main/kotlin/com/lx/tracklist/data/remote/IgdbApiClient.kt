@@ -334,14 +334,14 @@ object IgdbApiClient {
     suspend fun getGameDetails(context: Context, igdbId: String): Result<GameDetails> {
         val apicalypse = """
             fields name, alternative_names.name, first_release_date, cover.image_id, artworks.image_id, platforms.name, platforms.abbreviation, total_rating, summary, genres.name, themes.name,
-            collections.id, collections.name, collections.games.id, collections.games.name, collections.games.first_release_date, collections.games.cover.image_id, collections.games.game_type, collections.games.total_rating,
+            collections.id, collections.name, collections.games.id, collections.games.name, collections.games.first_release_date, collections.games.cover.image_id, collections.games.game_type, collections.games.total_rating, collections.games.platforms.name, collections.games.platforms.abbreviation,
             franchises.id, franchises.name,
-            parent_game.id, parent_game.name, parent_game.first_release_date, parent_game.cover.image_id,
-            expansions.id, expansions.name, expansions.first_release_date, expansions.cover.image_id,
-            dlcs.id, dlcs.name, dlcs.first_release_date, dlcs.cover.image_id,
-            standalone_expansions.id, standalone_expansions.name, standalone_expansions.first_release_date, standalone_expansions.cover.image_id,
-            remakes.id, remakes.name, remakes.first_release_date, remakes.cover.image_id,
-            remasters.id, remasters.name, remasters.first_release_date, remasters.cover.image_id,
+            parent_game.id, parent_game.name, parent_game.first_release_date, parent_game.cover.image_id, parent_game.platforms.name, parent_game.platforms.abbreviation,
+            expansions.id, expansions.name, expansions.first_release_date, expansions.cover.image_id, expansions.platforms.name, expansions.platforms.abbreviation,
+            dlcs.id, dlcs.name, dlcs.first_release_date, dlcs.cover.image_id, dlcs.platforms.name, dlcs.platforms.abbreviation,
+            standalone_expansions.id, standalone_expansions.name, standalone_expansions.first_release_date, standalone_expansions.cover.image_id, standalone_expansions.platforms.name, standalone_expansions.platforms.abbreviation,
+            remakes.id, remakes.name, remakes.first_release_date, remakes.cover.image_id, remakes.platforms.name, remakes.platforms.abbreviation,
+            remasters.id, remasters.name, remasters.first_release_date, remasters.cover.image_id, remasters.platforms.name, remasters.platforms.abbreviation,
             external_games.category, external_games.uid;
             where id = $igdbId;
         """.trimIndent()
@@ -589,7 +589,7 @@ object IgdbApiClient {
 
         // 1. Main-line series chronology from collection
         if (colGamesArray != null) {
-            data class MainlineCandidate(val id: String, val name: String, val releaseEpoch: Long, val coverId: String?, val score: Float?)
+            data class MainlineCandidate(val id: String, val name: String, val releaseEpoch: Long, val coverId: String?, val score: Float?, val platforms: List<String> = emptyList())
             val candidates = mutableListOf<MainlineCandidate>()
 
             for (g in colGamesArray) {
@@ -603,7 +603,8 @@ object IgdbApiClient {
                     val gEpoch = gObj.get("first_release_date")?.asLong?.times(1000L) ?: Long.MAX_VALUE
                     val gCover = gObj.getAsJsonObject("cover")?.get("image_id")?.asString
                     val gScore = gObj.get("total_rating")?.asFloat?.let { it / 10f }
-                    candidates.add(MainlineCandidate(gId, gName, gEpoch, gCover, gScore))
+                    val gPlatforms = parsePlatforms(gObj.getAsJsonArray("platforms"))
+                    candidates.add(MainlineCandidate(gId, gName, gEpoch, gCover, gScore, gPlatforms))
                 }
             }
 
@@ -631,7 +632,8 @@ object IgdbApiClient {
                             posterUrl = cov,
                             releaseYear = yr,
                             score = c.score,
-                            externalSource = "IGDB"
+                            externalSource = "IGDB",
+                            platforms = c.platforms
                         )
                     )
                 }
@@ -650,7 +652,8 @@ object IgdbApiClient {
                             posterUrl = cov,
                             releaseYear = yr,
                             score = c.score,
-                            externalSource = "IGDB"
+                            externalSource = "IGDB",
+                            platforms = c.platforms
                         )
                     )
                 }
@@ -685,6 +688,7 @@ object IgdbApiClient {
             val yr = epoch?.let { extractYear(it) }
             val coverId = obj.getAsJsonObject("cover")?.get("image_id")?.asString
             val cov = coverId?.let { "$COVER_IMAGE_BASE/$it.jpg" }
+            val platforms = parsePlatforms(obj.getAsJsonArray("platforms"))
 
             destination.add(
                 RelatedMediaItem(
@@ -694,7 +698,8 @@ object IgdbApiClient {
                     mediaType = MediaType.GAME,
                     posterUrl = cov,
                     releaseYear = yr,
-                    externalSource = "IGDB"
+                    externalSource = "IGDB",
+                    platforms = platforms
                 )
             )
         }

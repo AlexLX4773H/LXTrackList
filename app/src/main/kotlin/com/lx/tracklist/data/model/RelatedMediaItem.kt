@@ -10,6 +10,7 @@ data class RelatedMediaItem(
     val releaseYear: String? = null,
     val score: Float? = null,
     val inLibraryEntryId: Long? = null,
-    val inLibraryStatus: MediaStatus? = null
+    val inLibraryStatus: MediaStatus? = null,
+    val platforms: List<String>? = emptyList()
 )
 

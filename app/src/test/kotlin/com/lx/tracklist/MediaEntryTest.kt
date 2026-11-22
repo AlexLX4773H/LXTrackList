@@ -194,6 +194,59 @@ class MediaEntryTest {
     }
 
     @Test
+    fun testLegacyRelatedEntriesJsonWithoutPlatformsFieldDoesNotCrash() {
+        // Legacy JSON generated before 'platforms' field was introduced (no "platforms" key)
+        val legacyJson = """
+            [
+              {
+                "title": "Attack on Titan Season 2",
+                "relationship": "Sequel",
+                "externalId": "25777",
+                "externalSource": "MAL",
+                "mediaType": "ANIME"
+              }
+            ]
+        """.trimIndent()
+
+        val mainEntry = MediaEntry(
+            id = 1L,
+            title = "Attack on Titan",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.COMPLETED,
+            externalId = "16498",
+            externalSource = "MAL",
+            relatedEntriesJson = legacyJson
+        )
+
+        val library = listOf(
+            mainEntry,
+            MediaEntry(
+                id = 10L,
+                title = "Attack on Titan Season 2",
+                mediaType = MediaType.ANIME,
+                status = MediaStatus.WATCHING,
+                externalId = "25777",
+                externalSource = "MAL"
+            )
+        )
+
+        // Must not crash with NullPointerException on copy() or deserialization
+        val items = mainEntry.getRelatedMediaItems()
+        assertEquals(1, items.size)
+        assertEquals(emptyList<String>(), items[0].platforms)
+
+        val correlated = mainEntry.getCorrelatedRelatedItems(library)
+        assertEquals(1, correlated.size)
+        assertEquals(10L, correlated[0].inLibraryEntryId)
+        assertEquals(MediaStatus.WATCHING, correlated[0].inLibraryStatus)
+        assertEquals(emptyList<String>(), correlated[0].platforms)
+
+        // Verify copy() doesn't throw NPE
+        val copied = items[0].copy(title = "Updated Title")
+        assertEquals("Updated Title", copied.title)
+    }
+
+    @Test
     fun testSameNameDifferentExternalIdDoesNotMatch() {
         // Friday the 13th (1980) TMDB ID 9728
         val friday1980Entry = MediaEntry(

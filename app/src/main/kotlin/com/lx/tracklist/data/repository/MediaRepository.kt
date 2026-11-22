@@ -1014,7 +1014,8 @@ class MediaRepository(
                     externalScore = item.score,
                     externalScoreSource = if (item.externalSource.isNotBlank()) item.externalSource else "IGDB",
                     coverImageUri = item.posterUrl,
-                    airedStartDate = releaseMillis
+                    airedStartDate = releaseMillis,
+                    gamePlatforms = item.platforms.orEmpty().filter { it.isNotBlank() }.joinToString(", ").takeIf { it.isNotBlank() }
                 )
             } else if (item.externalSource.equals("TMDB", ignoreCase = true)) {
                 val tmdbId = item.externalId.toLongOrNull() ?: 0L

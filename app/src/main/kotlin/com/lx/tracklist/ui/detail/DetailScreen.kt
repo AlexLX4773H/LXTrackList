@@ -996,10 +996,9 @@ fun DetailScreen(
             item = previewRelatedItem!!,
             context = context,
             onDismiss = { previewRelatedItem = null },
-            onAddClick = {
-                val toAdd = previewRelatedItem
+            onAddClick = { updatedItem ->
                 previewRelatedItem = null
-                relatedItemToAdd = toAdd
+                relatedItemToAdd = updatedItem
             },
             onViewInLibrary = { entryId ->
                 previewRelatedItem = null
@@ -3450,7 +3449,8 @@ private data class RelatedDetailedInfo(
     val isAiring: Boolean? = null,
     val externalId: String? = null,
     val externalSource: String? = null,
-    val webUrl: String? = null
+    val webUrl: String? = null,
+    val platforms: List<String> = emptyList()
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -3459,7 +3459,7 @@ private fun RelatedItemDetailSheet(
     item: RelatedMediaItem,
     context: Context,
     onDismiss: () -> Unit,
-    onAddClick: () -> Unit,
+    onAddClick: (RelatedMediaItem) -> Unit,
     onViewInLibrary: (Long) -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
@@ -3583,6 +3583,7 @@ private fun RelatedItemDetailSheet(
                     } else {
                         "https://www.igdb.com/games/${gDetails?.externalId ?: item.externalId}"
                     }
+                    val platformsList = gDetails?.platforms?.filter { it.isNotBlank() }?.ifEmpty { null } ?: item.platforms.orEmpty()
                     detailedInfo = RelatedDetailedInfo(
                         title = gDetails?.title ?: item.title,
                         alternateTitle = gDetails?.alternateTitles?.firstOrNull(),
@@ -3590,14 +3591,15 @@ private fun RelatedItemDetailSheet(
                         tags = gDetails?.genres?.joinToString(", "),
                         posterUrl = gDetails?.coverUrl ?: item.posterUrl,
                         score = gDetails?.rating ?: item.score,
-                        scoreSource = gDetails?.ratingSource ?: item.externalSource,
+                        scoreSource = gDetails?.ratingSource ?: if (item.externalSource.isNotBlank()) item.externalSource else "IGDB",
                         releaseYear = yr,
-                        durationMinutes = null,
+                        durationMinutes = gDetails?.normalTimeMinutes ?: gDetails?.completionTimeMinutes,
                         totalUnits = null,
                         statusText = "Game",
                         externalId = gDetails?.externalId ?: item.externalId,
-                        externalSource = gDetails?.externalSource ?: item.externalSource,
-                        webUrl = webUrl
+                        externalSource = gDetails?.externalSource ?: if (item.externalSource.isNotBlank()) item.externalSource else "IGDB",
+                        webUrl = webUrl,
+                        platforms = platformsList
                     )
                 } else {
                     val malId = item.externalId.toLongOrNull() ?: 0L
@@ -3652,13 +3654,35 @@ private fun RelatedItemDetailSheet(
     val displayTitle = detailedInfo?.title ?: item.title
     val displayPoster = detailedInfo?.posterUrl ?: item.posterUrl
     val displayScore = detailedInfo?.score ?: item.score
-    val displayScoreSource = detailedInfo?.scoreSource ?: item.externalSource
+    val displayScoreSource = detailedInfo?.scoreSource ?: when {
+        item.mediaType == MediaType.GAME -> if (item.externalSource.equals("RAWG", ignoreCase = true)) "RAWG" else "IGDB"
+        item.mediaType == MediaType.MOVIE || item.mediaType == MediaType.SHOW -> if (item.externalSource.isNotBlank()) item.externalSource else "TMDB"
+        item.mediaType == MediaType.BOOK -> if (item.externalSource.isNotBlank()) item.externalSource else "Google Books"
+        item.externalSource.isNotBlank() -> item.externalSource
+        else -> "MAL"
+    }
     val displayYear = detailedInfo?.releaseYear ?: item.releaseYear
     val displayAlternate = detailedInfo?.alternateTitle
     val displaySynopsis = detailedInfo?.synopsis
     val displayTags = detailedInfo?.tags
     val displayExternalId = detailedInfo?.externalId ?: item.externalId.takeIf { it.isNotBlank() && it != "0" }
-    val displayExternalSource = detailedInfo?.externalSource ?: if (item.externalSource.equals("TMDB", ignoreCase = true)) "TMDB" else "MAL"
+    val displayExternalSource = detailedInfo?.externalSource
+        ?: when {
+            item.mediaType == MediaType.GAME -> {
+                if (item.externalSource.equals("RAWG", ignoreCase = true)) "RAWG" else "IGDB"
+            }
+            item.mediaType == MediaType.MOVIE || item.mediaType == MediaType.SHOW -> {
+                if (item.externalSource.isNotBlank()) item.externalSource else "TMDB"
+            }
+            item.mediaType == MediaType.BOOK -> {
+                if (item.externalSource.isNotBlank()) item.externalSource else "Google Books"
+            }
+            item.externalSource.equals("AniList", ignoreCase = true) -> "AniList"
+            item.externalSource.equals("MangaDex", ignoreCase = true) -> "MangaDex"
+            item.externalSource.equals("Kitsu", ignoreCase = true) -> "Kitsu"
+            item.externalSource.isNotBlank() -> item.externalSource
+            else -> "MAL"
+        }
     val displayWebUrl = detailedInfo?.webUrl ?: run {
         if (displayExternalId != null) {
             if (displayExternalSource.equals("TMDB", ignoreCase = true)) {
@@ -3699,6 +3723,14 @@ private fun RelatedItemDetailSheet(
         else -> LXTextSecondary
     }
 
+    val defaultTypeLabel = when (item.mediaType) {
+        MediaType.GAME -> "Game"
+        MediaType.MOVIE -> "Movie"
+        MediaType.SHOW -> "Show"
+        MediaType.BOOK -> "Book"
+        else -> item.mediaType.displayName
+    }
+
     val unitsInfo = when (item.mediaType) {
         MediaType.ANIME, MediaType.SHOW -> {
             val eps = detailedInfo?.totalUnits?.takeIf { it > 0 }?.let { "$it Episodes" }
@@ -3714,7 +3746,13 @@ private fun RelatedItemDetailSheet(
             listOfNotNull(chs, vols).joinToString(" • ").takeIf { it.isNotBlank() }
         }
         MediaType.GAME -> {
-            detailedInfo?.tags?.takeIf { it.isNotBlank() } ?: "Game"
+            detailedInfo?.durationMinutes?.takeIf { it > 0 }?.let { mins ->
+                val hrs = mins / 60
+                val remainMins = mins % 60
+                if (hrs > 0 && remainMins > 0) "~${hrs}h ${remainMins}m avg"
+                else if (hrs > 0) "~${hrs}h avg"
+                else "~${mins}m avg"
+            }
         }
     }
 
@@ -3822,7 +3860,7 @@ private fun RelatedItemDetailSheet(
                                 color = LXPrimaryGreen.copy(alpha = 0.15f)
                             ) {
                                 Text(
-                                    text = detailedInfo?.statusText ?: item.mediaType.displayName,
+                                    text = detailedInfo?.statusText ?: defaultTypeLabel,
                                     color = LXPrimaryGreen,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -3914,6 +3952,19 @@ private fun RelatedItemDetailSheet(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = LXTextSecondary
                             )
+                        }
+                    }
+                }
+
+                // Platforms (for Games)
+                val displayPlatforms = (detailedInfo?.platforms?.takeIf { it.isNotEmpty() } ?: item.platforms.orEmpty()).distinct()
+                if (item.mediaType == MediaType.GAME && displayPlatforms.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        displayPlatforms.forEach { platform ->
+                            GamePlatformChip(platform = platform, color = LXPrimaryGreen)
                         }
                     }
                 }
@@ -4137,7 +4188,18 @@ private fun RelatedItemDetailSheet(
                     Button(
                         onClick = {
                             onDismiss()
-                            onAddClick()
+                            val updatedItem = if (detailedInfo != null) {
+                                item.copy(
+                                    title = detailedInfo?.title ?: item.title,
+                                    externalId = detailedInfo?.externalId ?: item.externalId,
+                                    externalSource = detailedInfo?.externalSource ?: item.externalSource,
+                                    posterUrl = detailedInfo?.posterUrl ?: item.posterUrl,
+                                    releaseYear = detailedInfo?.releaseYear ?: item.releaseYear,
+                                    score = detailedInfo?.score ?: item.score,
+                                    platforms = (detailedInfo?.platforms?.takeIf { it.isNotEmpty() } ?: item.platforms.orEmpty()).distinct()
+                                )
+                            } else item
+                            onAddClick(updatedItem)
                         },
                         modifier = Modifier
                             .fillMaxWidth()
