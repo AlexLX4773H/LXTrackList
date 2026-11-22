@@ -1044,7 +1044,7 @@ class MediaRepository(
                         coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
                         durationMinutes = fullDetails?.durationMinutes,
                         tags = fullDetails?.tags,
-                        description = fullDetails?.synopsis,
+                        description = fullDetails?.buildDescriptionWithMetadata() ?: fullDetails?.synopsis,
                         airedStartDate = fullDetails?.airedStartDate
                     )
                 } else {
@@ -1065,7 +1065,7 @@ class MediaRepository(
                         seasonEpisodesJson = fullDetails?.seasonEpisodes?.let { MediaEntry.formatSeasonEpisodes(it) },
                         episodeLengthMinutes = fullDetails?.durationMinutes,
                         tags = fullDetails?.tags,
-                        description = fullDetails?.synopsis,
+                        description = fullDetails?.buildDescriptionWithMetadata() ?: fullDetails?.synopsis,
                         airedStartDate = fullDetails?.airedStartDate,
                         isAiring = fullDetails?.isAiring ?: false
                     )

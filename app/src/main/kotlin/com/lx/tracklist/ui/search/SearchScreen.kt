@@ -127,6 +127,7 @@ import com.lx.tracklist.data.remote.OpenLibraryApiClient
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.TmdbConfig
 import com.lx.tracklist.data.remote.buildGameDescriptionWithMetadata
+import com.lx.tracklist.data.remote.buildMovieTvDescriptionWithMetadata
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.lx.tracklist.ui.components.UserAvatarButton
@@ -1365,10 +1366,14 @@ private fun SearchResultDetailSheet(
     var detailedGamePublishers by remember(item.externalId) {
         mutableStateOf(item.gamePublishers.takeIf { it.isNotEmpty() } ?: item.rawGameResult?.publishers.orEmpty())
     }
+    var detailedMovieStudios by remember(item.externalId) { mutableStateOf<List<String>>(emptyList()) }
+    var detailedMoviePublishers by remember(item.externalId) { mutableStateOf<List<String>>(emptyList()) }
+    var detailedMovieTags by remember(item.externalId) { mutableStateOf<String?>(null) }
     var isLoadingDetails by remember(item.externalId) { mutableStateOf(false) }
 
     LaunchedEffect(item.externalId) {
-        if (item.mediaType == MediaType.SHOW && item.externalSource.equals("TMDB", ignoreCase = true) && (detailedEpisodes == null || detailedSeasons == null || detailedImdbId == null)) {
+        if (item.mediaType == MediaType.SHOW && item.externalSource.equals("TMDB", ignoreCase = true) &&
+            (detailedEpisodes == null || detailedSeasons == null || detailedImdbId == null || (detailedMovieStudios.isEmpty() && detailedMoviePublishers.isEmpty()))) {
             val tmdbId = item.externalId.toLongOrNull()
             if (tmdbId != null) {
                 isLoadingDetails = true
@@ -1391,12 +1396,22 @@ private fun SearchResultDetailSheet(
                             if (!tvDetails.imdbId.isNullOrBlank()) {
                                 detailedImdbId = tvDetails.imdbId
                             }
+                            if (detailedMovieStudios.isEmpty() && tvDetails.studios.isNotEmpty()) {
+                                detailedMovieStudios = tvDetails.studios
+                            }
+                            if (detailedMoviePublishers.isEmpty() && tvDetails.publishers.isNotEmpty()) {
+                                detailedMoviePublishers = tvDetails.publishers
+                            }
+                            if (detailedMovieTags.isNullOrBlank() && !tvDetails.tags.isNullOrBlank()) {
+                                detailedMovieTags = tvDetails.tags
+                            }
                         }
                     } catch (_: Exception) {}
                     isLoadingDetails = false
                 }
             }
-        } else if (item.mediaType == MediaType.MOVIE && item.externalSource.equals("TMDB", ignoreCase = true) && (detailedDuration == null || detailedImdbId == null)) {
+        } else if (item.mediaType == MediaType.MOVIE && item.externalSource.equals("TMDB", ignoreCase = true) &&
+            (detailedDuration == null || detailedImdbId == null || detailedMovieStudios.isEmpty())) {
             val tmdbId = item.externalId.toLongOrNull()
             if (tmdbId != null) {
                 withContext(Dispatchers.IO) {
@@ -1411,6 +1426,15 @@ private fun SearchResultDetailSheet(
                             }
                             if (!movieDetails.imdbId.isNullOrBlank()) {
                                 detailedImdbId = movieDetails.imdbId
+                            }
+                            if (detailedMovieStudios.isEmpty() && movieDetails.studios.isNotEmpty()) {
+                                detailedMovieStudios = movieDetails.studios
+                            }
+                            if (detailedMoviePublishers.isEmpty() && movieDetails.publishers.isNotEmpty()) {
+                                detailedMoviePublishers = movieDetails.publishers
+                            }
+                            if (detailedMovieTags.isNullOrBlank() && !movieDetails.tags.isNullOrBlank()) {
+                                detailedMovieTags = movieDetails.tags
                             }
                         }
                     } catch (_: Exception) {}
@@ -1857,12 +1881,70 @@ private fun SearchResultDetailSheet(
                 }
             }
 
+            // Movie / TV Metadata Card (Studio, Publisher)
+            val displayMovieStudio = detailedMovieStudios.takeIf { it.isNotEmpty() }?.joinToString(", ")
+            val displayMoviePublisher = detailedMoviePublishers.takeIf { it.isNotEmpty() }?.joinToString(", ")
+
+            if ((item.mediaType == MediaType.MOVIE || item.mediaType == MediaType.SHOW) &&
+                (!displayMovieStudio.isNullOrBlank() || !displayMoviePublisher.isNullOrBlank())
+            ) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, LXBorder)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (!displayMovieStudio.isNullOrBlank()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    text = "Studio:",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXPrimaryGreen
+                                )
+                                Text(
+                                    text = displayMovieStudio,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LXTextPrimary
+                                )
+                            }
+                        }
+                        if (!displayMoviePublisher.isNullOrBlank()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    text = "Publisher:",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXTextSecondary
+                                )
+                                Text(
+                                    text = displayMoviePublisher,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LXTextPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Tags / Genres
             val rawTags = item.rawJikanDetails?.tags
             val displayTagsList: List<String> = when {
                 detailedGameGenres.isNotEmpty() -> detailedGameGenres
                 item.gameGenres.isNotEmpty() -> item.gameGenres
                 !item.rawGameResult?.genres.isNullOrEmpty() -> item.rawGameResult?.genres.orEmpty()
+                !detailedMovieTags.isNullOrBlank() -> detailedMovieTags!!.split(",").map { it.trim() }.filter { it.isNotBlank() }
                 !rawTags.isNullOrBlank() -> rawTags.split(",").map { it.trim() }.filter { it.isNotBlank() }
                 !item.rawBookDetails?.categories.isNullOrEmpty() -> item.rawBookDetails?.categories.orEmpty()
                 else -> emptyList()
@@ -1923,9 +2005,14 @@ private fun SearchResultDetailSheet(
                             )
                         }
                     } else {
-                        val textToDisplay = detailedSynopsis?.takeIf { it.isNotBlank() }
+                        val rawText = detailedSynopsis?.takeIf { it.isNotBlank() }
                             ?: item.synopsis?.takeIf { it.isNotBlank() }
-                            ?: "No synopsis or overview available for this title."
+                        val textToDisplay = when {
+                            rawText == null -> "No synopsis or overview available for this title."
+                            item.mediaType == MediaType.GAME -> buildGameDescriptionWithMetadata(rawText, detailedGameDevelopers, detailedGamePublishers)
+                            item.mediaType == MediaType.MOVIE || item.mediaType == MediaType.SHOW -> buildMovieTvDescriptionWithMetadata(rawText, detailedMovieStudios, detailedMoviePublishers)
+                            else -> rawText
+                        }
                         Text(
                             text = textToDisplay,
                             style = MaterialTheme.typography.bodySmall.copy(lineHeight = 18.sp),

@@ -8,6 +8,7 @@ import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.TmdbSyncManager
+import com.lx.tracklist.data.remote.buildMovieTvDescriptionWithMetadata
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -63,6 +64,10 @@ class TmdbIntegrationTest {
                     {"id": 18, "name": "Drama"},
                     {"id": 53, "name": "Thriller"}
                 ],
+                "production_companies": [
+                    {"id": 508, "name": "Regency Enterprises"},
+                    {"id": 711, "name": "Fox 2000 Pictures"}
+                ],
                 "alternative_titles": {
                     "titles": [
                         {"iso_3166_1": "US", "title": "Fight Club: Extended"}
@@ -81,6 +86,11 @@ class TmdbIntegrationTest {
         assertEquals("TMDB", details.externalScoreSource)
         assertEquals("tt0137523", details.imdbId)
         assertEquals("Drama, Thriller", details.tags)
+        assertEquals(listOf("Regency Enterprises", "Fox 2000 Pictures"), details.studios)
+        assertEquals("Regency Enterprises, Fox 2000 Pictures", details.studioString)
+        val movieDesc = details.buildDescriptionWithMetadata()
+        assertTrue(movieDesc.contains("A ticking-loss insomniac..."))
+        assertTrue(movieDesc.contains("Studio: Regency Enterprises, Fox 2000 Pictures"))
         assertEquals("https://image.tmdb.org/t/p/w500/pB8BM7pdSp6B6Ih7QZ4DrQ3PmJK.jpg", details.posterUrl)
         assertEquals(false, details.isAiring)
         assertNotNull(details.airedStartDate)
@@ -108,6 +118,13 @@ class TmdbIntegrationTest {
                     {"id": 18, "name": "Drama"},
                     {"id": 80, "name": "Crime"}
                 ],
+                "production_companies": [
+                    {"id": 11073, "name": "Sony Pictures Television"},
+                    {"id": 33742, "name": "High Bridge Productions"}
+                ],
+                "networks": [
+                    {"id": 174, "name": "AMC"}
+                ],
                 "alternative_titles": {
                     "results": [
                         {"iso_3166_1": "ES", "title": "Metástasis"}
@@ -126,10 +143,32 @@ class TmdbIntegrationTest {
         assertEquals(5, details.totalSeasons)
         assertEquals(8.9f, details.externalScore ?: 0f, 0.001f)
         assertEquals("Drama, Crime", details.tags)
+        assertEquals(listOf("Sony Pictures Television", "High Bridge Productions"), details.studios)
+        assertEquals(listOf("AMC"), details.publishers)
+        val tvDesc = details.buildDescriptionWithMetadata()
+        assertTrue(tvDesc.contains("Walter White, a chemistry teacher..."))
+        assertTrue(tvDesc.contains("Studio: Sony Pictures Television, High Bridge Productions"))
+        assertTrue(tvDesc.contains("Publisher: AMC"))
         assertEquals(false, details.isAiring)
         assertNotNull(details.airedStartDate)
         assertNotNull(details.airedEndDate)
         assertTrue(details.alternateTitle?.contains("Metástasis") == true)
+    }
+
+    @Test
+    fun testBuildMovieTvDescriptionWithMetadataDeduplication() {
+        val baseOverview = "A great film about space exploration."
+        val studios = listOf("Syncopy", "Legendary Pictures")
+        val publishers = listOf("Warner Bros. Pictures")
+
+        val formatted = buildMovieTvDescriptionWithMetadata(baseOverview, studios, publishers)
+        assertTrue(formatted.contains("A great film about space exploration."))
+        assertTrue(formatted.contains("Studio: Syncopy, Legendary Pictures"))
+        assertTrue(formatted.contains("Publisher: Warner Bros. Pictures"))
+
+        // Repeated build on already-formatted text shouldn't duplicate
+        val secondPass = buildMovieTvDescriptionWithMetadata(formatted, studios, publishers)
+        assertEquals(formatted, secondPass)
     }
 
     @Test

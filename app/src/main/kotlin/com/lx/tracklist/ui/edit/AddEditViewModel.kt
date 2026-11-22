@@ -946,8 +946,9 @@ class AddEditViewModel(
                         .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
 
                     val targetMediaType = if (isMovie) MediaType.MOVIE else MediaType.SHOW
-                    val baseDesc = if (current.description.isBlank() && !(fullDetails?.synopsis ?: item.overview).isNullOrBlank()) {
-                        (fullDetails?.synopsis ?: item.overview) ?: ""
+                    val descWithMeta = fullDetails?.buildDescriptionWithMetadata() ?: item.overview
+                    val baseDesc = if (current.description.isBlank() && !descWithMeta.isNullOrBlank()) {
+                        descWithMeta
                     } else current.description
 
                     val duration = if (isMovie) {

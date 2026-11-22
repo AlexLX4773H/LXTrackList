@@ -592,12 +592,13 @@ object TmdbSyncManager {
 
                 // Description (synopsis)
                 val curDesc = entry.description ?: entry.notes
-                val newDescription = if (!details.synopsis.isNullOrBlank() &&
+                val formattedDesc = details.buildDescriptionWithMetadata().takeIf { it.isNotBlank() } ?: details.synopsis
+                val newDescription = if (!formattedDesc.isNullOrBlank() &&
                     (curDesc.isNullOrBlank() || forceRefresh) &&
-                    details.synopsis != curDesc
+                    formattedDesc != curDesc
                 ) {
                     hasChanges = true
-                    details.synopsis
+                    formattedDesc
                 } else {
                     curDesc
                 }

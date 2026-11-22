@@ -2037,7 +2037,7 @@ class SearchViewModel(
                             coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
                             durationMinutes = fullDetails?.durationMinutes ?: item.durationMinutes,
                             tags = fullDetails?.tags,
-                            description = fullDetails?.synopsis ?: item.synopsis,
+                            description = fullDetails?.buildDescriptionWithMetadata() ?: item.synopsis,
                             airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate,
                             originalLanguage = fullDetails?.originalLanguage ?: item.originalLanguage ?: item.rawTmdbResult?.originalLanguage
                         )
@@ -2061,7 +2061,7 @@ class SearchViewModel(
                             seasonEpisodesJson = fullDetails?.seasonEpisodes?.let { MediaEntry.formatSeasonEpisodes(it) },
                             episodeLengthMinutes = fullDetails?.durationMinutes,
                             tags = fullDetails?.tags,
-                            description = fullDetails?.synopsis ?: item.synopsis,
+                            description = fullDetails?.buildDescriptionWithMetadata() ?: item.synopsis,
                             airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate,
                             isAiring = fullDetails?.isAiring ?: false,
                             originalLanguage = fullDetails?.originalLanguage ?: item.originalLanguage ?: item.rawTmdbResult?.originalLanguage

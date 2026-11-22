@@ -1962,7 +1962,7 @@ object TachiyomiResolverManager {
             externalScore = matchDetails.externalScore ?: entry.externalScore,
             externalScoreSource = "TMDB",
             tags = if (entry.tags.isNullOrBlank() && !matchDetails.tags.isNullOrBlank()) matchDetails.tags else entry.tags,
-            description = if ((entry.description ?: entry.notes).isNullOrBlank() && !matchDetails.synopsis.isNullOrBlank()) matchDetails.synopsis else (entry.description ?: entry.notes),
+            description = if ((entry.description ?: entry.notes).isNullOrBlank() && !matchDetails.synopsis.isNullOrBlank()) matchDetails.buildDescriptionWithMetadata() else (entry.description ?: entry.notes),
             isAiring = matchDetails.isAiring ?: entry.isAiring,
             originalLanguage = matchDetails.originalLanguage ?: entry.originalLanguage,
             updatedAt = System.currentTimeMillis()

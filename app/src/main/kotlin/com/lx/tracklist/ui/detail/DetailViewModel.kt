@@ -1079,7 +1079,7 @@ class DetailViewModel(
                                 externalScore = details.externalScore ?: cur.externalScore,
                                 externalScoreSource = "TMDB",
                                 tags = if (!details.tags.isNullOrBlank()) details.tags else cur.tags,
-                                description = if (!details.synopsis.isNullOrBlank()) details.synopsis else (cur.description ?: cur.notes),
+                                description = details.buildDescriptionWithMetadata().takeIf { it.isNotBlank() } ?: (cur.description ?: cur.notes),
                                 userComments = cur.userComments,
                                 isAiring = details.isAiring ?: cur.isAiring,
                                 relatedEntriesJson = relatedJson,

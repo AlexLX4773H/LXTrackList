@@ -3493,7 +3493,7 @@ private fun RelatedItemDetailSheet(
                         detailedInfo = RelatedDetailedInfo(
                             title = full?.title,
                             alternateTitle = full?.alternateTitle,
-                            synopsis = full?.synopsis,
+                            synopsis = full?.buildDescriptionWithMetadata() ?: full?.synopsis,
                             tags = full?.tags,
                             posterUrl = full?.posterUrl,
                             score = full?.externalScore,
@@ -3516,7 +3516,7 @@ private fun RelatedItemDetailSheet(
                         detailedInfo = RelatedDetailedInfo(
                             title = full?.title,
                             alternateTitle = full?.alternateTitle,
-                            synopsis = full?.synopsis,
+                            synopsis = full?.buildDescriptionWithMetadata() ?: full?.synopsis,
                             tags = full?.tags,
                             posterUrl = full?.posterUrl,
                             score = full?.externalScore,

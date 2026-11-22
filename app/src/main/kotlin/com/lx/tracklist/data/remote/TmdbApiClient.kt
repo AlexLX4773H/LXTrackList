@@ -48,8 +48,63 @@ data class TmdbMediaDetails(
     val originalLanguage: String? = null,
     val relatedItems: List<RelatedMediaItem>? = null,
     val movieSeriesName: String? = null,
-    val movieSeriesNumber: Int? = null
-)
+    val movieSeriesNumber: Int? = null,
+    val studios: List<String> = emptyList(),
+    val publishers: List<String> = emptyList()
+) {
+    val studioString: String
+        get() = studios.joinToString(", ")
+
+    val publisherString: String
+        get() = publishers.joinToString(", ")
+
+    fun buildDescriptionWithMetadata(): String {
+        return buildMovieTvDescriptionWithMetadata(synopsis, studios, publishers)
+    }
+}
+
+fun buildMovieTvDescriptionWithMetadata(
+    baseSummary: String?,
+    studios: List<String> = emptyList(),
+    publishers: List<String> = emptyList()
+): String {
+    val metaLines = mutableListOf<String>()
+    val studioList = studios.filter { it.isNotBlank() }.distinct()
+    val pubList = publishers.filter { it.isNotBlank() }.distinct()
+
+    if (studioList.isNotEmpty()) {
+        metaLines.add("Studio: ${studioList.joinToString(", ")}")
+    }
+    if (pubList.isNotEmpty()) {
+        val distinctPubs = pubList.filterNot { pub -> studioList.any { it.equals(pub, ignoreCase = true) } }
+        if (distinctPubs.isNotEmpty()) {
+            metaLines.add("Publisher: ${distinctPubs.joinToString(", ")}")
+        } else if (studioList.isEmpty()) {
+            metaLines.add("Publisher: ${pubList.joinToString(", ")}")
+        }
+    }
+
+    var cleanSummary = baseSummary?.trim().orEmpty()
+    if (cleanSummary.isNotBlank()) {
+        cleanSummary = cleanSummary.lines().filterNot { line ->
+            val l = line.trim()
+            l.startsWith("Studio:", ignoreCase = true) ||
+            l.startsWith("Studio / Developer:", ignoreCase = true) ||
+            l.startsWith("Studio / Publisher:", ignoreCase = true) ||
+            l.startsWith("Publisher:", ignoreCase = true) ||
+            l.startsWith("Network:", ignoreCase = true) ||
+            l.startsWith("Broadcaster:", ignoreCase = true) ||
+            l.startsWith("Production:", ignoreCase = true)
+        }.joinToString("\n").trim()
+    }
+
+    val metaBlock = metaLines.joinToString("\n")
+    return when {
+        cleanSummary.isNotBlank() && metaBlock.isNotBlank() -> "$cleanSummary\n\n$metaBlock"
+        metaBlock.isNotBlank() -> metaBlock
+        else -> cleanSummary
+    }
+}
 
 data class TmdbSearchResult(
     val tmdbId: Long,
@@ -1164,6 +1219,17 @@ object TmdbApiClient {
         val origLang = obj.get("original_language")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
             ?: obj.getAsJsonArray("spoken_languages")?.firstOrNull()?.asJsonObject?.get("iso_639_1")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
 
+        // Production companies (Studios)
+        val studioList = mutableListOf<String>()
+        obj.getAsJsonArray("production_companies")?.forEach { elem ->
+            if (elem.isJsonObject) {
+                val compName = elem.asJsonObject.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                if (!compName.isNullOrBlank() && !studioList.contains(compName)) {
+                    studioList.add(compName)
+                }
+            }
+        }
+
         return TmdbMediaDetails(
             tmdbId = id,
             title = title,
@@ -1185,7 +1251,8 @@ object TmdbApiClient {
             sourceProvider = "TMDB",
             originalLanguage = origLang,
             relatedItems = recList.takeIf { it.isNotEmpty() },
-            movieSeriesName = movieSeriesName
+            movieSeriesName = movieSeriesName,
+            studios = studioList
         )
     }
 
@@ -1349,6 +1416,28 @@ object TmdbApiClient {
         val tvOrigLang = obj.get("original_language")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
             ?: obj.getAsJsonArray("spoken_languages")?.firstOrNull()?.asJsonObject?.get("iso_639_1")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
 
+        // Production companies (Studios)
+        val studioList = mutableListOf<String>()
+        obj.getAsJsonArray("production_companies")?.forEach { elem ->
+            if (elem.isJsonObject) {
+                val compName = elem.asJsonObject.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                if (!compName.isNullOrBlank() && !studioList.contains(compName)) {
+                    studioList.add(compName)
+                }
+            }
+        }
+
+        // Networks (Publishers / Broadcasters)
+        val networkList = mutableListOf<String>()
+        obj.getAsJsonArray("networks")?.forEach { elem ->
+            if (elem.isJsonObject) {
+                val netName = elem.asJsonObject.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                if (!netName.isNullOrBlank() && !networkList.contains(netName)) {
+                    networkList.add(netName)
+                }
+            }
+        }
+
         return TmdbMediaDetails(
             tmdbId = id,
             title = name,
@@ -1370,7 +1459,9 @@ object TmdbApiClient {
             imdbId = tvImdbId,
             sourceProvider = "TMDB",
             originalLanguage = tvOrigLang,
-            relatedItems = recList.takeIf { it.isNotEmpty() }
+            relatedItems = recList.takeIf { it.isNotEmpty() },
+            studios = studioList,
+            publishers = networkList
         )
     }
 
