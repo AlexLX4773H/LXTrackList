@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.6.15-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-0.6.16-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26--36)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Kotlin_2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
   <img src="https://img.shields.io/badge/UI-Jetpack_Compose_&_Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" />
@@ -17,82 +17,13 @@
 
 ---
 
-## 🚀 What's New in v0.6.15
+## 🚀 What's New in v0.6.16
 
 - **🔍 Persistent Search Query with Discovery Filters**:
   - In the **Search & Discover** tab, applying or switching Discover filters (e.g. `🔥 Most Popular Games`, `+PC`, seasonal anime, genres, tags) now preserves any active search query text (such as `"lord of the rings"` or `"Pok"`) instead of resetting it to empty.
   - Automatically triggers an immediate scoped search combining both the active text query and the selected discovery filter constraints across all media categories (Games, Movies, TV Shows, Anime, Manga, Manhwa, Light Novels, and Books).
   - Clearing discovery filters via the `✕` chip or reset action smoothly preserves the search text in the input bar and transitions back to an unconstrained search without wiping the results or input field.
   - Upgraded Anime discovery search dispatch in `executeSearch` to route through `fetchAnimeDiscovery`, ensuring complete support for all discovery modes, tags, demographic filters, original languages, and adult content modes when searching with active queries.
-
----
-
-## 🚀 What's New in v0.6.14
-
-- **🎮 Decimal Support for Game Custom Tracking Units**:
-  - Custom Units mode for video games now fully supports decimal values (e.g. `10.5` Hours, `170.5` Hours target).
-  - Upgraded Room database schema (`MIGRATION_19_20`) with `REAL` precision for `customUnitCurrent` and `customUnitTotal`.
-  - Intelligent number formatting displays integers cleanly without trailing `.0` (e.g., `12 Levels`, `42 Hours`), while precisely preserving decimal points when typed (e.g., `10.5 Hours`).
-  - Input fields now default to `KeyboardType.Decimal` with locale-aware comma/period auto-normalization and local text buffering to prevent input stripping or premature formatting while typing.
-  - Detail screen quick-edit progress dialog and progress card hero section seamlessly support decimal progress input and updates.
-- **⏱️ Average Completion Target Fallback & Accurate Est. Progress for Games**:
-  - In Custom Units mode for games, if "Hours" is tracked and no explicit "Total Target" is provided, the Entity details page automatically utilizes the community Average 100% Completion Time as the target (e.g., displaying `5 / 29.5 Hours` with an active progress bar and percentage badge instead of `5 / ? Hours`).
-  - The progress card's estimated duration row (`⏱️ Est: ... spent / ... avg`) now accurately reflects tracked hours (`entry.customUnitCurrent`), displaying e.g. `⏱️ Est: ~5.0 hrs spent / ~1.2 days avg` rather than `~0.0 hrs spent`.
-  - Added an intuitive `Avg: <hours>` placeholder in Add/Edit Entity under **Total Target** when "Hours" is selected and community duration is available.
-- **🧹 Clean Number Input & Sticky Zero Removal in Add / Edit Entry**:
-  - Resolved an issue in Add/Edit Entity where clearing or backspacing numeric fields (such as `Current Progress`, `Total Target`, `Seasons`, and `Series Number`) left a persistent `0` or `1` that prepended to newly typed numbers.
-  - Fields now smoothly clear to empty with an elegant placeholder (`0` or `Optional`) until input is typed.
-- **🔍 Server-Side Platform Filtering for Video Game Search**:
-  - Fixed an issue where combining platform filters (e.g., `+PC`, `+Nintendo DS`) with text search in the **Search & Discover** tab returned zero or very few games.
-  - Platform inclusion and exclusion constraints are now embedded directly into upstream server-side queries across IGDB (Apicalypse `where platforms = (...) & search "..."`) and RAWG (`&platforms=...&search=...`), delivering comprehensive, accurate results matching the requested platforms.
-- **✨ Discover Platforms Filter UI Polish**:
-  - Redesigned and uncompressed the header instructional cell in the **Platforms** discovery filter (`GamePlatformsSubMenu`).
-  - Clear, beautifully spaced instructions (`[✓] 1 tap = Include (OR)` and `[✕] 2 taps = Exclude`) alongside the active filter count, eliminating squashed/wrapped text.
-
----
-
-## 🚀 What's New in v0.6.13
-
-- **🎬 Movies & TV Shows Studio & Publisher Metadata Integration**:
-  - Automatically extracts production companies (**Studio**) and broadcasting / streaming networks (**Publisher**) from The Movie Database (TMDB).
-  - Appends clean, formatted `Studio: ...` and `Publisher: ...` metadata to the overview across all pipelines: **Search & Discover** (`addToLibrary`), **Media Details** metadata refresh, **External Sync Jobs** (`TmdbSyncManager`), **ID Resolver** (`TachiyomiResolverManager`), and **Add / Edit Entity**.
-  - Search preview bottom sheets now feature dedicated **Studio** and **Publisher** metadata cards alongside clickable `#genre` tags and metadata-formatted synopses.
-  - Smart deduplication strips previous metadata lines to ensure clean, non-accumulating text across repeated syncs or refreshes.
-- **🎮 Video Games Studio, Publisher & Genre Metadata Integration**:
-  - Extracts developer (**Studio**) and publisher (**Publisher**) information from IGDB and RAWG and embeds them cleanly into game descriptions.
-  - Search bottom sheet previews now showcase all game **Genre & Tag chips** prior to adding the title to your library.
-  - Fully wired into Search additions, external sync jobs (`GameSyncManager`), ID resolution, and manual edits.
-- **🎮 Enhanced Game Related Entity Previews & Platform Badges**:
-  - Resolved an issue in the Media Details related items sheet where clicking a related game temporarily flashed "MAL ID"; now displays authoritative **IGDB ID** / external source badges from the start.
-  - Related game preview sheets now prominently render targeted **Platform badges** (PC, PlayStation, Xbox, Nintendo, Mobile, etc.).
-- **🛡️ App Startup & Stability Hardening**:
-  - Resolved startup crashes associated with game entities and related media entries, guaranteeing smooth application launches.
-- **🎮 Comprehensive Platform Filtering & Exclusion (Discover & Library)**:
-  - Multi-select platform filtering with inclusion (`OR` condition) and exclusion (`✕`) in **Search & Discover** for video games across IGDB and RAWG.
-  - Added dedicated **Platform Filter** into **Library Advanced Filters** specifically for Games, allowing you to slice your collection by platform combinations.
-  - Complete platform coverage with dedicated taxonomy: **PC**, **PlayStation** (PS5, PS4, PS3, PS2, PS1, Vita, PSP), **Xbox** (All, Series X/S, One, 360, Original), **Nintendo** (Switch, Wii U, Wii, GameCube, N64, 3DS, DS, GBA, SNES, NES), **Mobile** (Android, iOS), **Other** (Linux, macOS, Stadia), and **Retro / Classics**.
-  - Active platform filter chips appear in search results with one-tap dismissal.
-- **🌐 Library Advanced Filter Original Language Support**:
-  - Brought deep Original Language filtering into **Library Advanced Filters** for all media categories (except Games), matching the Search & Discover discovery engine.
-  - Filter your library by original spoken or published language with native script names, ISO codes, and flag emojis (e.g., 🇯🇵 Japanese, 🇰🇷 Korean, 🇨🇳 Chinese, 🇮🇳 Indian languages: Malayalam, Tamil, Telugu, Hindi, etc.).
-- **🗣️ Original Language Pill & Add/Edit Language Picker Dialog**:
-  - The Media Details header now prominently displays the entry's original language as a dedicated styled pill with its native script and country flag.
-  - Introduced an intuitive **Original Language Picker Dialog** in Add/Edit Entity with real-time search, organized category sections (Top Languages, Indian Languages, Other Languages), and instant selection.
-  - Auto-extracts and persists original language across all metadata refreshers: The Movie Database (TMDB Movies & TV Shows), MangaDex, MyAnimeList / Jikan / AniList, and Google Books / Open Library.
-- **🔄 Dedicated Games Sync Job in External Sync Jobs**:
-  - Added a dedicated **Games Sync** card to the **External Sync Jobs** screen under Settings with status badge indicator (`SYNCING`, `CONNECTED`, or `ONLINE`).
-  - Real-time progress monitoring featuring a live progress bar, completion percentage, current game title, pending/failed counts, and a **Cancel Sync** button.
-  - Provides both **Fetch Missing** (populates missing metadata/covers) and **Re-fetch All** (force-refreshes all fields, covers, platforms, and completion times).
-  - Integrated with `GameSyncManager`, `SyncForegroundService`, and system notification reporting.
-- **🔍 Automated "Resolve IDs" Engine Support for Video Games**:
-  - The universal ID Resolution Engine now evaluates unlinked or unverified game entries (`MediaType.GAME`).
-  - Employs strict, confident title matchers against IGDB and RAWG APIs to automatically resolve official external IDs, box art, Steam CDN poster fallbacks, platforms, community completion times, ratings, and release dates.
-  - Full audit reports generated and saved to `/LXTrackList/data/tachiyomi_resolve_report_*.json`.
-- **⏳ Smart Duration Formatting for Large Hours & Playtimes (`DurationFormatter`)**:
-  - Automatically converts large hour quantities into human-readable intervals (days, weeks, months, or years) across the **Statistics & Analytics** screen (Playtime, To Complete, Avg Time) and **Media Detail** pages.
-  - Resolved UI squeezing on game detail pages where large community average completion times compressed the progress stepper button.
-- **⚡ Search "Load More Results" Pagination Fix**:
-  - Fixed on-demand pagination in Search & Discover so that tapping "Load More Results" smoothly appends deeper paginated results without interruption.
 
 ---
 
@@ -116,13 +47,17 @@ Discover what's airing, trending, and premiering directly inside the **Search & 
   - Filter movies and TV shows by release / first-air year.
   - Supports extended year horizons up to **Current Year + 2** (e.g. 2027) with quick-access year chips and a complete dropdown (1960 to Current Year + 2).
   - Sort by **Most Popular**, **Highest Rated**, **Release Date**, and **Box Office** (Movies) or **Premiere Date** (TV).
-- **Scoped Title Search**:
-  - When a seasonal or year filter is active, typing in the search bar scopes results strictly to that season or year (e.g. searching *"Frieren"* while filtered to *Fall 2023* searches within that season).
-  - Clearing the search query instantly restores the full seasonal/year catalog.
+- **Bidirectional Scoped Title Search & Query Persistence**:
+  - **Type First or Filter First**: Type a search query first and then apply Discovery filters, or pick Discovery filters and then type—the search query text is seamlessly preserved across filter additions and modifications.
+  - **Active Filter Scoped Search**: When Discovery filters are active (e.g. seasonal anime, release year, platforms, genres/tags, adult mode), searches execute strictly within those constraints across all media categories (Games, Movies, TV Shows, Anime, Manga, Manhwa, Light Novels, and Books).
+  - **Seamless Filter Dismissal**: Tapping the `✕` chip on an active filter smoothly transitions back to an unconstrained catalog search for the active query without clearing the search bar or blanking results.
+  - **Instant Discovery Restoration**: Clearing the search query via the search bar `✕` button immediately restores the full discovery catalog for the active filter.
 - **On-Demand "Load More" Pagination**:
   - Clean, dedicated load-more button at the bottom of discovery and search result lists to smoothly paginate and append deeper archives.
 - **Game Platform Multi-Select & Exclusion (Discover Games)**:
   - Multi-select platform filtering powered by `GamePlatformRegistry` with inclusion (`✓` - `OR` condition) and exclusion (`✕`) support across IGDB and RAWG.
+  - Platform inclusion/exclusion constraints are embedded directly into upstream server-side queries across IGDB (Apicalypse) and RAWG for accurate, comprehensive combined text and platform search results.
+  - Clean, uncompressed instructional header (`[✓] 1 tap = Include (OR)` and `[✕] 2 taps = Exclude`) with live active counts.
   - Comprehensive platform taxonomy: **PC**, **PlayStation** (PS5, PS4, PS3, PS2, PS1, Vita, PSP), **Xbox** (All, Series X/S, One, 360, Original), **Nintendo** (Switch, Wii U, Wii, GameCube, N64, 3DS, DS, GBA, SNES, NES), **Mobile** (Android & iOS), **Other** (Linux, macOS, Stadia), and **Retro / Classics**.
   - Active platform filter chips appear directly beneath search bars with one-tap dismissal.
 - **Subtle 3-State 18+ Content Cycle**:
