@@ -699,46 +699,69 @@ fun SearchDiscoverySheet(
                 HorizontalDivider(color = LXBorder, thickness = 1.dp)
 
                 // Sub-menu Instructions & active count
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .background(LXSurfaceElevated)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(16.dp)
-                                .background(LXPrimaryGreen, RoundedCornerShape(3.dp)),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Icon(Icons.Default.Check, contentDescription = null, tint = LXBackgroundBlack, modifier = Modifier.size(12.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .background(LXPrimaryGreen, RoundedCornerShape(3.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = LXBackgroundBlack, modifier = Modifier.size(12.dp))
+                            }
+                            Text("1 tap = Include", fontSize = 11.sp, color = LXPrimaryGreen, fontWeight = FontWeight.Bold, maxLines = 1)
                         }
-                        Text("1 tap = Include", fontSize = 11.sp, color = LXPrimaryGreen, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(16.dp)
-                                .background(Color(0xFFEF4444), RoundedCornerShape(3.dp)),
-                            contentAlignment = Alignment.Center
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .background(Color(0xFFEF4444), RoundedCornerShape(3.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp))
+                            }
+                            Text("2 taps = Exclude", fontSize = 11.sp, color = Color(0xFFEF4444), fontWeight = FontWeight.Bold, maxLines = 1)
                         }
-                        Text("2 taps = Exclude", fontSize = 11.sp, color = Color(0xFFEF4444), fontWeight = FontWeight.Bold)
                     }
 
-                    Text(
-                        text = "${activeIncludedTags.size} inc • ${activeExcludedTags.size} exc",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = if (activeIncludedTags.isNotEmpty() || activeExcludedTags.isNotEmpty()) LXPrimaryGreen else LXTextSecondary
-                    )
+                    HorizontalDivider(color = LXBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Active Filter",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = LXTextSecondary
+                        )
+                        Text(
+                            text = "${activeIncludedTags.size} inc • ${activeExcludedTags.size} exc",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (activeIncludedTags.isNotEmpty() || activeExcludedTags.isNotEmpty()) LXPrimaryGreen else LXTextSecondary,
+                            maxLines = 1
+                        )
+                    }
                 }
 
                 // Search Bar for Tags

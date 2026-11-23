@@ -14,7 +14,7 @@ import com.lx.tracklist.data.model.UserProfile
 
 @Database(
     entities = [MediaEntry::class, UserProfile::class, CustomCategory::class, SubCategory::class],
-    version = 19,
+    version = 20,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -198,6 +198,122 @@ abstract class LXTrackListDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Recreate media_entries with customUnitCurrent and customUnitTotal as REAL
+                db.execSQL(
+                    """
+                    CREATE TABLE media_entries_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        userId INTEGER NOT NULL,
+                        customCategory TEXT,
+                        subCategory TEXT,
+                        title TEXT NOT NULL,
+                        alternateTitle TEXT,
+                        mediaType TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        score INTEGER,
+                        externalScore REAL,
+                        externalScoreSource TEXT,
+                        startDate INTEGER,
+                        finishDate INTEGER,
+                        airedStartDate INTEGER,
+                        airedEndDate INTEGER,
+                        notes TEXT,
+                        tags TEXT,
+                        coverImageUri TEXT,
+                        priority TEXT NOT NULL,
+                        rewatchCount INTEGER NOT NULL,
+                        isRewatching INTEGER NOT NULL,
+                        isFavorite INTEGER NOT NULL,
+                        isExternallyTracked INTEGER NOT NULL,
+                        externalId TEXT,
+                        externalSource TEXT,
+                        createdAt INTEGER NOT NULL,
+                        updatedAt INTEGER NOT NULL,
+                        currentEpisodes INTEGER NOT NULL,
+                        totalEpisodes INTEGER NOT NULL,
+                        airedEpisodes INTEGER NOT NULL,
+                        seasonNumber INTEGER NOT NULL,
+                        currentSeasons INTEGER NOT NULL,
+                        totalSeasons INTEGER NOT NULL,
+                        seasonEpisodesJson TEXT,
+                        episodeLengthMinutes INTEGER,
+                        currentTimeMinutes INTEGER,
+                        isAiring INTEGER NOT NULL,
+                        broadcastTime TEXT,
+                        nextAiringEpoch INTEGER,
+                        currentVolumes INTEGER NOT NULL,
+                        totalVolumes INTEGER NOT NULL,
+                        currentChapters INTEGER NOT NULL,
+                        totalChapters INTEGER NOT NULL,
+                        airedChapters INTEGER NOT NULL,
+                        currentPages INTEGER NOT NULL,
+                        totalPages INTEGER NOT NULL,
+                        trackingUnit TEXT NOT NULL,
+                        movieSeriesNumber INTEGER,
+                        movieSeriesName TEXT,
+                        durationMinutes INTEGER,
+                        relatedEntriesJson TEXT,
+                        gamePlatforms TEXT,
+                        isGameFranchise INTEGER NOT NULL,
+                        gameSeriesEntriesJson TEXT,
+                        gameProgressPercent INTEGER NOT NULL,
+                        customUnitLabel TEXT,
+                        customUnitCurrent REAL NOT NULL DEFAULT 0.0,
+                        customUnitTotal REAL NOT NULL DEFAULT 0.0,
+                        userComments TEXT,
+                        originalLanguage TEXT
+                    )
+                    """.trimIndent()
+                )
+
+                db.execSQL(
+                    """
+                    INSERT INTO media_entries_new (
+                        id, userId, customCategory, subCategory, title, alternateTitle, mediaType, status, score,
+                        externalScore, externalScoreSource, startDate, finishDate, airedStartDate, airedEndDate,
+                        notes, tags, coverImageUri, priority, rewatchCount, isRewatching, isFavorite,
+                        isExternallyTracked, externalId, externalSource, createdAt, updatedAt, currentEpisodes,
+                        totalEpisodes, airedEpisodes, seasonNumber, currentSeasons, totalSeasons,
+                        seasonEpisodesJson, episodeLengthMinutes, currentTimeMinutes, isAiring, broadcastTime,
+                        nextAiringEpoch, currentVolumes, totalVolumes, currentChapters, totalChapters,
+                        airedChapters, currentPages, totalPages, trackingUnit, movieSeriesNumber,
+                        movieSeriesName, durationMinutes, relatedEntriesJson, gamePlatforms, isGameFranchise,
+                        gameSeriesEntriesJson, gameProgressPercent, customUnitLabel, customUnitCurrent,
+                        customUnitTotal, userComments, originalLanguage
+                    )
+                    SELECT
+                        id, userId, customCategory, subCategory, title, alternateTitle, mediaType, status, score,
+                        externalScore, externalScoreSource, startDate, finishDate, airedStartDate, airedEndDate,
+                        notes, tags, coverImageUri, priority, rewatchCount, isRewatching, isFavorite,
+                        isExternallyTracked, externalId, externalSource, createdAt, updatedAt, currentEpisodes,
+                        totalEpisodes, airedEpisodes, seasonNumber, currentSeasons, totalSeasons,
+                        seasonEpisodesJson, episodeLengthMinutes, currentTimeMinutes, isAiring, broadcastTime,
+                        nextAiringEpoch, currentVolumes, totalVolumes, currentChapters, totalChapters,
+                        airedChapters, currentPages, totalPages, trackingUnit, movieSeriesNumber,
+                        movieSeriesName, durationMinutes, relatedEntriesJson, gamePlatforms, isGameFranchise,
+                        gameSeriesEntriesJson, gameProgressPercent, customUnitLabel, CAST(customUnitCurrent AS REAL),
+                        CAST(customUnitTotal AS REAL), userComments, originalLanguage
+                    FROM media_entries
+                    """.trimIndent()
+                )
+
+                db.execSQL("DROP TABLE media_entries")
+                db.execSQL("ALTER TABLE media_entries_new RENAME TO media_entries")
+
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_media_entries_mediaType ON media_entries(mediaType)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_media_entries_status ON media_entries(status)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_media_entries_isFavorite ON media_entries(isFavorite)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_media_entries_isExternallyTracked ON media_entries(isExternallyTracked)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_media_entries_title ON media_entries(title)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_media_entries_userId ON media_entries(userId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_media_entries_customCategory ON media_entries(customCategory)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_media_entries_subCategory ON media_entries(subCategory)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_media_entries_externalId_externalSource ON media_entries(externalId, externalSource)")
+            }
+        }
+
         fun getDatabase(context: Context): LXTrackListDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -210,7 +326,7 @@ abstract class LXTrackListDatabase : RoomDatabase() {
                         MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
                         MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
                         MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18,
-                        MIGRATION_18_19
+                        MIGRATION_18_19, MIGRATION_19_20
                     )
                     .fallbackToDestructiveMigration()
                     .build()

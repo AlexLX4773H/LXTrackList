@@ -156,23 +156,148 @@ object IgdbApiClient {
     }
 
     /**
-     * Searches for games on IGDB.
+     * Builds the Apicalypse query string for searching games on IGDB with optional platforms, tags, years, and adult mode.
      */
-    suspend fun searchGames(context: Context, query: String, limit: Int = 20, page: Int = 1): Result<List<GameSearchResult>> {
+    fun buildSearchApicalypseQuery(
+        query: String,
+        limit: Int = 20,
+        page: Int = 1,
+        includedPlatforms: Set<String> = emptySet(),
+        excludedPlatforms: Set<String> = emptySet(),
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet(),
+        adultMode: AdultMode = AdultMode.OFF,
+        year: Int? = null,
+        startYear: Int? = null,
+        endYear: Int? = null
+    ): String {
         val cleanQuery = query.trim().replace("\"", "\\\"")
+        val searchClause = if (cleanQuery.isNotEmpty()) "search \"$cleanQuery\";\n" else ""
+        val whereConditions = mutableListOf("version_parent = null")
+
+        val sYear = startYear ?: year
+        val eYear = endYear ?: year
+        if (sYear != null || eYear != null) {
+            val fromYr = sYear ?: 1970
+            val toYr = eYear ?: sYear ?: (Calendar.getInstance().get(Calendar.YEAR) + 1)
+            val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                set(fromYr, Calendar.JANUARY, 1, 0, 0, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val startSec = cal.timeInMillis / 1000L
+            cal.set(toYr, Calendar.DECEMBER, 31, 23, 59, 59)
+            cal.set(Calendar.MILLISECOND, 999)
+            val endSec = cal.timeInMillis / 1000L
+            whereConditions.add("first_release_date >= $startSec & first_release_date <= $endSec")
+        }
+
+        val includedGenreIds = includedTags.mapNotNull { tag ->
+            tag.toIntOrNull() ?: GameTagRegistry.findGenre(tag)?.igdbId
+        }.distinct()
+
+        val excludedGenreIds = excludedTags.mapNotNull { tag ->
+            tag.toIntOrNull() ?: GameTagRegistry.findGenre(tag)?.igdbId
+        }.distinct()
+
+        if (includedGenreIds.isNotEmpty()) {
+            whereConditions.add("genres = [${includedGenreIds.joinToString(",")}]")
+        }
+        if (excludedGenreIds.isNotEmpty()) {
+            whereConditions.add("genres != (${excludedGenreIds.joinToString(",")})")
+        }
+
+        val includedPlatformIds = includedPlatforms.flatMap { plat ->
+            plat.toIntOrNull()?.let { listOf(it) } ?: GamePlatformRegistry.findOption(plat)?.igdbPlatformIds ?: emptyList()
+        }.distinct()
+
+        val excludedPlatformIds = excludedPlatforms.flatMap { plat ->
+            plat.toIntOrNull()?.let { listOf(it) } ?: GamePlatformRegistry.findOption(plat)?.igdbPlatformIds ?: emptyList()
+        }.distinct()
+
+        if (includedPlatformIds.isNotEmpty()) {
+            whereConditions.add("platforms = (${includedPlatformIds.joinToString(",")})")
+        }
+        if (excludedPlatformIds.isNotEmpty()) {
+            whereConditions.add("platforms != (${excludedPlatformIds.joinToString(",")})")
+        }
+
+        when (adultMode) {
+            AdultMode.ONLY -> whereConditions.add("themes = (42)")
+            AdultMode.OFF -> whereConditions.add("themes != (42)")
+            AdultMode.INCLUDE -> { /* No restriction */ }
+        }
+
+        val whereClause = if (whereConditions.isNotEmpty()) "where " + whereConditions.joinToString(" & ") + ";" else ""
         val offset = ((page - 1) * limit).coerceAtLeast(0)
         val offsetClause = if (offset > 0) "offset $offset;\n" else ""
-        val apicalypse = """
-            search "$cleanQuery";
+        return """
+            $searchClause
             fields name, alternative_names.name, first_release_date, cover.image_id, artworks.image_id, platforms.name, platforms.abbreviation, total_rating, summary, genres.name, involved_companies.company.name, involved_companies.developer, involved_companies.publisher, collections.id, collections.name, franchises.id, franchises.name, game_type;
-            where version_parent = null;
+            $whereClause
             limit $limit;
             $offsetClause
         """.trimIndent().trim()
+    }
+
+    /**
+     * Searches for games on IGDB with optional platform, tag, year, and adult filters.
+     */
+    suspend fun searchGames(
+        context: Context,
+        query: String,
+        limit: Int = 20,
+        page: Int = 1,
+        includedPlatforms: Set<String> = emptySet(),
+        excludedPlatforms: Set<String> = emptySet(),
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet(),
+        adultMode: AdultMode = AdultMode.OFF,
+        year: Int? = null,
+        startYear: Int? = null,
+        endYear: Int? = null
+    ): Result<List<GameSearchResult>> {
+        val apicalypse = buildSearchApicalypseQuery(
+            query = query,
+            limit = limit,
+            page = page,
+            includedPlatforms = includedPlatforms,
+            excludedPlatforms = excludedPlatforms,
+            includedTags = includedTags,
+            excludedTags = excludedTags,
+            adultMode = adultMode,
+            year = year,
+            startYear = startYear,
+            endYear = endYear
+        )
 
         val result = executeApicalypseQuery(context, apicalypse)
         return result.map { jsonStr ->
-            parseSearchResultsJson(jsonStr)
+            var list = parseSearchResultsJson(jsonStr)
+            if (includedTags.isNotEmpty()) {
+                list = list.filter { item ->
+                    includedTags.all { inc ->
+                        item.genres.any { g -> inc.equals(g, ignoreCase = true) }
+                    }
+                }
+            }
+            if (excludedTags.isNotEmpty()) {
+                list = list.filterNot { item ->
+                    excludedTags.any { exc ->
+                        item.genres.any { g -> exc.equals(g, ignoreCase = true) }
+                    }
+                }
+            }
+            if (includedPlatforms.isNotEmpty()) {
+                list = list.filter { item ->
+                    GamePlatformRegistry.matchesAnyPlatform(includedPlatforms, item.platforms)
+                }
+            }
+            if (excludedPlatforms.isNotEmpty()) {
+                list = list.filterNot { item ->
+                    GamePlatformRegistry.isExcluded(excludedPlatforms, item.platforms)
+                }
+            }
+            list
         }
     }
 

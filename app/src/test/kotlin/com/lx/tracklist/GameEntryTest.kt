@@ -96,27 +96,27 @@ class GameEntryTest {
             status = MediaStatus.WATCHING,
             trackingUnit = TrackingUnit.CUSTOM,
             customUnitLabel = "Levels",
-            customUnitCurrent = 12,
-            customUnitTotal = 20
+            customUnitCurrent = 12.0,
+            customUnitTotal = 20.0
         )
         assertEquals("12/20 Levels", levelGame.displayProgress)
         assertEquals(12f / 20f, levelGame.progressFraction, 0.001f)
 
         val nextLevel = levelGame.incrementProgress()
-        assertEquals(13, nextLevel.customUnitCurrent)
+        assertEquals(13.0, nextLevel.customUnitCurrent, 0.001)
         assertEquals("13/20 Levels", nextLevel.displayProgress)
         assertEquals(MediaStatus.WATCHING, nextLevel.status)
 
         // Increment until complete
-        var completing = levelGame.copy(customUnitCurrent = 19)
+        var completing = levelGame.copy(customUnitCurrent = 19.0)
         completing = completing.incrementProgress()
-        assertEquals(20, completing.customUnitCurrent)
+        assertEquals(20.0, completing.customUnitCurrent, 0.001)
         assertEquals(MediaStatus.COMPLETED, completing.status)
         assertNotNull(completing.finishDate)
 
         // Decrement sets back to WATCHING
         val decLevel = completing.decrementProgress()
-        assertEquals(19, decLevel.customUnitCurrent)
+        assertEquals(19.0, decLevel.customUnitCurrent, 0.001)
         assertEquals(MediaStatus.WATCHING, decLevel.status)
 
         // 2. Cities mode
@@ -126,8 +126,8 @@ class GameEntryTest {
             status = MediaStatus.WATCHING,
             trackingUnit = TrackingUnit.CUSTOM,
             customUnitLabel = "Cities",
-            customUnitCurrent = 4,
-            customUnitTotal = 9
+            customUnitCurrent = 4.0,
+            customUnitTotal = 9.0
         )
         assertEquals("4/9 Cities", civGame.displayProgress)
         assertEquals(4f / 9f, civGame.progressFraction, 0.001f)
@@ -139,20 +139,41 @@ class GameEntryTest {
             status = MediaStatus.WATCHING,
             trackingUnit = TrackingUnit.CUSTOM,
             customUnitLabel = "Hours",
-            customUnitCurrent = 42,
-            customUnitTotal = 0
+            customUnitCurrent = 42.0,
+            customUnitTotal = 0.0
         )
         assertEquals("42 Hours", hoursGame.displayProgress)
         assertEquals(0f, hoursGame.progressFraction, 0.001f)
 
         val nextHour = hoursGame.incrementProgress()
-        assertEquals(43, nextHour.customUnitCurrent)
+        assertEquals(43.0, nextHour.customUnitCurrent, 0.001)
         assertEquals("43 Hours", nextHour.displayProgress)
         assertEquals(MediaStatus.WATCHING, nextHour.status)
 
         val prevHour = hoursGame.decrementProgress()
-        assertEquals(41, prevHour.customUnitCurrent)
+        assertEquals(41.0, prevHour.customUnitCurrent, 0.001)
         assertEquals("41 Hours", prevHour.displayProgress)
+
+        // 4. Decimal Hours mode (e.g., 10.5 / 170.5 Hours)
+        val decimalGame = MediaEntry(
+            title = "Grand Theft Auto V",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.WATCHING,
+            trackingUnit = TrackingUnit.CUSTOM,
+            customUnitLabel = "Hours",
+            customUnitCurrent = 10.5,
+            customUnitTotal = 170.5
+        )
+        assertEquals("10.5/170.5 Hours", decimalGame.displayProgress)
+        assertEquals((10.5 / 170.5).toFloat(), decimalGame.progressFraction, 0.001f)
+
+        val nextDecHour = decimalGame.incrementProgress()
+        assertEquals(11.5, nextDecHour.customUnitCurrent, 0.001)
+        assertEquals("11.5/170.5 Hours", nextDecHour.displayProgress)
+
+        val prevDecHour = decimalGame.decrementProgress()
+        assertEquals(9.5, prevDecHour.customUnitCurrent, 0.001)
+        assertEquals("9.5/170.5 Hours", prevDecHour.displayProgress)
     }
 
     @Test
@@ -243,8 +264,8 @@ class GameEntryTest {
             isGameFranchise = false,
             trackingUnit = TrackingUnit.CUSTOM,
             customUnitLabel = "Hours",
-            customUnitCurrent = 120,
-            customUnitTotal = 150
+            customUnitCurrent = 120.0,
+            customUnitTotal = 150.0
         )
 
         val originalEntries = listOf(franchiseEntry, customUnitEntry)
@@ -283,8 +304,8 @@ class GameEntryTest {
         assertEquals("PC (Steam)", importedCustom.gamePlatforms)
         assertEquals(TrackingUnit.CUSTOM, importedCustom.trackingUnit)
         assertEquals("Hours", importedCustom.customUnitLabel)
-        assertEquals(120, importedCustom.customUnitCurrent)
-        assertEquals(150, importedCustom.customUnitTotal)
+        assertEquals(120.0, importedCustom.customUnitCurrent, 0.001)
+        assertEquals(150.0, importedCustom.customUnitTotal, 0.001)
     }
 
     @Test
@@ -321,8 +342,8 @@ class GameEntryTest {
         assertEquals(null, entry.gameSeriesEntriesJson)
         assertEquals(0, entry.gameProgressPercent)
         assertEquals(null, entry.customUnitLabel)
-        assertEquals(0, entry.customUnitCurrent)
-        assertEquals(0, entry.customUnitTotal)
+        assertEquals(0.0, entry.customUnitCurrent, 0.001)
+        assertEquals(0.0, entry.customUnitTotal, 0.001)
     }
 
     @Test
@@ -394,7 +415,7 @@ class GameEntryTest {
         // 4. User manual "Hours" override: user explicitly logged 60 hours
         val manualHoursGame = completedGame.copy(
             customUnitLabel = "Hours",
-            customUnitCurrent = 60
+            customUnitCurrent = 60.0
         )
         val summaryManual = com.lx.tracklist.ui.stats.calculateCategoryStatSummary(
             entries = listOf(manualHoursGame),

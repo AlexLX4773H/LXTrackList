@@ -18,7 +18,7 @@ data class GameSeriesItem(
     val coverUrl: String? = null,
     val status: GameSeriesItemStatus = GameSeriesItemStatus.PLANNED,
     val progressPercent: Int = 0,
-    val customUnitCurrent: Int = 0,
-    val customUnitTotal: Int = 0,
+    val customUnitCurrent: Double = 0.0,
+    val customUnitTotal: Double = 0.0,
     val platforms: List<String> = emptyList()
 )

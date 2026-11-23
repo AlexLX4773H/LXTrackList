@@ -109,8 +109,8 @@ data class MediaEntry(
     val gameSeriesEntriesJson: String? = null,
     val gameProgressPercent: Int = 0,
     val customUnitLabel: String? = null,
-    val customUnitCurrent: Int = 0,
-    val customUnitTotal: Int = 0,
+    val customUnitCurrent: Double = 0.0,
+    val customUnitTotal: Double = 0.0,
 
     // User personal thoughts / comments about the entity
     @SerializedName("userComments")
@@ -392,7 +392,11 @@ data class MediaEntry(
                     "$gameProgressPercent%"
                 } else {
                     val label = customUnitLabel?.takeIf { it.isNotBlank() } ?: "Units"
-                    if (customUnitTotal > 0) "$customUnitCurrent/$customUnitTotal $label" else "$customUnitCurrent $label"
+                    val curStr = formatCustomUnitValue(customUnitCurrent)
+                    if (customUnitTotal > 0.0) {
+                        val totStr = formatCustomUnitValue(customUnitTotal)
+                        "$curStr/$totStr $label"
+                    } else "$curStr $label"
                 }
             }
         }
@@ -435,7 +439,7 @@ data class MediaEntry(
                 if (trackingUnit == TrackingUnit.PERCENTAGE) {
                     (gameProgressPercent / 100f).coerceIn(0f, 1f)
                 } else {
-                    if (customUnitTotal > 0) (customUnitCurrent.toFloat() / customUnitTotal).coerceIn(0f, 1f)
+                    if (customUnitTotal > 0.0) (customUnitCurrent / customUnitTotal).toFloat().coerceIn(0f, 1f)
                     else if (status == MediaStatus.COMPLETED) 1f else 0f
                 }
             }
@@ -586,8 +590,8 @@ data class MediaEntry(
                         finishDate = if (newStatus == MediaStatus.COMPLETED && finishDate == null) now else finishDate
                     )
                 } else {
-                    val nextVal = customUnitCurrent + 1
-                    val isDone = customUnitTotal > 0 && nextVal >= customUnitTotal
+                    val nextVal = customUnitCurrent + 1.0
+                    val isDone = customUnitTotal > 0.0 && nextVal >= customUnitTotal
                     val newStatus = if (isDone) MediaStatus.COMPLETED else status
                     val newRewatchCount = if (isDone && isRewatching) rewatchCount + 1 else rewatchCount
                     val newIsRewatching = if (isDone) false else isRewatching
@@ -665,10 +669,10 @@ data class MediaEntry(
                         updatedAt = now
                     )
                 } else {
-                    val nextVal = (customUnitCurrent - 1).coerceAtLeast(0)
+                    val nextVal = (customUnitCurrent - 1.0).coerceAtLeast(0.0)
                     copy(
                         customUnitCurrent = nextVal,
-                        status = if (status == MediaStatus.COMPLETED && customUnitTotal > 0 && nextVal < customUnitTotal) MediaStatus.WATCHING else status,
+                        status = if (status == MediaStatus.COMPLETED && customUnitTotal > 0.0 && nextVal < customUnitTotal) MediaStatus.WATCHING else status,
                         updatedAt = now
                     )
                 }
@@ -1005,6 +1009,14 @@ data class MediaEntry(
                 ?.filter { it.isNotBlank() }
                 ?.distinct()
                 ?: emptyList()
+        }
+
+        fun formatCustomUnitValue(value: Double): String {
+            return if (value % 1.0 == 0.0) {
+                value.toLong().toString()
+            } else {
+                String.format(Locale.US, "%.2f", value).trimEnd('0').trimEnd('.')
+            }
         }
     }
 }

@@ -32,15 +32,88 @@ object RawgApiClient {
             .build()
     }
 
-    suspend fun searchGames(context: Context, query: String, limit: Int = 20, page: Int = 1): Result<List<GameSearchResult>> {
+    fun buildSearchUrl(
+        apiKey: String,
+        query: String,
+        limit: Int = 20,
+        page: Int = 1,
+        includedPlatforms: Set<String> = emptySet(),
+        excludedPlatforms: Set<String> = emptySet(),
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet(),
+        adultMode: AdultMode = AdultMode.OFF,
+        year: Int? = null,
+        startYear: Int? = null,
+        endYear: Int? = null
+    ): String {
+        val encodedQuery = URLEncoder.encode(query.trim(), "UTF-8")
+        val sYear = startYear ?: year
+        val eYear = endYear ?: year
+        val datesParam = if (sYear != null || eYear != null) {
+            val fromYr = sYear ?: 1970
+            val toYr = eYear ?: sYear ?: (Calendar.getInstance().get(Calendar.YEAR) + 1)
+            "&dates=$fromYr-01-01,$toYr-12-31"
+        } else ""
+
+        val rawgSlugs = includedTags.mapNotNull { tag ->
+            GameTagRegistry.findGenre(tag)?.rawgSlug ?: tag.trim().lowercase(Locale.ROOT).replace(" ", "-")
+        }.distinct()
+
+        val genresParam = if (rawgSlugs.isNotEmpty()) {
+            "&genres=${rawgSlugs.joinToString(",")}"
+        } else ""
+
+        val rawgPlatformIds = includedPlatforms.flatMap { plat ->
+            plat.toIntOrNull()?.let { listOf(it) } ?: GamePlatformRegistry.findOption(plat)?.rawgPlatformIds ?: emptyList()
+        }.distinct()
+
+        val platformsParam = if (rawgPlatformIds.isNotEmpty()) {
+            "&platforms=${rawgPlatformIds.joinToString(",")}"
+        } else ""
+
+        val adultParam = when (adultMode) {
+            AdultMode.ONLY -> "&tags=nsfw"
+            AdultMode.OFF -> ""
+            AdultMode.INCLUDE -> ""
+        }
+
+        val pageParam = if (page > 1) "&page=$page" else ""
+        return "$BASE_URL/games?key=$apiKey&search=$encodedQuery$datesParam$genresParam$platformsParam$adultParam&page_size=$limit$pageParam"
+    }
+
+    suspend fun searchGames(
+        context: Context,
+        query: String,
+        limit: Int = 20,
+        page: Int = 1,
+        includedPlatforms: Set<String> = emptySet(),
+        excludedPlatforms: Set<String> = emptySet(),
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet(),
+        adultMode: AdultMode = AdultMode.OFF,
+        year: Int? = null,
+        startYear: Int? = null,
+        endYear: Int? = null
+    ): Result<List<GameSearchResult>> {
         val apiKey = GameApiConfig.getRawgApiKey(context)
         if (apiKey.isBlank()) {
             return Result.failure(IllegalStateException("RAWG API key is not configured."))
         }
 
-        val encodedQuery = URLEncoder.encode(query.trim(), "UTF-8")
-        val pageParam = if (page > 1) "&page=$page" else ""
-        val url = "$BASE_URL/games?key=$apiKey&search=$encodedQuery&page_size=$limit$pageParam"
+        val url = buildSearchUrl(
+            apiKey = apiKey,
+            query = query,
+            limit = limit,
+            page = page,
+            includedPlatforms = includedPlatforms,
+            excludedPlatforms = excludedPlatforms,
+            includedTags = includedTags,
+            excludedTags = excludedTags,
+            adultMode = adultMode,
+            year = year,
+            startYear = startYear,
+            endYear = endYear
+        )
         val request = Request.Builder().url(url).build()
 
         return try {
@@ -49,7 +122,32 @@ object RawgApiClient {
             if (!response.isSuccessful) {
                 return Result.failure(Exception("RAWG API error (HTTP ${response.code}): $body"))
             }
-            Result.success(parseSearchResultsJson(body))
+            var list = parseSearchResultsJson(body)
+            if (includedTags.isNotEmpty()) {
+                list = list.filter { item ->
+                    includedTags.all { inc ->
+                        item.genres.any { g -> inc.equals(g, ignoreCase = true) }
+                    }
+                }
+            }
+            if (excludedTags.isNotEmpty()) {
+                list = list.filterNot { item ->
+                    excludedTags.any { exc ->
+                        item.genres.any { g -> exc.equals(g, ignoreCase = true) }
+                    }
+                }
+            }
+            if (includedPlatforms.isNotEmpty()) {
+                list = list.filter { item ->
+                    GamePlatformRegistry.matchesAnyPlatform(includedPlatforms, item.platforms)
+                }
+            }
+            if (excludedPlatforms.isNotEmpty()) {
+                list = list.filterNot { item ->
+                    GamePlatformRegistry.isExcluded(excludedPlatforms, item.platforms)
+                }
+            }
+            Result.success(list)
         } catch (e: Exception) {
             Log.e(TAG, "Error searching RAWG games", e)
             Result.failure(e)

@@ -426,20 +426,25 @@ class DetailViewModel(
     }
 
     fun setProgress(newProgress: Int) {
+        setProgress(newProgress.toDouble())
+    }
+
+    fun setProgress(newProgress: Double) {
         val cur = entry.value ?: return
-        val clamped = max(0, newProgress)
+        val clampedInt = max(0, newProgress.toInt())
+        val clampedDouble = max(0.0, newProgress)
         if (cur.hasSeasonEpisodeTracking()) {
-            setShowProgress(cur.currentSeasons, clamped)
+            setShowProgress(cur.currentSeasons, clampedInt)
             return
         }
         val now = System.currentTimeMillis()
         viewModelScope.launch {
             val updated = when (cur.mediaType) {
                 com.lx.tracklist.data.model.MediaType.ANIME, com.lx.tracklist.data.model.MediaType.SHOW -> {
-                    val isDone = cur.totalEpisodes > 0 && clamped >= cur.totalEpisodes
+                    val isDone = cur.totalEpisodes > 0 && clampedInt >= cur.totalEpisodes
                     val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
                     cur.copy(
-                        currentEpisodes = clamped,
+                        currentEpisodes = clampedInt,
                         currentTimeMinutes = null,
                         status = newStatus,
                         finishDate = if (newStatus == com.lx.tracklist.data.model.MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
@@ -449,40 +454,40 @@ class DetailViewModel(
                 com.lx.tracklist.data.model.MediaType.MANGA, com.lx.tracklist.data.model.MediaType.MANHWA, com.lx.tracklist.data.model.MediaType.BOOK -> {
                     when (cur.trackingUnit) {
                         TrackingUnit.VOLUMES -> {
-                            val isDone = cur.totalVolumes > 0 && clamped >= cur.totalVolumes
+                            val isDone = cur.totalVolumes > 0 && clampedInt >= cur.totalVolumes
                             val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
                             cur.copy(
-                                currentVolumes = clamped,
+                                currentVolumes = clampedInt,
                                 status = newStatus,
                                 finishDate = if (newStatus == com.lx.tracklist.data.model.MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
                                 updatedAt = now
                             )
                         }
                         TrackingUnit.PAGES -> {
-                            val isDone = cur.totalPages > 0 && clamped >= cur.totalPages
+                            val isDone = cur.totalPages > 0 && clampedInt >= cur.totalPages
                             val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
                             cur.copy(
-                                currentPages = clamped,
+                                currentPages = clampedInt,
                                 status = newStatus,
                                 finishDate = if (newStatus == com.lx.tracklist.data.model.MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
                                 updatedAt = now
                             )
                         }
                         TrackingUnit.CHAPTERS, TrackingUnit.COMBINED -> {
-                            val isDone = cur.totalChapters > 0 && clamped >= cur.totalChapters
+                            val isDone = cur.totalChapters > 0 && clampedInt >= cur.totalChapters
                             val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
                             cur.copy(
-                                currentChapters = clamped,
+                                currentChapters = clampedInt,
                                 status = newStatus,
                                 finishDate = if (newStatus == com.lx.tracklist.data.model.MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
                                 updatedAt = now
                             )
                         }
                         else -> {
-                            val isDone = cur.totalChapters > 0 && clamped >= cur.totalChapters
+                            val isDone = cur.totalChapters > 0 && clampedInt >= cur.totalChapters
                             val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
                             cur.copy(
-                                currentChapters = clamped,
+                                currentChapters = clampedInt,
                                 status = newStatus,
                                 finishDate = if (newStatus == com.lx.tracklist.data.model.MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
                                 updatedAt = now
@@ -491,7 +496,7 @@ class DetailViewModel(
                     }
                 }
                 com.lx.tracklist.data.model.MediaType.MOVIE -> {
-                    val isDone = clamped > 0
+                    val isDone = clampedInt > 0
                     val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
                     cur.copy(
                         status = newStatus,
@@ -501,19 +506,19 @@ class DetailViewModel(
                 }
                 com.lx.tracklist.data.model.MediaType.GAME -> {
                     if (cur.trackingUnit == TrackingUnit.PERCENTAGE) {
-                        val isDone = clamped >= 100
+                        val isDone = clampedInt >= 100
                         val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
                         cur.copy(
-                            gameProgressPercent = clamped.coerceIn(0, 100),
+                            gameProgressPercent = clampedInt.coerceIn(0, 100),
                             status = newStatus,
                             finishDate = if (newStatus == com.lx.tracklist.data.model.MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
                             updatedAt = now
                         )
                     } else {
-                        val isDone = cur.customUnitTotal > 0 && clamped >= cur.customUnitTotal
+                        val isDone = cur.customUnitTotal > 0.0 && clampedDouble >= cur.customUnitTotal
                         val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
                         cur.copy(
-                            customUnitCurrent = clamped,
+                            customUnitCurrent = clampedDouble,
                             status = newStatus,
                             finishDate = if (newStatus == com.lx.tracklist.data.model.MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
                             updatedAt = now
@@ -631,7 +636,7 @@ class DetailViewModel(
                 currentVolumes = 0,
                 currentPages = 0,
                 gameProgressPercent = 0,
-                customUnitCurrent = 0,
+                customUnitCurrent = 0.0,
                 startDate = now,
                 finishDate = null,
                 updatedAt = now
@@ -660,7 +665,7 @@ class DetailViewModel(
                 currentChapters = if (cur.totalChapters > 0) cur.totalChapters else cur.currentChapters,
                 currentVolumes = if (cur.totalVolumes > 0) cur.totalVolumes else cur.currentVolumes,
                 gameProgressPercent = if (cur.mediaType == MediaType.GAME) 100 else cur.gameProgressPercent,
-                customUnitCurrent = if (cur.mediaType == MediaType.GAME && (cur.customUnitTotal ?: 0) > 0) (cur.customUnitTotal ?: cur.customUnitCurrent) else cur.customUnitCurrent,
+                customUnitCurrent = if (cur.mediaType == MediaType.GAME && cur.customUnitTotal > 0.0) cur.customUnitTotal else cur.customUnitCurrent,
                 finishDate = now,
                 updatedAt = now
             )

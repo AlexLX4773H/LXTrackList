@@ -134,8 +134,8 @@ data class AddEditUiState(
     val gameSeriesEntries: List<GameSeriesItem> = emptyList(),
     val gameProgressPercent: Int = 0,
     val customUnitLabel: String = "",
-    val customUnitCurrent: Int = 0,
-    val customUnitTotal: Int? = null,
+    val customUnitCurrent: Double = 0.0,
+    val customUnitTotal: Double? = null,
 
     val isSaved: Boolean = false,
     val errorMessage: String? = null
@@ -263,7 +263,7 @@ class AddEditViewModel(
                             gameProgressPercent = entry.gameProgressPercent,
                             customUnitLabel = entry.customUnitLabel ?: "",
                             customUnitCurrent = entry.customUnitCurrent,
-                            customUnitTotal = entry.customUnitTotal.takeIf { it > 0 },
+                            customUnitTotal = entry.customUnitTotal.takeIf { it > 0.0 },
                             isSaved = false,
                             errorMessage = null
                         )
@@ -402,8 +402,8 @@ class AddEditViewModel(
     fun updateCurrentEpisodes(value: Int) = _uiState.update { it.copy(currentEpisodes = value) }
     fun updateTotalEpisodes(value: Int) = _uiState.update { it.copy(totalEpisodes = value) }
     fun updateAiredEpisodes(value: Int) = _uiState.update { it.copy(airedEpisodes = value) }
-    fun updateCurrentSeasons(value: Int) = _uiState.update { it.copy(currentSeasons = value.coerceAtLeast(1)) }
-    fun updateTotalSeasons(value: Int) = _uiState.update { it.copy(totalSeasons = value.coerceAtLeast(1)) }
+    fun updateCurrentSeasons(value: Int) = _uiState.update { it.copy(currentSeasons = value.coerceAtLeast(0)) }
+    fun updateTotalSeasons(value: Int) = _uiState.update { it.copy(totalSeasons = value.coerceAtLeast(0)) }
     fun updateSeasonEpisodeCount(seasonIndex: Int, episodes: Int) = _uiState.update { state ->
         if (seasonIndex < 0) return@update state
         val targetSize = maxOf(state.totalSeasons.coerceAtLeast(1), state.seasonEpisodes.size, seasonIndex + 1)
@@ -447,8 +447,8 @@ class AddEditViewModel(
     }
     fun updateGameProgressPercent(value: Int) = _uiState.update { it.copy(gameProgressPercent = value.coerceIn(0, 100)) }
     fun updateCustomUnitLabel(value: String) = _uiState.update { it.copy(customUnitLabel = value) }
-    fun updateCustomUnitCurrent(value: Int) = _uiState.update { it.copy(customUnitCurrent = value.coerceAtLeast(0)) }
-    fun updateCustomUnitTotal(value: Int?) = _uiState.update { it.copy(customUnitTotal = value?.takeIf { it > 0 }) }
+    fun updateCustomUnitCurrent(value: Double) = _uiState.update { it.copy(customUnitCurrent = value.coerceAtLeast(0.0)) }
+    fun updateCustomUnitTotal(value: Double?) = _uiState.update { it.copy(customUnitTotal = value?.takeIf { it > 0.0 }) }
 
     fun saveEntry() {
         val s = _uiState.value
@@ -505,8 +505,8 @@ class AddEditViewModel(
                 totalEpisodes = s.totalEpisodes,
                 airedEpisodes = s.airedEpisodes,
                 seasonNumber = s.seasonNumber,
-                currentSeasons = s.currentSeasons,
-                totalSeasons = s.totalSeasons,
+                currentSeasons = s.currentSeasons.coerceAtLeast(1),
+                totalSeasons = s.totalSeasons.coerceAtLeast(1),
                 seasonEpisodesJson = effectiveSeasonEpisodesJson,
                 episodeLengthMinutes = s.episodeLengthMinutes,
                 currentTimeMinutes = if (s.mediaType == MediaType.ANIME || s.mediaType == MediaType.SHOW || s.mediaType == MediaType.MOVIE) s.currentTimeMinutes else null,
@@ -527,8 +527,8 @@ class AddEditViewModel(
                 gameSeriesEntriesJson = null,
                 gameProgressPercent = s.gameProgressPercent.coerceIn(0, 100),
                 customUnitLabel = s.customUnitLabel.trim().ifBlank { null },
-                customUnitCurrent = s.customUnitCurrent.coerceAtLeast(0),
-                customUnitTotal = s.customUnitTotal?.takeIf { it > 0 } ?: 0,
+                customUnitCurrent = s.customUnitCurrent.coerceAtLeast(0.0),
+                customUnitTotal = s.customUnitTotal?.takeIf { it > 0.0 } ?: 0.0,
                 updatedAt = System.currentTimeMillis()
             )
 

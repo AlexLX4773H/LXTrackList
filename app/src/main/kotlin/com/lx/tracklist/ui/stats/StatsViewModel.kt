@@ -176,7 +176,7 @@ fun calculateCategoryStatSummary(
             }
             MediaType.GAME -> {
                 val userHours = if (entry.customUnitLabel?.trim()?.equals("Hours", ignoreCase = true) == true) {
-                    entry.customUnitCurrent.toDouble()
+                    entry.customUnitCurrent
                 } else null
 
                 val avgCompletionMin = (entry.durationMinutes ?: 0).toDouble()

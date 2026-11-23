@@ -804,9 +804,10 @@ fun AddEditScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     OutlinedTextField(
-                                        value = state.currentSeasons.toString(),
-                                        onValueChange = { viewModel.updateCurrentSeasons(it.toIntOrNull() ?: 1) },
+                                        value = if (state.currentSeasons > 0) state.currentSeasons.toString() else "",
+                                        onValueChange = { viewModel.updateCurrentSeasons(it.toIntOrNull() ?: 0) },
                                         label = { Text("Current Season", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        placeholder = { Text("1") },
                                         singleLine = true,
                                         maxLines = 1,
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -816,9 +817,10 @@ fun AddEditScreen(
                                         colors = outlinedColors()
                                     )
                                     OutlinedTextField(
-                                        value = state.totalSeasons.toString(),
-                                        onValueChange = { viewModel.updateTotalSeasons(it.toIntOrNull() ?: 1) },
+                                        value = if (state.totalSeasons > 0) state.totalSeasons.toString() else "",
+                                        onValueChange = { viewModel.updateTotalSeasons(it.toIntOrNull() ?: 0) },
                                         label = { Text("Total Seasons", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        placeholder = { Text("1") },
                                         singleLine = true,
                                         maxLines = 1,
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -1153,9 +1155,10 @@ fun AddEditScreen(
                                     colors = outlinedColors()
                                 )
                                 OutlinedTextField(
-                                    value = state.movieSeriesNumber?.toString() ?: "",
-                                    onValueChange = { viewModel.updateMovieSeriesNumber(it.toIntOrNull()) },
+                                    value = if ((state.movieSeriesNumber ?: 0) > 0) state.movieSeriesNumber.toString() else "",
+                                    onValueChange = { viewModel.updateMovieSeriesNumber(it.toIntOrNull()?.takeIf { v -> v > 0 }) },
                                     label = { Text("Movie #", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    placeholder = { Text("Optional") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                     singleLine = true,
                                     maxLines = 1,
@@ -1349,12 +1352,10 @@ fun AddEditScreen(
                                         var localText by remember { mutableStateOf(state.gameProgressPercent.toString()) }
 
                                         LaunchedEffect(state.gameProgressPercent) {
-                                            if (!isFocused || localText.isEmpty()) {
+                                            if (!isFocused) {
                                                 if (localText.toIntOrNull() != state.gameProgressPercent) {
                                                     localText = state.gameProgressPercent.toString()
                                                 }
-                                            } else if (localText.toIntOrNull() != state.gameProgressPercent) {
-                                                localText = state.gameProgressPercent.toString()
                                             }
                                         }
 
@@ -1483,6 +1484,30 @@ fun AddEditScreen(
                                         colors = outlinedColors()
                                     )
 
+                                    var currentProgressText by remember {
+                                        mutableStateOf(if (state.customUnitCurrent > 0.0) MediaEntry.formatCustomUnitValue(state.customUnitCurrent) else "")
+                                    }
+                                    var totalTargetText by remember {
+                                        mutableStateOf(if ((state.customUnitTotal ?: 0.0) > 0.0) MediaEntry.formatCustomUnitValue(state.customUnitTotal!!) else "")
+                                    }
+
+                                    LaunchedEffect(state.customUnitCurrent) {
+                                        if (currentProgressText.isEmpty() && state.customUnitCurrent == 0.0) {
+                                            // Keep empty if user explicitly cleared it
+                                        } else if (currentProgressText.toDoubleOrNull() != state.customUnitCurrent) {
+                                            currentProgressText = if (state.customUnitCurrent > 0.0) MediaEntry.formatCustomUnitValue(state.customUnitCurrent) else ""
+                                        }
+                                    }
+
+                                    LaunchedEffect(state.customUnitTotal) {
+                                        val total = state.customUnitTotal ?: 0.0
+                                        if (totalTargetText.isEmpty() && total == 0.0) {
+                                            // Keep empty if user explicitly cleared it
+                                        } else if (totalTargetText.toDoubleOrNull() != state.customUnitTotal) {
+                                            totalTargetText = if (total > 0.0) MediaEntry.formatCustomUnitValue(total) else ""
+                                        }
+                                    }
+
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -1491,25 +1516,40 @@ fun AddEditScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         OutlinedTextField(
-                                            value = state.customUnitCurrent.toString(),
-                                            onValueChange = { viewModel.updateCustomUnitCurrent(it.toIntOrNull() ?: 0) },
+                                            value = currentProgressText,
+                                            onValueChange = { input ->
+                                                val filtered = input.replace(',', '.')
+                                                if (filtered.isEmpty() || filtered.matches(Regex("""^\d*\.?\d*$"""))) {
+                                                    currentProgressText = filtered
+                                                    val parsed = filtered.toDoubleOrNull() ?: 0.0
+                                                    viewModel.updateCustomUnitCurrent(parsed)
+                                                }
+                                            },
                                             label = { Text("Current Progress", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                            placeholder = { Text("0") },
                                             singleLine = true,
                                             maxLines = 1,
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .fillMaxHeight(),
                                             colors = outlinedColors()
                                         )
                                         OutlinedTextField(
-                                            value = state.customUnitTotal?.toString() ?: "",
-                                            onValueChange = { viewModel.updateCustomUnitTotal(it.toIntOrNull()) },
+                                            value = totalTargetText,
+                                            onValueChange = { input ->
+                                                val filtered = input.replace(',', '.')
+                                                if (filtered.isEmpty() || filtered.matches(Regex("""^\d*\.?\d*$"""))) {
+                                                    totalTargetText = filtered
+                                                    val parsed = filtered.toDoubleOrNull()?.takeIf { it > 0.0 }
+                                                    viewModel.updateCustomUnitTotal(parsed)
+                                                }
+                                            },
                                             label = { Text("Total Target", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                             placeholder = { Text("Optional") },
                                             singleLine = true,
                                             maxLines = 1,
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .fillMaxHeight(),

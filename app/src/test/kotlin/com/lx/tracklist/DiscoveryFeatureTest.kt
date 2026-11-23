@@ -848,6 +848,37 @@ class DiscoveryFeatureTest {
     }
 
     @Test
+    fun testIgdbAndRawgSearchQueryWithPlatforms() {
+        // IGDB Apicalypse search query with search text and platforms
+        val apicalypse = IgdbApiClient.buildSearchApicalypseQuery(
+            query = "Harry potter",
+            includedPlatforms = setOf("PC"),
+            excludedPlatforms = setOf("Mobile")
+        )
+        assertTrue(apicalypse.contains("search \"Harry potter\";"))
+        assertTrue(apicalypse.contains("platforms = (") && apicalypse.contains("6"))
+        assertTrue(apicalypse.contains("platforms != (") && apicalypse.contains("34"))
+        assertFalse(apicalypse.contains("sort ")) // IGDB forbids sort with search
+
+        // Test with Nintendo DS
+        val dsApicalypse = IgdbApiClient.buildSearchApicalypseQuery(
+            query = "Pok",
+            includedPlatforms = setOf("Nintendo DS")
+        )
+        assertTrue(dsApicalypse.contains("search \"Pok\";"))
+        assertTrue(dsApicalypse.contains("platforms = (20)"))
+
+        // RAWG search URL with platforms
+        val rawgUrl = RawgApiClient.buildSearchUrl(
+            apiKey = "test_key",
+            query = "Harry potter",
+            includedPlatforms = setOf("PC")
+        )
+        assertTrue(rawgUrl.contains("search=Harry+potter"))
+        assertTrue(rawgUrl.contains("&platforms=") && rawgUrl.contains("4"))
+    }
+
+    @Test
     fun testDurationFormatterPlaytimeAndAverageTime() {
         // Less than 24h
         assertEquals("0.0 hrs", DurationFormatter.formatHours(0.0))

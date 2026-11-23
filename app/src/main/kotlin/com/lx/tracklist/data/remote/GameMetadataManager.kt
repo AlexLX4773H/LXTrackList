@@ -13,24 +13,77 @@ object GameMetadataManager {
      * Searches for games, prioritizing IGDB as primary and falling back to RAWG if unconfigured or no hits,
      * or routing directly if a specific source ("IGDB" or "RAWG") is specified.
      */
-    suspend fun searchGames(context: Context, query: String, source: String? = null, limit: Int = 20, page: Int = 1): Result<List<GameSearchResult>> {
+    suspend fun searchGames(
+        context: Context,
+        query: String,
+        source: String? = null,
+        limit: Int = 20,
+        page: Int = 1,
+        includedPlatforms: Set<String> = emptySet(),
+        excludedPlatforms: Set<String> = emptySet(),
+        includedTags: Set<String> = emptySet(),
+        excludedTags: Set<String> = emptySet(),
+        adultMode: AdultMode = AdultMode.OFF,
+        year: Int? = null,
+        startYear: Int? = null,
+        endYear: Int? = null
+    ): Result<List<GameSearchResult>> {
         val src = source?.trim()?.uppercase()
         if (src == "IGDB") {
             if (!GameApiConfig.isIgdbConfigured(context)) {
                 return Result.failure(IllegalStateException("IGDB credentials are not configured. Please add your Twitch Client ID and Secret in Settings."))
             }
-            return IgdbApiClient.searchGames(context, query, limit, page)
+            return IgdbApiClient.searchGames(
+                context = context,
+                query = query,
+                limit = limit,
+                page = page,
+                includedPlatforms = includedPlatforms,
+                excludedPlatforms = excludedPlatforms,
+                includedTags = includedTags,
+                excludedTags = excludedTags,
+                adultMode = adultMode,
+                year = year,
+                startYear = startYear,
+                endYear = endYear
+            )
         }
         if (src == "RAWG") {
             if (!GameApiConfig.isRawgConfigured(context)) {
                 return Result.failure(IllegalStateException("RAWG API key is not configured. Please add your RAWG API key in Settings."))
             }
-            return RawgApiClient.searchGames(context, query, limit, page)
+            return RawgApiClient.searchGames(
+                context = context,
+                query = query,
+                limit = limit,
+                page = page,
+                includedPlatforms = includedPlatforms,
+                excludedPlatforms = excludedPlatforms,
+                includedTags = includedTags,
+                excludedTags = excludedTags,
+                adultMode = adultMode,
+                year = year,
+                startYear = startYear,
+                endYear = endYear
+            )
         }
 
         // 1. Try IGDB primary
         if (GameApiConfig.isIgdbConfigured(context)) {
-            val igdbRes = IgdbApiClient.searchGames(context, query, limit, page)
+            val igdbRes = IgdbApiClient.searchGames(
+                context = context,
+                query = query,
+                limit = limit,
+                page = page,
+                includedPlatforms = includedPlatforms,
+                excludedPlatforms = excludedPlatforms,
+                includedTags = includedTags,
+                excludedTags = excludedTags,
+                adultMode = adultMode,
+                year = year,
+                startYear = startYear,
+                endYear = endYear
+            )
             if (igdbRes.isSuccess) {
                 val list = igdbRes.getOrDefault(emptyList())
                 if (list.isNotEmpty()) {
@@ -43,7 +96,20 @@ object GameMetadataManager {
 
         // 2. Fallback to RAWG
         if (GameApiConfig.isRawgConfigured(context)) {
-            val rawgRes = RawgApiClient.searchGames(context, query, limit, page)
+            val rawgRes = RawgApiClient.searchGames(
+                context = context,
+                query = query,
+                limit = limit,
+                page = page,
+                includedPlatforms = includedPlatforms,
+                excludedPlatforms = excludedPlatforms,
+                includedTags = includedTags,
+                excludedTags = excludedTags,
+                adultMode = adultMode,
+                year = year,
+                startYear = startYear,
+                endYear = endYear
+            )
             if (rawgRes.isSuccess) {
                 return rawgRes
             } else {

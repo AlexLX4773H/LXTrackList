@@ -1039,12 +1039,15 @@ fun DetailScreen(
 }
 
 private data class ProgressInfo(
-    val current: Int,
-    val total: Int,
+    val current: Double,
+    val total: Double,
     val totalStr: String,
     val unit: String,
     val description: String
-)
+) {
+    constructor(current: Int, total: Int, totalStr: String, unit: String, description: String) :
+        this(current.toDouble(), total.toDouble(), totalStr, unit, description)
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1075,7 +1078,7 @@ private fun DetailProgressCard(
     entry: MediaEntry,
     onIncrement: () -> Unit,
     onDecrement: () -> Unit,
-    onSetProgress: (Int) -> Unit = {},
+    onSetProgress: (Double) -> Unit = {},
     onSetShowProgress: (Int, Int) -> Unit = { _, _ -> },
     onStartRewatch: () -> Unit,
     onFinishRewatch: () -> Unit,
@@ -1169,7 +1172,7 @@ private fun DetailProgressCard(
         MediaType.GAME -> {
             if (entry.trackingUnit == TrackingUnit.CUSTOM) {
                 val label = entry.customUnitLabel?.takeIf { it.isNotBlank() } ?: "Units"
-                val totalStr = if (entry.customUnitTotal > 0) "${entry.customUnitTotal}" else "?"
+                val totalStr = if (entry.customUnitTotal > 0.0) MediaEntry.formatCustomUnitValue(entry.customUnitTotal) else "?"
                 ProgressInfo(entry.customUnitCurrent, entry.customUnitTotal, totalStr, label, "$label completed")
             } else {
                 ProgressInfo(entry.gameProgressPercent, 100, "100%", "%", "Game progress")
@@ -1213,7 +1216,7 @@ private fun DetailProgressCard(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
-                } else if (info.total > 0 || (hasSeasonTracking && entry.getEffectiveTotalEpisodes() > 0)) {
+                } else if (info.total > 0.0 || (hasSeasonTracking && entry.getEffectiveTotalEpisodes() > 0)) {
                     val pct = (entry.progressFraction * 100).toInt()
                     Surface(
                         color = LXSurfaceElevated,
@@ -1322,8 +1325,13 @@ private fun DetailProgressCard(
                         .padding(end = 12.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .clickable {
+                            val isCustomGame = entry.mediaType == MediaType.GAME && entry.trackingUnit == TrackingUnit.CUSTOM
                             editSeasonInput = "${entry.currentSeasons}"
-                            editInput = "${info.current}"
+                            editInput = if (isCustomGame) {
+                                if (entry.customUnitCurrent > 0.0) MediaEntry.formatCustomUnitValue(entry.customUnitCurrent) else ""
+                            } else {
+                                "${info.current.toInt()}"
+                            }
                             showEditDialog = true
                         }
                         .padding(vertical = 2.dp)
@@ -1332,8 +1340,13 @@ private fun DetailProgressCard(
                         verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        val currentText = if (entry.mediaType == MediaType.GAME && entry.trackingUnit == TrackingUnit.CUSTOM) {
+                            MediaEntry.formatCustomUnitValue(info.current)
+                        } else {
+                            "${info.current.toInt()}"
+                        }
                         Text(
-                            text = "${info.current}",
+                            text = currentText,
                             style = MaterialTheme.typography.headlineLarge.copy(
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 32.sp
@@ -1398,7 +1411,7 @@ private fun DetailProgressCard(
                 }
 
                 if (!isMovie) {
-                    val canDecrement = info.current > 0 || (hasSeasonTracking && entry.currentSeasons > 1)
+                    val canDecrement = info.current > 0.0 || (hasSeasonTracking && entry.currentSeasons > 1)
                     Row(
                         modifier = Modifier.wrapContentWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -1450,7 +1463,7 @@ private fun DetailProgressCard(
             }
 
             // Animated Progress Bar (only rendered when total is known)
-            if (info.total > 0 || (hasSeasonTracking && entry.getEffectiveTotalEpisodes() > 0)) {
+            if (info.total > 0.0 || (hasSeasonTracking && entry.getEffectiveTotalEpisodes() > 0)) {
                 val progressAnimated by animateFloatAsState(
                     targetValue = entry.progressFraction,
                     label = "progress_bar_anim"
@@ -1785,10 +1798,20 @@ private fun DetailProgressCard(
                             )
                         }
                     } else {
+                        val isCustomGame = entry.mediaType == MediaType.GAME && entry.trackingUnit == TrackingUnit.CUSTOM
                         OutlinedTextField(
                             value = editInput,
-                            onValueChange = { if (it.all { c -> c.isDigit() }) editInput = it },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            onValueChange = { input ->
+                                if (isCustomGame) {
+                                    val filtered = input.replace(',', '.')
+                                    if (filtered.isEmpty() || filtered.matches(Regex("""^\d*\.?\d*$"""))) {
+                                        editInput = filtered
+                                    }
+                                } else {
+                                    if (input.all { c -> c.isDigit() }) editInput = input
+                                }
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = if (isCustomGame) KeyboardType.Decimal else KeyboardType.Number),
                             singleLine = true,
                             label = { Text(info.unit) },
                             modifier = Modifier.fillMaxWidth(),
@@ -1807,14 +1830,21 @@ private fun DetailProgressCard(
             confirmButton = {
                 Button(
                     onClick = {
-                        val parsedEp = editInput.toIntOrNull()
+                        val isCustomGame = entry.mediaType == MediaType.GAME && entry.trackingUnit == TrackingUnit.CUSTOM
                         if (isShowWithSeasons) {
+                            val parsedEp = editInput.toIntOrNull()
                             val parsedSeason = editSeasonInput.toIntOrNull() ?: entry.currentSeasons
                             if (parsedEp != null) {
                                 onSetShowProgress(parsedSeason, parsedEp)
                             }
-                        } else if (parsedEp != null) {
-                            onSetProgress(parsedEp)
+                        } else if (isCustomGame) {
+                            val parsedDouble = editInput.toDoubleOrNull() ?: 0.0
+                            onSetProgress(parsedDouble)
+                        } else {
+                            val parsedEp = editInput.toIntOrNull()
+                            if (parsedEp != null) {
+                                onSetProgress(parsedEp.toDouble())
+                            }
                         }
                         showEditDialog = false
                     },

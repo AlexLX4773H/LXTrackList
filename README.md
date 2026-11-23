@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.6.13-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-0.6.14-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26--36)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Kotlin_2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
   <img src="https://img.shields.io/badge/UI-Jetpack_Compose_&_Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" />
@@ -14,6 +14,26 @@
   <img src="https://img.shields.io/badge/Theme-OLED_Dark_&_Neon_Lime_/_Custom_Themes-A7EF60?style=flat-square" alt="Theme" />
   <img src="https://img.shields.io/badge/Privacy-100%25_Local_&_Offline_First-success?style=flat-square" alt="Privacy" />
 </p>
+
+---
+
+## 🚀 What's New in v0.6.14
+
+- **🎮 Decimal Support for Game Custom Tracking Units**:
+  - Custom Units mode for video games now fully supports decimal values (e.g. `10.5` Hours, `170.5` Hours target).
+  - Upgraded Room database schema (`MIGRATION_19_20`) with `REAL` precision for `customUnitCurrent` and `customUnitTotal`.
+  - Intelligent number formatting displays integers cleanly without trailing `.0` (e.g., `12 Levels`, `42 Hours`), while precisely preserving decimal points when typed (e.g., `10.5 Hours`).
+  - Input fields now default to `KeyboardType.Decimal` with locale-aware comma/period auto-normalization and local text buffering to prevent input stripping or premature formatting while typing.
+  - Detail screen quick-edit progress dialog and progress card hero section seamlessly support decimal progress input and updates.
+- **🧹 Clean Number Input & Sticky Zero Removal in Add / Edit Entry**:
+  - Resolved an issue in Add/Edit Entity where clearing or backspacing numeric fields (such as `Current Progress`, `Total Target`, `Seasons`, and `Series Number`) left a persistent `0` or `1` that prepended to newly typed numbers.
+  - Fields now smoothly clear to empty with an elegant placeholder (`0` or `Optional`) until input is typed.
+- **🔍 Server-Side Platform Filtering for Video Game Search**:
+  - Fixed an issue where combining platform filters (e.g., `+PC`, `+Nintendo DS`) with text search in the **Search & Discover** tab returned zero or very few games.
+  - Platform inclusion and exclusion constraints are now embedded directly into upstream server-side queries across IGDB (Apicalypse `where platforms = (...) & search "..."`) and RAWG (`&platforms=...&search=...`), delivering comprehensive, accurate results matching the requested platforms.
+- **✨ Discover Platforms Filter UI Polish**:
+  - Redesigned and uncompressed the header instructional cell in the **Platforms** discovery filter (`GamePlatformsSubMenu`).
+  - Clear, beautifully spaced instructions (`[✓] 1 tap = Include (OR)` and `[✕] 2 taps = Exclude`) alongside the active filter count, eliminating squashed/wrapped text.
 
 ---
 
@@ -166,7 +186,7 @@ Comprehensive video game tracking with dedicated progress modes, platform icons,
   - Color-tinted to match the active theme, replacing generic emojis.
 - **Dual Progress Tracking Modes**:
   - **Percentage Mode (0–100%)**: Smooth slider with fine-grained `-5%`, `-1%`, `+1%`, and `+5%` stepper buttons, and automatic "Completed" milestone tag.
-  - **Compact Custom Units Mode**: Track game-specific milestones using progression metrics such as **Levels**, **Cities**, **Chapters**, **Missions**, **Hours**, and **Quests**, with optional target caps.
+  - **Compact Custom Units Mode**: Track game-specific milestones using progression metrics such as **Levels**, **Cities**, **Chapters**, **Missions**, **Hours**, and **Quests**, with full support for integer and decimal values (e.g. `10.5` or `170.5` Hours) and optional target caps.
 - **Streamlined Edit UI & Language Picker**:
   - Vertical-optimized, compact custom unit controls with quick preset chips and side-by-side progress and target inputs.
   - Dedicated Original Language Picker dialog with instant search and regional groupings.
@@ -212,7 +232,7 @@ Track each medium with metrics tailored to its natural progression:
 - **Light Novels**: First-class support with dedicated AniList `NOVEL` GraphQL integration. Automatically maps to authoritative MyAnimeList manga IDs (`idMal`) to prevent mismatching with doujinshis or unrelated manga adaptations.
 - **Movies & Live-Action TV Shows**: Track standalone movies or full cinematic franchises, runtime in minutes, TV seasons, and current episode progress.
 - **Books**: Track pages read, total chapters, volume progress, ISBN, and authors via Google Books and Open Library.
-- **Video Games**: Track game completion percentage (0–100%) or custom progress milestones (Levels, Cities, Chapters, Missions, Hours, Quests). Manage multi-platform libraries with distinct, themed vector icons (PC, PS, Xbox, Switch, Mobile, Retro), play dates, replay counts, and franchise series progression.
+- **Video Games**: Track game completion percentage (0–100%) or custom progress milestones (Levels, Cities, Chapters, Missions, Hours, Quests) with full decimal precision support (e.g. `10.5` hours). Manage multi-platform libraries with distinct, themed vector icons (PC, PS, Xbox, Switch, Mobile, Retro), play dates, replay counts, and franchise series progression.
 - **Custom Categories & Subcategories**: Create custom categories (e.g., *Donghua*, *Web Novels*, *Podcasts*, *Documentaries*) with custom tracking units (Episodes, Chapters, Volumes, Pages) and badge accent colors.
 
 ### 🌐 Multi-Source External DB & Cascading Sync
