@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.6.14-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-0.6.15-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26--36)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Kotlin_2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
   <img src="https://img.shields.io/badge/UI-Jetpack_Compose_&_Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" />
@@ -14,6 +14,16 @@
   <img src="https://img.shields.io/badge/Theme-OLED_Dark_&_Neon_Lime_/_Custom_Themes-A7EF60?style=flat-square" alt="Theme" />
   <img src="https://img.shields.io/badge/Privacy-100%25_Local_&_Offline_First-success?style=flat-square" alt="Privacy" />
 </p>
+
+---
+
+## 🚀 What's New in v0.6.15
+
+- **🔍 Persistent Search Query with Discovery Filters**:
+  - In the **Search & Discover** tab, applying or switching Discover filters (e.g. `🔥 Most Popular Games`, `+PC`, seasonal anime, genres, tags) now preserves any active search query text (such as `"lord of the rings"` or `"Pok"`) instead of resetting it to empty.
+  - Automatically triggers an immediate scoped search combining both the active text query and the selected discovery filter constraints across all media categories (Games, Movies, TV Shows, Anime, Manga, Manhwa, Light Novels, and Books).
+  - Clearing discovery filters via the `✕` chip or reset action smoothly preserves the search text in the input bar and transitions back to an unconstrained search without wiping the results or input field.
+  - Upgraded Anime discovery search dispatch in `executeSearch` to route through `fetchAnimeDiscovery`, ensuring complete support for all discovery modes, tags, demographic filters, original languages, and adult content modes when searching with active queries.
 
 ---
 

@@ -175,7 +175,7 @@ fun SearchScreen(
             activeFilter = state.activeDiscoveryFilter,
             onDismiss = { showDiscoverySheet = false },
             onApplyAnime = { animeFilter ->
-                viewModel.applyAnimeDiscoveryFilter(animeFilter)
+                viewModel.applyAnimeDiscoveryFilter(animeFilter, context)
             },
             onApplyMovie = { movieFilter ->
                 viewModel.applyMovieDiscoveryFilter(movieFilter, context)
@@ -199,7 +199,7 @@ fun SearchScreen(
                 viewModel.applyGameDiscoveryFilter(gameFilter, context)
             },
             onResetFilter = {
-                viewModel.clearDiscoveryFilter()
+                viewModel.clearDiscoveryFilter(context)
             }
         )
     }
@@ -665,7 +665,7 @@ fun SearchScreen(
                             )
                         }
                         IconButton(
-                            onClick = { viewModel.clearDiscoveryFilter() },
+                            onClick = { viewModel.clearDiscoveryFilter(context) },
                             modifier = Modifier.size(24.dp)
                         ) {
                             Icon(

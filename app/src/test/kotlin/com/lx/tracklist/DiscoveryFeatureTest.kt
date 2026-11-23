@@ -1150,4 +1150,52 @@ class DiscoveryFeatureTest {
         val missingDuration = fullyPopulated.copy(durationMinutes = 0)
         assertTrue(GameSyncManager.needsSync(missingDuration, forceRefresh = false))
     }
+
+    @Test
+    fun testSearchUiStatePreservesQueryWithDiscoveryFilter() {
+        val initialSearchQuery = "lord of the rings"
+        val state = com.lx.tracklist.ui.search.SearchUiState(
+            query = initialSearchQuery,
+            selectedCategory = SearchCategory.GAMES
+        )
+
+        // Applying discovery filter must retain existing search query
+        val gameFilter = DiscoveryFilter.Game(
+            mode = ContentDiscoveryMode.MOST_POPULAR,
+            includedPlatforms = setOf("PC")
+        )
+        val stateWithFilter = state.copy(
+            selectedCategory = SearchCategory.GAMES,
+            activeDiscoveryFilter = gameFilter
+        )
+        assertEquals("lord of the rings", stateWithFilter.query)
+        assertEquals(gameFilter, stateWithFilter.activeDiscoveryFilter)
+
+        // Clearing discovery filter must still retain search query
+        val stateFilterCleared = stateWithFilter.copy(activeDiscoveryFilter = null)
+        assertEquals("lord of the rings", stateFilterCleared.query)
+        org.junit.Assert.assertNull(stateFilterCleared.activeDiscoveryFilter)
+    }
+
+    @Test
+    fun testDiscoveryFilterSearchKeyGeneration() {
+        val query = "lord of the rings"
+        val category = SearchCategory.GAMES
+        val filter1 = DiscoveryFilter.Game(
+            mode = ContentDiscoveryMode.MOST_POPULAR,
+            includedPlatforms = setOf("PC")
+        )
+        val filter2 = DiscoveryFilter.Game(
+            mode = ContentDiscoveryMode.MOST_POPULAR,
+            includedPlatforms = setOf("Nintendo DS")
+        )
+
+        val keyNoFilter = "$category:$query"
+        val keyFilter1 = "$category:$query:${filter1.hashCode()}"
+        val keyFilter2 = "$category:$query:${filter2.hashCode()}"
+
+        assertEquals("GAMES:lord of the rings", keyNoFilter)
+        assertFalse(keyNoFilter == keyFilter1)
+        assertFalse(keyFilter1 == keyFilter2)
+    }
 }

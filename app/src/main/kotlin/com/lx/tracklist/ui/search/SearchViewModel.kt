@@ -291,20 +291,26 @@ class SearchViewModel(
         }
     }
 
-    fun applyAnimeDiscoveryFilter(filter: DiscoveryFilter.Anime) {
+    fun applyAnimeDiscoveryFilter(filter: DiscoveryFilter.Anime, context: Context? = null) {
         searchJob?.cancel()
+        val currentQuery = _uiState.value.query.trim()
         activeSearchKey = "DISCOVER:ANIME:${filter.mode}:${filter.season}:${filter.year}:${filter.sortOrder}:${filter.includedTags}:${filter.excludedTags}:${filter.adultMode}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.ANIME,
                 activeDiscoveryFilter = filter,
-                query = "",
                 isLoading = true,
                 currentPage = 1,
                 canLoadMore = false,
                 errorMessage = null,
                 results = emptyList()
             )
+        }
+        if (currentQuery.length >= 2) {
+            searchJob = viewModelScope.launch {
+                executeSearch(currentQuery, SearchCategory.ANIME, context)
+            }
+            return
         }
         searchJob = viewModelScope.launch {
             try {
@@ -347,7 +353,8 @@ class SearchViewModel(
         season: AnimeSeason,
         year: Int,
         sort: AnimeSortOrder,
-        adultMode: AdultMode = AdultMode.OFF
+        adultMode: AdultMode = AdultMode.OFF,
+        context: Context? = null
     ) {
         applyAnimeDiscoveryFilter(
             DiscoveryFilter.Anime(
@@ -356,11 +363,12 @@ class SearchViewModel(
                 year = year,
                 sortOrder = sort,
                 adultMode = adultMode
-            )
+            ),
+            context = context
         )
     }
 
-    fun removeAnimeTagFilter(tag: String) {
+    fun removeAnimeTagFilter(tag: String, context: Context? = null) {
         val currentFilter = _uiState.value.activeDiscoveryFilter as? DiscoveryFilter.Anime ?: return
         val newIncluded = currentFilter.includedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
         val newExcluded = currentFilter.excludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
@@ -368,17 +376,19 @@ class SearchViewModel(
             currentFilter.copy(
                 includedTags = newIncluded,
                 excludedTags = newExcluded
-            )
+            ),
+            context = context
         )
     }
 
-    fun clearAnimeTagFilters() {
+    fun clearAnimeTagFilters(context: Context? = null) {
         val currentFilter = _uiState.value.activeDiscoveryFilter as? DiscoveryFilter.Anime ?: return
         applyAnimeDiscoveryFilter(
             currentFilter.copy(
                 includedTags = emptySet(),
                 excludedTags = emptySet()
-            )
+            ),
+            context = context
         )
     }
 
@@ -491,18 +501,24 @@ class SearchViewModel(
 
     fun applyMangaDiscoveryFilter(filter: DiscoveryFilter.Manga, context: Context? = null) {
         searchJob?.cancel()
+        val currentQuery = _uiState.value.query.trim()
         activeSearchKey = "DISCOVER:MANGA:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.MANGA,
                 activeDiscoveryFilter = filter,
-                query = "",
                 isLoading = true,
                 currentPage = 1,
                 canLoadMore = false,
                 errorMessage = null,
                 results = emptyList()
             )
+        }
+        if (currentQuery.length >= 2) {
+            searchJob = viewModelScope.launch {
+                executeSearch(currentQuery, SearchCategory.MANGA, context)
+            }
+            return
         }
         searchJob = viewModelScope.launch {
             try {
@@ -542,18 +558,24 @@ class SearchViewModel(
 
     fun applyManhwaDiscoveryFilter(filter: DiscoveryFilter.Manhwa, context: Context? = null) {
         searchJob?.cancel()
+        val currentQuery = _uiState.value.query.trim()
         activeSearchKey = "DISCOVER:MANHWA:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.MANHWA,
                 activeDiscoveryFilter = filter,
-                query = "",
                 isLoading = true,
                 currentPage = 1,
                 canLoadMore = false,
                 errorMessage = null,
                 results = emptyList()
             )
+        }
+        if (currentQuery.length >= 2) {
+            searchJob = viewModelScope.launch {
+                executeSearch(currentQuery, SearchCategory.MANHWA, context)
+            }
+            return
         }
         searchJob = viewModelScope.launch {
             try {
@@ -593,18 +615,24 @@ class SearchViewModel(
 
     fun applyLightNovelDiscoveryFilter(filter: DiscoveryFilter.LightNovel, context: Context? = null) {
         searchJob?.cancel()
+        val currentQuery = _uiState.value.query.trim()
         activeSearchKey = "DISCOVER:LN:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.LIGHT_NOVELS,
                 activeDiscoveryFilter = filter,
-                query = "",
                 isLoading = true,
                 currentPage = 1,
                 canLoadMore = false,
                 errorMessage = null,
                 results = emptyList()
             )
+        }
+        if (currentQuery.length >= 2) {
+            searchJob = viewModelScope.launch {
+                executeSearch(currentQuery, SearchCategory.LIGHT_NOVELS, context)
+            }
+            return
         }
         searchJob = viewModelScope.launch {
             try {
@@ -644,18 +672,24 @@ class SearchViewModel(
 
     fun applyBookDiscoveryFilter(filter: DiscoveryFilter.Book, context: Context? = null) {
         searchJob?.cancel()
+        val currentQuery = _uiState.value.query.trim()
         activeSearchKey = "DISCOVER:BOOK:${filter.mode}:${filter.startYear}:${filter.endYear}:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags}:${filter.excludedTags}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.BOOKS,
                 activeDiscoveryFilter = filter,
-                query = "",
                 isLoading = true,
                 currentPage = 1,
                 canLoadMore = false,
                 errorMessage = null,
                 results = emptyList()
             )
+        }
+        if (currentQuery.length >= 2) {
+            searchJob = viewModelScope.launch {
+                executeSearch(currentQuery, SearchCategory.BOOKS, context)
+            }
+            return
         }
         searchJob = viewModelScope.launch {
             try {
@@ -697,19 +731,25 @@ class SearchViewModel(
         context: Context? = null
     ) {
         searchJob?.cancel()
+        val currentQuery = _uiState.value.query.trim()
         val yearPart = filter.year?.toString() ?: "ALL"
         activeSearchKey = "DISCOVER:MOVIE:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.MOVIES,
                 activeDiscoveryFilter = filter,
-                query = "",
                 isLoading = true,
                 currentPage = 1,
                 canLoadMore = false,
                 errorMessage = null,
                 results = emptyList()
             )
+        }
+        if (currentQuery.length >= 2) {
+            searchJob = viewModelScope.launch {
+                executeSearch(currentQuery, SearchCategory.MOVIES, context)
+            }
+            return
         }
         searchJob = viewModelScope.launch {
             try {
@@ -770,19 +810,25 @@ class SearchViewModel(
         context: Context? = null
     ) {
         searchJob?.cancel()
+        val currentQuery = _uiState.value.query.trim()
         val yearPart = filter.year?.toString() ?: "ALL"
         activeSearchKey = "DISCOVER:TV:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguages.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.TV_SHOWS,
                 activeDiscoveryFilter = filter,
-                query = "",
                 isLoading = true,
                 currentPage = 1,
                 canLoadMore = false,
                 errorMessage = null,
                 results = emptyList()
             )
+        }
+        if (currentQuery.length >= 2) {
+            searchJob = viewModelScope.launch {
+                executeSearch(currentQuery, SearchCategory.TV_SHOWS, context)
+            }
+            return
         }
         searchJob = viewModelScope.launch {
             try {
@@ -840,19 +886,25 @@ class SearchViewModel(
 
     fun applyGameDiscoveryFilter(filter: DiscoveryFilter.Game, context: Context? = null) {
         searchJob?.cancel()
+        val currentQuery = _uiState.value.query.trim()
         val yearPart = filter.year?.toString() ?: filter.endYear?.toString() ?: "ALL"
         activeSearchKey = "DISCOVER:GAME:${filter.mode}:$yearPart:${filter.sortOrder}:${filter.adultMode}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguages.sorted()}:${filter.includedPlatforms.sorted()}:${filter.excludedPlatforms.sorted()}"
         _uiState.update {
             it.copy(
                 selectedCategory = SearchCategory.GAMES,
                 activeDiscoveryFilter = filter,
-                query = "",
                 isLoading = true,
                 currentPage = 1,
                 canLoadMore = false,
                 errorMessage = null,
                 results = emptyList()
             )
+        }
+        if (currentQuery.length >= 2) {
+            searchJob = viewModelScope.launch {
+                executeSearch(currentQuery, SearchCategory.GAMES, context)
+            }
+            return
         }
         searchJob = viewModelScope.launch {
             try {
@@ -1173,18 +1225,25 @@ class SearchViewModel(
         }
     }
 
-    fun clearDiscoveryFilter() {
+    fun clearDiscoveryFilter(context: Context? = null) {
         searchJob?.cancel()
         activeSearchKey = null
+        val currentQuery = _uiState.value.query.trim()
+        val currentCategory = _uiState.value.selectedCategory
         _uiState.update {
             it.copy(
                 activeDiscoveryFilter = null,
                 results = emptyList(),
                 currentPage = 1,
                 canLoadMore = false,
-                isLoading = false,
+                isLoading = currentQuery.length >= 2,
                 errorMessage = null
             )
+        }
+        if (currentQuery.length >= 2) {
+            searchJob = viewModelScope.launch {
+                executeSearch(currentQuery, currentCategory, context)
+            }
         }
     }
 
@@ -1308,8 +1367,9 @@ class SearchViewModel(
     fun submitSearch(context: Context? = null) {
         val currentQuery = _uiState.value.query.trim()
         val currentCategory = _uiState.value.selectedCategory
+        val activeFilter = _uiState.value.activeDiscoveryFilter
         if (currentQuery.length >= 2) {
-            val searchKey = "$currentCategory:$currentQuery"
+            val searchKey = if (activeFilter != null) "$currentCategory:$currentQuery:${activeFilter.hashCode()}" else "$currentCategory:$currentQuery"
             // If the exact same search is already actively executing, let it finish instead of cancelling & restarting
             if (searchJob?.isActive == true && activeSearchKey == searchKey && _uiState.value.isLoading) {
                 return
@@ -1326,11 +1386,10 @@ class SearchViewModel(
         category: SearchCategory,
         context: Context?
     ) {
-        val searchKey = "$category:$query"
+        val activeFilter = _uiState.value.activeDiscoveryFilter
+        val searchKey = if (activeFilter != null) "$category:$query:${activeFilter.hashCode()}" else "$category:$query"
         activeSearchKey = searchKey
         _uiState.update { it.copy(isLoading = true, errorMessage = null, currentPage = 1, canLoadMore = false) }
-
-        val activeFilter = _uiState.value.activeDiscoveryFilter
 
         try {
             val results = withContext(Dispatchers.IO) {
@@ -1338,11 +1397,14 @@ class SearchViewModel(
                 if (activeFilter != null) {
                     when (activeFilter) {
                         is DiscoveryFilter.Anime -> {
-                            val list = JikanApiClient.fetchSeasonalAnime(
-                                year = activeFilter.year,
-                                season = activeFilter.season.apiValue,
+                            val list = JikanApiClient.fetchAnimeDiscovery(
+                                mode = activeFilter.mode,
+                                year = if (activeFilter.mode == AnimeDiscoveryMode.SEASONAL) activeFilter.year else null,
+                                season = if (activeFilter.mode == AnimeDiscoveryMode.SEASONAL) activeFilter.season.apiValue else null,
                                 sort = activeFilter.sortOrder.apiValue,
                                 search = query,
+                                includedTags = activeFilter.includedTags,
+                                excludedTags = activeFilter.excludedTags,
                                 adultMode = activeFilter.adultMode,
                                 originalLanguages = activeFilter.originalLanguages,
                                 originalLanguage = activeFilter.originalLanguage,
