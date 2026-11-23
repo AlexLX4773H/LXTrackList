@@ -1,9 +1,12 @@
 package com.lx.tracklist
 
+import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.ui.components.SortOption
+import com.lx.tracklist.ui.library.LibrarySortOption
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -778,5 +781,138 @@ class MediaEntryTest {
         assertEquals(futureDate, unreleasedBook.getComputedNextAiringEpoch())
         assertEquals("In 90d", unreleasedBook.getTimeUntilNextEpisode())
         org.junit.Assert.assertTrue(unreleasedBook.formatAiringCardText()!!.endsWith("• In 90d"))
+    }
+
+    @Test
+    fun testCalculateSpentAndRemainingTime() {
+        // 1. Anime: 10 of 24 ep watched (24 min each), 1 rewatch
+        val anime = MediaEntry(
+            title = "Test Anime",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.WATCHING,
+            currentEpisodes = 10,
+            totalEpisodes = 24,
+            episodeLengthMinutes = 24,
+            rewatchCount = 1
+        )
+        // Spent: (10 + 1 * 24) * 24 = 34 * 24 = 816 min
+        assertEquals(816.0, anime.calculateSpentTimeMinutes(), 0.01)
+        // Remaining: (24 - 10) * 24 = 14 * 24 = 336 min
+        assertEquals(336.0, anime.calculateRemainingTimeMinutes(), 0.01)
+
+        // Completed Anime: remaining is 0.0
+        val animeCompleted = anime.copy(status = MediaStatus.COMPLETED, currentEpisodes = 24)
+        assertEquals(0.0, animeCompleted.calculateRemainingTimeMinutes(), 0.01)
+
+        // 2. Movie: 120 min duration, watched 40 min, 0 rewatch
+        val movie = MediaEntry(
+            title = "Test Movie",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.WATCHING,
+            durationMinutes = 120,
+            currentTimeMinutes = 40,
+            rewatchCount = 0
+        )
+        // Spent: 40 min
+        assertEquals(40.0, movie.calculateSpentTimeMinutes(), 0.01)
+        // Remaining: 120 - 40 = 80 min
+        assertEquals(80.0, movie.calculateRemainingTimeMinutes(), 0.01)
+
+        // Movie completed with 2 rewatches: spent = (1 + 2) * 120 = 360 min, remaining = 0
+        val movieDone = movie.copy(status = MediaStatus.COMPLETED, rewatchCount = 2)
+        assertEquals(360.0, movieDone.calculateSpentTimeMinutes(), 0.01)
+        assertEquals(0.0, movieDone.calculateRemainingTimeMinutes(), 0.01)
+
+        // 3. Manga: 50 chapters read out of 100
+        val manga = MediaEntry(
+            title = "Test Manga",
+            mediaType = MediaType.MANGA,
+            status = MediaStatus.WATCHING,
+            currentChapters = 50,
+            totalChapters = 100,
+            rewatchCount = 0
+        )
+        // Spent: 50 * 5.0 = 250 min
+        assertEquals(250.0, manga.calculateSpentTimeMinutes(), 0.01)
+        // Remaining: (100 - 50) * 5.0 = 250 min
+        assertEquals(250.0, manga.calculateRemainingTimeMinutes(), 0.01)
+
+        // 4. Book: 300 pages read out of 400
+        val book = MediaEntry(
+            title = "Test Book",
+            mediaType = MediaType.BOOK,
+            status = MediaStatus.WATCHING,
+            currentPages = 300,
+            totalPages = 400,
+            rewatchCount = 0
+        )
+        // Spent: 300 * 1.5 = 450 min
+        assertEquals(450.0, book.calculateSpentTimeMinutes(), 0.01)
+        // Remaining: (400 - 300) * 1.5 = 150 min
+        assertEquals(150.0, book.calculateRemainingTimeMinutes(), 0.01)
+
+        // 5. Game with Hours unit: current 25.5 hrs, target 50 hrs
+        val gameHours = MediaEntry(
+            title = "Test Game Hours",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.WATCHING,
+            customUnitLabel = "Hours",
+            customUnitCurrent = 25.5,
+            customUnitTotal = 50.0
+        )
+        // Spent: 25.5 * 60 = 1530 min
+        assertEquals(1530.0, gameHours.calculateSpentTimeMinutes(), 0.01)
+        // Remaining: (50 - 25.5) * 60 = 24.5 * 60 = 1470 min
+        assertEquals(1470.0, gameHours.calculateRemainingTimeMinutes(), 0.01)
+
+        // 6. Game with percentage and community avg completion time: 50% of 1200 min (20 hrs)
+        val gamePercent = MediaEntry(
+            title = "Test Game Percent",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.WATCHING,
+            gameProgressPercent = 50,
+            durationMinutes = 1200
+        )
+        // Spent: 0.5 * 1200 = 600 min
+        assertEquals(600.0, gamePercent.calculateSpentTimeMinutes(), 0.01)
+        // Remaining: (1.0 - 0.5) * 1200 = 600 min
+        assertEquals(600.0, gamePercent.calculateRemainingTimeMinutes(), 0.01)
+    }
+
+    @Test
+    fun testDynamicSortDisplayLabels() {
+        val customAnime = CustomCategory(name = "Donghua", isWatchType = true)
+        val customManga = CustomCategory(name = "Webtoons", isWatchType = false)
+        val customCats = listOf(customAnime, customManga)
+
+        // TopNavBar SortOption
+        assertEquals("Most Time Watched", SortOption.TIME_SPENT_DESC.getDisplayLabel(MediaType.ANIME))
+        assertEquals("Most Time Watched", SortOption.TIME_SPENT_DESC.getDisplayLabel(MediaType.SHOW))
+        assertEquals("Most Time Watched", SortOption.TIME_SPENT_DESC.getDisplayLabel(MediaType.MOVIE))
+        assertEquals("Most Time Played", SortOption.TIME_SPENT_DESC.getDisplayLabel(MediaType.GAME))
+        assertEquals("Most Time Read", SortOption.TIME_SPENT_DESC.getDisplayLabel(MediaType.MANGA))
+        assertEquals("Most Time Read", SortOption.TIME_SPENT_DESC.getDisplayLabel(MediaType.BOOK))
+        assertEquals("Most Time Watched / Played / Read", SortOption.TIME_SPENT_DESC.getDisplayLabel(null))
+
+        assertEquals("Most Time To Watch", SortOption.TIME_REMAINING_DESC.getDisplayLabel(MediaType.ANIME))
+        assertEquals("Most Time To Play", SortOption.TIME_REMAINING_DESC.getDisplayLabel(MediaType.GAME))
+        assertEquals("Most Time To Read", SortOption.TIME_REMAINING_DESC.getDisplayLabel(MediaType.MANGA))
+        assertEquals("Most Time To Watch / Play / Read", SortOption.TIME_REMAINING_DESC.getDisplayLabel(null))
+
+        // Custom category resolution
+        assertEquals("Most Time Watched", SortOption.TIME_SPENT_DESC.getDisplayLabel(null, "Donghua", customCats))
+        assertEquals("Most Time Read", SortOption.TIME_SPENT_DESC.getDisplayLabel(null, "Webtoons", customCats))
+        assertEquals("Most Time To Watch", SortOption.TIME_REMAINING_DESC.getDisplayLabel(null, "Donghua", customCats))
+        assertEquals("Most Time To Read", SortOption.TIME_REMAINING_DESC.getDisplayLabel(null, "Webtoons", customCats))
+
+        // LibrarySortOption
+        assertEquals("Most Time Watched", LibrarySortOption.TIME_SPENT_DESC.getDisplayLabel(MediaType.ANIME))
+        assertEquals("Most Time Played", LibrarySortOption.TIME_SPENT_DESC.getDisplayLabel(MediaType.GAME))
+        assertEquals("Most Time Read", LibrarySortOption.TIME_SPENT_DESC.getDisplayLabel(MediaType.MANGA))
+        assertEquals("Most Time To Watch", LibrarySortOption.TIME_REMAINING_DESC.getDisplayLabel(MediaType.ANIME))
+        assertEquals("Most Time To Play", LibrarySortOption.TIME_REMAINING_DESC.getDisplayLabel(MediaType.GAME))
+        assertEquals("Most Time To Read", LibrarySortOption.TIME_REMAINING_DESC.getDisplayLabel(MediaType.MANGA))
+        assertEquals("Most Time Watched", LibrarySortOption.TIME_SPENT_DESC.getDisplayLabel(null, "Donghua", customCats))
+        assertEquals("Most Time Read", LibrarySortOption.TIME_SPENT_DESC.getDisplayLabel(null, "Webtoons", customCats))
     }
 }

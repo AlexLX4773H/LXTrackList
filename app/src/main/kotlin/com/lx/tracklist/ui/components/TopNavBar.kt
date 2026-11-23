@@ -73,7 +73,38 @@ enum class SortOption(val displayName: String) {
     TITLE_ASC("Title (A-Z)"),
     TITLE_DESC("Title (Z-A)"),
     SCORE_DESC("Highest Score"),
-    PROGRESS_DESC("Highest Progress")
+    PROGRESS_DESC("Highest Progress"),
+    TIME_SPENT_DESC("Most Time Watched / Played / Read"),
+    TIME_REMAINING_DESC("Most Time To Watch / Play / Read");
+
+    fun getDisplayLabel(
+        mediaType: MediaType?,
+        customCategoryTitle: String? = null,
+        customCategories: List<com.lx.tracklist.data.model.CustomCategory> = emptyList()
+    ): String {
+        val resolvedMediaType = if (customCategoryTitle != null) {
+            val custom = customCategories.firstOrNull { it.name.equals(customCategoryTitle, ignoreCase = true) }
+            if (custom != null) {
+                if (custom.isWatchType) MediaType.ANIME else MediaType.MANGA
+            } else mediaType
+        } else mediaType
+
+        return when (this) {
+            TIME_SPENT_DESC -> when {
+                resolvedMediaType?.isPlayType == true -> "Most Time Played"
+                resolvedMediaType?.isReadType == true -> "Most Time Read"
+                resolvedMediaType?.isWatchType == true -> "Most Time Watched"
+                else -> "Most Time Watched / Played / Read"
+            }
+            TIME_REMAINING_DESC -> when {
+                resolvedMediaType?.isPlayType == true -> "Most Time To Play"
+                resolvedMediaType?.isReadType == true -> "Most Time To Read"
+                resolvedMediaType?.isWatchType == true -> "Most Time To Watch"
+                else -> "Most Time To Watch / Play / Read"
+            }
+            else -> displayName
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,6 +122,7 @@ fun TopNavBar(
     activeUser: UserProfile? = null,
     onLogoClick: () -> Unit = {},
     customCategoryTitle: String? = null,
+    customCategories: List<com.lx.tracklist.data.model.CustomCategory> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
@@ -310,7 +342,7 @@ fun TopNavBar(
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    text = option.displayName,
+                                    text = option.getDisplayLabel(selectedCategory, customCategoryTitle, customCategories),
                                     color = if (option == selectedSort) (if (ThemeManager.isBeyondTheme) Color(0xFFFC8181) else LXPrimaryGreen) else LXTextPrimary,
                                     fontWeight = if (option == selectedSort) FontWeight.Bold else FontWeight.Normal
                                 )

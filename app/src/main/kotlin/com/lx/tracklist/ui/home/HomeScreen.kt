@@ -198,6 +198,7 @@ fun HomeScreen(
                 TopNavBar(
                     selectedCategory = state.selectedCategory,
                     customCategoryTitle = state.selectedCustomCategory,
+                    customCategories = state.customCategories,
                     onCategoryClick = { viewModel.setCategorySheetOpen(true) },
                     searchQuery = state.searchQuery,
                     onSearchQueryChange = { viewModel.setSearchQuery(it) },

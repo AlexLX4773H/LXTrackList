@@ -37,16 +37,43 @@ enum class LibrarySortOption(val displayName: String) {
     SCORE_ASC("Lowest Score"),
     PROGRESS_DESC("Highest Progress"),
     PROGRESS_ASC("Lowest Progress"),
-    REWATCH_DESC("Most Re-watched/Re-read");
+    REWATCH_DESC("Most Re-watched/Re-read"),
+    TIME_SPENT_DESC("Most Time Watched / Played / Read"),
+    TIME_REMAINING_DESC("Most Time To Watch / Play / Read");
 
-    fun getDisplayLabel(mediaType: com.lx.tracklist.data.model.MediaType?): String = when (this) {
-        REWATCH_DESC -> when {
-            mediaType?.isPlayType == true -> "Most Replayed"
-            mediaType?.isReadType == true -> "Most Re-read"
-            mediaType?.isWatchType == true -> "Most Re-watched"
-            else -> "Most Re-watched/Replayed"
+    fun getDisplayLabel(
+        mediaType: com.lx.tracklist.data.model.MediaType?,
+        customCategoryTitle: String? = null,
+        customCategories: List<com.lx.tracklist.data.model.CustomCategory> = emptyList()
+    ): String {
+        val resolvedMediaType = if (customCategoryTitle != null) {
+            val custom = customCategories.firstOrNull { it.name.equals(customCategoryTitle, ignoreCase = true) }
+            if (custom != null) {
+                if (custom.isWatchType) com.lx.tracklist.data.model.MediaType.ANIME else com.lx.tracklist.data.model.MediaType.MANGA
+            } else mediaType
+        } else mediaType
+
+        return when (this) {
+            REWATCH_DESC -> when {
+                resolvedMediaType?.isPlayType == true -> "Most Replayed"
+                resolvedMediaType?.isReadType == true -> "Most Re-read"
+                resolvedMediaType?.isWatchType == true -> "Most Re-watched"
+                else -> "Most Re-watched/Replayed"
+            }
+            TIME_SPENT_DESC -> when {
+                resolvedMediaType?.isPlayType == true -> "Most Time Played"
+                resolvedMediaType?.isReadType == true -> "Most Time Read"
+                resolvedMediaType?.isWatchType == true -> "Most Time Watched"
+                else -> "Most Time Watched / Played / Read"
+            }
+            TIME_REMAINING_DESC -> when {
+                resolvedMediaType?.isPlayType == true -> "Most Time To Play"
+                resolvedMediaType?.isReadType == true -> "Most Time To Read"
+                resolvedMediaType?.isWatchType == true -> "Most Time To Watch"
+                else -> "Most Time To Watch / Play / Read"
+            }
+            else -> displayName
         }
-        else -> displayName
     }
 }
 
@@ -402,6 +429,12 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             LibrarySortOption.PROGRESS_DESC -> list.sortedByDescending { it.progressFraction }
             LibrarySortOption.PROGRESS_ASC -> list.sortedBy { it.progressFraction }
             LibrarySortOption.REWATCH_DESC -> list.sortedByDescending { it.rewatchCount }
+            LibrarySortOption.TIME_SPENT_DESC -> list.sortedWith(
+                compareByDescending<MediaEntry> { it.calculateSpentTimeMinutes() }.thenByDescending { it.updatedAt }
+            )
+            LibrarySortOption.TIME_REMAINING_DESC -> list.sortedWith(
+                compareByDescending<MediaEntry> { it.calculateRemainingTimeMinutes() }.thenByDescending { it.updatedAt }
+            )
         }
 
         LibraryUiState(

@@ -178,6 +178,159 @@ data class MediaEntry(
         }
     }
 
+    /**
+     * Calculates the time already consumed/spent for this entry in minutes.
+     * Incorporates watched episodes/runtime, read pages/chapters/volumes, and played hours/percentages,
+     * including rewatch/re-read/replay multipliers.
+     */
+    fun calculateSpentTimeMinutes(): Double {
+        val isCompleted = status == MediaStatus.COMPLETED
+        return when (mediaType) {
+            MediaType.ANIME, MediaType.SHOW -> {
+                val epLen = (episodeLengthMinutes ?: (if (mediaType == MediaType.SHOW) 45 else 24)).toDouble().coerceAtLeast(1.0)
+                val watchedEp = getTotalWatchedEpisodes().toDouble()
+                val effectiveTotalEp = getEffectiveTotalEpisodes().toDouble()
+                val totalEpConsumed = watchedEp + (rewatchCount * (if (effectiveTotalEp > 0) effectiveTotalEp else watchedEp))
+                totalEpConsumed * epLen
+            }
+            MediaType.MOVIE -> {
+                val dur = (durationMinutes ?: 100).toDouble().coerceAtLeast(1.0)
+                val totalViews = (if (isCompleted) 1 else 0) + rewatchCount
+                val watchedMin = if (isCompleted) 0.0 else (currentTimeMinutes ?: 0).toDouble().coerceIn(0.0, dur)
+                (totalViews * dur) + watchedMin
+            }
+            MediaType.MANGA, MediaType.MANHWA -> {
+                val chRead = (currentChapters + (rewatchCount * (if (totalChapters > 0) totalChapters else currentChapters))).toDouble()
+                val volRead = (currentVolumes + (rewatchCount * (if (totalVolumes > 0) totalVolumes else currentVolumes))).toDouble()
+                if (chRead > 0) {
+                    chRead * 5.0
+                } else if (volRead > 0) {
+                    volRead * 60.0
+                } else {
+                    0.0
+                }
+            }
+            MediaType.BOOK -> {
+                val pagesRead = (currentPages + (rewatchCount * (if (totalPages > 0) totalPages else currentPages))).toDouble()
+                val chRead = (currentChapters + (rewatchCount * (if (totalChapters > 0) totalChapters else currentChapters))).toDouble()
+                val volRead = (currentVolumes + (rewatchCount * (if (totalVolumes > 0) totalVolumes else currentVolumes))).toDouble()
+                if (pagesRead > 0) {
+                    pagesRead * 1.5
+                } else if (chRead > 0) {
+                    chRead * 10.0
+                } else if (volRead > 0) {
+                    volRead * 180.0
+                } else {
+                    0.0
+                }
+            }
+            MediaType.GAME -> {
+                val userHours = if (customUnitLabel?.trim()?.equals("Hours", ignoreCase = true) == true) {
+                    customUnitCurrent
+                } else null
+
+                val avgCompletionMin = (durationMinutes ?: 0).toDouble()
+
+                if (userHours != null && userHours > 0) {
+                    userHours * 60.0
+                } else if (avgCompletionMin > 0) {
+                    val isDone = isCompleted || gameProgressPercent >= 100
+                    val totalViews = (if (isDone) 1 else 0) + rewatchCount
+                    val fraction = when {
+                        isDone -> 1.0
+                        customUnitTotal > 0.0 && customUnitCurrent > 0.0 -> (customUnitCurrent / customUnitTotal).coerceIn(0.0, 1.0)
+                        gameProgressPercent > 0 -> (gameProgressPercent.coerceIn(0, 100) / 100.0)
+                        else -> 0.0
+                    }
+                    if (isDone) {
+                        totalViews * avgCompletionMin
+                    } else {
+                        val replayedMinutes = rewatchCount * avgCompletionMin
+                        val currentRunMinutes = fraction * avgCompletionMin
+                        replayedMinutes + currentRunMinutes
+                    }
+                } else {
+                    0.0
+                }
+            }
+        }
+    }
+
+    /**
+     * Calculates the time remaining to complete this entry in minutes.
+     * Returns 0.0 if already completed.
+     */
+    fun calculateRemainingTimeMinutes(): Double {
+        if (status == MediaStatus.COMPLETED) return 0.0
+
+        return when (mediaType) {
+            MediaType.ANIME, MediaType.SHOW -> {
+                val epLen = (episodeLengthMinutes ?: (if (mediaType == MediaType.SHOW) 45 else 24)).toDouble().coerceAtLeast(1.0)
+                val watchedEp = getTotalWatchedEpisodes()
+                val effectiveTotalEp = getEffectiveTotalEpisodes()
+                if (effectiveTotalEp > 0 && effectiveTotalEp > watchedEp) {
+                    (effectiveTotalEp - watchedEp) * epLen
+                } else if (totalEpisodes > 0 && totalEpisodes > watchedEp) {
+                    (totalEpisodes - watchedEp) * epLen
+                } else {
+                    0.0
+                }
+            }
+            MediaType.MOVIE -> {
+                val dur = (durationMinutes ?: 100).toDouble().coerceAtLeast(1.0)
+                val watchedMin = (currentTimeMinutes ?: 0).toDouble().coerceIn(0.0, dur)
+                (dur - watchedMin).coerceAtLeast(0.0)
+            }
+            MediaType.MANGA, MediaType.MANHWA -> {
+                if (totalChapters > 0 && totalChapters > currentChapters) {
+                    (totalChapters - currentChapters) * 5.0
+                } else if (totalVolumes > 0 && totalVolumes > currentVolumes) {
+                    (totalVolumes - currentVolumes) * 60.0
+                } else {
+                    0.0
+                }
+            }
+            MediaType.BOOK -> {
+                if (totalPages > 0 && totalPages > currentPages) {
+                    (totalPages - currentPages) * 1.5
+                } else if (totalChapters > 0 && totalChapters > currentChapters) {
+                    (totalChapters - currentChapters) * 10.0
+                } else if (totalVolumes > 0 && totalVolumes > currentVolumes) {
+                    (totalVolumes - currentVolumes) * 180.0
+                } else {
+                    0.0
+                }
+            }
+            MediaType.GAME -> {
+                if (gameProgressPercent >= 100) return 0.0
+
+                val userHours = if (customUnitLabel?.trim()?.equals("Hours", ignoreCase = true) == true) {
+                    customUnitCurrent
+                } else null
+
+                val avgCompletionMin = (durationMinutes ?: 0).toDouble()
+
+                if (userHours != null && userHours > 0) {
+                    val effTotalHours = getEffectiveCustomUnitTotal()
+                    if (effTotalHours > 0.0 && effTotalHours > userHours) {
+                        (effTotalHours - userHours) * 60.0
+                    } else {
+                        0.0
+                    }
+                } else if (avgCompletionMin > 0) {
+                    val fraction = when {
+                        customUnitTotal > 0.0 && customUnitCurrent > 0.0 -> (customUnitCurrent / customUnitTotal).coerceIn(0.0, 1.0)
+                        gameProgressPercent > 0 -> (gameProgressPercent.coerceIn(0, 100) / 100.0)
+                        else -> 0.0
+                    }
+                    (1.0 - fraction).coerceAtLeast(0.0) * avgCompletionMin
+                } else {
+                    0.0
+                }
+            }
+        }
+    }
+
     fun matchesExternal(
         candidateExternalId: String?,
         candidateExternalSource: String?,

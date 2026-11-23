@@ -19,6 +19,18 @@
 
 ## 🚀 What's New in v0.6.16
 
+- **⏱️ Dynamic Time-Based Sorting (Watched/Played/Read & Time Remaining)**:
+  - Added two comprehensive time-based sort orders to both the **Home Tab** and **Library Tab**:
+    1. **Most Time Watched / Played / Read**: Ranks entries by total time already consumed/invested, factoring in runtime per episode/movie, chapters/pages read, game playtime/progress, and repeat completions (rewatches, re-reads, replays).
+    2. **Most Time To Watch / Play / Read**: Ranks in-progress and planned entries by estimated time remaining to complete (returning zero for completed media), computing remaining episodes, chapters, pages, or game hours/percentage targets against runtime metrics.
+  - **Context-Aware Dynamic Labels**: Sort labels dynamically adapt based on the selected media category:
+    - **Watch Categories** (Anime, TV Shows, Movies): *"Most Time Watched"* and *"Most Time To Watch"*.
+    - **Play Categories** (Video Games): *"Most Time Played"* and *"Most Time To Play"*.
+    - **Read Categories** (Manga, Manhwa, Books/Light Novels): *"Most Time Read"* and *"Most Time To Read"*.
+    - **Custom Categories**: Automatically resolves custom watch-type vs read-type category definitions.
+    - **All / Mixed Categories**: Defaults to *"Most Time Watched / Played / Read"* and *"Most Time To Watch / Play / Read"*.
+  - **Unified Duration Engine**: Standardized spent time and remaining time calculation across `MediaEntry`, Home and Library sort engines, and the Statistics dashboard for complete data consistency.
+
 - **🔍 Persistent Search Query with Discovery Filters**:
   - In the **Search & Discover** tab, applying or switching Discover filters (e.g. `🔥 Most Popular Games`, `+PC`, seasonal anime, genres, tags) now preserves any active search query text (such as `"lord of the rings"` or `"Pok"`) instead of resetting it to empty.
   - Automatically triggers an immediate scoped search combining both the active text query and the selected discovery filter constraints across all media categories (Games, Movies, TV Shows, Anime, Manga, Manhwa, Light Novels, and Books).
@@ -232,7 +244,7 @@ Never worry about duplicate entries when restoring backups after names or IDs ch
   - **Set Category / Subcategory**: Bulk categorize your items.
   - **Batch DB Sync**: Bulk **Fetch Missing**, **Re-fetch All**, or **Resolve IDs** with background notifications.
   - **Delete**: Bulk removal with confirmation.
-- **8 Dynamic Sort Options**: Sort by Title (A-Z, Z-A), Score, Progress, Recently Updated, Date Added, Start Date, or Finish Date.
+- **10 Dynamic Sort Options**: Sort by Title (A-Z, Z-A), Score (Highest, Lowest), Progress (Highest, Lowest), Recently Updated, Most Re-watched / Replayed, Most Time Watched / Played / Read, or Most Time To Watch / Play / Read (with category-adaptive dynamic labels).
 - **Granular Advanced Filters**: Filter simultaneously by Media Type, Status, Priority (Low, Medium, High), Airing Status (All, Airing/Publishing, NYA/NYP, Finished), Score, Custom Categories, **Game Platforms** (multi-select include/exclude for Games), and **Original Language** (native scripts and flag emojis for all media).
 
 ### ✏️ Context-Aware External DB Sync Dialog

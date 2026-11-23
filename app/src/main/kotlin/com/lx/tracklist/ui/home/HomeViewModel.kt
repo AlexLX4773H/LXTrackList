@@ -188,6 +188,12 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
             SortOption.TITLE_DESC -> queryFiltered.sortedByDescending { it.title.lowercase() }
             SortOption.SCORE_DESC -> queryFiltered.sortedByDescending { it.score ?: -1 }
             SortOption.PROGRESS_DESC -> queryFiltered.sortedByDescending { it.progressFraction }
+            SortOption.TIME_SPENT_DESC -> queryFiltered.sortedWith(
+                compareByDescending<MediaEntry> { it.calculateSpentTimeMinutes() }.thenByDescending { it.updatedAt }
+            )
+            SortOption.TIME_REMAINING_DESC -> queryFiltered.sortedWith(
+                compareByDescending<MediaEntry> { it.calculateRemainingTimeMinutes() }.thenByDescending { it.updatedAt }
+            )
         }
 
         // 7. Filter entries by active status or subcategory tab
