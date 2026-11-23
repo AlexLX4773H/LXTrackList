@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.6.16-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-0.6.17-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26--36)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Kotlin_2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
   <img src="https://img.shields.io/badge/UI-Jetpack_Compose_&_Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" />
@@ -17,9 +17,9 @@
 
 ---
 
-## 🚀 What's New in v0.6.16
+## 🚀 What's New in v0.6.17
 
-- **⏱️ Dynamic Time-Based Sorting (Watched/Played/Read & Time Remaining)**:
+- **⏱️ Dynamic Category-Adaptive Time Sorting (Spent Time & Time Remaining)**:
   - Added two comprehensive time-based sort orders to both the **Home Tab** and **Library Tab**:
     1. **Most Time Watched / Played / Read**: Ranks entries by total time already consumed/invested, factoring in runtime per episode/movie, chapters/pages read, game playtime/progress, and repeat completions (rewatches, re-reads, replays).
     2. **Most Time To Watch / Play / Read**: Ranks in-progress and planned entries by estimated time remaining to complete (returning zero for completed media), computing remaining episodes, chapters, pages, or game hours/percentage targets against runtime metrics.
@@ -32,10 +32,16 @@
   - **Unified Duration Engine**: Standardized spent time and remaining time calculation across `MediaEntry`, Home and Library sort engines, and the Statistics dashboard for complete data consistency.
 
 - **🔍 Persistent Search Query with Discovery Filters**:
-  - In the **Search & Discover** tab, applying or switching Discover filters (e.g. `🔥 Most Popular Games`, `+PC`, seasonal anime, genres, tags) now preserves any active search query text (such as `"lord of the rings"` or `"Pok"`) instead of resetting it to empty.
+  - In the **Search & Discover** tab, applying or switching Discover filters (e.g. `🔥 Most Popular Games`, `+PC`, seasonal anime, genres, tags) now preserves any active search query text (such as `"lord of the rings"`) instead of resetting it to empty.
   - Automatically triggers an immediate scoped search combining both the active text query and the selected discovery filter constraints across all media categories (Games, Movies, TV Shows, Anime, Manga, Manhwa, Light Novels, and Books).
   - Clearing discovery filters via the `✕` chip or reset action smoothly preserves the search text in the input bar and transitions back to an unconstrained search without wiping the results or input field.
   - Upgraded Anime discovery search dispatch in `executeSearch` to route through `fetchAnimeDiscovery`, ensuring complete support for all discovery modes, tags, demographic filters, original languages, and adult content modes when searching with active queries.
+
+- **🎮 Game Hours Progress & Completion Time Integration**:
+  - In **Edit Entry** for Games, when Custom Units is set to "Hours" and no Total Target is specified, the entity automatically leverages the community **Avg 100% Completion Time** (from IGDB/HowLongToBeat) as the effective target for progress bar display and estimated time tracking in the Details page.
+  - Displays accurate **Est progress** in hours spent vs avg completion time (e.g. `Est: ~5.0 hrs spent / ~29.5 hrs avg`).
+  - Added decimal/floating-point support for Custom Units in Game progress tracking (allowing precise hour tracking like `12.5 hrs`).
+  - Fixed numeric input handling in Edit Entities so deleting an existing number clears the field completely rather than retaining a stuck leading `0`.
 
 ---
 
