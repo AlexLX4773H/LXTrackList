@@ -1172,8 +1172,9 @@ private fun DetailProgressCard(
         MediaType.GAME -> {
             if (entry.trackingUnit == TrackingUnit.CUSTOM) {
                 val label = entry.customUnitLabel?.takeIf { it.isNotBlank() } ?: "Units"
-                val totalStr = if (entry.customUnitTotal > 0.0) MediaEntry.formatCustomUnitValue(entry.customUnitTotal) else "?"
-                ProgressInfo(entry.customUnitCurrent, entry.customUnitTotal, totalStr, label, "$label completed")
+                val effTotal = entry.getEffectiveCustomUnitTotal()
+                val totalStr = if (effTotal > 0.0) MediaEntry.formatCustomUnitValue(effTotal) else "?"
+                ProgressInfo(entry.customUnitCurrent, effTotal, totalStr, label, "$label completed")
             } else {
                 ProgressInfo(entry.gameProgressPercent, 100, "100%", "%", "Game progress")
             }
@@ -1392,11 +1393,26 @@ private fun DetailProgressCard(
                     } else if (entry.mediaType == MediaType.GAME && entry.durationMinutes != null && entry.durationMinutes > 0) {
                         Spacer(modifier = Modifier.height(3.dp))
                         val durStr = DurationFormatter.formatMinutes(entry.durationMinutes)
-                        val progressPct = entry.gameProgressPercent.coerceIn(0, 100)
-                        val timeSpentMins = (progressPct / 100.0) * entry.durationMinutes
-                        val spentStr = DurationFormatter.formatHours(timeSpentMins / 60.0)
-                        val label = if (entry.status == MediaStatus.COMPLETED || progressPct >= 100) {
+                        val isHours = entry.trackingUnit == TrackingUnit.CUSTOM &&
+                            entry.customUnitLabel?.trim()?.equals("Hours", ignoreCase = true) == true
+                        val timeSpentHours = if (isHours) {
+                            entry.customUnitCurrent
+                        } else if (entry.trackingUnit == TrackingUnit.PERCENTAGE) {
+                            (entry.gameProgressPercent.coerceIn(0, 100) / 100.0) * (entry.durationMinutes / 60.0)
+                        } else {
+                            val effTotal = entry.getEffectiveCustomUnitTotal()
+                            if (effTotal > 0.0) {
+                                (entry.customUnitCurrent / effTotal).coerceIn(0.0, 1.0) * (entry.durationMinutes / 60.0)
+                            } else 0.0
+                        }
+                        val spentStr = DurationFormatter.formatHours(timeSpentHours)
+                        val isDone = entry.status == MediaStatus.COMPLETED ||
+                            (entry.trackingUnit == TrackingUnit.PERCENTAGE && entry.gameProgressPercent >= 100) ||
+                            (entry.trackingUnit == TrackingUnit.CUSTOM && entry.customUnitTotal > 0.0 && entry.customUnitCurrent >= entry.customUnitTotal)
+                        val label = if (isDone && !isHours) {
                             "⏱️ 100% Avg: ~$durStr (in stats)"
+                        } else if (isDone && isHours) {
+                            "⏱️ Spent: ~$spentStr / ~$durStr avg"
                         } else {
                             "⏱️ Est: ~$spentStr spent / ~$durStr avg"
                         }

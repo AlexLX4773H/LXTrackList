@@ -25,6 +25,10 @@
   - Intelligent number formatting displays integers cleanly without trailing `.0` (e.g., `12 Levels`, `42 Hours`), while precisely preserving decimal points when typed (e.g., `10.5 Hours`).
   - Input fields now default to `KeyboardType.Decimal` with locale-aware comma/period auto-normalization and local text buffering to prevent input stripping or premature formatting while typing.
   - Detail screen quick-edit progress dialog and progress card hero section seamlessly support decimal progress input and updates.
+- **⏱️ Average Completion Target Fallback & Accurate Est. Progress for Games**:
+  - In Custom Units mode for games, if "Hours" is tracked and no explicit "Total Target" is provided, the Entity details page automatically utilizes the community Average 100% Completion Time as the target (e.g., displaying `5 / 29.5 Hours` with an active progress bar and percentage badge instead of `5 / ? Hours`).
+  - The progress card's estimated duration row (`⏱️ Est: ... spent / ... avg`) now accurately reflects tracked hours (`entry.customUnitCurrent`), displaying e.g. `⏱️ Est: ~5.0 hrs spent / ~1.2 days avg` rather than `~0.0 hrs spent`.
+  - Added an intuitive `Avg: <hours>` placeholder in Add/Edit Entity under **Total Target** when "Hours" is selected and community duration is available.
 - **🧹 Clean Number Input & Sticky Zero Removal in Add / Edit Entry**:
   - Resolved an issue in Add/Edit Entity where clearing or backspacing numeric fields (such as `Current Progress`, `Total Target`, `Seasons`, and `Series Number`) left a persistent `0` or `1` that prepended to newly typed numbers.
   - Fields now smoothly clear to empty with an elegant placeholder (`0` or `Optional`) until input is typed.
@@ -186,12 +190,13 @@ Comprehensive video game tracking with dedicated progress modes, platform icons,
   - Color-tinted to match the active theme, replacing generic emojis.
 - **Dual Progress Tracking Modes**:
   - **Percentage Mode (0–100%)**: Smooth slider with fine-grained `-5%`, `-1%`, `+1%`, and `+5%` stepper buttons, and automatic "Completed" milestone tag.
-  - **Compact Custom Units Mode**: Track game-specific milestones using progression metrics such as **Levels**, **Cities**, **Chapters**, **Missions**, **Hours**, and **Quests**, with full support for integer and decimal values (e.g. `10.5` or `170.5` Hours) and optional target caps.
+  - **Compact Custom Units Mode**: Track game-specific milestones using progression metrics such as **Levels**, **Cities**, **Chapters**, **Missions**, **Hours**, and **Quests**, with full support for integer and decimal values (e.g. `10.5` or `170.5` Hours) and optional target caps. If no target cap is set for Hours, the app automatically adopts the community 100% average completion time as the display target and computes accurate estimated progress.
 - **Streamlined Edit UI & Language Picker**:
   - Vertical-optimized, compact custom unit controls with quick preset chips and side-by-side progress and target inputs.
   - Dedicated Original Language Picker dialog with instant search and regional groupings.
 - **Community Average 100% Completion Time & Smart Duration Formatter**:
   - Automatically queries IGDB's `game_time_to_beats` endpoint and RAWG `playtime` to retrieve typical 100% completion durations.
+  - Serves as the automated target baseline for Hours tracking when no explicit target cap is specified (e.g., displaying `5 / 29.5 Hours` instead of `5 / ? Hours`).
   - Auto-heals existing entries on detail screen visits, provides an editable "Avg 100% Completion (Hours)" input in Add/Edit, and displays completion badges on detail pages.
   - Smart duration formatting automatically scales very large playtimes and averages into readable human units (days, weeks, months, or years) without compressing UI stepper buttons.
 - **IGDB, RAWG & SteamGridDB Metadata Integration**:

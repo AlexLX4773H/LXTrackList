@@ -174,6 +174,21 @@ class GameEntryTest {
         val prevDecHour = decimalGame.decrementProgress()
         assertEquals(9.5, prevDecHour.customUnitCurrent, 0.001)
         assertEquals("9.5/170.5 Hours", prevDecHour.displayProgress)
+
+        // 5. Open-ended Hours mode with durationMinutes (avg completion time fallback)
+        val hoursWithAvgGame = MediaEntry(
+            title = "Tropico 5",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.WATCHING,
+            trackingUnit = TrackingUnit.CUSTOM,
+            customUnitLabel = "Hours",
+            customUnitCurrent = 5.0,
+            customUnitTotal = 0.0,
+            durationMinutes = 1770 // 29.5 hours
+        )
+        assertEquals(29.5, hoursWithAvgGame.getEffectiveCustomUnitTotal(), 0.001)
+        assertEquals("5/29.5 Hours", hoursWithAvgGame.displayProgress)
+        assertEquals((5.0 / 29.5).toFloat(), hoursWithAvgGame.progressFraction, 0.001f)
     }
 
     @Test

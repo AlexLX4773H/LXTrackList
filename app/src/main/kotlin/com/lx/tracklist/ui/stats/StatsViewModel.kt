@@ -183,6 +183,12 @@ fun calculateCategoryStatSummary(
 
                 if (userHours != null && userHours > 0) {
                     totalMinutes += userHours * 60.0
+                    if (!isCompleted) {
+                        val effTotalHours = entry.getEffectiveCustomUnitTotal()
+                        if (effTotalHours > 0.0 && effTotalHours > userHours) {
+                            remainingMinutes += (effTotalHours - userHours) * 60.0
+                        }
+                    }
                 } else if (avgCompletionMin > 0) {
                     val isDone = isCompleted || entry.gameProgressPercent >= 100
                     val totalViews = (if (isDone) 1 else 0) + entry.rewatchCount

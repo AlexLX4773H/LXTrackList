@@ -393,8 +393,9 @@ data class MediaEntry(
                 } else {
                     val label = customUnitLabel?.takeIf { it.isNotBlank() } ?: "Units"
                     val curStr = formatCustomUnitValue(customUnitCurrent)
-                    if (customUnitTotal > 0.0) {
-                        val totStr = formatCustomUnitValue(customUnitTotal)
+                    val effTotal = getEffectiveCustomUnitTotal()
+                    if (effTotal > 0.0) {
+                        val totStr = formatCustomUnitValue(effTotal)
                         "$curStr/$totStr $label"
                     } else "$curStr $label"
                 }
@@ -439,7 +440,8 @@ data class MediaEntry(
                 if (trackingUnit == TrackingUnit.PERCENTAGE) {
                     (gameProgressPercent / 100f).coerceIn(0f, 1f)
                 } else {
-                    if (customUnitTotal > 0.0) (customUnitCurrent / customUnitTotal).toFloat().coerceIn(0f, 1f)
+                    val effTotal = getEffectiveCustomUnitTotal()
+                    if (effTotal > 0.0) (customUnitCurrent / effTotal).toFloat().coerceIn(0f, 1f)
                     else if (status == MediaStatus.COMPLETED) 1f else 0f
                 }
             }
@@ -698,6 +700,14 @@ data class MediaEntry(
 
     fun getGamePlatformList(): List<String> {
         return parseGamePlatforms(gamePlatforms)
+    }
+
+    fun getEffectiveCustomUnitTotal(): Double {
+        if (customUnitTotal > 0.0) return customUnitTotal
+        if (customUnitLabel?.trim()?.equals("Hours", ignoreCase = true) == true && durationMinutes != null && durationMinutes > 0) {
+            return durationMinutes / 60.0
+        }
+        return 0.0
     }
 
     fun getEffectiveLanguage(): String {

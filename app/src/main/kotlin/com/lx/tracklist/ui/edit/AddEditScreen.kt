@@ -1546,7 +1546,12 @@ fun AddEditScreen(
                                                 }
                                             },
                                             label = { Text("Total Target", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                            placeholder = { Text("Optional") },
+                                            placeholder = {
+                                                val targetPlaceholder = if (state.customUnitLabel.equals("Hours", ignoreCase = true) && (state.durationMinutes ?: 0) > 0) {
+                                                    "Avg: ${MediaEntry.formatCustomUnitValue(state.durationMinutes!! / 60.0)}"
+                                                } else "Optional"
+                                                Text(targetPlaceholder)
+                                            },
                                             singleLine = true,
                                             maxLines = 1,
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
