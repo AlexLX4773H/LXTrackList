@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Tag
@@ -319,6 +320,11 @@ fun SearchDiscoverySheet(
         mutableStateOf(bookFilter?.excludedTags ?: emptySet())
     }
 
+    // Music state
+    var selectedMusicLanguages by remember { mutableStateOf(emptySet<String>()) }
+    var musicIncludedTags by remember { mutableStateOf(emptySet<String>()) }
+    var musicExcludedTags by remember { mutableStateOf(emptySet<String>()) }
+
     var adultMode by remember {
         mutableStateOf(activeFilter?.adultMode ?: AdultMode.OFF)
     }
@@ -339,6 +345,7 @@ fun SearchDiscoverySheet(
         SearchCategory.LIGHT_NOVELS -> selectedLightNovelLanguages
         SearchCategory.BOOKS -> selectedBookLanguages
         SearchCategory.GAMES -> selectedGameLanguages
+        SearchCategory.MUSIC -> selectedMusicLanguages
     }
 
     fun setCategoryLanguages(languages: Set<String>) {
@@ -351,6 +358,7 @@ fun SearchDiscoverySheet(
             SearchCategory.LIGHT_NOVELS -> selectedLightNovelLanguages = languages
             SearchCategory.BOOKS -> selectedBookLanguages = languages
             SearchCategory.GAMES -> selectedGameLanguages = languages
+            SearchCategory.MUSIC -> selectedMusicLanguages = languages
         }
     }
 
@@ -377,6 +385,7 @@ fun SearchDiscoverySheet(
         SearchCategory.LIGHT_NOVELS -> lightNovelIncludedTags
         SearchCategory.BOOKS -> bookIncludedTags
         SearchCategory.GAMES -> gameIncludedTags
+        SearchCategory.MUSIC -> musicIncludedTags
     }
 
     val activeExcludedTags: Set<String> = when (category) {
@@ -388,6 +397,7 @@ fun SearchDiscoverySheet(
         SearchCategory.LIGHT_NOVELS -> lightNovelExcludedTags
         SearchCategory.BOOKS -> bookExcludedTags
         SearchCategory.GAMES -> gameExcludedTags
+        SearchCategory.MUSIC -> musicExcludedTags
     }
 
     val backDispatcherOwner = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current
@@ -573,6 +583,24 @@ fun SearchDiscoverySheet(
                     }
                 }
             }
+            SearchCategory.MUSIC -> {
+                val isInc = musicIncludedTags.any { it.equals(clean, ignoreCase = true) }
+                val isExc = musicExcludedTags.any { it.equals(clean, ignoreCase = true) }
+                when {
+                    !isInc && !isExc -> {
+                        musicIncludedTags = musicIncludedTags + clean
+                        musicExcludedTags = musicExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                    isInc -> {
+                        musicIncludedTags = musicIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        musicExcludedTags = musicExcludedTags + clean
+                    }
+                    else -> {
+                        musicIncludedTags = musicIncludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                        musicExcludedTags = musicExcludedTags.filter { !it.equals(clean, ignoreCase = true) }.toSet()
+                    }
+                }
+            }
         }
     }
 
@@ -618,6 +646,10 @@ fun SearchDiscoverySheet(
             SearchCategory.GAMES -> {
                 gameIncludedTags = emptySet()
                 gameExcludedTags = emptySet()
+            }
+            SearchCategory.MUSIC -> {
+                musicIncludedTags = emptySet()
+                musicExcludedTags = emptySet()
             }
         }
     }
@@ -679,6 +711,7 @@ fun SearchDiscoverySheet(
                                 SearchCategory.LIGHT_NOVELS -> "Light Novel Tags & Genres"
                                 SearchCategory.BOOKS -> "Book Genres & Subjects"
                                 SearchCategory.GAMES -> "Game Genres"
+                                SearchCategory.MUSIC -> "Music Genres"
                             },
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             color = LXTextPrimary
@@ -846,6 +879,9 @@ fun SearchDiscoverySheet(
                             TagDisplayItem(it.name, "Genre")
                         }
                         SearchCategory.GAMES -> GameTagRegistry.filterGameGenres(tagSearchQuery).map {
+                            TagDisplayItem(it.name, "Genre")
+                        }
+                        SearchCategory.MUSIC -> MusicTagRegistry.filterMusicGenres(tagSearchQuery).map {
                             TagDisplayItem(it.name, "Genre")
                         }
                     }
@@ -1034,6 +1070,7 @@ fun SearchDiscoverySheet(
                                     null -> Icons.Default.Tv
                                 }
                                 SearchCategory.GAMES -> Icons.Default.SportsEsports
+                                SearchCategory.MUSIC -> Icons.Default.MusicNote
                                 SearchCategory.MANGA, SearchCategory.MANHWA, SearchCategory.LIGHT_NOVELS, SearchCategory.BOOKS -> Icons.Default.Explore
                             },
                             contentDescription = null,
@@ -1063,6 +1100,7 @@ fun SearchDiscoverySheet(
                                 SearchCategory.MANHWA -> "Discover Manhwa"
                                 SearchCategory.LIGHT_NOVELS -> "Discover Light Novels"
                                 SearchCategory.BOOKS -> "Discover Books"
+                                SearchCategory.MUSIC -> "Discover Music"
                             },
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             color = LXTextPrimary
@@ -3025,6 +3063,21 @@ fun SearchDiscoverySheet(
                             onDismiss()
                         }
                     )
+                }
+
+                SearchCategory.MUSIC -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Music discovery and charts coming soon! Use the search bar above to look up songs, albums, and artists.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = LXTextSecondary
+                        )
+                    }
                 }
             }
 

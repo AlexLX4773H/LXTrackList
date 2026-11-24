@@ -46,6 +46,7 @@ fun OriginalLanguagePickerDialog(
             MediaType.MOVIE -> SearchCategory.MOVIES
             MediaType.SHOW -> SearchCategory.TV_SHOWS
             MediaType.GAME -> SearchCategory.GAMES
+            MediaType.MUSIC -> SearchCategory.MUSIC
         }
     }
 

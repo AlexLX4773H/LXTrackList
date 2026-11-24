@@ -3012,6 +3012,7 @@ private fun AdvancedFilterSheet(
                 MediaType.SHOW -> SearchCategory.TV_SHOWS
                 MediaType.BOOK -> SearchCategory.BOOKS
                 MediaType.GAME -> SearchCategory.GAMES
+                MediaType.MUSIC -> SearchCategory.MUSIC
                 null -> SearchCategory.MOVIES
             }
             SearchDiscoveryLanguageSubMenu(

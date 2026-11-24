@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit
         Index("userId"),
         Index("customCategory"),
         Index("subCategory"),
+        Index("creator"),
         Index(value = ["externalId", "externalSource"])
     ]
 )
@@ -117,12 +118,35 @@ data class MediaEntry(
     val userComments: String? = null,
 
     // Original language code (e.g. "ja", "ko", "zh", "en", "fr")
-    val originalLanguage: String? = null
+    val originalLanguage: String? = null,
+
+    // Universal creator field (Music Artist, Book Author, Game Developer, Anime Studio, Movie Director)
+    @SerializedName(value = "creator", alternate = ["artist", "author", "studio", "developer"])
+    val creator: String? = null,
+
+    // Music album external ID (MusicBrainz Release Group MBID / Deezer Album ID)
+    @SerializedName(value = "musicAlbumId", alternate = ["albumId"])
+    val musicAlbumId: String? = null
 ) {
     // Backward compatibility reference for legacy callers
     @get:Ignore
     val notes: String?
         get() = description
+
+    fun getCreatorRoleLabel(): String = when (mediaType) {
+        MediaType.MUSIC -> "Artist"
+        MediaType.ANIME -> "Studio"
+        MediaType.MANGA, MediaType.MANHWA -> "Author"
+        MediaType.BOOK -> "Author"
+        MediaType.GAME -> "Developer"
+        MediaType.MOVIE -> "Director"
+        MediaType.SHOW -> "Creator / Network"
+    }
+
+    val artist: String? get() = creator
+    val author: String? get() = creator
+    val studio: String? get() = creator
+    val developer: String? get() = creator
 
     val isNotYetAiredOrPublished: Boolean
         get() {
@@ -253,6 +277,11 @@ data class MediaEntry(
                     0.0
                 }
             }
+            MediaType.MUSIC -> {
+                val durSec = (durationMinutes ?: 0).toDouble()
+                val totalListens = (if (isCompleted) 1 else 0) + rewatchCount
+                (totalListens * durSec) / 60.0
+            }
         }
     }
 
@@ -327,6 +356,10 @@ data class MediaEntry(
                 } else {
                     0.0
                 }
+            }
+            MediaType.MUSIC -> {
+                if (status == MediaStatus.COMPLETED) 0.0
+                else (durationMinutes ?: 0).toDouble() / 60.0
             }
         }
     }
@@ -553,7 +586,19 @@ data class MediaEntry(
                     } else "$curStr $label"
                 }
             }
+            MediaType.MUSIC -> {
+                val durSec = durationMinutes ?: 0
+                val durStr = if (durSec > 0) formatMusicDuration(durSec) else ""
+                val albumStr = movieSeriesName?.let { alb ->
+                    val trackStr = if (movieSeriesNumber != null) "Track $movieSeriesNumber" else ""
+                    listOf(trackStr, alb).filter { it.isNotBlank() }.joinToString(" • ")
+                } ?: ""
+                listOf(durStr, albumStr).filter { it.isNotBlank() }.joinToString(" • ")
+                    .ifBlank { if (status == MediaStatus.COMPLETED) "Listened" else "Planned" }
+            }
         }
+
+    fun formatMusicDuration(seconds: Int? = durationMinutes): String = Companion.formatMusicDuration(seconds)
 
     val progressFraction: Float
         get() = when (mediaType) {
@@ -597,6 +642,9 @@ data class MediaEntry(
                     if (effTotal > 0.0) (customUnitCurrent / effTotal).toFloat().coerceIn(0f, 1f)
                     else if (status == MediaStatus.COMPLETED) 1f else 0f
                 }
+            }
+            MediaType.MUSIC -> {
+                if (status == MediaStatus.COMPLETED) 1f else 0f
             }
         }
 
@@ -760,6 +808,19 @@ data class MediaEntry(
                     )
                 }
             }
+            MediaType.MUSIC -> {
+                val newStatus = if (status == MediaStatus.COMPLETED) MediaStatus.WATCHING else MediaStatus.COMPLETED
+                val isDone = newStatus == MediaStatus.COMPLETED
+                val newRewatchCount = if (isDone && isRewatching) rewatchCount + 1 else rewatchCount
+                val newIsRewatching = if (isDone) false else isRewatching
+                copy(
+                    status = newStatus,
+                    rewatchCount = newRewatchCount,
+                    isRewatching = newIsRewatching,
+                    updatedAt = now,
+                    finishDate = if (status != MediaStatus.COMPLETED && finishDate == null) now else finishDate
+                )
+            }
         }
     }
 
@@ -832,6 +893,7 @@ data class MediaEntry(
                     )
                 }
             }
+            MediaType.MUSIC -> copy(updatedAt = now)
         }
     }
 
@@ -889,7 +951,7 @@ data class MediaEntry(
             MediaType.MANHWA -> "ko"
             MediaType.BOOK -> "en"
             MediaType.MOVIE, MediaType.SHOW -> "en"
-            MediaType.GAME -> "en"
+            MediaType.GAME, MediaType.MUSIC -> "en"
         }
     }
 
@@ -1025,7 +1087,7 @@ data class MediaEntry(
         val diff = nextEpoch - now
         if (diff <= 0) {
             return when (mediaType) {
-                MediaType.MOVIE, MediaType.GAME -> "Releasing today"
+                MediaType.MOVIE, MediaType.GAME, MediaType.MUSIC -> "Releasing today"
                 MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "Publishing today"
                 MediaType.SHOW, MediaType.ANIME -> if (isNotYetAiredOrPublished) "Premieres today" else "Airing now"
             }
@@ -1059,6 +1121,13 @@ data class MediaEntry(
     }
 
     companion object {
+        fun formatMusicDuration(seconds: Int?): String {
+            val s = (seconds ?: 0).coerceAtLeast(0)
+            val m = s / 60
+            val remSec = s % 60
+            return "$m:${remSec.toString().padStart(2, '0')}"
+        }
+
         fun parseBroadcastToNextEpoch(broadcastStr: String, now: Long = System.currentTimeMillis()): Long? {
             if (broadcastStr.isBlank() || broadcastStr.equals("Unknown", ignoreCase = true)) return null
             val regex = Regex("""([A-Za-z]+)\s+at\s+(\d{1,2}):(\d{2})""", RegexOption.IGNORE_CASE)

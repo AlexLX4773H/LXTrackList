@@ -590,6 +590,22 @@ fun DetailScreen(
                             }
                         }
 
+                        if (!currentEntry.creator.isNullOrBlank()) {
+                            Text(
+                                text = "${currentEntry.getCreatorRoleLabel()}: ${currentEntry.creator}",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = LXPrimaryGreen
+                            )
+                        }
+                        if (currentEntry.mediaType == MediaType.MUSIC && !currentEntry.movieSeriesName.isNullOrBlank()) {
+                            val trackPrefix = if ((currentEntry.movieSeriesNumber ?: 0) > 0) "Track ${currentEntry.movieSeriesNumber} • " else ""
+                            Text(
+                                text = "Album: $trackPrefix${currentEntry.movieSeriesName}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = LXTextSecondary
+                            )
+                        }
+
                         // Badges
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -624,7 +640,9 @@ fun DetailScreen(
                                     source = currentEntry.externalScoreSource
                                 )
                             }
-                            if (currentEntry.mediaType == MediaType.MOVIE && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
+                            if (currentEntry.mediaType == MediaType.MUSIC && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
+                                MetaChip(label = "⏱️ ${currentEntry.formatMusicDuration()}", color = LXPrimaryGreen)
+                            } else if (currentEntry.mediaType == MediaType.MOVIE && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
                                 val h = currentEntry.durationMinutes / 60
                                 val m = currentEntry.durationMinutes % 60
                                 val durStr = if (h > 0) "${h}h ${m}m" else "${m}m"
@@ -636,11 +654,21 @@ fun DetailScreen(
                                 MetaChip(label = "⏱️ ${currentEntry.episodeLengthMinutes} min/ep", color = LXPrimaryGreen)
                             }
                             if (currentEntry.isRewatching) {
-                                val rewatchBadge = if (currentEntry.mediaType == MediaType.GAME) "REPLAYING" else "REWATCHING"
+                                val rewatchBadge = when {
+                                    currentEntry.mediaType == MediaType.MUSIC -> "RELISTENING"
+                                    currentEntry.mediaType == MediaType.GAME -> "REPLAYING"
+                                    currentEntry.mediaType.isReadType -> "REREADING"
+                                    else -> "REWATCHING"
+                                }
                                 MetaChip(label = rewatchBadge, color = LXPrimaryGreen)
                             }
                             if (currentEntry.rewatchCount > 0) {
-                                val rewatchLabel = if (currentEntry.mediaType == MediaType.GAME) "Replayed" else "Rewatched"
+                                val rewatchLabel = when {
+                                    currentEntry.mediaType == MediaType.MUSIC -> "Relistened"
+                                    currentEntry.mediaType == MediaType.GAME -> "Replayed"
+                                    currentEntry.mediaType.isReadType -> "Reread"
+                                    else -> "Rewatched"
+                                }
                                 MetaChip(label = "$rewatchLabel ${currentEntry.rewatchCount}x", color = LXScoreGold)
                             }
                             if (currentEntry.mediaType == MediaType.GAME) {
@@ -793,6 +821,22 @@ fun DetailScreen(
                             }
                         }
 
+                        if (!currentEntry.creator.isNullOrBlank()) {
+                            Text(
+                                text = "${currentEntry.getCreatorRoleLabel()}: ${currentEntry.creator}",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = LXPrimaryGreen
+                            )
+                        }
+                        if (currentEntry.mediaType == MediaType.MUSIC && !currentEntry.movieSeriesName.isNullOrBlank()) {
+                            val trackPrefix = if ((currentEntry.movieSeriesNumber ?: 0) > 0) "Track ${currentEntry.movieSeriesNumber} • " else ""
+                            Text(
+                                text = "Album: $trackPrefix${currentEntry.movieSeriesName}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = LXTextSecondary
+                            )
+                        }
+
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -826,7 +870,9 @@ fun DetailScreen(
                                     source = currentEntry.externalScoreSource
                                 )
                             }
-                            if (currentEntry.mediaType == MediaType.MOVIE && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
+                            if (currentEntry.mediaType == MediaType.MUSIC && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
+                                MetaChip(label = "⏱️ ${currentEntry.formatMusicDuration()}", color = LXPrimaryGreen)
+                            } else if (currentEntry.mediaType == MediaType.MOVIE && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
                                 val h = currentEntry.durationMinutes / 60
                                 val m = currentEntry.durationMinutes % 60
                                 val durStr = if (h > 0) "${h}h ${m}m" else "${m}m"
@@ -838,11 +884,21 @@ fun DetailScreen(
                                 MetaChip(label = "⏱️ ${currentEntry.episodeLengthMinutes} min/ep", color = LXPrimaryGreen)
                             }
                             if (currentEntry.isRewatching) {
-                                val rewatchBadge = if (currentEntry.mediaType == MediaType.GAME) "REPLAYING" else "REWATCHING"
+                                val rewatchBadge = when {
+                                    currentEntry.mediaType == MediaType.MUSIC -> "RELISTENING"
+                                    currentEntry.mediaType == MediaType.GAME -> "REPLAYING"
+                                    currentEntry.mediaType.isReadType -> "REREADING"
+                                    else -> "REWATCHING"
+                                }
                                 MetaChip(label = rewatchBadge, color = LXPrimaryGreen)
                             }
                             if (currentEntry.rewatchCount > 0) {
-                                val rewatchLabel = if (currentEntry.mediaType == MediaType.GAME) "Replayed" else "Rewatched"
+                                val rewatchLabel = when {
+                                    currentEntry.mediaType == MediaType.MUSIC -> "Relistened"
+                                    currentEntry.mediaType == MediaType.GAME -> "Replayed"
+                                    currentEntry.mediaType.isReadType -> "Reread"
+                                    else -> "Rewatched"
+                                }
                                 MetaChip(label = "$rewatchLabel ${currentEntry.rewatchCount}x", color = LXScoreGold)
                             }
                             if (currentEntry.mediaType == MediaType.GAME) {
@@ -1178,6 +1234,11 @@ private fun DetailProgressCard(
             } else {
                 ProgressInfo(entry.gameProgressPercent, 100, "100%", "%", "Game progress")
             }
+        }
+        MediaType.MUSIC -> {
+            val isDone = entry.status == MediaStatus.COMPLETED
+            val durStr = entry.formatMusicDuration().takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
+            ProgressInfo(if (isDone) 1 else 0, 1, "1", "Track", if (isDone) "Listened$durStr" else "Plan to listen$durStr")
         }
     }
 
@@ -1670,7 +1731,7 @@ private fun DetailProgressCard(
                         val countdownStr = entry.getTimeUntilNextEpisode(prefixIn = true)
                         if (!scheduleStr.isNullOrBlank() || !countdownStr.isNullOrBlank()) {
                             val verb = when (entry.mediaType) {
-                                MediaType.MOVIE, MediaType.GAME -> "Releasing"
+                                MediaType.MOVIE, MediaType.GAME, MediaType.MUSIC -> "Releasing"
                                 MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "Publishing"
                                 MediaType.SHOW, MediaType.ANIME -> if (entry.isNotYetAiredOrPublished) "Premiering" else null
                             }
@@ -1991,7 +2052,7 @@ private fun DetailDatesCard(entry: MediaEntry) {
                 } else {
                     val airedTitle = when (entry.mediaType) {
                         MediaType.ANIME, MediaType.SHOW -> "Aired / Broadcast Dates"
-                        MediaType.GAME -> "Release Date"
+                        MediaType.GAME, MediaType.MUSIC -> "Release Date"
                         else -> "Publishing Period"
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -2124,6 +2185,7 @@ private fun DetailDatesCard(entry: MediaEntry) {
                 val userTitle = when (entry.mediaType) {
                     MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "My Reading Dates"
                     MediaType.GAME -> "My Play Dates"
+                    MediaType.MUSIC -> "My Listening Dates"
                     else -> "My Watch Dates"
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -2159,6 +2221,8 @@ private fun DetailExternalTrackingCard(
     onRequestLinkExternalId: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val clipboardManager = LocalClipboardManager.current
     val canTrack = MalSyncManager.canBeExternallyTracked(entry)
     val malTokenStore = remember(context, activeUser.id) { MalTokenStore(context) }
     val isMalLoggedIn = remember(context, activeUser.id) { malTokenStore.isLoggedIn(activeUser.id) }
@@ -2425,11 +2489,13 @@ private fun DetailExternalTrackingCard(
                 val hasValidId = JikanSyncManager.hasValidExternalId(entry)
                 val isMovieOrShow = entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.SHOW
                 val isBook = entry.mediaType == MediaType.BOOK
+                val isMusic = entry.mediaType == MediaType.MUSIC
                 val isMal = JikanSyncManager.isMalSource(entry) || entry.mediaType == MediaType.ANIME
 
                 if (hasValidId) {
                     val sourceLabel = when {
                         isMovieOrShow || entry.externalSource.equals("TMDB", ignoreCase = true) -> "TMDB"
+                        isMusic || entry.externalSource.equals("MusicBrainz", ignoreCase = true) || entry.externalSource.equals("Deezer", ignoreCase = true) -> entry.externalSource ?: "MusicBrainz"
                         entry.externalSource.equals("MAL", ignoreCase = true) || entry.externalSource.equals("MyAnimeList", ignoreCase = true) -> "MAL"
                         !entry.externalSource.isNullOrBlank() -> entry.externalSource
                         isBook -> "Book"
@@ -2495,11 +2561,44 @@ private fun DetailExternalTrackingCard(
                             }
                         }
                     }
+
+                    if (isMusic) {
+                        val musicLinks = remember(entry) {
+                            ExternalLinkHelper.buildMusicOpenOptions(
+                                title = entry.title,
+                                artist = entry.creator,
+                                album = entry.movieSeriesName,
+                                externalId = entry.externalId,
+                                externalSource = entry.externalSource,
+                                webUrl = null
+                            )
+                        }
+                        if (musicLinks.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                musicLinks.forEach { opt ->
+                                    OutlinedButton(
+                                        onClick = { ExternalLinkHelper.openUrlSafely(opt.url, uriHandler, context, clipboardManager) },
+                                        modifier = Modifier.weight(1f).height(32.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                        shape = RoundedCornerShape(6.dp),
+                                        border = BorderStroke(1.dp, LXBorder),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(opt.color))
+                                    ) {
+                                        Text(opt.title, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 } else {
                     val unlinkedLabel = when {
                         isTachiyomi -> "Tachiyomi ID (Not Linked)"
                         isMovieOrShow -> "TMDB ID (Not Linked)"
                         isBook -> "Book ID (Not Linked)"
+                        isMusic -> "MusicBrainz ID (Not Linked)"
                         isMal -> "MAL ID (Not Linked)"
                         else -> "No External ID Linked"
                     }
@@ -3774,6 +3873,7 @@ private fun RelatedItemDetailSheet(
         MediaType.MOVIE -> "Movie"
         MediaType.SHOW -> "Show"
         MediaType.BOOK -> "Book"
+        MediaType.MUSIC -> "Music"
         else -> item.mediaType.displayName
     }
 
@@ -3785,6 +3885,9 @@ private fun RelatedItemDetailSheet(
         }
         MediaType.MOVIE -> {
             detailedInfo?.durationMinutes?.takeIf { it > 0 }?.let { "${it}m runtime" }
+        }
+        MediaType.MUSIC -> {
+            detailedInfo?.durationMinutes?.takeIf { it > 0 }?.let { "${it / 60}m ${it % 60}s" }
         }
         MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> {
             val chs = detailedInfo?.totalUnits?.takeIf { it > 0 }?.let { "$it Chapters" }

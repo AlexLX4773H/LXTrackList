@@ -60,6 +60,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Sync
@@ -141,6 +142,7 @@ import com.lx.tracklist.data.model.Priority
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.GameSearchResult
+import com.lx.tracklist.data.remote.MusicSearchResult
 import com.lx.tracklist.ui.components.CoverImageSearchDialog
 import com.lx.tracklist.ui.components.SteamGridDbPickerSheet
 import com.lx.tracklist.ui.components.UserAvatarButton
@@ -171,6 +173,7 @@ fun AddEditScreen(
     var showExternalSyncDialog by remember { mutableStateOf(false) }
     val defaultExternalSource = remember(state.mediaType) {
         when {
+            state.mediaType == MediaType.MUSIC -> ExternalDbSource.MUSICBRAINZ
             state.mediaType == MediaType.GAME -> ExternalDbSource.IGDB
             state.mediaType == MediaType.MANHWA -> ExternalDbSource.MANGADEX
             state.mediaType == MediaType.BOOK -> ExternalDbSource.GOOGLE_BOOKS
@@ -345,6 +348,9 @@ fun AddEditScreen(
                     ) {
                         val orderedMenuSources = remember(state.mediaType) {
                             when {
+                                state.mediaType == MediaType.MUSIC -> listOf(
+                                    ExternalDbSource.MUSICBRAINZ
+                                )
                                 state.mediaType == MediaType.GAME -> listOf(
                                     ExternalDbSource.IGDB,
                                     ExternalDbSource.RAWG
@@ -393,6 +399,28 @@ fun AddEditScreen(
                                 HorizontalDivider(color = LXBorder.copy(alpha = 0.5f))
                             }
                             when (src) {
+                                ExternalDbSource.MUSICBRAINZ -> {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text("🎵", fontSize = 16.sp)
+                                                Column {
+                                                    Text("MusicBrainz / Deezer", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                                    Text("Music tracks, albums, artists & cover art", fontSize = 11.sp, color = LXTextSecondary)
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            showSyncDropdown = false
+                                            selectedExternalSource = ExternalDbSource.MUSICBRAINZ
+                                            viewModel.searchExternalDb(state.title, ExternalDbSource.MUSICBRAINZ, context)
+                                            showExternalSyncDialog = true
+                                        }
+                                    )
+                                }
                                 ExternalDbSource.MAL -> {
                                     DropdownMenuItem(
                                         text = {
@@ -660,6 +688,17 @@ fun AddEditScreen(
                     }
                 }
             }
+
+            // Universal Creator Field (Artist, Studio, Author, Developer, Director)
+            OutlinedTextField(
+                value = state.creator,
+                onValueChange = { viewModel.updateCreator(it) },
+                label = { Text("${state.mediaType.getCreatorRoleLabel()} (Optional)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                singleLine = true,
+                maxLines = 1,
+                modifier = Modifier.fillMaxWidth(),
+                colors = outlinedColors()
+            )
 
             // Status Chips
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1586,6 +1625,63 @@ fun AddEditScreen(
                                 colors = outlinedColors()
                             )
                         }
+
+                        MediaType.MUSIC -> {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(IntrinsicSize.Min),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = state.movieSeriesName,
+                                    onValueChange = { viewModel.updateMovieSeriesName(it) },
+                                    label = { Text("Album Name", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    singleLine = true,
+                                    maxLines = 1,
+                                    modifier = Modifier
+                                        .weight(1.5f)
+                                        .fillMaxHeight(),
+                                    colors = outlinedColors()
+                                )
+                                OutlinedTextField(
+                                    value = if ((state.movieSeriesNumber ?: 0) > 0) state.movieSeriesNumber.toString() else "",
+                                    onValueChange = { viewModel.updateMovieSeriesNumber(it.toIntOrNull()?.takeIf { v -> v > 0 }) },
+                                    label = { Text("Track #", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                    placeholder = { Text("Optional") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    maxLines = 1,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
+                                    colors = outlinedColors()
+                                )
+                            }
+
+                            OutlinedTextField(
+                                value = if (state.durationMinutes != null && state.durationMinutes!! > 0) MediaEntry.formatMusicDuration(state.durationMinutes) else "",
+                                onValueChange = { input ->
+                                    val parts = input.trim().split(":")
+                                    val secs = when {
+                                        parts.size == 2 -> {
+                                            val m = parts[0].toIntOrNull() ?: 0
+                                            val s = parts[1].toIntOrNull() ?: 0
+                                            (m * 60 + s).takeIf { it > 0 }
+                                        }
+                                        parts.size == 1 -> parts[0].toIntOrNull()?.takeIf { it > 0 }
+                                        else -> null
+                                    }
+                                    viewModel.updateDurationMinutes(secs)
+                                },
+                                label = { Text("Duration (m:ss or seconds)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                placeholder = { Text("e.g. 3:45 or 225") },
+                                singleLine = true,
+                                maxLines = 1,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = outlinedColors()
+                            )
+                        }
                     }
                 }
             }
@@ -1609,6 +1705,7 @@ fun AddEditScreen(
 
                     // Personal Watch / Reading Dates
                     val personalLabel = when (state.mediaType) {
+                        MediaType.MUSIC -> "My Listening Dates"
                         MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "My Reading Dates"
                         MediaType.GAME -> "My Play Dates"
                         else -> "My Watch Dates"
@@ -1636,7 +1733,7 @@ fun AddEditScreen(
                         MediaType.ANIME, MediaType.SHOW -> "Airing / Broadcast Dates"
                         MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> "Publishing Dates"
                         MediaType.MOVIE -> "Theatrical / Release Dates"
-                        MediaType.GAME -> "Release Date"
+                        MediaType.GAME, MediaType.MUSIC -> "Release Date"
                     }
                     Text(
                         text = airedLabel,
@@ -2247,6 +2344,10 @@ fun AddEditScreen(
                     },
                     onSelectGame = { item ->
                         viewModel.applySelectedGameResult(item, context)
+                        showExternalSyncDialog = false
+                    },
+                    onSelectMusic = { item ->
+                        viewModel.applySelectedMusicResult(item)
                         showExternalSyncDialog = false
                     }
                 )
@@ -2966,7 +3067,8 @@ private fun ExternalDbSyncDialog(
     onSearch: (String, ExternalDbSource) -> Unit,
     onSelectMal: (JikanMediaDetails) -> Unit,
     onSelectTmdb: (TmdbSearchResult) -> Unit,
-    onSelectGame: (GameSearchResult) -> Unit = {}
+    onSelectGame: (GameSearchResult) -> Unit = {},
+    onSelectMusic: (MusicSearchResult) -> Unit = {}
 ) {
     if (!isOpen) return
 
@@ -2982,6 +3084,9 @@ private fun ExternalDbSyncDialog(
 
     val availableSources = remember(mediaType, syncState.selectedSource) {
         val base = when {
+            mediaType == MediaType.MUSIC -> listOf(
+                ExternalDbSource.MUSICBRAINZ
+            )
             mediaType == MediaType.GAME -> listOf(
                 ExternalDbSource.IGDB,
                 ExternalDbSource.RAWG
@@ -3100,6 +3205,24 @@ private fun ExternalDbSyncDialog(
                 ) {
                     availableSources.forEach { source ->
                         when (source) {
+                            ExternalDbSource.MUSICBRAINZ -> {
+                                FilterChip(
+                                    selected = syncState.selectedSource == ExternalDbSource.MUSICBRAINZ,
+                                    onClick = {
+                                        if (syncState.selectedSource != ExternalDbSource.MUSICBRAINZ) {
+                                            expandedItemKey = null
+                                            onSearch(searchInput, ExternalDbSource.MUSICBRAINZ)
+                                        }
+                                    },
+                                    label = { Text("🎵 MusicBrainz", fontSize = 12.sp, maxLines = 1, softWrap = false) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = LXPrimaryGreen,
+                                        selectedLabelColor = LXBackgroundBlack,
+                                        containerColor = LXSurfaceElevated,
+                                        labelColor = LXTextSecondary
+                                    )
+                                )
+                            }
                             ExternalDbSource.MAL -> {
                                 FilterChip(
                                     selected = syncState.selectedSource == ExternalDbSource.MAL,
@@ -3668,6 +3791,158 @@ private fun ExternalDbSyncDialog(
                                                                 fontWeight = FontWeight.Bold,
                                                                 maxLines = 1
                                                             )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else if (syncState.selectedSource == ExternalDbSource.MUSICBRAINZ) {
+                        if (syncState.musicResults.isEmpty()) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("Enter a track or artist title and tap search.", color = LXTextSecondary, fontSize = 13.sp)
+                            }
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                itemsIndexed(syncState.musicResults, key = { idx, item -> "${item.externalSource}_${item.externalId}_$idx" }) { _, item ->
+                                    val openOptions = remember(item) {
+                                        ExternalLinkHelper.buildMusicOpenOptions(
+                                            title = item.title,
+                                            artist = item.artist,
+                                            album = item.albumName,
+                                            externalId = item.externalId,
+                                            externalSource = item.externalSource,
+                                            webUrl = item.webUrl
+                                        )
+                                    }
+
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, LXBorder)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (!item.coverUrl.isNullOrBlank()) {
+                                                AsyncImage(
+                                                    model = item.coverUrl,
+                                                    contentDescription = null,
+                                                    modifier = Modifier
+                                                        .size(52.dp)
+                                                        .clip(RoundedCornerShape(6.dp)),
+                                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                                )
+                                            } else {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(52.dp)
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(LXBackgroundBlack),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(Icons.Default.MusicNote, contentDescription = null, tint = LXPrimaryGreen.copy(alpha = 0.7f))
+                                                }
+                                            }
+
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = item.title,
+                                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                                    color = LXTextPrimary,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                if (!item.artist.isNullOrBlank()) {
+                                                    Text(
+                                                        text = item.artist,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = LXPrimaryGreen,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                                val metaList = mutableListOf<String>()
+                                                if (!item.albumName.isNullOrBlank()) metaList.add(item.albumName)
+                                                if (item.durationSeconds != null && item.durationSeconds > 0) {
+                                                    metaList.add(MediaEntry.formatMusicDuration(item.durationSeconds))
+                                                }
+                                                if (item.releaseYear != null) metaList.add(item.releaseYear.toString())
+                                                if (metaList.isNotEmpty()) {
+                                                    Text(
+                                                        text = metaList.joinToString(" • "),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = LXTextSecondary,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
+
+                                            Column(
+                                                horizontalAlignment = Alignment.End,
+                                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Button(
+                                                    onClick = { onSelectMusic(item) },
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = LXPrimaryGreen,
+                                                        contentColor = LXBackgroundBlack
+                                                    ),
+                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    modifier = Modifier.height(28.dp)
+                                                ) {
+                                                    Text("Apply", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                }
+
+                                                if (openOptions.isNotEmpty()) {
+                                                    var showMusicMenu by remember { mutableStateOf(false) }
+                                                    Box {
+                                                        IconButton(
+                                                            onClick = {
+                                                                if (openOptions.size > 1) {
+                                                                    showMusicMenu = true
+                                                                } else {
+                                                                    openExternalUrl(openOptions.first().url)
+                                                                }
+                                                            },
+                                                            modifier = Modifier.size(24.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                                                contentDescription = "Open",
+                                                                tint = LXTextSecondary,
+                                                                modifier = Modifier.size(15.dp)
+                                                            )
+                                                        }
+
+                                                        if (openOptions.size > 1) {
+                                                            DropdownMenu(
+                                                                expanded = showMusicMenu,
+                                                                onDismissRequest = { showMusicMenu = false }
+                                                            ) {
+                                                                openOptions.forEach { opt ->
+                                                                    DropdownMenuItem(
+                                                                        text = { Text(opt.title, fontSize = 12.sp) },
+                                                                        onClick = {
+                                                                            showMusicMenu = false
+                                                                            openExternalUrl(opt.url)
+                                                                        }
+                                                                    )
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }

@@ -595,4 +595,71 @@ object ExternalLinkHelper {
 
         return list
     }
+
+    fun buildMusicOpenOptions(
+        title: String,
+        artist: String?,
+        album: String?,
+        externalId: String?,
+        externalSource: String?,
+        webUrl: String? = null
+    ): List<ExternalOpenOption> {
+        val list = mutableListOf<ExternalOpenOption>()
+        val query = listOfNotNull(artist?.trim(), title.trim()).joinToString(" ")
+        val encodedQuery = safeUrlEncode(query)
+
+        // 1. MusicBrainz
+        val mbUrl = when {
+            externalSource.equals("MusicBrainz", ignoreCase = true) && !externalId.isNullOrBlank() ->
+                webUrl ?: "https://musicbrainz.org/recording/$externalId"
+            webUrl != null && webUrl.contains("musicbrainz.org", ignoreCase = true) -> webUrl
+            else -> "https://musicbrainz.org/search?query=$encodedQuery&type=recording"
+        }
+        list.add(
+            ExternalOpenOption(
+                title = "MusicBrainz 🎵",
+                subtitle = "musicbrainz.org",
+                url = mbUrl,
+                color = 0xFFBA478F
+            )
+        )
+
+        // 2. Deezer
+        val deezerUrl = when {
+            externalSource.equals("Deezer", ignoreCase = true) && !externalId.isNullOrBlank() ->
+                webUrl ?: "https://www.deezer.com/track/$externalId"
+            webUrl != null && webUrl.contains("deezer.com", ignoreCase = true) -> webUrl
+            else -> "https://www.deezer.com/search/$encodedQuery"
+        }
+        list.add(
+            ExternalOpenOption(
+                title = "Deezer",
+                subtitle = "deezer.com",
+                url = deezerUrl,
+                color = 0xFFFEAA2D
+            )
+        )
+
+        // 3. Spotify
+        list.add(
+            ExternalOpenOption(
+                title = "Spotify 🎧",
+                subtitle = "open.spotify.com",
+                url = "https://open.spotify.com/search/$encodedQuery",
+                color = 0xFF1DB954
+            )
+        )
+
+        // 4. YouTube Music
+        list.add(
+            ExternalOpenOption(
+                title = "YouTube Music ▶️",
+                subtitle = "music.youtube.com",
+                url = "https://music.youtube.com/search?q=$encodedQuery",
+                color = 0xFFFF0000
+            )
+        )
+
+        return list
+    }
 }

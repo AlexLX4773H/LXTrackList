@@ -836,6 +836,7 @@ fun MalCategoryStatsCard(
                 ) {
                     MalMetricRow(label = "Total Entries", value = summary.totalEntries.formatCommas())
                     val rewatchStatLabel = when {
+                        summary.isMusic -> "Relistened"
                         summary.isGame -> "Replayed"
                         summary.isVideo -> "Rewatched"
                         else -> "Reread"
@@ -844,7 +845,17 @@ fun MalCategoryStatsCard(
                         label = rewatchStatLabel,
                         value = summary.rewatchedCount.formatCommas()
                     )
-                    if (summary.isGame) {
+                    if (summary.isMusic) {
+                        val hours = summary.daysSpent * 24.0
+                        if (hours > 0) {
+                            MalMetricRow(
+                                label = "Listening Time",
+                                value = DurationFormatter.formatHours(hours),
+                                valueColor = LXPrimaryGreen
+                            )
+                        }
+                        MalMetricRow(label = "Tracks", value = summary.totalEntries.formatCommas())
+                    } else if (summary.isGame) {
                         val hours = summary.daysSpent * 24.0
                         if (hours > 0) {
                             MalMetricRow(

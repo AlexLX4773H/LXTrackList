@@ -77,6 +77,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.Person
@@ -164,6 +165,7 @@ import com.lx.tracklist.data.remote.BookSyncProgress
 import com.lx.tracklist.data.remote.GameApiConfig
 import com.lx.tracklist.data.remote.GameSyncProgress
 import com.lx.tracklist.data.remote.JikanSyncProgress
+import com.lx.tracklist.data.remote.MusicApiConfig
 import com.lx.tracklist.data.remote.TachiyomiResolveProgress
 import com.lx.tracklist.data.remote.TmdbConfig
 import com.lx.tracklist.data.remote.TmdbSyncProgress
@@ -4552,6 +4554,224 @@ private fun SyncJobsContent(
                     }
                 }
             }
+        }
+
+        // Music Metadata & Services Card
+        var showSpotifyConfigDialog by rememberSaveable { mutableStateOf(false) }
+        var spotifyConfigured by remember { mutableStateOf(MusicApiConfig.isSpotifyConfigured(context)) }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
+            border = androidx.compose.foundation.BorderStroke(1.dp, LXBorder),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MusicNote,
+                            contentDescription = null,
+                            tint = LXPrimaryGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Music Metadata & Services",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = LXTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = if (spotifyConfigured) "SPOTIFY + FREE APIS" else "FREE APIS ACTIVE",
+                            color = LXPrimaryGreen,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Automated music search and metadata enrichment using Deezer API, MusicBrainz, Cover Art Archive, and iTunes Search API without requiring any API keys. High-resolution album artwork, artist attribution, genre tagging, track numbers, and track lengths are fetched automatically.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+
+                // Active Provider Badges
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(
+                        "Deezer (HQ Covers & Audio)",
+                        "MusicBrainz (Catalog & ISRCs)",
+                        "Cover Art Archive",
+                        "iTunes (Artwork Fallback)"
+                    ).forEach { provider ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXSurfaceElevated)
+                                .border(1.dp, LXBorder, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "✓ $provider",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextPrimary
+                            )
+                        }
+                    }
+                    if (spotifyConfigured) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .border(1.dp, LXPrimaryGreen.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "✓ Spotify Connected",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                                color = LXPrimaryGreen
+                            )
+                        }
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = { showSpotifyConfigDialog = true },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MusicNote,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (spotifyConfigured) "Manage Spotify Credentials" else "Configure Optional Spotify API",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+
+        if (showSpotifyConfigDialog) {
+            var clientIdInput by rememberSaveable { mutableStateOf(MusicApiConfig.getSpotifyClientId(context)) }
+            var clientSecretInput by rememberSaveable { mutableStateOf(MusicApiConfig.getSpotifyClientSecret(context)) }
+
+            AlertDialog(
+                onDismissRequest = { showSpotifyConfigDialog = false },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.MusicNote, contentDescription = null, tint = LXPrimaryGreen)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Spotify API Credentials", color = LXTextPrimary, style = MaterialTheme.typography.titleMedium)
+                    }
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "Spotify integration is completely optional. Music tracking already functions out of the box with Deezer and MusicBrainz without any credentials.\n\nTo use Spotify Web API features, enter your Client ID and Client Secret from developer.spotify.com:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LXTextSecondary
+                        )
+                        OutlinedTextField(
+                            value = clientIdInput,
+                            onValueChange = { clientIdInput = it },
+                            label = { Text("Client ID") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = LXPrimaryGreen,
+                                unfocusedBorderColor = LXBorder,
+                                focusedTextColor = LXTextPrimary,
+                                unfocusedTextColor = LXTextPrimary,
+                                cursorColor = LXPrimaryGreen
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = clientSecretInput,
+                            onValueChange = { clientSecretInput = it },
+                            label = { Text("Client Secret") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = LXPrimaryGreen,
+                                unfocusedBorderColor = LXBorder,
+                                focusedTextColor = LXTextPrimary,
+                                unfocusedTextColor = LXTextPrimary,
+                                cursorColor = LXPrimaryGreen
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            MusicApiConfig.setSpotifyCredentials(context, clientIdInput, clientSecretInput)
+                            spotifyConfigured = MusicApiConfig.isSpotifyConfigured(context)
+                            showSpotifyConfigDialog = false
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = LXPrimaryGreen,
+                            contentColor = LXBackgroundBlack
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Save", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (spotifyConfigured) {
+                            TextButton(
+                                onClick = {
+                                    MusicApiConfig.clearSpotifyCredentials(context)
+                                    spotifyConfigured = false
+                                    clientIdInput = ""
+                                    clientSecretInput = ""
+                                    showSpotifyConfigDialog = false
+                                }
+                            ) {
+                                Text("Clear", color = LXErrorRed)
+                            }
+                        }
+                        TextButton(onClick = { showSpotifyConfigDialog = false }) {
+                            Text("Cancel", color = LXTextSecondary)
+                        }
+                    }
+                },
+                containerColor = LXSurfaceElevated,
+                shape = RoundedCornerShape(16.dp)
+            )
         }
 
         // Tachiyomi ID Resolution Card

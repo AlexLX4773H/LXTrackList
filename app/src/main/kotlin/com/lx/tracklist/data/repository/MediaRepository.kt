@@ -723,6 +723,7 @@ class MediaRepository(
         if (typeA.isReadType && typeB.isReadType) return true
         if (typeA.isWatchType && typeB.isWatchType) return true
         if (typeA.isPlayType && typeB.isPlayType) return true
+        if (typeA.isListenType && typeB.isListenType) return true
         return false
     }
 

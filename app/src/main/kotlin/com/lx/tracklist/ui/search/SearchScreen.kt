@@ -49,6 +49,7 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -118,6 +119,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.lx.tracklist.R
+import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.UserProfile
@@ -306,6 +308,7 @@ fun SearchScreen(
                 SearchCategory.BOOKS -> "Search books by title, author, or ISBN..."
                 SearchCategory.LIGHT_NOVELS -> "Search light novels & web novels..."
                 SearchCategory.GAMES -> "Search games on IGDB / RAWG..."
+                SearchCategory.MUSIC -> "Search songs, albums, or artists on MusicBrainz / Deezer..."
             }
 
             if (isSlime) {
@@ -563,6 +566,7 @@ fun SearchScreen(
                     }
                     val attributionText = when {
                         state.selectedCategory == SearchCategory.GAMES -> "Results from IGDB (RAWG fallback)"
+                        state.selectedCategory == SearchCategory.MUSIC -> "Results from MusicBrainz / Deezer"
                         state.selectedCategory == SearchCategory.BOOKS -> "Results from Google Books (Open Library fallback)"
                         state.selectedCategory == SearchCategory.LIGHT_NOVELS -> "Results from AniList (Jikan/MAL fallback)"
                         hasMangaDex -> "Results from MangaDex (with MAL/AniList backup)"
@@ -764,6 +768,7 @@ fun SearchScreen(
                                 SearchCategory.MOVIES, SearchCategory.TV_SHOWS -> Icons.Default.Movie
                                 SearchCategory.BOOKS, SearchCategory.LIGHT_NOVELS -> Icons.Default.Book
                                 SearchCategory.GAMES -> Icons.Default.SportsEsports
+                                SearchCategory.MUSIC -> Icons.Default.MusicNote
                                 else -> Icons.Default.Search
                             },
                             contentDescription = null,
@@ -915,6 +920,7 @@ private fun SearchResultCard(
                             MediaType.SHOW -> Icons.Default.Tv
                             MediaType.BOOK -> Icons.Default.Book
                             MediaType.GAME -> Icons.Default.SportsEsports
+                            MediaType.MUSIC -> Icons.Default.MusicNote
                             else -> Icons.Default.Search
                         },
                         contentDescription = null,
@@ -1002,11 +1008,16 @@ private fun SearchResultCard(
                             MediaType.BOOK -> if (it == 1) "1 page" else "$it pages"
                             MediaType.MOVIE -> null
                             MediaType.GAME -> null
+                            MediaType.MUSIC -> null
                         }
                         if (unitLabel != null) metaParts.add(unitLabel)
                     }
                     item.durationMinutes?.takeIf { it > 0 }?.let {
-                        metaParts.add("${it}m")
+                        if (item.mediaType == MediaType.MUSIC) {
+                            metaParts.add(MediaEntry.formatMusicDuration(it))
+                        } else {
+                            metaParts.add("${it}m")
+                        }
                     }
 
                     if (metaParts.isNotEmpty()) {
@@ -1581,6 +1592,7 @@ private fun SearchResultDetailSheet(
                                 MediaType.SHOW -> Icons.Default.Tv
                                 MediaType.BOOK -> Icons.Default.Book
                                 MediaType.GAME -> Icons.Default.SportsEsports
+                                MediaType.MUSIC -> Icons.Default.MusicNote
                                 else -> Icons.Default.Search
                             },
                             contentDescription = null,
@@ -1741,6 +1753,16 @@ private fun SearchResultDetailSheet(
                             val plats = if (item.gamePlatforms.isNotEmpty()) item.gamePlatforms.joinToString(" • ") else null
                             plats ?: "Game"
                         }
+                        MediaType.MUSIC -> {
+                            val dur = duration?.takeIf { it > 0 }?.let { MediaEntry.formatMusicDuration(it) }
+                            val album = item.albumName
+                            when {
+                                album != null && dur != null -> "$album • $dur"
+                                album != null -> album
+                                dur != null -> dur
+                                else -> "Track"
+                            }
+                        }
                     }
                     if (!unitsInfo.isNullOrBlank()) {
                         Text(
@@ -1872,6 +1894,60 @@ private fun SearchResultDetailSheet(
                                 )
                                 Text(
                                     text = displayGamePub,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LXTextPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Music Metadata Card (Artist, Album)
+            val displayArtist = item.creator ?: item.musicArtist
+            val displayAlbum = item.albumName
+            if (item.mediaType == MediaType.MUSIC && (!displayArtist.isNullOrBlank() || !displayAlbum.isNullOrBlank())) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = LXSurfaceElevated),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, LXBorder)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (!displayArtist.isNullOrBlank()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    text = "Artist:",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXPrimaryGreen
+                                )
+                                Text(
+                                    text = displayArtist,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LXTextPrimary
+                                )
+                            }
+                        }
+                        if (!displayAlbum.isNullOrBlank()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    text = "Album:",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXTextSecondary
+                                )
+                                Text(
+                                    text = displayAlbum,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = LXTextPrimary
                                 )
@@ -2145,6 +2221,14 @@ private fun SearchResultDetailSheet(
                     )
                     item.mediaType == MediaType.GAME -> ExternalLinkHelper.buildGameOpenOptions(
                         title = item.title,
+                        externalId = item.externalId,
+                        externalSource = item.externalSource,
+                        webUrl = item.webUrl
+                    )
+                    item.mediaType == MediaType.MUSIC -> ExternalLinkHelper.buildMusicOpenOptions(
+                        title = item.title,
+                        artist = item.creator ?: item.musicArtist,
+                        album = item.albumName,
                         externalId = item.externalId,
                         externalSource = item.externalSource,
                         webUrl = item.webUrl

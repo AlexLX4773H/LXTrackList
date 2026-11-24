@@ -9,8 +9,8 @@ enum class MediaStatus(val defaultLabel: String) {
 
     fun getDisplayLabel(mediaType: MediaType): String {
         return when (this) {
-            WATCHING -> if (mediaType.isPlayType) "Playing" else if (mediaType.isReadType) "Reading" else "Watching"
-            PLAN_TO_WATCH -> if (mediaType.isPlayType) "Plan to Play" else if (mediaType.isReadType) "Plan to Read" else "Plan to Watch"
+            WATCHING -> if (mediaType.isListenType) "Listening" else if (mediaType.isPlayType) "Playing" else if (mediaType.isReadType) "Reading" else "Watching"
+            PLAN_TO_WATCH -> if (mediaType.isListenType) "Plan to Listen" else if (mediaType.isPlayType) "Plan to Play" else if (mediaType.isReadType) "Plan to Read" else "Plan to Watch"
             COMPLETED -> "Completed"
             ON_HOLD -> "On Hold"
             DROPPED -> "Dropped"
@@ -21,7 +21,7 @@ enum class MediaStatus(val defaultLabel: String) {
         fun fromString(value: String): MediaStatus {
             val normalized = value.trim().uppercase().replace(" ", "_").replace("-", "_")
             return when {
-                normalized.contains("PLAYING") || normalized.contains("WATCHING") || normalized.contains("READING") -> WATCHING
+                normalized.contains("PLAYING") || normalized.contains("WATCHING") || normalized.contains("READING") || normalized.contains("LISTENING") -> WATCHING
                 normalized.contains("PLAN") -> PLAN_TO_WATCH
                 normalized.contains("COMPLETE") -> COMPLETED
                 normalized.contains("HOLD") -> ON_HOLD

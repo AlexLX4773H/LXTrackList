@@ -525,6 +525,15 @@ class DetailViewModel(
                         )
                     }
                 }
+                com.lx.tracklist.data.model.MediaType.MUSIC -> {
+                    val isDone = clampedInt > 0
+                    val newStatus = if (isDone) com.lx.tracklist.data.model.MediaStatus.COMPLETED else cur.status
+                    cur.copy(
+                        status = newStatus,
+                        finishDate = if (newStatus == com.lx.tracklist.data.model.MediaStatus.COMPLETED && cur.finishDate == null) now else cur.finishDate,
+                        updatedAt = now
+                    )
+                }
             }
             repository.update(updated)
         }

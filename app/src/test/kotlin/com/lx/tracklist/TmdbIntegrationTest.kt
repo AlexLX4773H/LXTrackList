@@ -311,7 +311,7 @@ class TmdbIntegrationTest {
         assertEquals("External Sync Jobs", com.lx.tracklist.ui.settings.SettingsSubMenu.SYNC_JOBS.title)
 
         val categories = com.lx.tracklist.ui.search.SearchCategory.entries
-        assertEquals(8, categories.size)
+        assertEquals(9, categories.size)
         assertEquals("MAL", com.lx.tracklist.ui.search.SearchCategory.ANIME.sourceName)
         assertEquals("MAL / MangaDex", com.lx.tracklist.ui.search.SearchCategory.MANGA.sourceName)
         assertEquals("MangaDex / AniList", com.lx.tracklist.ui.search.SearchCategory.MANHWA.sourceName)
@@ -320,6 +320,7 @@ class TmdbIntegrationTest {
         assertEquals("Google Books / Open Library", com.lx.tracklist.ui.search.SearchCategory.BOOKS.sourceName)
         assertEquals("AniList / MAL", com.lx.tracklist.ui.search.SearchCategory.LIGHT_NOVELS.sourceName)
         assertEquals("IGDB / RAWG", com.lx.tracklist.ui.search.SearchCategory.GAMES.sourceName)
+        assertEquals("MusicBrainz / Deezer / Spotify", com.lx.tracklist.ui.search.SearchCategory.MUSIC.sourceName)
     }
 
     @Test

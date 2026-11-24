@@ -53,6 +53,18 @@ object CsvImporter {
         val currentTimeIdx = header.indexOfFirst {
             it.contains("current_time") || it.contains("currenttime") || it.contains("watch_time") || it.contains("watchtime")
         }
+        val creatorIdx = header.indexOfFirst {
+            it == "creator" || it == "artist" || it == "author" || it == "studio" || it == "developer" || it == "director"
+        }
+        val albumIdx = header.indexOfFirst {
+            it.contains("album") || it == "series" || it == "franchise"
+        }
+        val trackNumberIdx = header.indexOfFirst {
+            it.contains("track") || it.contains("track_number") || it.contains("tracknumber")
+        }
+        val musicAlbumIdIdx = header.indexOfFirst {
+            it.contains("musicalbumid") || it.contains("album_id") || it.contains("albumid")
+        }
 
         val entries = mutableListOf<MediaEntry>()
 
@@ -94,6 +106,10 @@ object CsvImporter {
             } else false
             val parsedLength = if (episodeLengthIdx in cols.indices) cols[episodeLengthIdx].toIntOrNull() else null
             val parsedCurrentTime = if (currentTimeIdx in cols.indices) cols[currentTimeIdx].toIntOrNull()?.takeIf { it > 0 } else null
+            val creator = if (creatorIdx in cols.indices) cols[creatorIdx].trim().takeIf { it.isNotBlank() } else null
+            val albumName = if (albumIdx in cols.indices) cols[albumIdx].trim().takeIf { it.isNotBlank() } else null
+            val trackNumber = if (trackNumberIdx in cols.indices) cols[trackNumberIdx].toIntOrNull() else null
+            val musicAlbumId = if (musicAlbumIdIdx in cols.indices) cols[musicAlbumIdIdx].trim().takeIf { it.isNotBlank() } else null
 
             entries.add(
                 MediaEntry(
@@ -118,9 +134,13 @@ object CsvImporter {
                     externalSource = foreignSource ?: "CSV",
                     rewatchCount = rewatchCount,
                     isRewatching = isRewatching,
-                    episodeLengthMinutes = if (mediaType != MediaType.MOVIE) parsedLength else null,
+                    episodeLengthMinutes = if (mediaType != MediaType.MOVIE && mediaType != MediaType.MUSIC) parsedLength else null,
                     currentTimeMinutes = parsedCurrentTime,
-                    durationMinutes = if (mediaType == MediaType.MOVIE) parsedLength else null
+                    durationMinutes = if (mediaType == MediaType.MOVIE || mediaType == MediaType.MUSIC) parsedLength else null,
+                    creator = creator,
+                    movieSeriesName = albumName,
+                    movieSeriesNumber = trackNumber,
+                    musicAlbumId = musicAlbumId
                 )
             )
         }

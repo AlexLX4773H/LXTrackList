@@ -15,6 +15,7 @@ import com.lx.tracklist.data.remote.BookDetails
 import com.lx.tracklist.data.remote.BookMetadataManager
 import com.lx.tracklist.data.remote.GameMetadataManager
 import com.lx.tracklist.data.remote.GameSearchResult
+import com.lx.tracklist.data.remote.MusicMetadataManager
 import com.lx.tracklist.data.remote.buildGameDescriptionWithMetadata
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanMediaDetails
@@ -47,7 +48,8 @@ enum class SearchCategory(val displayName: String, val sourceName: String) {
     TV_SHOWS("TV Shows", "TMDB"),
     BOOKS("Books", "Google Books / Open Library"),
     LIGHT_NOVELS("Light Novels", "AniList / MAL"),
-    GAMES("Games", "IGDB / RAWG")
+    GAMES("Games", "IGDB / RAWG"),
+    MUSIC("Music", "MusicBrainz / Deezer / Spotify")
 }
 
 data class SearchResultItem(
@@ -72,6 +74,11 @@ data class SearchResultItem(
     val author: String? = null,
     val publisher: String? = null,
     val isbn: String? = null,
+    val creator: String? = null,
+    val albumName: String? = null,
+    val musicAlbumId: String? = null,
+    val musicTrackNumber: Int? = null,
+    val musicArtist: String? = null,
     val rawBookDetails: BookDetails? = null,
     val rawJikanDetails: JikanMediaDetails? = null,
     val rawTmdbResult: TmdbSearchResult? = null,
@@ -2005,6 +2012,32 @@ class SearchViewModel(
                         if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to search games")
                         res.getOrDefault(emptyList()).map { game -> mapGameToSearchResult(game) }
                     }
+                    SearchCategory.MUSIC -> {
+                        val res = MusicMetadataManager.searchMusic(query, limit = 20)
+                        if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to search music")
+                        res.getOrDefault(emptyList()).map { music ->
+                            SearchResultItem(
+                                externalId = music.externalId,
+                                externalSource = music.externalSource,
+                                mediaType = MediaType.MUSIC,
+                                title = music.title,
+                                alternateTitle = music.alternateTitle,
+                                posterUrl = music.coverUrl ?: music.albumCoverUrl,
+                                releaseYear = music.releaseYear,
+                                originalLanguage = music.originalLanguage ?: "en",
+                                durationMinutes = music.durationSeconds,
+                                score = music.score,
+                                statusText = "Music Track",
+                                synopsis = if (!music.albumName.isNullOrBlank()) "Album: ${music.albumName}" else null,
+                                creator = music.artist,
+                                albumName = music.albumName,
+                                musicAlbumId = music.musicAlbumId,
+                                musicTrackNumber = music.trackNumber,
+                                musicArtist = music.artist,
+                                directSiteUrl = music.webUrl
+                            )
+                        }
+                    }
                 }
             }
 
@@ -2070,6 +2103,7 @@ class SearchViewModel(
                         alternateTitle = fullDetails?.alternateTitles?.firstOrNull() ?: item.alternateTitle,
                         mediaType = MediaType.GAME,
                         status = status,
+                        creator = gameDevs.firstOrNull() ?: item.creator,
                         customCategory = customCategory,
                         subCategory = subCategory,
                         externalId = fullDetails?.externalId ?: item.externalId,
@@ -2100,6 +2134,7 @@ class SearchViewModel(
                             alternateTitle = fullDetails?.alternateTitle ?: item.alternateTitle,
                             mediaType = MediaType.MOVIE,
                             status = status,
+                            creator = fullDetails?.studioString?.takeIf { it.isNotBlank() } ?: fullDetails?.publisherString?.takeIf { it.isNotBlank() } ?: item.creator,
                             customCategory = customCategory,
                             subCategory = subCategory,
                             externalId = item.externalId,
@@ -2125,6 +2160,7 @@ class SearchViewModel(
                             alternateTitle = fullDetails?.alternateTitle ?: item.alternateTitle,
                             mediaType = MediaType.SHOW,
                             status = status,
+                            creator = fullDetails?.studioString?.takeIf { it.isNotBlank() } ?: fullDetails?.publisherString?.takeIf { it.isNotBlank() } ?: item.creator,
                             customCategory = customCategory,
                             subCategory = subCategory,
                             externalId = item.externalId,
@@ -2144,6 +2180,31 @@ class SearchViewModel(
                             originalLanguage = fullDetails?.originalLanguage ?: item.originalLanguage ?: item.rawTmdbResult?.originalLanguage
                         )
                     }
+                } else if (item.mediaType == MediaType.MUSIC) {
+                    MediaEntry(
+                        userId = targetUserId,
+                        title = item.title,
+                        alternateTitle = item.alternateTitle,
+                        mediaType = MediaType.MUSIC,
+                        status = status,
+                        creator = item.creator ?: item.musicArtist,
+                        movieSeriesName = item.albumName,
+                        movieSeriesNumber = item.musicTrackNumber,
+                        musicAlbumId = item.musicAlbumId,
+                        customCategory = customCategory,
+                        subCategory = subCategory,
+                        externalId = item.externalId,
+                        externalSource = item.externalSource,
+                        externalScore = item.score,
+                        externalScoreSource = item.externalSource,
+                        coverImageUri = item.posterUrl,
+                        durationMinutes = item.durationMinutes,
+                        tags = null,
+                        description = item.synopsis,
+                        airedStartDate = null,
+                        trackingUnit = TrackingUnit.PERCENTAGE,
+                        originalLanguage = item.originalLanguage ?: "en"
+                    )
                 } else {
                     // MAL / Jikan / Book / Light Novel item
                     val details = item.rawJikanDetails
@@ -2164,6 +2225,7 @@ class SearchViewModel(
                         alternateTitle = details?.alternateTitle ?: item.alternateTitle,
                         mediaType = item.mediaType,
                         status = status,
+                        creator = item.author ?: details?.authors ?: item.creator,
                         customCategory = customCategory,
                         subCategory = subCategory,
                         externalId = item.externalId,

@@ -20,6 +20,8 @@ import com.lx.tracklist.data.remote.GoogleBooksApiClient
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanMediaDetails
 import com.lx.tracklist.data.remote.MangaDexApiClient
+import com.lx.tracklist.data.remote.MusicMetadataManager
+import com.lx.tracklist.data.remote.MusicSearchResult
 import com.lx.tracklist.data.remote.OpenLibraryApiClient
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbApiClient
@@ -56,6 +58,7 @@ enum class ExternalDbSource(val displayName: String, val shortName: String) {
     OPEN_LIBRARY("Open Library", "Open Library"),
     IGDB("IGDB", "IGDB"),
     RAWG("RAWG", "RAWG"),
+    MUSICBRAINZ("MusicBrainz / Deezer", "MusicBrainz"),
     @Deprecated("Use ANILIST instead")
     ANILIST_NOVEL("AniList", "AniList")
 }
@@ -67,6 +70,7 @@ data class ExternalSyncUiState(
     val malResults: List<JikanMediaDetails> = emptyList(),
     val tmdbResults: List<TmdbSearchResult> = emptyList(),
     val gameResults: List<GameSearchResult> = emptyList(),
+    val musicResults: List<MusicSearchResult> = emptyList(),
     val errorMessage: String? = null,
     val successMessage: String? = null
 )
@@ -75,6 +79,7 @@ data class AddEditUiState(
     val id: Long = 0L,
     val userId: Long = 0L,
     val title: String = "",
+    val creator: String = "",
     val alternateTitles: List<String> = emptyList(),
     val alternateTitle: String = "",
     val mediaType: MediaType = MediaType.ANIME,
@@ -127,6 +132,7 @@ data class AddEditUiState(
     val movieSeriesName: String = "",
     val movieSeriesNumber: Int? = null,
     val durationMinutes: Int? = null,
+    val musicAlbumId: String? = null,
 
     // Game fields
     val gamePlatforms: String = "",
@@ -211,6 +217,7 @@ class AddEditViewModel(
                             id = entry.id,
                             userId = entry.userId,
                             title = entry.title,
+                            creator = entry.creator ?: "",
                             alternateTitles = altTitles,
                             alternateTitle = entry.alternateTitle ?: "",
                             mediaType = entry.mediaType,
@@ -257,6 +264,7 @@ class AddEditViewModel(
                             movieSeriesName = entry.movieSeriesName ?: "",
                             movieSeriesNumber = entry.movieSeriesNumber,
                             durationMinutes = entry.durationMinutes,
+                            musicAlbumId = entry.musicAlbumId,
                             gamePlatforms = entry.gamePlatforms ?: "",
                             isGameFranchise = entry.isGameFranchise,
                             gameSeriesEntries = entry.getGameSeriesEntries(),
@@ -292,6 +300,8 @@ class AddEditViewModel(
     }
 
     fun updateTitle(value: String) = _uiState.update { it.copy(title = value) }
+    fun updateCreator(value: String) = _uiState.update { it.copy(creator = value) }
+    fun updateMusicAlbumId(value: String?) = _uiState.update { it.copy(musicAlbumId = value) }
     fun updateAlternateTitle(value: String) {
         val split = value.split("\n").map { it.trim() }.filter { it.isNotBlank() }
         _uiState.update { it.copy(alternateTitle = value, alternateTitles = split) }
@@ -522,6 +532,8 @@ class AddEditViewModel(
                 movieSeriesName = s.movieSeriesName.trim().ifBlank { null },
                 movieSeriesNumber = s.movieSeriesNumber,
                 durationMinutes = s.durationMinutes,
+                creator = s.creator.trim().ifBlank { null },
+                musicAlbumId = s.musicAlbumId?.trim()?.ifBlank { null },
                 gamePlatforms = s.gamePlatforms.trim().ifBlank { null },
                 isGameFranchise = false,
                 gameSeriesEntriesJson = null,
@@ -552,6 +564,7 @@ class AddEditViewModel(
                     malResults = emptyList(),
                     tmdbResults = emptyList(),
                     gameResults = emptyList(),
+                    musicResults = emptyList(),
                     errorMessage = "Please enter a title to search."
                 )
             }
@@ -570,12 +583,28 @@ class AddEditViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 when (source) {
+                    ExternalDbSource.MUSICBRAINZ -> {
+                        val res = MusicMetadataManager.searchMusic(cleanQuery, limit = 20)
+                        val list = res.getOrDefault(emptyList())
+                        val err = res.exceptionOrNull()?.message
+                        _syncState.update {
+                            it.copy(
+                                isSearching = false,
+                                musicResults = list,
+                                gameResults = emptyList(),
+                                malResults = emptyList(),
+                                tmdbResults = emptyList(),
+                                errorMessage = if (list.isEmpty()) err ?: "No matches found on MusicBrainz / Deezer for '$cleanQuery'" else null
+                            )
+                        }
+                    }
                     ExternalDbSource.IGDB, ExternalDbSource.RAWG -> {
                         if (context == null) {
                             _syncState.update {
                                 it.copy(
                                     isSearching = false,
                                     gameResults = emptyList(),
+                                    musicResults = emptyList(),
                                     malResults = emptyList(),
                                     tmdbResults = emptyList(),
                                     errorMessage = "Context required for game search."
@@ -590,6 +619,7 @@ class AddEditViewModel(
                             it.copy(
                                 isSearching = false,
                                 gameResults = list,
+                                musicResults = emptyList(),
                                 malResults = emptyList(),
                                 tmdbResults = emptyList(),
                                 errorMessage = if (list.isEmpty()) err ?: "No matches found on ${source.shortName} for '$cleanQuery'" else null
@@ -611,6 +641,7 @@ class AddEditViewModel(
                             it.copy(
                                 isSearching = false,
                                 malResults = items,
+                                musicResults = emptyList(),
                                 tmdbResults = emptyList(),
                                 gameResults = emptyList(),
                                 errorMessage = if (items.isEmpty()) "No matches found on MyAnimeList for '$cleanQuery'" else null
@@ -644,6 +675,7 @@ class AddEditViewModel(
                                 it.copy(
                                     isSearching = false,
                                     malResults = combined,
+                                    musicResults = emptyList(),
                                     tmdbResults = emptyList(),
                                     gameResults = emptyList(),
                                     errorMessage = if (combined.isEmpty()) "No matches found on MangaDex / AniList for '$cleanQuery'" else null
@@ -657,6 +689,7 @@ class AddEditViewModel(
                                 it.copy(
                                     isSearching = false,
                                     tmdbResults = emptyList(),
+                                    musicResults = emptyList(),
                                     malResults = emptyList(),
                                     gameResults = emptyList(),
                                     errorMessage = "TMDB Read Access Token is not configured. Please add your token in Settings > TMDB Sync."
@@ -684,6 +717,7 @@ class AddEditViewModel(
                                 it.copy(
                                     isSearching = false,
                                     tmdbResults = finalResults,
+                                    musicResults = emptyList(),
                                     malResults = emptyList(),
                                     gameResults = emptyList(),
                                     errorMessage = if (finalResults.isEmpty()) "No matches found on TMDB for '$cleanQuery'" else null
@@ -714,6 +748,7 @@ class AddEditViewModel(
                                 it.copy(
                                     isSearching = false,
                                     malResults = combined,
+                                    musicResults = emptyList(),
                                     tmdbResults = emptyList(),
                                     gameResults = emptyList(),
                                     errorMessage = if (combined.isEmpty()) "No matches found on Google Books / Open Library for '$cleanQuery'" else null
@@ -728,6 +763,7 @@ class AddEditViewModel(
                             it.copy(
                                 isSearching = false,
                                 malResults = items,
+                                musicResults = emptyList(),
                                 tmdbResults = emptyList(),
                                 gameResults = emptyList(),
                                 errorMessage = if (items.isEmpty()) "No matches found on Open Library for '$cleanQuery'" else null
@@ -768,6 +804,7 @@ class AddEditViewModel(
                             it.copy(
                                 isSearching = false,
                                 malResults = items,
+                                musicResults = emptyList(),
                                 tmdbResults = emptyList(),
                                 gameResults = emptyList(),
                                 errorMessage = if (items.isEmpty()) "No matches found on AniList for '$cleanQuery'" else null
@@ -883,6 +920,7 @@ class AddEditViewModel(
                 title = cleanedOriginalTitle,
                 alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
                 alternateTitles = allAlts,
+                creator = item.authors?.takeIf { it.isNotBlank() } ?: current.creator,
                 mediaType = targetMediaType,
                 coverImageUri = item.posterUrl ?: current.coverImageUri,
                 externalId = resolvedExtId,
@@ -963,6 +1001,7 @@ class AddEditViewModel(
                         title = cleanedOriginalTitle,
                         alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
                         alternateTitles = allAlts,
+                        creator = fullDetails?.studioString?.takeIf { it.isNotBlank() } ?: fullDetails?.publisherString?.takeIf { it.isNotBlank() } ?: current.creator,
                         mediaType = targetMediaType,
                         coverImageUri = fullDetails?.posterUrl ?: item.posterUrl ?: item.backdropUrl ?: current.coverImageUri,
                         externalId = item.tmdbId.toString(),
@@ -1047,6 +1086,7 @@ class AddEditViewModel(
                         title = cleanedOriginalTitle,
                         alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
                         alternateTitles = allAlts,
+                        creator = (fullDetails?.developers?.firstOrNull() ?: item.developers.firstOrNull()) ?: current.creator,
                         mediaType = MediaType.GAME,
                         coverImageUri = fullDetails?.coverUrl ?: item.coverUrl ?: current.coverImageUri,
                         externalId = item.externalId,
@@ -1070,12 +1110,43 @@ class AddEditViewModel(
         }
     }
 
+    fun applySelectedMusicResult(item: MusicSearchResult) {
+        _uiState.update { current ->
+            val queryTitle = current.title.trim()
+            val candidateTitle = item.title.trim()
+            val currentAlts = (current.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() } + current.alternateTitles
+            val extraAlts = if (candidateTitle.isNotBlank() && !candidateTitle.equals(queryTitle, ignoreCase = true)) {
+                listOf(candidateTitle)
+            } else emptyList()
+            val allAlts = (extraAlts + currentAlts).distinct().filter { !it.equals(queryTitle, ignoreCase = true) }
+
+            current.copy(
+                title = candidateTitle.ifBlank { queryTitle },
+                alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
+                alternateTitles = allAlts,
+                creator = item.artist.takeIf { it.isNotBlank() } ?: current.creator,
+                movieSeriesName = item.albumName?.takeIf { it.isNotBlank() } ?: current.movieSeriesName,
+                movieSeriesNumber = item.trackNumber ?: current.movieSeriesNumber,
+                musicAlbumId = item.musicAlbumId ?: current.musicAlbumId,
+                durationMinutes = item.durationSeconds ?: current.durationMinutes,
+                coverImageUri = item.coverUrl?.takeIf { it.isNotBlank() } ?: current.coverImageUri,
+                externalId = item.externalId,
+                externalSource = item.externalSource,
+                tags = if (current.tags.isBlank() && item.genres.isNotEmpty()) item.genres.joinToString(", ") else current.tags,
+                airedStartDate = item.releaseDateMillis ?: current.airedStartDate,
+                mediaType = MediaType.MUSIC
+            )
+        }
+        _syncState.update { it.copy(successMessage = "Applied '${item.title}' from ${item.externalSource}!") }
+    }
+
     fun clearSyncMessage() {
         _syncState.update { it.copy(successMessage = null) }
     }
 
     companion object {
         fun getDefaultSourceForType(mediaType: MediaType): ExternalDbSource = when {
+            mediaType == MediaType.MUSIC -> ExternalDbSource.MUSICBRAINZ
             mediaType == MediaType.GAME -> ExternalDbSource.IGDB
             mediaType == MediaType.MANHWA -> ExternalDbSource.MANGADEX
             mediaType == MediaType.BOOK -> ExternalDbSource.GOOGLE_BOOKS

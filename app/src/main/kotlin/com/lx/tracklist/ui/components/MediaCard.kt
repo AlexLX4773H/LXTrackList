@@ -395,6 +395,7 @@ fun MediaCard(
                                 else -> formatDateRange(entry.startDate, entry.finishDate)
                             }
                             val subtitleText = when {
+                                !entry.creator.isNullOrBlank() -> "${entry.getCreatorRoleLabel()}: ${entry.creator}"
                                 !entry.alternateTitle.isNullOrBlank() -> entry.getAlternateTitles().joinToString(" • ")
                                 dateInfo.isNotBlank() -> dateInfo
                                 else -> entry.mediaType.displayName
@@ -444,6 +445,20 @@ fun MediaCard(
                                                     .padding(horizontal = 5.dp, vertical = 2.dp)
                                             )
                                         }
+                                    }
+
+                                    if (entry.mediaType == MediaType.MUSIC && !entry.movieSeriesName.isNullOrBlank()) {
+                                        Text(
+                                            text = "💿 ${entry.movieSeriesName}",
+                                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                            color = colors.primary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier
+                                                .weight(1f, fill = false)
+                                                .background(colors.primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                                        )
                                     }
 
                                     if (!entry.customCategory.isNullOrBlank()) {
