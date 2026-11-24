@@ -107,6 +107,7 @@ fun SearchDiscoverySheet(
     onApplyLightNovel: (DiscoveryFilter.LightNovel) -> Unit,
     onApplyBook: (DiscoveryFilter.Book) -> Unit,
     onApplyGame: (DiscoveryFilter.Game) -> Unit = {},
+    onApplyMusic: (DiscoveryFilter.Music) -> Unit = {},
     onResetFilter: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -321,9 +322,34 @@ fun SearchDiscoverySheet(
     }
 
     // Music state
-    var selectedMusicLanguages by remember { mutableStateOf(emptySet<String>()) }
-    var musicIncludedTags by remember { mutableStateOf(emptySet<String>()) }
-    var musicExcludedTags by remember { mutableStateOf(emptySet<String>()) }
+    val musicFilter = activeFilter as? DiscoveryFilter.Music
+    var selectedMusicMode by remember {
+        mutableStateOf(musicFilter?.mode ?: MusicDiscoveryMode.TOP_CHARTS)
+    }
+    var selectedMusicGenre by remember {
+        mutableStateOf(musicFilter?.selectedGenre)
+    }
+    var selectedMusicYear by remember {
+        mutableIntStateOf(musicFilter?.year ?: currentYear)
+    }
+    var selectedMusicStartYear by remember {
+        mutableStateOf<Int?>(musicFilter?.startYear ?: musicFilter?.year ?: currentYear)
+    }
+    var selectedMusicEndYear by remember {
+        mutableStateOf<Int?>(musicFilter?.endYear ?: musicFilter?.year ?: currentYear)
+    }
+    var selectedMusicSort by remember {
+        mutableStateOf(musicFilter?.sortOrder ?: MusicSortOrder.POPULARITY)
+    }
+    var selectedMusicLanguages by remember {
+        mutableStateOf(musicFilter?.originalLanguages ?: emptySet())
+    }
+    var musicIncludedTags by remember {
+        mutableStateOf(musicFilter?.includedTags ?: emptySet())
+    }
+    var musicExcludedTags by remember {
+        mutableStateOf(musicFilter?.excludedTags ?: emptySet())
+    }
 
     var adultMode by remember {
         mutableStateOf(activeFilter?.adultMode ?: AdultMode.OFF)
@@ -3066,18 +3092,48 @@ fun SearchDiscoverySheet(
                 }
 
                 SearchCategory.MUSIC -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Music discovery and charts coming soon! Use the search bar above to look up songs, albums, and artists.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = LXTextSecondary
-                        )
-                    }
+                    MusicDiscoveryContent(
+                        currentYear = currentYear,
+                        selectedMusicMode = selectedMusicMode,
+                        onSelectMusicMode = { selectedMusicMode = it },
+                        selectedGenre = selectedMusicGenre,
+                        onSelectGenre = { selectedMusicGenre = it },
+                        selectedMusicStartYear = selectedMusicStartYear,
+                        selectedMusicEndYear = selectedMusicEndYear,
+                        onRangeChange = { s, e ->
+                            selectedMusicStartYear = s
+                            selectedMusicEndYear = e
+                            selectedMusicYear = e ?: (s ?: currentYear)
+                        },
+                        selectedMusicSort = selectedMusicSort,
+                        onSelectMusicSort = { selectedMusicSort = it },
+                        musicIncludedTags = musicIncludedTags,
+                        musicExcludedTags = musicExcludedTags,
+                        onOpenTags = { showTagsSubMenu = true },
+                        onRemoveIncludedTag = { tag ->
+                            musicIncludedTags = musicIncludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+                        },
+                        onRemoveExcludedTag = { tag ->
+                            musicExcludedTags = musicExcludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+                        },
+                        selectedLanguages = selectedMusicLanguages,
+                        onOpenLanguages = { showLanguageSubMenu = true },
+                        onApply = {
+                            val filter = DiscoveryFilter.Music(
+                                mode = selectedMusicMode,
+                                selectedGenre = selectedMusicGenre,
+                                year = if (selectedMusicMode == MusicDiscoveryMode.BY_YEAR) (selectedMusicEndYear ?: selectedMusicStartYear ?: currentYear) else null,
+                                startYear = if (selectedMusicMode == MusicDiscoveryMode.BY_YEAR) selectedMusicStartYear else null,
+                                endYear = if (selectedMusicMode == MusicDiscoveryMode.BY_YEAR) selectedMusicEndYear else null,
+                                sortOrder = selectedMusicSort,
+                                includedTags = musicIncludedTags,
+                                excludedTags = musicExcludedTags,
+                                originalLanguages = selectedMusicLanguages
+                            )
+                            onApplyMusic(filter)
+                            onDismiss()
+                        }
+                    )
                 }
             }
 

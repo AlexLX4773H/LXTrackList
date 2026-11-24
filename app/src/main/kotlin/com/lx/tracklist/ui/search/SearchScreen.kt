@@ -200,6 +200,9 @@ fun SearchScreen(
             onApplyGame = { gameFilter ->
                 viewModel.applyGameDiscoveryFilter(gameFilter, context)
             },
+            onApplyMusic = { musicFilter ->
+                viewModel.applyMusicDiscoveryFilter(musicFilter, context)
+            },
             onResetFilter = {
                 viewModel.clearDiscoveryFilter(context)
             }
@@ -308,7 +311,7 @@ fun SearchScreen(
                 SearchCategory.BOOKS -> "Search books by title, author, or ISBN..."
                 SearchCategory.LIGHT_NOVELS -> "Search light novels & web novels..."
                 SearchCategory.GAMES -> "Search games on IGDB / RAWG..."
-                SearchCategory.MUSIC -> "Search songs, albums, or artists on MusicBrainz / Deezer..."
+                SearchCategory.MUSIC -> "Search songs, albums, or artists..."
             }
 
             if (isSlime) {
@@ -566,7 +569,7 @@ fun SearchScreen(
                     }
                     val attributionText = when {
                         state.selectedCategory == SearchCategory.GAMES -> "Results from IGDB (RAWG fallback)"
-                        state.selectedCategory == SearchCategory.MUSIC -> "Results from MusicBrainz / Deezer"
+                        state.selectedCategory == SearchCategory.MUSIC -> "Results from iTunes, Deezer & MusicBrainz"
                         state.selectedCategory == SearchCategory.BOOKS -> "Results from Google Books (Open Library fallback)"
                         state.selectedCategory == SearchCategory.LIGHT_NOVELS -> "Results from AniList (Jikan/MAL fallback)"
                         hasMangaDex -> "Results from MangaDex (with MAL/AniList backup)"
@@ -653,6 +656,11 @@ fun SearchScreen(
                                     is DiscoveryFilter.Book -> when (filter.mode) {
                                         ContentDiscoveryMode.BY_YEAR -> Icons.Default.Book
                                         ContentDiscoveryMode.MOST_POPULAR -> Icons.Default.LocalFireDepartment
+                                    }
+                                    is DiscoveryFilter.Music -> when (filter.mode) {
+                                        MusicDiscoveryMode.BY_YEAR -> Icons.Default.MusicNote
+                                        MusicDiscoveryMode.BY_GENRE -> Icons.Default.MusicNote
+                                        MusicDiscoveryMode.TOP_CHARTS -> Icons.Default.LocalFireDepartment
                                     }
                                 },
                                 contentDescription = null,

@@ -85,4 +85,34 @@ class MusicMetadataTest {
         assertNotNull(spotifyOption)
         assertTrue(spotifyOption?.url?.contains("open.spotify.com") == true)
     }
+
+    @Test
+    fun testITunesGenreMap() {
+        assertEquals("21", ITunesApiClient.GENRE_MAP["Rock"])
+        assertEquals("14", ITunesApiClient.GENRE_MAP["Pop"])
+        assertEquals("18", ITunesApiClient.GENRE_MAP["Hip-Hop"])
+        assertEquals("27", ITunesApiClient.GENRE_MAP["J-Pop"])
+        assertEquals("51", ITunesApiClient.GENRE_MAP["K-Pop"])
+        assertEquals("29", ITunesApiClient.GENRE_MAP["Anime"])
+    }
+
+    @Test
+    fun testMusicDiscoveryFilter() {
+        val topFilter = com.lx.tracklist.ui.search.DiscoveryFilter.Music(
+            mode = com.lx.tracklist.ui.search.MusicDiscoveryMode.TOP_CHARTS
+        )
+        assertTrue(topFilter.label.contains("Top Music Charts"))
+
+        val genreFilter = com.lx.tracklist.ui.search.DiscoveryFilter.Music(
+            mode = com.lx.tracklist.ui.search.MusicDiscoveryMode.BY_GENRE,
+            selectedGenre = "Rock"
+        )
+        assertTrue(genreFilter.label.contains("Rock Music"))
+
+        val yearFilter = com.lx.tracklist.ui.search.DiscoveryFilter.Music(
+            mode = com.lx.tracklist.ui.search.MusicDiscoveryMode.BY_YEAR,
+            year = 2024
+        )
+        assertTrue(yearFilter.label.contains("Music 2024"))
+    }
 }

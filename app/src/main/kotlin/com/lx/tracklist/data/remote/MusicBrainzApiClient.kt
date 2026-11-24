@@ -44,7 +44,7 @@ object MusicBrainzApiClient {
         try {
             throttle()
             val encodedQuery = URLEncoder.encode(trimmed, "UTF-8")
-            val url = "${MusicApiConfig.MUSICBRAINZ_BASE_URL}/recording/?query=$encodedQuery&fmt=json&limit=$limit"
+            val url = "${MusicApiConfig.MUSICBRAINZ_BASE_URL}/recording?query=$encodedQuery&fmt=json&limit=$limit"
 
             val request = Request.Builder()
                 .url(url)

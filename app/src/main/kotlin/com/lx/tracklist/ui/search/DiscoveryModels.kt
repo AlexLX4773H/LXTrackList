@@ -102,6 +102,18 @@ enum class GameSortOrder(val apiValue: String, val displayName: String) {
     RELEASE_DATE("first_release_date desc", "Release Date")
 }
 
+enum class MusicDiscoveryMode(val displayName: String, val iconEmoji: String) {
+    TOP_CHARTS("Top Charts", "🔥"),
+    BY_GENRE("By Genre", "🎸"),
+    BY_YEAR("By Year", "🗓️")
+}
+
+enum class MusicSortOrder(val apiValue: String, val displayName: String) {
+    POPULARITY("popularity", "Most Popular"),
+    RECENT("recent", "Release Date"),
+    TITLE("title", "Title (A–Z)")
+}
+
 enum class AdultMode(val displayName: String) {
     OFF("Off"),
     INCLUDE("18+"),
@@ -735,6 +747,47 @@ sealed class DiscoveryFilter {
                     AdultMode.ONLY -> " • 18+ Only"
                 }
                 return "$base$sortText$platText$tagsText$adultText"
+            }
+    }
+
+    data class Music(
+        val mode: MusicDiscoveryMode = MusicDiscoveryMode.TOP_CHARTS,
+        val selectedGenre: String? = null,
+        val year: Int? = AnimeSeason.currentYear(),
+        val startYear: Int? = null,
+        val endYear: Int? = year,
+        val sortOrder: MusicSortOrder = MusicSortOrder.POPULARITY,
+        override val includedTags: Set<String> = emptySet(),
+        override val excludedTags: Set<String> = emptySet(),
+        override val adultMode: AdultMode = AdultMode.OFF,
+        override val originalLanguages: Set<String> = emptySet(),
+        override val includedPlatforms: Set<String> = emptySet(),
+        override val excludedPlatforms: Set<String> = emptySet()
+    ) : DiscoveryFilter() {
+        val yearText: String
+            get() = when {
+                startYear != null && endYear != null && startYear != endYear -> "$startYear–$endYear"
+                endYear != null -> "$endYear"
+                year != null -> "$year"
+                startYear != null -> "$startYear"
+                else -> ""
+            }
+
+        override val label: String
+            get() {
+                val base = when (mode) {
+                    MusicDiscoveryMode.TOP_CHARTS -> "🔥 Top Music Charts"
+                    MusicDiscoveryMode.BY_GENRE -> if (!selectedGenre.isNullOrBlank()) "🎸 $selectedGenre Music" else "🎸 Music by Genre"
+                    MusicDiscoveryMode.BY_YEAR -> "🗓️ Music $yearText".trim()
+                }
+                val tagsText = when {
+                    includedTags.isNotEmpty() && excludedTags.isNotEmpty() -> " • +${includedTags.size} / -${excludedTags.size} tags"
+                    includedTags.isNotEmpty() -> " • +${includedTags.size} tags"
+                    excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"
+                    else -> ""
+                }
+                val langText = formatLanguageLabel(originalLanguages)
+                return "$base$tagsText$langText"
             }
     }
 }

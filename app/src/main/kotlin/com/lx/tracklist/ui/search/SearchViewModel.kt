@@ -16,6 +16,7 @@ import com.lx.tracklist.data.remote.BookMetadataManager
 import com.lx.tracklist.data.remote.GameMetadataManager
 import com.lx.tracklist.data.remote.GameSearchResult
 import com.lx.tracklist.data.remote.MusicMetadataManager
+import com.lx.tracklist.data.remote.MusicSearchResult
 import com.lx.tracklist.data.remote.buildGameDescriptionWithMetadata
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanMediaDetails
@@ -159,6 +160,9 @@ data class SearchResultItem(
             externalSource.equals("Kitsu", ignoreCase = true) -> "Open Kitsu"
             externalSource.equals("Google Books", ignoreCase = true) -> "Open Books"
             externalSource.equals("Open Library", ignoreCase = true) -> "Open Library"
+            externalSource.equals("Deezer", ignoreCase = true) -> "Open Deezer"
+            externalSource.equals("MusicBrainz", ignoreCase = true) -> "Open MusicBrainz"
+            externalSource.contains("Apple", ignoreCase = true) || externalSource.contains("iTunes", ignoreCase = true) -> "Open Apple Music"
             else -> "Open MAL"
         }
 }
@@ -295,6 +299,7 @@ class SearchViewModel(
             is DiscoveryFilter.LightNovel -> applyLightNovelDiscoveryFilter(filter, context)
             is DiscoveryFilter.Book -> applyBookDiscoveryFilter(filter, context)
             is DiscoveryFilter.Game -> applyGameDiscoveryFilter(filter, context)
+            is DiscoveryFilter.Music -> applyMusicDiscoveryFilter(filter, context)
         }
     }
 
@@ -475,6 +480,16 @@ class SearchViewModel(
         )
     }
 
+    fun removeMusicTagFilter(tag: String, context: Context? = null) {
+        val currentFilter = _uiState.value.activeDiscoveryFilter as? DiscoveryFilter.Music ?: return
+        val newIncluded = currentFilter.includedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        val newExcluded = currentFilter.excludedTags.filter { !it.equals(tag, ignoreCase = true) }.toSet()
+        applyMusicDiscoveryFilter(
+            currentFilter.copy(includedTags = newIncluded, excludedTags = newExcluded),
+            context = context
+        )
+    }
+
     fun removeGamePlatformFilter(platform: String, context: Context? = null) {
         val currentFilter = _uiState.value.activeDiscoveryFilter as? DiscoveryFilter.Game ?: return
         val newIncluded = currentFilter.includedPlatforms.filter { !it.equals(platform, ignoreCase = true) }.toSet()
@@ -502,6 +517,7 @@ class SearchViewModel(
             is DiscoveryFilter.LightNovel -> removeLightNovelTagFilter(tag, context)
             is DiscoveryFilter.Book -> removeBookTagFilter(tag, context)
             is DiscoveryFilter.Game -> removeGameTagFilter(tag, context)
+            is DiscoveryFilter.Music -> removeMusicTagFilter(tag, context)
             null -> {}
         }
     }
@@ -955,6 +971,65 @@ class SearchViewModel(
         }
     }
 
+    fun applyMusicDiscoveryFilter(filter: DiscoveryFilter.Music, context: Context? = null) {
+        searchJob?.cancel()
+        val currentQuery = _uiState.value.query.trim()
+        val yearPart = filter.year?.toString() ?: filter.endYear?.toString() ?: "ALL"
+        activeSearchKey = "DISCOVER:MUSIC:${filter.mode}:${filter.selectedGenre}:$yearPart:${filter.sortOrder}:${filter.includedTags.sorted()}:${filter.excludedTags.sorted()}:${filter.originalLanguages.sorted()}"
+        _uiState.update {
+            it.copy(
+                selectedCategory = SearchCategory.MUSIC,
+                activeDiscoveryFilter = filter,
+                isLoading = true,
+                currentPage = 1,
+                canLoadMore = false,
+                errorMessage = null,
+                results = emptyList()
+            )
+        }
+        if (currentQuery.length >= 2) {
+            searchJob = viewModelScope.launch {
+                executeSearch(currentQuery, SearchCategory.MUSIC, context)
+            }
+            return
+        }
+        searchJob = viewModelScope.launch {
+            try {
+                val results = withContext(Dispatchers.IO) {
+                    val res = MusicMetadataManager.discoverMusic(
+                        mode = filter.mode,
+                        genre = filter.selectedGenre ?: filter.includedTags.firstOrNull(),
+                        year = if (filter.mode == MusicDiscoveryMode.BY_YEAR) (filter.endYear ?: filter.year ?: filter.startYear) else null,
+                        startYear = if (filter.mode == MusicDiscoveryMode.BY_YEAR) filter.startYear else null,
+                        endYear = if (filter.mode == MusicDiscoveryMode.BY_YEAR) filter.endYear else null,
+                        sortOrder = filter.sortOrder,
+                        limit = 30
+                    )
+                    if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to discover music")
+                    res.getOrDefault(emptyList()).map { music -> mapMusicToSearchResult(music) }
+                }
+                _uiState.update {
+                    it.copy(
+                        results = results,
+                        isLoading = false,
+                        canLoadMore = false,
+                        errorMessage = if (results.isEmpty()) "No tracks found matching filter" else null
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        results = emptyList(),
+                        isLoading = false,
+                        errorMessage = e.message ?: "Failed to discover music"
+                    )
+                }
+            }
+        }
+    }
+
     fun loadMore(context: Context? = null) {
         val currentState = _uiState.value
         if (currentState.isLoading || currentState.isLoadingMore || !currentState.canLoadMore) return
@@ -1144,6 +1219,9 @@ class SearchViewModel(
                             }
                             list.map { game -> mapGameToSearchResult(game) }
                         }
+                        filter is DiscoveryFilter.Music -> {
+                            emptyList()
+                        }
                         currentState.selectedCategory == SearchCategory.MOVIES && query.length >= 2 -> {
                             val list = TmdbApiClient.searchMoviesMultiple(
                                 title = query,
@@ -1271,6 +1349,29 @@ class SearchViewModel(
             gameGenres = game.genres,
             gameDevelopers = game.developers,
             gamePublishers = game.publishers
+        )
+    }
+
+    private fun mapMusicToSearchResult(music: MusicSearchResult): SearchResultItem {
+        return SearchResultItem(
+            externalId = music.externalId,
+            externalSource = music.externalSource,
+            mediaType = MediaType.MUSIC,
+            title = music.title,
+            alternateTitle = music.alternateTitle,
+            posterUrl = music.coverUrl ?: music.albumCoverUrl,
+            releaseYear = music.releaseYear,
+            originalLanguage = music.originalLanguage ?: "en",
+            durationMinutes = music.durationSeconds,
+            score = music.score,
+            statusText = "Track",
+            synopsis = if (!music.albumName.isNullOrBlank()) "Album: ${music.albumName}" else null,
+            creator = music.artist,
+            albumName = music.albumName,
+            musicAlbumId = music.musicAlbumId,
+            musicTrackNumber = music.trackNumber,
+            musicArtist = music.artist,
+            directSiteUrl = music.webUrl
         )
     }
 
@@ -1549,6 +1650,22 @@ class SearchViewModel(
                                 ).getOrThrow()
                             }
                             return@withContext list.map { game -> mapGameToSearchResult(game) }
+                        }
+                        is DiscoveryFilter.Music -> {
+                            val list = if (query.isNotBlank()) {
+                                MusicMetadataManager.searchMusic(query, limit = 20).getOrThrow()
+                            } else {
+                                MusicMetadataManager.discoverMusic(
+                                    mode = activeFilter.mode,
+                                    genre = activeFilter.selectedGenre ?: activeFilter.includedTags.firstOrNull(),
+                                    year = if (activeFilter.mode == MusicDiscoveryMode.BY_YEAR) (activeFilter.endYear ?: activeFilter.year ?: activeFilter.startYear) else null,
+                                    startYear = if (activeFilter.mode == MusicDiscoveryMode.BY_YEAR) activeFilter.startYear else null,
+                                    endYear = if (activeFilter.mode == MusicDiscoveryMode.BY_YEAR) activeFilter.endYear else null,
+                                    sortOrder = activeFilter.sortOrder,
+                                    limit = 30
+                                ).getOrThrow()
+                            }
+                            return@withContext list.map { music -> mapMusicToSearchResult(music) }
                         }
                     }
                 }
@@ -2015,28 +2132,7 @@ class SearchViewModel(
                     SearchCategory.MUSIC -> {
                         val res = MusicMetadataManager.searchMusic(query, limit = 20)
                         if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to search music")
-                        res.getOrDefault(emptyList()).map { music ->
-                            SearchResultItem(
-                                externalId = music.externalId,
-                                externalSource = music.externalSource,
-                                mediaType = MediaType.MUSIC,
-                                title = music.title,
-                                alternateTitle = music.alternateTitle,
-                                posterUrl = music.coverUrl ?: music.albumCoverUrl,
-                                releaseYear = music.releaseYear,
-                                originalLanguage = music.originalLanguage ?: "en",
-                                durationMinutes = music.durationSeconds,
-                                score = music.score,
-                                statusText = "Music Track",
-                                synopsis = if (!music.albumName.isNullOrBlank()) "Album: ${music.albumName}" else null,
-                                creator = music.artist,
-                                albumName = music.albumName,
-                                musicAlbumId = music.musicAlbumId,
-                                musicTrackNumber = music.trackNumber,
-                                musicArtist = music.artist,
-                                directSiteUrl = music.webUrl
-                            )
-                        }
+                        res.getOrDefault(emptyList()).map { music -> mapMusicToSearchResult(music) }
                     }
                 }
             }
