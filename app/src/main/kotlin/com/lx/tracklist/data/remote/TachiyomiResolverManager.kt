@@ -1295,13 +1295,12 @@ object TachiyomiResolverManager {
         if (matchedBookDetails != null) {
             val book = matchedBookDetails!!
             val cleanedOriginalTitle = stripBracketedSuffixes(entry.title).takeIf { it.isNotBlank() } ?: entry.title
-
+            val candidateTitle = book.title.takeIf { it.isNotBlank() }
             val candidateSubtitle = book.subtitle?.takeIf { it.isNotBlank() }
             val currentAlts = entry.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
-            val extraAlts = if (candidateSubtitle != null && !candidateSubtitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
-                listOf(candidateSubtitle)
-            } else emptyList()
-            val allAlts = (extraAlts + currentAlts).distinct().filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
+            val extraAlts = listOfNotNull(candidateTitle, candidateSubtitle, cleanedOriginalTitle.takeIf { it != entry.title })
+                .filter { it.isNotBlank() && !it.equals(entry.title, ignoreCase = true) }
+            val allAlts = (extraAlts + currentAlts).distinct().filter { !it.equals(entry.title, ignoreCase = true) }
 
             val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(entry)
             val needsPoster = entry.coverImageUri.isNullOrBlank() ||
@@ -1343,7 +1342,7 @@ object TachiyomiResolverManager {
             }
 
             val updatedEntry = entry.copy(
-                title = cleanedOriginalTitle,
+                title = entry.title,
                 alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
                 creator = book.authorString.takeIf { it.isNotBlank() } ?: entry.creator,
                 externalSource = book.sourceProvider,
@@ -1365,14 +1364,14 @@ object TachiyomiResolverManager {
 
             repository.update(updatedEntry)
 
-            val titleChanged = !cleanedOriginalTitle.equals(entry.title, ignoreCase = false)
+            val titleChanged = false
 
             return ResolutionOutcome.Success(
                 ResolvedItemReport(
                     entryId = entry.id,
                     originalTitle = entry.title,
                     resolvedTitle = cleanedOriginalTitle,
-                    isTitleChanged = titleChanged,
+                    isTitleChanged = false,
                     alternateTitles = allAlts,
                     originalSource = entry.externalSource,
                     originalExternalId = entry.externalId,
@@ -1480,10 +1479,12 @@ object TachiyomiResolverManager {
         if (matchedDetails != null) {
             val game = matchedDetails
             val cleanedOriginalTitle = stripBracketedSuffixes(entry.title).takeIf { it.isNotBlank() } ?: entry.title
-
+            val candidateTitle = game.title.takeIf { it.isNotBlank() }
             val currentAlts = entry.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
-            val gameAlts = game.alternateTitles.map { it.trim() }.filter { it.isNotBlank() && !it.equals(cleanedOriginalTitle, ignoreCase = true) }
-            val allAlts = (gameAlts + currentAlts).distinct().filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
+            val extraAlts = (listOfNotNull(candidateTitle, cleanedOriginalTitle.takeIf { it != entry.title }) + game.alternateTitles)
+                .map { it.trim() }
+                .filter { it.isNotBlank() && !it.equals(entry.title, ignoreCase = true) }
+            val allAlts = (extraAlts + currentAlts).distinct().filter { !it.equals(entry.title, ignoreCase = true) }
 
             val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(entry)
             val needsPoster = entry.coverImageUri.isNullOrBlank() ||
@@ -1525,7 +1526,7 @@ object TachiyomiResolverManager {
             }
 
             val updatedEntry = entry.copy(
-                title = cleanedOriginalTitle,
+                title = entry.title,
                 alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
                 creator = (game.developers.firstOrNull() ?: game.publishers.firstOrNull())?.takeIf { it.isNotBlank() } ?: entry.creator,
                 externalSource = game.externalSource,
@@ -1546,7 +1547,7 @@ object TachiyomiResolverManager {
 
             repository.update(updatedEntry)
 
-            val titleChanged = !cleanedOriginalTitle.equals(entry.title, ignoreCase = false)
+            val titleChanged = false
 
             val webUrl = if (game.externalSource.equals("RAWG", ignoreCase = true)) {
                 "https://rawg.io/games/${game.externalId}"
@@ -1559,7 +1560,7 @@ object TachiyomiResolverManager {
                     entryId = entry.id,
                     originalTitle = entry.title,
                     resolvedTitle = cleanedOriginalTitle,
-                    isTitleChanged = titleChanged,
+                    isTitleChanged = false,
                     alternateTitles = allAlts,
                     originalSource = entry.externalSource,
                     originalExternalId = entry.externalId,
@@ -1600,13 +1601,12 @@ object TachiyomiResolverManager {
         val candidateAlts = matchDetails.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
         val currentAlts = entry.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
 
-        val extraAlts = if (candidateTitle != null && !candidateTitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
-            listOf(candidateTitle)
-        } else emptyList()
+        val extraAlts = (listOfNotNull(candidateTitle, cleanedOriginalTitle.takeIf { it != entry.title }) + candidateAlts)
+            .filter { it.isNotBlank() && !it.equals(entry.title, ignoreCase = true) }
 
-        val allAlts = (extraAlts + candidateAlts + currentAlts)
+        val allAlts = (extraAlts + currentAlts)
             .distinct()
-            .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
+            .filter { !it.equals(entry.title, ignoreCase = true) }
 
         // Preserve original Tachiyomi ID in description so future backup reimports match seamlessly
         val originalTachiId = entry.externalId?.takeIf {
@@ -1642,7 +1642,7 @@ object TachiyomiResolverManager {
         }
 
         val updatedEntry = entry.copy(
-            title = cleanedOriginalTitle,
+            title = entry.title,
             alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
             creator = matchDetails.authors?.takeIf { it.isNotBlank() } ?: entry.creator,
             externalSource = matchSource,
@@ -1663,14 +1663,14 @@ object TachiyomiResolverManager {
 
         repository.update(updatedEntry)
 
-        val titleChanged = !cleanedOriginalTitle.equals(entry.title, ignoreCase = false)
+        val titleChanged = false
 
         return ResolutionOutcome.Success(
             ResolvedItemReport(
                 entryId = entry.id,
                 originalTitle = entry.title,
                 resolvedTitle = cleanedOriginalTitle,
-                isTitleChanged = titleChanged,
+                isTitleChanged = false,
                 alternateTitles = allAlts,
                 originalSource = entry.externalSource,
                 originalExternalId = entry.externalId,
@@ -1897,13 +1897,12 @@ object TachiyomiResolverManager {
         val candidateAlts = matchDetails.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
         val currentAlts = entry.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
 
-        val extraAlts = if (candidateTitle != null && !candidateTitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
-            listOf(candidateTitle)
-        } else emptyList()
+        val extraAlts = (listOfNotNull(candidateTitle, cleanedOriginalTitle.takeIf { it != entry.title }) + candidateAlts)
+            .filter { it.isNotBlank() && !it.equals(entry.title, ignoreCase = true) }
 
-        val allAlts = (extraAlts + candidateAlts + currentAlts)
+        val allAlts = (extraAlts + currentAlts)
             .distinct()
-            .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
+            .filter { !it.equals(entry.title, ignoreCase = true) }
 
         val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(entry)
         val needsPoster = entry.coverImageUri.isNullOrBlank() ||
@@ -1947,7 +1946,7 @@ object TachiyomiResolverManager {
         } else entry.seasonEpisodesJson
 
         val updatedEntry = entry.copy(
-            title = cleanedOriginalTitle,
+            title = entry.title,
             alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
             creator = matchDetails.resolveCreatorFor(entry.mediaType == MediaType.SHOW || matchDetails.type == "TV") ?: entry.creator,
             externalSource = "TMDB",
@@ -1971,7 +1970,7 @@ object TachiyomiResolverManager {
 
         repository.update(updatedEntry)
 
-        val titleChanged = !cleanedOriginalTitle.equals(entry.title, ignoreCase = false)
+        val titleChanged = false
         val webUrl = if (entry.mediaType == MediaType.SHOW || matchDetails.type == "TV") {
             "https://www.themoviedb.org/tv/${matchDetails.tmdbId}"
         } else {
@@ -2108,13 +2107,12 @@ object TachiyomiResolverManager {
         val candidateAlts = matchDetails.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
         val currentAlts = entry.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
 
-        val extraAlts = if (candidateTitle != null && !candidateTitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
-            listOf(candidateTitle)
-        } else emptyList()
+        val extraAlts = (listOfNotNull(candidateTitle, cleanedOriginalTitle.takeIf { it != entry.title }) + candidateAlts)
+            .filter { it.isNotBlank() && !it.equals(entry.title, ignoreCase = true) }
 
-        val allAlts = (extraAlts + candidateAlts + currentAlts)
+        val allAlts = (extraAlts + currentAlts)
             .distinct()
-            .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
+            .filter { !it.equals(entry.title, ignoreCase = true) }
 
         val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(entry)
         val needsPoster = entry.coverImageUri.isNullOrBlank() ||
@@ -2139,7 +2137,7 @@ object TachiyomiResolverManager {
         }
 
         val updatedEntry = entry.copy(
-            title = cleanedOriginalTitle,
+            title = entry.title,
             alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
             creator = matchDetails.authors?.takeIf { it.isNotBlank() } ?: entry.creator,
             externalSource = matchSource,
@@ -2161,7 +2159,7 @@ object TachiyomiResolverManager {
 
         repository.update(updatedEntry)
 
-        val titleChanged = !cleanedOriginalTitle.equals(entry.title, ignoreCase = false)
+        val titleChanged = false
 
         return ResolutionOutcome.Success(
             ResolvedItemReport(

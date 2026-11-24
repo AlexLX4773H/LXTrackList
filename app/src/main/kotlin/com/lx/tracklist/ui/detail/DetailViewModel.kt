@@ -181,6 +181,7 @@ class DetailViewModel(
 
     private var loadedForEntryId: Long? = null
     private var checkedDurationForEntryId: Long? = null
+    private var loadRelatedJob: kotlinx.coroutines.Job? = null
 
     init {
         viewModelScope.launch {
@@ -190,7 +191,9 @@ class DetailViewModel(
                     if (localRelated.isNotEmpty() && _rawRelatedEntries.value.isEmpty()) {
                         _rawRelatedEntries.value = localRelated
                     }
-                    loadRelatedEntries(currentEntry)
+                    if (loadedForEntryId != currentEntry.id) {
+                        loadRelatedEntries(currentEntry)
+                    }
                     checkAndFetchMissingGameCompletionTime(currentEntry)
                 }
             }
@@ -243,12 +246,12 @@ class DetailViewModel(
         return false
     }
 
-    fun loadRelatedEntries(cur: MediaEntry, context: Context? = null) {
-        if (loadedForEntryId == cur.id && _rawRelatedEntries.value.isNotEmpty()) return
+    fun loadRelatedEntries(cur: MediaEntry, context: Context? = null, force: Boolean = false) {
+        if (!force && loadedForEntryId == cur.id && (_rawRelatedEntries.value.isNotEmpty() || _isLoadingRelated.value)) return
         loadedForEntryId = cur.id
 
         val localRelated = cur.getRelatedMediaItems()
-        if (localRelated.isNotEmpty() || (cur.relatedEntriesJson == "[]" && cur.mediaType != MediaType.BOOK)) {
+        if (!force && (localRelated.isNotEmpty() || (cur.relatedEntriesJson == "[]" && cur.mediaType != MediaType.BOOK))) {
             _rawRelatedEntries.value = localRelated
             _isLoadingRelated.value = false
             _relatedErrorMessage.value = null
@@ -258,7 +261,8 @@ class DetailViewModel(
         _isLoadingRelated.value = true
         _relatedErrorMessage.value = null
 
-        viewModelScope.launch(Dispatchers.IO) {
+        loadRelatedJob?.cancel()
+        loadRelatedJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 val isAnime = isAnimeOrManga(cur)
                 val isBook = cur.mediaType == MediaType.BOOK
@@ -332,8 +336,9 @@ class DetailViewModel(
                     _relatedErrorMessage.value = null
 
                     val json = com.google.gson.Gson().toJson(filtered)
-                    if (json != cur.relatedEntriesJson) {
-                        repository.update(cur.copy(relatedEntriesJson = json, updatedAt = System.currentTimeMillis()))
+                    val latest = repository.getEntryByIdSync(cur.id) ?: return@launch
+                    if (json != latest.relatedEntriesJson) {
+                        repository.update(latest.copy(relatedEntriesJson = json, updatedAt = System.currentTimeMillis()))
                     }
                 } else {
                     val ex = fetchResult.exceptionOrNull()
@@ -345,14 +350,16 @@ class DetailViewModel(
                     if (isNotFound) {
                         _rawRelatedEntries.value = emptyList()
                         _relatedErrorMessage.value = null
-                        if (cur.relatedEntriesJson != "[]") {
-                            repository.update(cur.copy(relatedEntriesJson = "[]", updatedAt = System.currentTimeMillis()))
+                        val latest = repository.getEntryByIdSync(cur.id) ?: return@launch
+                        if (latest.relatedEntriesJson != "[]") {
+                            repository.update(latest.copy(relatedEntriesJson = "[]", updatedAt = System.currentTimeMillis()))
                         }
                     } else {
                         _relatedErrorMessage.value = "Unable to load related entries. Tap to retry."
                     }
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
                 val isNotFound = e is com.lx.tracklist.data.remote.NotFoundException ||
                         e is com.lx.tracklist.data.remote.TmdbNotFoundException ||
                         e.message?.contains("not found", ignoreCase = true) == true ||
@@ -361,8 +368,9 @@ class DetailViewModel(
                 if (isNotFound) {
                     _rawRelatedEntries.value = emptyList()
                     _relatedErrorMessage.value = null
-                    if (cur.relatedEntriesJson != "[]") {
-                        repository.update(cur.copy(relatedEntriesJson = "[]", updatedAt = System.currentTimeMillis()))
+                    val latest = repository.getEntryByIdSync(cur.id) ?: return@launch
+                    if (latest.relatedEntriesJson != "[]") {
+                        repository.update(latest.copy(relatedEntriesJson = "[]", updatedAt = System.currentTimeMillis()))
                     }
                 } else {
                     _relatedErrorMessage.value = "Failed to load related entries (${e.localizedMessage ?: "network error"}). Tap to retry."
@@ -375,9 +383,9 @@ class DetailViewModel(
 
     fun retryLoadRelatedEntries(context: Context? = null) {
         val cur = entry.value ?: return
-        loadedForEntryId = null
+        _rawRelatedEntries.value = emptyList()
         _relatedErrorMessage.value = null
-        loadRelatedEntries(cur.copy(relatedEntriesJson = null), context)
+        loadRelatedEntries(cur.copy(relatedEntriesJson = null), context, force = true)
     }
 
     suspend fun addRelatedToLibrary(item: RelatedMediaItem, status: MediaStatus, context: Context? = null): Long {
@@ -723,24 +731,33 @@ class DetailViewModel(
 
                     if (match != null) {
                         val now = System.currentTimeMillis()
-                        val updated = cur.copy(
-                            externalId = match.externalId.takeIf { it.isNotBlank() } ?: cur.externalId,
-                            externalSource = match.externalSource.takeIf { it.isNotBlank() } ?: cur.externalSource,
-                            creator = match.artist.takeIf { it.isNotBlank() } ?: cur.creator,
-                            movieSeriesName = match.albumName?.takeIf { it.isNotBlank() } ?: cur.movieSeriesName,
-                            movieSeriesNumber = match.trackNumber ?: cur.movieSeriesNumber,
-                            musicAlbumId = match.musicAlbumId?.takeIf { it.isNotBlank() } ?: cur.musicAlbumId,
-                            coverImageUri = (match.coverUrl ?: match.albumCoverUrl)?.takeIf { it.isNotBlank() } ?: cur.coverImageUri,
-                            durationMinutes = match.durationSeconds ?: cur.durationMinutes,
-                            tags = match.genres.joinToString(", ").takeIf { it.isNotBlank() } ?: cur.tags,
-                            airedStartDate = match.releaseDateMillis ?: cur.airedStartDate,
-                            originalLanguage = match.originalLanguage ?: cur.originalLanguage,
+                        val latest = repository.getEntryByIdSync(cur.id) ?: cur
+                        val candidateTitle = match.title.trim()
+                        val currentAlts = (latest.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() }
+                        val mergedAlts = if (candidateTitle.isNotBlank() && !candidateTitle.equals(latest.title, ignoreCase = true) && !currentAlts.any { it.equals(candidateTitle, ignoreCase = true) }) {
+                            currentAlts + candidateTitle
+                        } else {
+                            currentAlts
+                        }
+                        val updated = latest.copy(
+                            title = latest.title,
+                            externalId = match.externalId.takeIf { it.isNotBlank() } ?: latest.externalId,
+                            externalSource = match.externalSource.takeIf { it.isNotBlank() } ?: latest.externalSource,
+                            creator = match.artist.takeIf { it.isNotBlank() } ?: latest.creator,
+                            movieSeriesName = match.albumName?.takeIf { it.isNotBlank() } ?: latest.movieSeriesName,
+                            movieSeriesNumber = match.trackNumber ?: latest.movieSeriesNumber,
+                            musicAlbumId = match.musicAlbumId?.takeIf { it.isNotBlank() } ?: latest.musicAlbumId,
+                            coverImageUri = (match.coverUrl ?: match.albumCoverUrl)?.takeIf { it.isNotBlank() } ?: latest.coverImageUri,
+                            durationMinutes = match.durationSeconds ?: latest.durationMinutes,
+                            tags = match.genres.joinToString(", ").takeIf { it.isNotBlank() } ?: latest.tags,
+                            airedStartDate = match.releaseDateMillis ?: latest.airedStartDate,
+                            originalLanguage = match.originalLanguage ?: latest.originalLanguage,
+                            alternateTitle = mergedAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: latest.alternateTitle,
                             updatedAt = now
                         )
                         repository.update(updated)
                         _metadataRefreshMessage.value = "Metadata refreshed from ${match.externalSource} (${match.title})"
-                        loadedForEntryId = -1L
-                        loadRelatedEntries(updated, context)
+                        loadRelatedEntries(updated, context, force = true)
                         return@launch
                     } else {
                         _metadataRefreshMessage.value = "No matching music track found for \"${cur.title}\""
@@ -762,39 +779,46 @@ class DetailViewModel(
                     val details = detailsRes.getOrNull()
                     if (details != null) {
                         val now = System.currentTimeMillis()
+                        val latest = repository.getEntryByIdSync(cur.id) ?: cur
+                        val candidateTitle = details.title.trim()
+                        val currentAlts = (latest.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() }
+                        val gameAlts = details.alternateTitles.map { it.trim() }.filter { it.isNotBlank() }
+                        val allCandidates = (listOf(candidateTitle) + gameAlts).filter { it.isNotBlank() && !it.equals(latest.title, ignoreCase = true) }
+                        val mergedAlts = (currentAlts + allCandidates).distinct()
+
                         val remotePlatforms = details.platforms
-                        val mergedPlatforms = if (cur.gamePlatforms.isNullOrBlank()) {
+                        val mergedPlatforms = if (latest.gamePlatforms.isNullOrBlank()) {
                             MediaEntry.formatGamePlatforms(remotePlatforms)
                         } else {
-                            val curList = cur.getGamePlatformList().toMutableList()
+                            val curList = latest.getGamePlatformList().toMutableList()
                             remotePlatforms.forEach { p ->
                                 if (!curList.any { it.equals(p, ignoreCase = true) }) curList.add(p)
                             }
                             MediaEntry.formatGamePlatforms(curList)
                         }
 
-                        val updated = cur.copy(
+                        val updated = latest.copy(
+                            title = latest.title,
                             externalId = details.externalId,
                             externalSource = details.externalSource,
                             creator = details.developers.firstOrNull()?.takeIf { it.isNotBlank() }
                                 ?: details.publishers.firstOrNull()?.takeIf { it.isNotBlank() }
-                                ?: cur.creator,
-                            coverImageUri = details.coverUrl ?: cur.coverImageUri,
-                            alternateTitle = if (details.alternateTitles.isNotEmpty()) details.alternateTitles.joinToString("\n") else cur.alternateTitle,
-                            airedStartDate = details.releaseDateMillis ?: cur.airedStartDate,
-                            externalScore = details.rating ?: cur.externalScore,
+                                ?: latest.creator,
+                            coverImageUri = details.coverUrl ?: latest.coverImageUri,
+                            alternateTitle = mergedAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: latest.alternateTitle,
+                            airedStartDate = details.releaseDateMillis ?: latest.airedStartDate,
+                            externalScore = details.rating ?: latest.externalScore,
                             externalScoreSource = details.ratingSource,
-                            tags = if (details.genres.isNotEmpty()) details.genres.joinToString(", ") else cur.tags,
-                            description = details.buildDescriptionWithMetadata().takeIf { it.isNotBlank() } ?: cur.description,
-                            durationMinutes = details.completionTimeMinutes ?: cur.durationMinutes,
+                            tags = if (details.genres.isNotEmpty()) details.genres.joinToString(", ") else latest.tags,
+                            description = details.buildDescriptionWithMetadata().takeIf { it.isNotBlank() } ?: latest.description,
+                            durationMinutes = details.completionTimeMinutes ?: latest.durationMinutes,
                             gamePlatforms = mergedPlatforms,
-                            relatedEntriesJson = if (details.relatedItems.isNotEmpty()) com.google.gson.Gson().toJson(details.relatedItems) else cur.relatedEntriesJson,
+                            relatedEntriesJson = if (details.relatedItems.isNotEmpty()) com.google.gson.Gson().toJson(details.relatedItems) else latest.relatedEntriesJson,
                             updatedAt = now
                         )
                         repository.update(updated)
                         _metadataRefreshMessage.value = "Metadata refreshed from ${details.externalSource} (${details.title})"
-                        loadedForEntryId = -1L
-                        loadRelatedEntries(updated, context)
+                        loadRelatedEntries(updated, context, force = true)
                         return@launch
                     } else {
                         val errMsg = detailsRes.exceptionOrNull()?.message ?: "Failed to fetch game details"
@@ -869,6 +893,13 @@ class DetailViewModel(
 
                     if (bookDetails != null) {
                         val now = System.currentTimeMillis()
+                        val latest = repository.getEntryByIdSync(cur.id) ?: cur
+                        val candidateTitle = bookDetails.title.trim()
+                        val candidateSubtitle = bookDetails.subtitle?.trim().orEmpty()
+                        val currentAlts = (latest.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() }
+                        val candidates = listOf(candidateTitle, candidateSubtitle).filter { it.isNotBlank() && !it.equals(latest.title, ignoreCase = true) }
+                        val mergedAlts = (currentAlts + candidates).distinct()
+
                         val publishEpoch = bookDetails.publishedDate?.let { dateStr ->
                             try {
                                 when (dateStr.length) {
@@ -884,31 +915,31 @@ class DetailViewModel(
                             (bookDetails.totalChapters ?: 0) > 0 -> TrackingUnit.CHAPTERS
                             else -> TrackingUnit.PAGES
                         }
-                        val updated = cur.copy(
-                            coverImageUri = if (!bookDetails.coverUrl.isNullOrBlank()) bookDetails.coverUrl else cur.coverImageUri,
-                            creator = bookDetails.authorString.takeIf { it.isNotBlank() } ?: cur.creator,
-                            alternateTitle = if (!bookDetails.subtitle.isNullOrBlank()) bookDetails.subtitle else cur.alternateTitle,
-                            totalPages = if (bookDetails.pageCount != null && bookDetails.pageCount > 0) bookDetails.pageCount else cur.totalPages,
-                            totalVolumes = if (bookDetails.totalVolumes != null && bookDetails.totalVolumes > 0) bookDetails.totalVolumes else cur.totalVolumes,
-                            totalChapters = if (bookDetails.totalChapters != null && bookDetails.totalChapters > 0) bookDetails.totalChapters else cur.totalChapters,
+                        val updated = latest.copy(
+                            title = latest.title,
+                            coverImageUri = if (!bookDetails.coverUrl.isNullOrBlank()) bookDetails.coverUrl else latest.coverImageUri,
+                            creator = bookDetails.authorString.takeIf { it.isNotBlank() } ?: latest.creator,
+                            alternateTitle = mergedAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: latest.alternateTitle,
+                            totalPages = if (bookDetails.pageCount != null && bookDetails.pageCount > 0) bookDetails.pageCount else latest.totalPages,
+                            totalVolumes = if (bookDetails.totalVolumes != null && bookDetails.totalVolumes > 0) bookDetails.totalVolumes else latest.totalVolumes,
+                            totalChapters = if (bookDetails.totalChapters != null && bookDetails.totalChapters > 0) bookDetails.totalChapters else latest.totalChapters,
                             trackingUnit = targetUnit,
-                            airedStartDate = publishEpoch ?: cur.airedStartDate,
-                            airedEndDate = publishEpoch ?: cur.airedEndDate ?: cur.airedStartDate,
-                            externalScore = bookDetails.averageScore ?: cur.externalScore,
+                            airedStartDate = publishEpoch ?: latest.airedStartDate,
+                            airedEndDate = publishEpoch ?: latest.airedEndDate ?: latest.airedStartDate,
+                            externalScore = bookDetails.averageScore ?: latest.externalScore,
                             externalScoreSource = bookDetails.sourceProvider,
-                            tags = bookDetails.buildTagsString().takeIf { it.isNotBlank() } ?: cur.tags,
-                            description = (bookDetails.buildDescriptionWithMetadata()).takeIf { it.isNotBlank() } ?: (cur.description ?: cur.notes),
-                            userComments = cur.userComments,
-                            originalLanguage = bookDetails.language ?: cur.originalLanguage,
-                            externalId = bookDetails.id.takeIf { it.isNotBlank() } ?: cur.externalId,
+                            tags = bookDetails.buildTagsString().takeIf { it.isNotBlank() } ?: latest.tags,
+                            description = (bookDetails.buildDescriptionWithMetadata()).takeIf { it.isNotBlank() } ?: (latest.description ?: latest.notes),
+                            userComments = latest.userComments,
+                            originalLanguage = bookDetails.language ?: latest.originalLanguage,
+                            externalId = bookDetails.id.takeIf { it.isNotBlank() } ?: latest.externalId,
                             externalSource = bookDetails.sourceProvider,
                             relatedEntriesJson = null,
                             updatedAt = now
                         )
                         repository.update(updated)
                         _metadataRefreshMessage.value = "Metadata refreshed from ${bookDetails.sourceProvider} (${bookDetails.title})"
-                        loadedForEntryId = -1L
-                        loadRelatedEntries(updated, context)
+                        loadRelatedEntries(updated, context, force = true)
                         return@launch
                     } else {
                         _metadataRefreshMessage.value = "No metadata returned from external book databases."
@@ -987,27 +1018,36 @@ class DetailViewModel(
                         if (details != null) {
                             val now = System.currentTimeMillis()
                             val mdId = details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: mangaDexIdToUse
-                            val updated = cur.copy(
+                            val latest = repository.getEntryByIdSync(cur.id) ?: cur
+                            val candidateTitle = details.title?.trim().orEmpty()
+                            val candidateAlts = details.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+                            val currentAlts = (latest.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() }
+                            val allCandidates = (listOf(candidateTitle) + candidateAlts).filter { it.isNotBlank() && !it.equals(latest.title, ignoreCase = true) }
+                            val mergedAlts = (currentAlts + allCandidates).distinct()
+
+                            val updated = latest.copy(
+                                title = latest.title,
                                 externalId = mdId,
                                 externalSource = "MangaDex",
-                                creator = details.authors?.takeIf { it.isNotBlank() } ?: cur.creator,
-                                coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else cur.coverImageUri,
-                                alternateTitle = if (!details.alternateTitle.isNullOrBlank()) details.alternateTitle else cur.alternateTitle,
-                                totalChapters = if (details.totalChapters != null && details.totalChapters > 0) details.totalChapters else cur.totalChapters,
-                                totalVolumes = if (details.totalVolumes != null && details.totalVolumes > 0) details.totalVolumes else cur.totalVolumes,
-                                airedStartDate = details.airedStartDate ?: cur.airedStartDate,
-                                airedEndDate = if (details.isAiring == true) null else (details.airedEndDate ?: cur.airedEndDate),
-                                externalScore = details.externalScore ?: cur.externalScore,
+                                creator = details.authors?.takeIf { it.isNotBlank() } ?: latest.creator,
+                                coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else latest.coverImageUri,
+                                alternateTitle = mergedAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: latest.alternateTitle,
+                                totalChapters = if (details.totalChapters != null && details.totalChapters > 0) details.totalChapters else latest.totalChapters,
+                                totalVolumes = if (details.totalVolumes != null && details.totalVolumes > 0) details.totalVolumes else latest.totalVolumes,
+                                airedStartDate = details.airedStartDate ?: latest.airedStartDate,
+                                airedEndDate = if (details.isAiring == true) null else (details.airedEndDate ?: latest.airedEndDate),
+                                externalScore = details.externalScore ?: latest.externalScore,
                                 externalScoreSource = details.externalScoreSource ?: "MangaDex",
-                                tags = if (!details.tags.isNullOrBlank()) details.tags else cur.tags,
-                                description = if (!details.synopsis.isNullOrBlank()) details.synopsis else (cur.description ?: cur.notes),
-                                userComments = cur.userComments,
-                                isAiring = details.isAiring ?: cur.isAiring,
-                                originalLanguage = details.originalLanguage ?: cur.originalLanguage,
+                                tags = if (!details.tags.isNullOrBlank()) details.tags else latest.tags,
+                                description = if (!details.synopsis.isNullOrBlank()) details.synopsis else (latest.description ?: latest.notes),
+                                userComments = latest.userComments,
+                                isAiring = details.isAiring ?: latest.isAiring,
+                                originalLanguage = details.originalLanguage ?: latest.originalLanguage,
                                 updatedAt = now
                             )
                             repository.update(updated)
                             _metadataRefreshMessage.value = "Metadata refreshed from MangaDex (${details.title})"
+                            loadRelatedEntries(updated, context, force = true)
                         } else {
                             attemptFallbackResolution("No metadata returned from MangaDex")
                         }
@@ -1032,6 +1072,13 @@ class DetailViewModel(
                         val details = result.getOrNull()
                         if (details != null) {
                             val now = System.currentTimeMillis()
+                            val latest = repository.getEntryByIdSync(cur.id) ?: cur
+                            val candidateTitle = details.title?.trim().orEmpty()
+                            val candidateAlts = details.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+                            val currentAlts = (latest.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() }
+                            val allCandidates = (listOf(candidateTitle) + candidateAlts).filter { it.isNotBlank() && !it.equals(latest.title, ignoreCase = true) }
+                            val mergedAlts = (currentAlts + allCandidates).distinct()
+
                             val resolvedSource = when {
                                 details.sourceProvider == "MangaDex" -> "MangaDex"
                                 details.sourceProvider.startsWith("MAL") -> "MAL"
@@ -1041,65 +1088,66 @@ class DetailViewModel(
                             }
                             val newExtId = when {
                                 details.sourceProvider == "MangaDex" -> {
-                                    details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: cur.externalId
+                                    details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: latest.externalId
                                 }
                                 details.sourceProvider.contains("AniList") -> {
                                     (details.malId?.takeIf { it > 0 } ?: details.url?.substringAfterLast('/')?.toLongOrNull())?.toString()
-                                        ?: cur.externalId
+                                        ?: latest.externalId
                                 }
                                 details.sourceProvider.equals("Kitsu", ignoreCase = true) -> {
                                     details.malId?.toString() ?: details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-                                        ?: cur.externalId
+                                        ?: latest.externalId
                                 }
                                 else -> {
-                                    (details.malId ?: extId)?.toString() ?: cur.externalId
+                                    (details.malId ?: extId)?.toString() ?: latest.externalId
                                 }
                             }
                             val newAiredEpisodes = if (details.airedEpisodes != null && details.airedEpisodes > 0) {
                                 details.airedEpisodes
-                            } else if (cur.mediaType == MediaType.ANIME && (details.isAiring ?: cur.isAiring)) {
-                                val effective = cur.copy(
-                                    airedStartDate = details.airedStartDate ?: cur.airedStartDate,
-                                    totalEpisodes = if (details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else cur.totalEpisodes,
-                                    isAiring = details.isAiring ?: cur.isAiring
+                            } else if (latest.mediaType == MediaType.ANIME && (details.isAiring ?: latest.isAiring)) {
+                                val effective = latest.copy(
+                                    airedStartDate = details.airedStartDate ?: latest.airedStartDate,
+                                    totalEpisodes = if (details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else latest.totalEpisodes,
+                                    isAiring = details.isAiring ?: latest.isAiring
                                 ).getEffectiveAiredEpisodes()
-                                if (effective > 0) effective else cur.airedEpisodes
+                                if (effective > 0) effective else latest.airedEpisodes
                             } else {
-                                cur.airedEpisodes
+                                latest.airedEpisodes
                             }
-                            val newBroadcastTime = if (!details.broadcastTime.isNullOrBlank()) details.broadcastTime else cur.broadcastTime
-                            val newNextAiringEpoch = details.nextAiringEpoch ?: cur.nextAiringEpoch
+                            val newBroadcastTime = if (!details.broadcastTime.isNullOrBlank()) details.broadcastTime else latest.broadcastTime
+                            val newNextAiringEpoch = details.nextAiringEpoch ?: latest.nextAiringEpoch
 
                             val relatedJson = if (!details.relatedMedia.isNullOrEmpty()) {
                                 com.google.gson.Gson().toJson(details.relatedMedia)
                             } else {
-                                cur.relatedEntriesJson
+                                latest.relatedEntriesJson
                             }
 
-                            val updated = cur.copy(
+                            val updated = latest.copy(
+                                title = latest.title,
                                 externalId = newExtId,
                                 externalSource = resolvedSource,
-                                creator = details.authors?.takeIf { it.isNotBlank() } ?: cur.creator,
-                                coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else cur.coverImageUri,
-                                alternateTitle = if (!details.alternateTitle.isNullOrBlank()) details.alternateTitle else cur.alternateTitle,
-                                totalEpisodes = if (details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else cur.totalEpisodes,
-                                totalChapters = if (details.totalChapters != null && details.totalChapters > 0) details.totalChapters else cur.totalChapters,
-                                totalVolumes = if (details.totalVolumes != null && details.totalVolumes > 0) details.totalVolumes else cur.totalVolumes,
+                                creator = details.authors?.takeIf { it.isNotBlank() } ?: latest.creator,
+                                coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else latest.coverImageUri,
+                                alternateTitle = mergedAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: latest.alternateTitle,
+                                totalEpisodes = if (details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else latest.totalEpisodes,
+                                totalChapters = if (details.totalChapters != null && details.totalChapters > 0) details.totalChapters else latest.totalChapters,
+                                totalVolumes = if (details.totalVolumes != null && details.totalVolumes > 0) details.totalVolumes else latest.totalVolumes,
                                 airedEpisodes = newAiredEpisodes,
                                 broadcastTime = newBroadcastTime,
                                 nextAiringEpoch = newNextAiringEpoch,
-                                episodeLengthMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.episodeLengthMinutes,
-                                durationMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.durationMinutes,
-                                airedStartDate = details.airedStartDate ?: cur.airedStartDate,
-                                airedEndDate = if (details.isAiring == true) null else (details.airedEndDate ?: cur.airedEndDate),
-                                externalScore = details.externalScore ?: cur.externalScore,
+                                episodeLengthMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else latest.episodeLengthMinutes,
+                                durationMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else latest.durationMinutes,
+                                airedStartDate = details.airedStartDate ?: latest.airedStartDate,
+                                airedEndDate = if (details.isAiring == true) null else (details.airedEndDate ?: latest.airedEndDate),
+                                externalScore = details.externalScore ?: latest.externalScore,
                                 externalScoreSource = details.externalScoreSource ?: resolvedSource,
-                                tags = if (!details.tags.isNullOrBlank()) details.tags else cur.tags,
-                                description = if (!details.synopsis.isNullOrBlank()) details.synopsis else (cur.description ?: cur.notes),
-                                userComments = cur.userComments,
-                                isAiring = details.isAiring ?: cur.isAiring,
+                                tags = if (!details.tags.isNullOrBlank()) details.tags else latest.tags,
+                                description = if (!details.synopsis.isNullOrBlank()) details.synopsis else (latest.description ?: latest.notes),
+                                userComments = latest.userComments,
+                                isAiring = details.isAiring ?: latest.isAiring,
                                 relatedEntriesJson = relatedJson,
-                                originalLanguage = details.originalLanguage ?: cur.originalLanguage,
+                                originalLanguage = details.originalLanguage ?: latest.originalLanguage,
                                 updatedAt = now
                             )
                             repository.update(updated)
@@ -1107,6 +1155,7 @@ class DetailViewModel(
                                 _rawRelatedEntries.value = details.relatedMedia
                             }
                             _metadataRefreshMessage.value = "Metadata refreshed from $resolvedSource (#$newExtId)"
+                            loadRelatedEntries(updated, context, force = true)
                         } else {
                             attemptFallbackResolution("No metadata returned from external source")
                         }
@@ -1127,45 +1176,51 @@ class DetailViewModel(
                         val details = result.getOrNull()
                         if (details != null) {
                             val now = System.currentTimeMillis()
+                            val latest = repository.getEntryByIdSync(cur.id) ?: cur
+                            val candidateTitle = details.title?.trim().orEmpty()
+                            val candidateAlts = details.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+                            val currentAlts = (latest.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() }
+                            val allCandidates = (listOf(candidateTitle) + candidateAlts).filter { it.isNotBlank() && !it.equals(latest.title, ignoreCase = true) }
+                            val mergedAlts = if (forceReLink || isTvContaminatedMovie || latest.alternateTitle?.contains("Dr. Hudson", ignoreCase = true) == true) {
+                                allCandidates.distinct()
+                            } else {
+                                (currentAlts + allCandidates).distinct()
+                            }
+
                             val relatedJson = if (!details.relatedItems.isNullOrEmpty()) {
                                 com.google.gson.Gson().toJson(details.relatedItems)
                             } else {
-                                cur.relatedEntriesJson
+                                latest.relatedEntriesJson
                             }
-                            val seriesName = if (cur.mediaType == MediaType.MOVIE && !details.movieSeriesName.isNullOrBlank()) details.movieSeriesName else cur.movieSeriesName
+                            val seriesName = if (latest.mediaType == MediaType.MOVIE && !details.movieSeriesName.isNullOrBlank()) details.movieSeriesName else latest.movieSeriesName
 
-                            val updated = cur.copy(
+                            val updated = latest.copy(
+                                title = latest.title,
                                 externalId = details.tmdbId.toString(),
                                 externalSource = "TMDB",
-                                creator = details.resolveCreatorFor(isTv) ?: cur.creator,
-                                coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else cur.coverImageUri,
-                                alternateTitle = if (!details.alternateTitle.isNullOrBlank()) {
-                                    details.alternateTitle
-                                } else if (forceReLink || isTvContaminatedMovie || cur.alternateTitle?.contains("Dr. Hudson", ignoreCase = true) == true) {
-                                    null
+                                creator = details.resolveCreatorFor(isTv) ?: latest.creator,
+                                coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else latest.coverImageUri,
+                                alternateTitle = mergedAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: latest.alternateTitle,
+                                totalEpisodes = if (isTv && details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else if (isTv) latest.totalEpisodes else 0,
+                                totalSeasons = if (isTv && details.totalSeasons != null && details.totalSeasons > 0) details.totalSeasons else if (isTv) latest.totalSeasons else 1,
+                                seasonEpisodesJson = if (latest.mediaType == MediaType.SHOW && details.seasonEpisodes != null) {
+                                    MediaEntry.formatSeasonEpisodes(details.seasonEpisodes) ?: latest.seasonEpisodesJson
                                 } else {
-                                    cur.alternateTitle
+                                    latest.seasonEpisodesJson
                                 },
-                                totalEpisodes = if (isTv && details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else if (isTv) cur.totalEpisodes else 0,
-                                totalSeasons = if (isTv && details.totalSeasons != null && details.totalSeasons > 0) details.totalSeasons else if (isTv) cur.totalSeasons else 1,
-                                seasonEpisodesJson = if (cur.mediaType == MediaType.SHOW && details.seasonEpisodes != null) {
-                                    MediaEntry.formatSeasonEpisodes(details.seasonEpisodes) ?: cur.seasonEpisodesJson
-                                } else {
-                                    cur.seasonEpisodesJson
-                                },
-                                durationMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.durationMinutes,
-                                episodeLengthMinutes = if (isTv && details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else if (isTv) cur.episodeLengthMinutes else null,
-                                airedStartDate = details.airedStartDate ?: cur.airedStartDate,
-                                airedEndDate = if (details.isAiring == true) null else (details.airedEndDate ?: cur.airedEndDate),
-                                externalScore = details.externalScore ?: cur.externalScore,
+                                durationMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else latest.durationMinutes,
+                                episodeLengthMinutes = if (isTv && details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else if (isTv) latest.episodeLengthMinutes else null,
+                                airedStartDate = details.airedStartDate ?: latest.airedStartDate,
+                                airedEndDate = if (details.isAiring == true) null else (details.airedEndDate ?: latest.airedEndDate),
+                                externalScore = details.externalScore ?: latest.externalScore,
                                 externalScoreSource = "TMDB",
-                                tags = if (!details.tags.isNullOrBlank()) details.tags else cur.tags,
-                                description = details.buildDescriptionWithMetadata().takeIf { it.isNotBlank() } ?: (cur.description ?: cur.notes),
-                                userComments = cur.userComments,
-                                isAiring = details.isAiring ?: cur.isAiring,
+                                tags = if (!details.tags.isNullOrBlank()) details.tags else latest.tags,
+                                description = details.buildDescriptionWithMetadata().takeIf { it.isNotBlank() } ?: (latest.description ?: latest.notes),
+                                userComments = latest.userComments,
+                                isAiring = details.isAiring ?: latest.isAiring,
                                 relatedEntriesJson = relatedJson,
                                 movieSeriesName = seriesName,
-                                originalLanguage = details.originalLanguage ?: cur.originalLanguage ?: (if (cur.mediaType != MediaType.GAME) cur.getEffectiveLanguage() else null),
+                                originalLanguage = details.originalLanguage ?: latest.originalLanguage ?: (if (latest.mediaType != MediaType.GAME) latest.getEffectiveLanguage() else null),
                                 updatedAt = now
                             )
                             repository.update(updated)
@@ -1173,6 +1228,7 @@ class DetailViewModel(
                                 _rawRelatedEntries.value = details.relatedItems
                             }
                             _metadataRefreshMessage.value = "Metadata refreshed from TMDB (TMDB #${details.tmdbId})"
+                            loadRelatedEntries(updated, context, force = true)
                         } else {
                             attemptFallbackResolution("No metadata returned from The Movie Database")
                         }
@@ -1192,7 +1248,8 @@ class DetailViewModel(
     fun updateCoverImage(coverUrl: String) {
         val cur = entry.value ?: return
         viewModelScope.launch {
-            val updated = cur.copy(
+            val latest = repository.getEntryByIdSync(cur.id) ?: cur
+            val updated = latest.copy(
                 coverImageUri = coverUrl,
                 updatedAt = System.currentTimeMillis()
             )

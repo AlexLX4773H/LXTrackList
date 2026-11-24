@@ -189,11 +189,13 @@ object MalSyncManager {
                 val listStatus = details.myListStatus
                     ?: return@withContext Result.failure(Exception("Entry is not on your MyAnimeList list yet."))
 
-                val updatedEntry = entry.copy(
+                val latest = repository.getEntryByIdSync(entry.id) ?: entry
+                val updatedEntry = latest.copy(
+                    title = latest.title,
                     status = mapMalStatusToLx(listStatus.status),
-                    score = listStatus.score?.takeIf { it > 0 } ?: entry.score,
+                    score = listStatus.score?.takeIf { it > 0 } ?: latest.score,
                     currentEpisodes = listStatus.numEpisodesWatched,
-                    totalEpisodes = if (details.numEpisodes > 0) details.numEpisodes else entry.totalEpisodes,
+                    totalEpisodes = if (details.numEpisodes > 0) details.numEpisodes else latest.totalEpisodes,
                     isRewatching = listStatus.isRewatching,
                     rewatchCount = listStatus.numTimesRewatched,
                     updatedAt = System.currentTimeMillis()
@@ -210,13 +212,15 @@ object MalSyncManager {
                 val listStatus = details.myListStatus
                     ?: return@withContext Result.failure(Exception("Entry is not on your MyAnimeList list yet."))
 
-                val updatedEntry = entry.copy(
+                val latest = repository.getEntryByIdSync(entry.id) ?: entry
+                val updatedEntry = latest.copy(
+                    title = latest.title,
                     status = mapMalStatusToLx(listStatus.status),
-                    score = listStatus.score?.takeIf { it > 0 } ?: entry.score,
+                    score = listStatus.score?.takeIf { it > 0 } ?: latest.score,
                     currentVolumes = listStatus.numVolumesRead,
                     currentChapters = listStatus.numChaptersRead,
-                    totalVolumes = if (details.numVolumes > 0) details.numVolumes else entry.totalVolumes,
-                    totalChapters = if (details.numChapters > 0) details.numChapters else entry.totalChapters,
+                    totalVolumes = if (details.numVolumes > 0) details.numVolumes else latest.totalVolumes,
+                    totalChapters = if (details.numChapters > 0) details.numChapters else latest.totalChapters,
                     isRewatching = listStatus.isRereading,
                     rewatchCount = listStatus.numTimesReread,
                     updatedAt = System.currentTimeMillis()

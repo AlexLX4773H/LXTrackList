@@ -829,17 +829,17 @@ class AddEditViewModel(
             val queryTitle = current.title.trim()
             val cleanedOriginalTitle = TachiyomiResolverManager.stripBracketedSuffixes(queryTitle).takeIf { it.isNotBlank() } ?: queryTitle
             val candidateTitle = item.title?.trim()?.takeIf { it.isNotBlank() }
+            val targetTitle = if ((entryId != null && entryId > 0) || current.title.isNotBlank()) current.title else (candidateTitle ?: cleanedOriginalTitle)
 
             val candidateAlts = item.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
             val currentAlts = (current.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() } + current.alternateTitles
 
-            val extraAlts = if (candidateTitle != null && !candidateTitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
-                listOf(candidateTitle)
-            } else emptyList()
+            val extraAlts = (listOfNotNull(candidateTitle, cleanedOriginalTitle.takeIf { it != targetTitle }) + candidateAlts)
+                .filter { it.isNotBlank() && !it.equals(targetTitle, ignoreCase = true) }
 
-            val allAlts = (extraAlts + candidateAlts + currentAlts)
+            val allAlts = (extraAlts + currentAlts)
                 .distinct()
-                .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
+                .filter { !it.equals(targetTitle, ignoreCase = true) }
 
             // Preserve original Tachiyomi ID in description so future backup reimports match seamlessly
             val originalTachiId = current.externalId?.takeIf {
@@ -917,7 +917,7 @@ class AddEditViewModel(
                 else current.airedEndDate
 
             current.copy(
-                title = cleanedOriginalTitle,
+                title = targetTitle,
                 alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
                 alternateTitles = allAlts,
                 creator = item.authors?.takeIf { it.isNotBlank() } ?: current.creator,
@@ -962,26 +962,26 @@ class AddEditViewModel(
                     val queryTitle = current.title.trim()
                     val cleanedOriginalTitle = TachiyomiResolverManager.stripBracketedSuffixes(queryTitle).takeIf { it.isNotBlank() } ?: queryTitle
                     val candidateTitle = (fullDetails?.title ?: item.title).trim().takeIf { it.isNotBlank() }
+                    val targetTitle = if ((entryId != null && entryId > 0) || current.title.isNotBlank()) current.title else (candidateTitle ?: cleanedOriginalTitle)
 
                     val candidateAlts = mutableListOf<String>()
                     fullDetails?.alternateTitle?.split("\n")?.forEach { line ->
                         val clean = line.trim()
-                        if (clean.isNotBlank() && !clean.equals(cleanedOriginalTitle, ignoreCase = true)) {
+                        if (clean.isNotBlank() && !clean.equals(targetTitle, ignoreCase = true)) {
                             candidateAlts.add(clean)
                         }
                     }
-                    if (!item.originalTitle.isNullOrBlank() && !item.originalTitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
+                    if (!item.originalTitle.isNullOrBlank() && !item.originalTitle.equals(targetTitle, ignoreCase = true)) {
                         candidateAlts.add(item.originalTitle.trim())
                     }
 
                     val currentAlts = (current.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() } + current.alternateTitles
-                    val extraAlts = if (candidateTitle != null && !candidateTitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
-                        listOf(candidateTitle)
-                    } else emptyList()
+                    val extraAlts = (listOfNotNull(candidateTitle, cleanedOriginalTitle.takeIf { it != targetTitle }))
+                        .filter { it.isNotBlank() && !it.equals(targetTitle, ignoreCase = true) }
 
                     val allAlts = (extraAlts + candidateAlts + currentAlts)
                         .distinct()
-                        .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
+                        .filter { !it.equals(targetTitle, ignoreCase = true) }
 
                     val targetMediaType = if (isMovie) MediaType.MOVIE else MediaType.SHOW
                     val descWithMeta = fullDetails?.buildDescriptionWithMetadata() ?: item.overview
@@ -998,7 +998,7 @@ class AddEditViewModel(
                     } else current.episodeLengthMinutes
 
                     current.copy(
-                        title = cleanedOriginalTitle,
+                        title = targetTitle,
                         alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
                         alternateTitles = allAlts,
                         creator = fullDetails?.resolveCreatorFor(!isMovie) ?: current.creator,
@@ -1039,26 +1039,26 @@ class AddEditViewModel(
                     val queryTitle = current.title.trim()
                     val cleanedOriginalTitle = TachiyomiResolverManager.stripBracketedSuffixes(queryTitle).takeIf { it.isNotBlank() } ?: queryTitle
                     val candidateTitle = (fullDetails?.title ?: item.title).trim().takeIf { it.isNotBlank() }
+                    val targetTitle = if ((entryId != null && entryId > 0) || current.title.isNotBlank()) current.title else (candidateTitle ?: cleanedOriginalTitle)
 
                     val candidateAlts = mutableListOf<String>()
                     fullDetails?.alternateTitles?.forEach { line ->
                         val clean = line.trim()
-                        if (clean.isNotBlank() && !clean.equals(cleanedOriginalTitle, ignoreCase = true)) {
+                        if (clean.isNotBlank() && !clean.equals(targetTitle, ignoreCase = true)) {
                             candidateAlts.add(clean)
                         }
                     }
-                    if (!item.alternateTitle.isNullOrBlank() && !item.alternateTitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
+                    if (!item.alternateTitle.isNullOrBlank() && !item.alternateTitle.equals(targetTitle, ignoreCase = true)) {
                         candidateAlts.add(item.alternateTitle.trim())
                     }
 
                     val currentAlts = (current.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() } + current.alternateTitles
-                    val extraAlts = if (candidateTitle != null && !candidateTitle.equals(cleanedOriginalTitle, ignoreCase = true)) {
-                        listOf(candidateTitle)
-                    } else emptyList()
+                    val extraAlts = (listOfNotNull(candidateTitle, cleanedOriginalTitle.takeIf { it != targetTitle }))
+                        .filter { it.isNotBlank() && !it.equals(targetTitle, ignoreCase = true) }
 
                     val allAlts = (extraAlts + candidateAlts + currentAlts)
                         .distinct()
-                        .filter { !it.equals(cleanedOriginalTitle, ignoreCase = true) }
+                        .filter { !it.equals(targetTitle, ignoreCase = true) }
 
                     val descWithMeta = fullDetails?.buildDescriptionWithMetadata()
                         ?: buildGameDescriptionWithMetadata(item.summary, item.developers, item.publishers)
@@ -1083,7 +1083,7 @@ class AddEditViewModel(
                     val releaseDate = fullDetails?.releaseDateMillis ?: item.releaseDateMillis ?: current.airedStartDate
 
                     current.copy(
-                        title = cleanedOriginalTitle,
+                        title = targetTitle,
                         alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
                         alternateTitles = allAlts,
                         creator = (fullDetails?.developers?.firstOrNull() ?: item.developers.firstOrNull()) ?: current.creator,
@@ -1114,14 +1114,15 @@ class AddEditViewModel(
         _uiState.update { current ->
             val queryTitle = current.title.trim()
             val candidateTitle = item.title.trim()
+            val targetTitle = if ((entryId != null && entryId > 0) || current.title.isNotBlank()) current.title else candidateTitle.ifBlank { queryTitle }
             val currentAlts = (current.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() } + current.alternateTitles
-            val extraAlts = if (candidateTitle.isNotBlank() && !candidateTitle.equals(queryTitle, ignoreCase = true)) {
+            val extraAlts = if (candidateTitle.isNotBlank() && !candidateTitle.equals(targetTitle, ignoreCase = true)) {
                 listOf(candidateTitle)
             } else emptyList()
-            val allAlts = (extraAlts + currentAlts).distinct().filter { !it.equals(queryTitle, ignoreCase = true) }
+            val allAlts = (extraAlts + currentAlts).distinct().filter { !it.equals(targetTitle, ignoreCase = true) }
 
             current.copy(
-                title = candidateTitle.ifBlank { queryTitle },
+                title = targetTitle,
                 alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
                 alternateTitles = allAlts,
                 creator = item.artist.takeIf { it.isNotBlank() } ?: current.creator,

@@ -670,5 +670,35 @@ class TmdbIntegrationTest {
         val mdDetails = com.lx.tracklist.data.remote.MangaDexApiClient.parseMangaDexItem(mangaDexJson)
         assertEquals("Chugong, DUBU", mdDetails?.authors)
     }
+
+    @Test
+    fun testTitlePreservationAndAlternateTitleMerge() {
+        val entry = MediaEntry(
+            id = 1L,
+            userId = 1L,
+            title = "Chief of the Novice Village",
+            alternateTitle = "Xīnshǒu Cūn Cūnzhǎng",
+            mediaType = MediaType.MANHWA,
+            status = MediaStatus.COMPLETED
+        )
+
+        val candidateTitle = "新手村村长"
+        val candidateAlts = listOf("Xinshou Cun Cunzhang", "Novice Village Chief: The Necromancer")
+
+        val currentAlts = (entry.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() }
+        val allCandidates = (listOf(candidateTitle) + candidateAlts).filter { it.isNotBlank() && !it.equals(entry.title, ignoreCase = true) }
+        val mergedAlts = (currentAlts + allCandidates).distinct()
+
+        val updated = entry.copy(
+            title = entry.title,
+            alternateTitle = mergedAlts.joinToString("\n")
+        )
+
+        assertEquals("Chief of the Novice Village", updated.title)
+        assertTrue(updated.alternateTitle!!.contains("新手村村长"))
+        assertTrue(updated.alternateTitle!!.contains("Novice Village Chief: The Necromancer"))
+        assertTrue(updated.alternateTitle!!.contains("Xīnshǒu Cūn Cūnzhǎng"))
+        assertTrue(updated.alternateTitle!!.contains("Xinshou Cun Cunzhang"))
+    }
 }
 
