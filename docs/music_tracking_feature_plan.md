@@ -13,7 +13,7 @@
 ### 1.1 Category Placement & Status Labels
 - **Built-in Category:** Add `MediaType.MUSIC` (`displayName = "Music"`) to `MediaType.kt` after `GAME`.
 - **New Enum Flag:** Add `val isListenType: Boolean = false` parameter to `MediaType`, set `true` only for `MUSIC`.
-- **Search Category:** Add `SearchCategory.MUSIC("Music", "MusicBrainz / Deezer / Spotify")` to `SearchViewModel.kt` directly after `SearchCategory.GAMES`.
+- **Search Category:** Add `SearchCategory.MUSIC("Music", "iTunes / MusicBrainz / Spotify")` to `SearchViewModel.kt` directly after `SearchCategory.GAMES`.
 - **Library & Drawer Ordering:** Place **Music** immediately after **Games** in the category bar/drawer and all `MediaType.entries` chip rows.
 - **Status Labels (`MediaStatus.kt`):**
   - `WATCHING` → **"Listening"**
@@ -42,7 +42,7 @@ This single column serves a polymorphic purpose based on `MediaType`:
 
 | `MediaType` | Role / Label in UI | Example Data | Sources |
 |---|---|---|---|
-| **`MUSIC`** | **Artist** | `"Daft Punk"`, `"Queen"`, `"Yoasobi"` | MusicBrainz `artist-credit`, Deezer `artist.name`, Spotify `artists` |
+| **`MUSIC`** | **Artist** | `"Daft Punk"`, `"Queen"`, `"Yoasobi"` | MusicBrainz `artist-credit`, iTunes `artistName`, Spotify `artists` |
 | **`ANIME`** | **Studio** | `"Ufotable"`, `"MAPPA"`, `"Bones"` | AniList `studios`, Jikan `studios` |
 | **`MANGA` / `MANHWA`** | **Author / Artist** | `"Eiichiro Oda"`, `"Chugong, DUBU"` | MangaDex `author/artist`, AniList `staff` |
 | **`BOOK` / `LIGHT_NOVEL`** | **Author** | `"Brandon Sanderson"`, `"Tappei Nagatsuki"` | Google Books `authors`, Open Library `author_name` |
@@ -108,17 +108,17 @@ Music tracking is closest to **Movies** in structure (single finite item with a 
 | `tags` | Genre tags (comma-separated) | e.g., "Rock, Alternative, Indie" |
 | `description` | Song description / lyrics excerpt / notes | **Pure synopsis / notes** (no artist/album text pollution) |
 | `coverImageUri` | Album art / single cover | Poster image |
-| `externalScore` | External rating (if available) | From MusicBrainz/Deezer |
+| `externalScore` | External rating (if available) | From MusicBrainz/iTunes |
 | `airedStartDate` | **Release date** | Song/single release date |
 | `relatedEntriesJson` | Other tracks from same album, other songs by artist | Reuse `RelatedMediaItem` |
-| `externalId` | MusicBrainz MBID / Deezer Track ID / Spotify ID | External catalog ID |
-| `externalSource` | `"MusicBrainz"` / `"Deezer"` / `"Spotify"` | Provider tag |
+| `externalId` | MusicBrainz MBID / iTunes Track ID / Spotify ID | External catalog ID |
+| `externalSource` | `"MusicBrainz"` / `"iTunes"` / `"Spotify"` | Provider tag |
 
 #### New `MediaEntry` Columns (2 new fields total)
 | New Field | Type | Default | Description |
 |---|---|---|---|
 | `creator` | `String?` | `null` | **Universal creator column** (Artist for Music; Studio/Author/Developer for other categories) |
-| `musicAlbumId` | `String?` | `null` | External album ID (MusicBrainz Release Group MBID / Deezer Album ID) for fetching album art and linking related tracks |
+| `musicAlbumId` | `String?` | `null` | External album ID (MusicBrainz Release Group MBID / Apple Music Album ID) for fetching album art and linking related tracks |
 
 ---
 
@@ -174,7 +174,7 @@ Music progress behaves identically to Movies — a simple **toggle**:
 |---|---|---|---|---|---|---|---|
 | **[MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API)** | 100% Free & Open | **No API key** — only requires descriptive `User-Agent` header | **1 req/sec** (HTTP 503 if exceeded) | Excellent (artists, releases, recordings, relationships, ISRCs, 65M+ recordings) | Via **Cover Art Archive** (separate free API, also no key) | Yes — recordings, releases, release groups | **Primary Metadata Provider** |
 | **[Cover Art Archive](https://coverartarchive.org/)** (CAA) | 100% Free & Open | **No API key** — only requires `User-Agent` | ~1-3 req/sec (polite use) | Cover art only (front, back, booklet) | **Yes:** `front-500` (500px) and `front-1200` (1200px) square covers | N/A | **Primary Cover Art Provider** |
-| **[Deezer API](https://developers.deezer.com/api)** | Free for public catalog | **No API key needed** for search & catalog | ~50 req/5sec | Good (tracks, albums, artists, genres, 90M+ tracks) | **Yes:** `cover_big` (500×500) and `cover_xl` (1000×1000) | Yes — full track catalog with previews | **Secondary / Zero-Auth Fallback** |
+| **[Apple Music / iTunes API](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/)** | 100% Free & Global | **No API key needed** for search & catalog | Generous | Excellent (tracks, albums, artists, genres, previews, 100M+ tracks) | **Yes:** high-res 600×600 square covers | Yes — full track catalog with audio previews & Top Charts | **Primary Search & Discovery Provider** |
 | **[Spotify Web API](https://developer.spotify.com/documentation/web-api)** | Free (Dev Mode) | OAuth2 Client Credentials (free app registration) | Rolling 30s window (unpublished exact limit); 5 test users in Dev Mode | Very Good (tracks, albums, artists, genres, popularity, 100M+ tracks) | **Yes:** `album.images[]` up to 640×640 | Yes — full catalog | **Optional Enhancement (Requires OAuth)** |
 | **[Last.fm API](https://www.last.fm/api)** | ~~Free~~ → **Now requires Last.fm Pro subscription** for API keys | API Key (paid) | ~5 req/sec | Good (artist info, album info, tags, similar artists) | Yes (medium-res) | Yes | **Not Recommended** (no longer free) |
 | **[iTunes Search API](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/)** | Free | **No API key** | ~20 req/min | Basic (track, album, artist, genre, preview URL) | **Yes:** `artworkUrl100` (100×100, replaceable to 600×600) | Yes — Apple Music catalog | **Supplementary Zero-Key Fallback** |
@@ -202,16 +202,12 @@ Music progress behaves identically to Movies — a simple **toggle**:
   - `GET https://coverartarchive.org/release-group/{RELEASE_GROUP_MBID}/front` — Release group cover (fallback)
 - **Rate Limit:** Polite use (~1-3 req/s), `User-Agent` required.
 
-#### 3. **Secondary / Zero-Auth Fallback: [Deezer API](https://developers.deezer.com/api)**
-- **Why:** No API key at all (not even a User-Agent requirement), 90M+ track catalog, includes high-res square album art (up to 1000×1000), and returns song duration in seconds natively.
-- **Usage Limits & Throttling:**
-  - **Rate Limit:** ~50 requests per 5 seconds (~10 req/s).
-  - **Built-in Handling:** Only used when MusicBrainz returns zero hits or the user explicitly selects Deezer as source.
+#### 3. **Search & Discovery: [Apple Music / iTunes API](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/)**
+- **Why:** No API key required, works worldwide across all territories (including India), 100M+ track catalog, includes 600×600 album art, track duration in seconds, official top chart RSS feeds, and 30-second audio previews.
 - **Endpoints Used:**
-  - `GET https://api.deezer.com/search/track?q={query}` — Search tracks
-  - `GET https://api.deezer.com/album/{id}` — Album details with cover art
-  - `GET https://api.deezer.com/artist/{id}/top` — Top tracks by artist
-  - `GET https://api.deezer.com/album/{id}/tracks` — Track listing for related tracks
+  - `GET https://itunes.apple.com/search?term={query}&media=music&entity=song` — Search tracks
+  - `GET https://itunes.apple.com/lookup?id={albumId}&entity=song` — Album details with track listing
+  - `GET https://itunes.apple.com/us/rss/topsongs/limit={limit}/json` — Top charts discovery
 
 #### 4. **Optional Enhancement: [Spotify Web API](https://developer.spotify.com/documentation/web-api)**
 - **Why:** Largest catalog (100M+ tracks), excellent search quality, genre/popularity data. OAuth is straightforward (Client Credentials flow, same as IGDB's Twitch OAuth pattern already built).
@@ -231,7 +227,7 @@ Music progress behaves identically to Movies — a simple **toggle**:
 | Tier | Source | Resolution | Auth | When Used |
 |---|---|---|---|---|
 | **Tier 1** | Cover Art Archive via MusicBrainz MBID | 500px / 1200px square | None (User-Agent only) | Automatic on Add/Sync when MusicBrainz is primary source |
-| **Tier 2** | Deezer `cover_xl` | 1000×1000 square | None | Automatic when Deezer is source, or CAA has no art |
+| **Tier 2** | Apple Music / iTunes `artworkUrl100` → `600x600` | 600×600 square | None | Automatic when Apple Music is source, or CAA has no art |
 | **Tier 3** | Spotify `album.images[0].url` | Up to 640×640 | OAuth2 (optional) | When Spotify is configured and selected |
 | **Tier 4** | iTunes Search API `artworkUrl100` → replace `100x100` with `600x600` | 600×600 | None | Zero-key fallback when all above fail |
 | **Tier 5** | Existing `CoverImageSearchDialog.kt` (Google/DuckDuckGo WebView) | User-selected | None | Manual fallback, pre-filled with `"$title $artist album cover"` |
@@ -459,9 +455,9 @@ Mirror the existing `GameApiConfig.kt` / `GameMetadataManager.kt` / `GameSyncMan
 
 1. **`MusicApiConfig.kt`**
    - Stores optional `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` from `BuildConfig` with runtime overrides in `SharedPreferences` (matching `GameApiConfig.kt`).
-   - MusicBrainz and Deezer need **no stored keys** — only the `User-Agent` header (which uses `BuildConfig.VERSION_NAME` + a contact email).
+   - MusicBrainz and iTunes need **no stored keys** — only the `User-Agent` header for MusicBrainz (which uses `BuildConfig.VERSION_NAME` + a contact email).
    - Caches Spotify OAuth2 `access_token` + `expires_at` epoch ms (identical pattern to Twitch token in `GameApiConfig.kt`).
-   - Helper: `isMusicBrainzAvailable() = true` (always available), `isDeezerAvailable() = true` (always available), `isSpotifyConfigured(context)`.
+   - Helper: `isMusicBrainzAvailable() = true` (always available), `isITunesAvailable() = true` (always available), `isSpotifyConfigured(context)`.
 
 2. **`MusicModels.kt`**
    - `MusicSearchResult(externalId, externalSource, title, artist, albumName, albumId, albumCoverUrl, durationSeconds, releaseYear, releaseDateMillis, genres, score, trackNumber, totalTracks, webUrl)`
@@ -479,13 +475,11 @@ Mirror the existing `GameApiConfig.kt` / `GameMetadataManager.kt` / `GameSyncMan
    - `getCoverArtUrlFallback(releaseGroupMbid)`: `https://coverartarchive.org/release-group/{mbid}/front`
    - **Rate-Limit Guard:** Enforce `>= 1100ms` spacing between calls (safely under 1 req/sec). 1 retry on HTTP 503.
 
-4. **`DeezerApiClient.kt`**
-   - **No auth required.** Plain GET requests.
-   - `searchTracks(query, limit = 20)`: `GET https://api.deezer.com/search/track?q={query}&limit=20`
-   - `getAlbumDetails(albumId)`: `GET https://api.deezer.com/album/{id}` — returns `cover_xl` (1000×1000) and track list
-   - `getArtistTopTracks(artistId)`: `GET https://api.deezer.com/artist/{id}/top?limit=20`
-   - `getAlbumTracks(albumId)`: `GET https://api.deezer.com/album/{id}/tracks`
-   - **Rate-Limit Guard:** 200ms minimum spacing (~5 req/s, well under Deezer's limits).
+4. **`ITunesApiClient.kt`**
+   - **No auth required.** Worldwide availability, rich 600×600 artwork, track durations, search, and official Apple Music charts.
+   - `searchTracks(query, limit = 20)`: `GET https://itunes.apple.com/search?term={query}&media=music&entity=song&limit={limit}`
+   - `fetchTopSongs(genreId, limit = 30)`: `GET https://rss.applemarketingtools.com/api/v2/us/music/most-played/{limit}/songs.json`
+   - `fetchAlbumTracks(albumId)`: `GET https://itunes.apple.com/lookup?id={albumId}&entity=song` — returns album track list, durations, track numbers, and 600×600 cover artwork.
 
 5. **`SpotifyApiClient.kt`** (Optional)
    - `ensureValidToken(context)`: `POST https://accounts.spotify.com/api/token` with `client_credentials` grant type (identical pattern to `IgdbApiClient.ensureValidToken()`).
@@ -495,20 +489,20 @@ Mirror the existing `GameApiConfig.kt` / `GameMetadataManager.kt` / `GameSyncMan
    - **Rate-Limit Guard:** Respect `Retry-After` header on HTTP 429. Minimum 100ms spacing.
 
 6. **`MusicMetadataManager.kt`**
-   - Orchestrates MusicBrainz primary → Deezer fallback → Spotify optional.
+   - Orchestrates iTunes (instant high-res artwork, search, charts) + MusicBrainz open data + optional Spotify.
    - `searchMusic(context, query, source?, limit)` — Routes to configured providers.
    - `getMusicDetails(context, externalId, externalSource)` — Fetches full details from the originating source.
    - `getAlbumTracks(context, albumId, externalSource)` — Fetches tracklist for related entries.
-   - `searchAlbumCoverArt(context, title, artist)` — Multi-tier cover art resolution (CAA → Deezer → iTunes → manual).
+   - `searchAlbumCoverArt(context, title, artist)` — Multi-tier cover art resolution (iTunes → CAA → manual).
 
 7. **`MusicSyncManager.kt`**
    - Mirrors `GameSyncManager.kt` for bulk background metadata sync of `MediaType.MUSIC` entries.
    - Register in `SyncForegroundService.kt` (`isAnySyncRunning()`, `cancelAllSyncs()`, notification observer).
-   - Throttles MusicBrainz calls at 1100ms intervals; Deezer at 200ms.
+   - Throttles MusicBrainz calls at 1100ms intervals.
 
 8. **`app/build.gradle.kts`**
    - Read `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` from `.env` / `System.getenv(...)` and expose via `buildConfigField(...)`.
-   - **MusicBrainz and Deezer require zero build config changes.**
+   - **MusicBrainz and iTunes require zero build config changes.**
 
 ---
 
@@ -526,16 +520,16 @@ Every file below has existing `MediaType` branches or category lists that must b
 | **`ui/components/CategorySelectorDrawer.kt`** | Add `MediaType.MUSIC -> Icons.Default.MusicNote` in `getCategoryIcon()`; ensure Music appears after Games in built-in category list. |
 | **`ui/components/MediaCard.kt`** | 1. Display `entry.creator` as the primary subtitle under `entry.title` across **all categories** (Music Artist, Book Author, Game Developer, Anime Studio).<br>2. Handle `MediaType.MUSIC`: album badge, duration as `m:ss`, `displayProgress`, wire toggle `+` button (Completed ↔ Listening). |
 | **`ui/detail/DetailScreen.kt` & `DetailViewModel.kt`** | 1. Show **Creator** row/chip (`"${entry.getCreatorRoleLabel()}: ${entry.creator}"`) below title for all categories.<br>2. Show **Album** info chip with track number for Music.<br>3. Show **"Release Date"** label for `airedStartDate`.<br>4. Show **Duration** as `m:ss` for Music.<br>5. Show **Genre** tag chips.<br>6. In `DetailDescriptionCard`: display pure synopsis without the appended metadata lines.<br>7. Show **Related Tracks** section (same album, same artist). |
-| **`ui/edit/AddEditScreen.kt` & `AddEditViewModel.kt`** | 1. Add dedicated **"Creator"** text input field with dynamic label (`"Artist"`, `"Author"`, `"Studio"`, `"Developer"`, `"Director"`).<br>2. Stop appending creator/publisher text into `description` — write directly to `creator`.<br>3. Add `ExternalDbSource.MUSICBRAINZ`, `ExternalDbSource.DEEZER`, optional `ExternalDbSource.SPOTIFY` when `mediaType == MUSIC`.<br>4. Add **Album** text field + **Track Number** field when `mediaType == MUSIC`.<br>5. Add **Duration** field (input as `m:ss` or total seconds) when `mediaType == MUSIC`.<br>6. Add **Genre** tag picker. |
+| **`ui/edit/AddEditScreen.kt` & `AddEditViewModel.kt`** | 1. Add dedicated **"Creator"** text input field with dynamic label (`"Artist"`, `"Author"`, `"Studio"`, `"Developer"`, `"Director"`).<br>2. Stop appending creator/publisher text into `description` — write directly to `creator`.<br>3. Add `ExternalDbSource.MUSICBRAINZ`, optional `ExternalDbSource.SPOTIFY` when `mediaType == MUSIC`.<br>4. Add **Album** text field + **Track Number** field when `mediaType == MUSIC`.<br>5. Add **Duration** field (input as `m:ss` or total seconds) when `mediaType == MUSIC`.<br>6. Add **Genre** tag picker. |
 | **`ui/search/SearchViewModel.kt`** | 1. Add `SearchCategory.MUSIC` after `GAMES`.<br>2. Map `MusicSearchResult` → `SearchResultItem(creator = it.artist, ...)`.<br>3. When converting search items to `MediaEntry` across all categories, set `creator = item.creator ?: item.author ?: item.gameDevelopers.firstOrNull()` and keep `description = item.synopsis` clean (remove `buildGameDescriptionWithMetadata` / `buildDescriptionWithMetadata` concatenation). |
 | **`ui/search/SearchScreen.kt` & `SearchDiscoverySheet.kt`** | Add Music tab chip. Add music discovery filters (Popular, By Year, Genre). |
 | **`ui/search/DiscoveryModels.kt`** | Add `MusicSortOrder` enum (`POPULARITY`, `RATING`, `RELEASE_DATE`). Add `DiscoveryFilter.Music` data class with `mode`, `year`/`startYear`/`endYear`, `sortOrder`, `includedTags`, `excludedTags`. |
 | **`ui/search/MusicTagRegistry.kt`** *(new)* | Create genre registry with presets: `Pop`, `Rock`, `Hip-Hop`, `R&B`, `Electronic`, `Jazz`, `Classical`, `Country`, `Metal`, `Indie`, `Alternative`, `K-Pop`, `J-Pop`, `Latin`, `Reggae`, `Soul`, `Funk`, `Blues`, `Folk`, `Punk`, `Dance`, `Ambient`, `Soundtrack`. |
-| **`ui/library/LibraryScreen.kt` & `HomeScreen.kt`** | Verify `MediaType.entries` chips include Music, status filter labels show `"Listening"`, `"Plan to Listen"`, and Sync Library dialog text mentions Music (MusicBrainz/Deezer). |
+| **`ui/library/LibraryScreen.kt` & `HomeScreen.kt`** | Verify `MediaType.entries` chips include Music, status filter labels show `"Listening"`, `"Plan to Listen"`, and Sync Library dialog text mentions Music (iTunes/MusicBrainz). |
 | **`ui/stats/StatsScreen.kt` & `StatsViewModel.kt`** | Include `MediaType.MUSIC` in category breakdown, completion counts, artist breakdown stat card, and listening time stats. |
-| **`ui/settings/SettingsScreen.kt`** | Add **Music Metadata** section: Spotify Client ID/Secret (optional), attribution notes for MusicBrainz and Deezer, **"Sync Music Metadata"** action button. |
-| **`ui/settings/MusicSettingsCard.kt`** *(new)* | Create settings card mirroring `GameSettingsCard.kt`: Spotify credentials input (optional), MusicBrainz/Deezer status (always available), test connection buttons, sync controls. |
-| **`util/ExternalLinkHelper.kt`** | Add external URL builders for `"MusicBrainz"` (`https://musicbrainz.org/recording/{mbid}`), `"Deezer"` (`https://www.deezer.com/track/{id}`), and `"Spotify"` (`https://open.spotify.com/track/{id}`). |
+| **`ui/settings/SettingsScreen.kt`** | Add **Music Metadata** section: Spotify Client ID/Secret (optional), attribution notes for iTunes and MusicBrainz, **"Sync Music Metadata"** action button. |
+| **`ui/settings/MusicSettingsCard.kt`** *(new)* | Create settings card mirroring `GameSettingsCard.kt`: Spotify credentials input (optional), iTunes/MusicBrainz status (always available), test connection buttons, sync controls. |
+| **`util/ExternalLinkHelper.kt`** | Add external URL builders for `"MusicBrainz"` (`https://musicbrainz.org/recording/{mbid}`), `"Apple Music"` (`https://music.apple.com`), and `"Spotify"` (`https://open.spotify.com/track/{id}`). |
 | **`data/repository/MediaRepository.kt`** | Update `addRelatedToLibrary()` to handle `MediaType.MUSIC`, ensure `areCompatibleTypes()` keeps `MUSIC` isolated from watch/read/play types. |
 | **`data/exporter/JsonExporter.kt` & `data/importer/JsonImporter.kt`** | Verify `creator` and `musicAlbumId` serialize/deserialize cleanly with default values so older JSON backups remain 100% backward compatible. |
 | **`data/importer/CsvImporter.kt`** | Support parsing `"Music"` / `"Song"` as `MediaType.MUSIC`, map `"Listening"` → `WATCHING` status, parse `"Artist"` / `"Creator"` column into `creator`. |
@@ -546,7 +540,7 @@ Every file below has existing `MediaType` branches or category lists that must b
 
 | Category | Primary API Source | Fallback API Source | Target Field | Previous Handling | New Handling |
 |---|---|---|---|---|---|
-| **Music** | MusicBrainz `recording.artist-credit[0].name` | Deezer `track.artist.name` / Spotify `artists[0].name` | `MediaEntry.creator` | N/A (New category) | Populates `creator` as Artist |
+| **Music** | iTunes `artistName` / MusicBrainz `recording.artist-credit[0].name` | Spotify `artists[0].name` | `MediaEntry.creator` | N/A (New category) | Populates `creator` as Artist |
 | **Anime** | AniList `studios.nodes[0].name` | Jikan / MAL `data.studios[0].name` | `MediaEntry.creator` | Appended to description or omitted | Populates `creator` as Studio |
 | **Manga / Manhwa** | MangaDex `relationships[author].attributes.name` | AniList `staff.edges[role=Story].node.name` | `MediaEntry.creator` | Appended to description or omitted | Populates `creator` as Author/Artist |
 | **Books / Light Novels** | Google Books `volumeInfo.authors[0]` | Open Library `docs[].author_name[0]` | `MediaEntry.creator` | Appended `Author: ...` to `description` | Populates `creator` as Author; `description` is pure synopsis |
@@ -577,20 +571,20 @@ Every file below has existing `MediaType` branches or category lists that must b
   - `formatMusicDuration()` edge cases (0, 59, 180, 3661).
   - Run `./gradlew testDebugUnitTest`.
 
-### Phase 2 — MusicBrainz Client, Deezer Fallback, Cover Art Pipeline & Search Model Updates
-- **Files:** `MusicApiConfig.kt`, `MusicModels.kt`, `MusicBrainzApiClient.kt`, `DeezerApiClient.kt`, `MusicMetadataManager.kt`, `ExternalLinkHelper.kt`, `SearchResultItem.kt`, `BookDetails.kt`, `GameModels.kt`.
+### Phase 2 — iTunes Client, MusicBrainz Integration, Cover Art Pipeline & Search Model Updates
+- **Files:** `MusicApiConfig.kt`, `MusicModels.kt`, `ITunesApiClient.kt`, `MusicBrainzApiClient.kt`, `MusicMetadataManager.kt`, `ExternalLinkHelper.kt`, `SearchResultItem.kt`, `BookDetails.kt`, `GameModels.kt`.
 - **Goal:**
-  1. Implement MusicBrainz search/detail queries (with 1-req/s throttle), Deezer zero-auth fallback, Cover Art Archive URL construction, and iTunes cover art fallback URL generation.
+  1. Implement iTunes search/detail queries, MusicBrainz open-data search, and cover art resolution pipeline.
   2. Add `val creator: String? = null` to `SearchResultItem`.
   3. Update `BookDetails.toMediaEntry()` and `GameModels` to populate `creator` directly and stop appending metadata lines into `description`.
-- **Verification:** Unit tests mocking JSON responses for MusicBrainz recording search → album cover resolution and Deezer track search → cover_xl extraction. Run `./gradlew testDebugUnitTest`.
+- **Verification:** Unit tests mocking JSON responses for iTunes track search and MusicBrainz recording search. Run `./gradlew testDebugUnitTest`.
 
 ### Phase 3 — Add/Edit Screen: Dedicated Creator Input Field & Music Form
 - **Files:** `AddEditViewModel.kt`, `AddEditScreen.kt`, `CategorySelectorDrawer.kt`, `MusicTagRegistry.kt` (new).
 - **Goal:**
   1. Add a dedicated "Creator" input field to `AddEditScreen` that dynamically renders the correct label based on `mediaType` ("Artist" for Music, "Author" for Books, "Studio" for Anime, "Developer" for Games, "Director" for Movies).
   2. Add Album, Track Number, and Duration inputs when `mediaType == MediaType.MUSIC`.
-  3. Support MusicBrainz/Deezer search autofill with clean `creator` and pure `description`.
+  3. Support iTunes/MusicBrainz search autofill with clean `creator` and pure `description`.
   4. Add Genre tag picker with music presets (`MusicTagRegistry`).
 - **Verification:** `./gradlew assembleDebug`; test adding a song, a book, and a game, confirming the creator field works cleanly and descriptions stay uncluttered.
 
@@ -615,7 +609,7 @@ Every file below has existing `MediaType` branches or category lists that must b
 ### Phase 6 — Settings, Spotify OAuth (Optional), Background Sync & Stats
 - **Files:** `SettingsScreen.kt`, `MusicSettingsCard.kt` (new), `SpotifyApiClient.kt` (optional), `MusicSyncManager.kt`, `SyncForegroundService.kt`, `StatsScreen.kt`, `StatsViewModel.kt`, `LibraryScreen.kt`.
 - **Goal:**
-  1. Add Music Metadata section in Settings (MusicBrainz always-on status, optional Spotify Client ID/Secret with connection test).
+  1. Add Music Metadata section in Settings (iTunes/MusicBrainz always-on status, optional Spotify Client ID/Secret with connection test).
   2. Optionally implement `SpotifyApiClient.kt` with Client Credentials OAuth (identical pattern to IGDB Twitch OAuth).
   3. Register `MusicSyncManager` in `SyncForegroundService` and Library Sync dialog.
   4. Update `StatsScreen` to include Music (listening time, top artists) and Creator breakdown.
@@ -643,12 +637,12 @@ These fields already exist in the database, are nullable, and are only used by `
 ### Why `durationMinutes` stores seconds for Music?
 Songs are typically 2-5 minutes. Storing in minutes loses precision. The existing `durationMinutes` field is `Int?` and nullable — for Music we store seconds (max ~3600 for a 1-hour track). The display logic already has per-`mediaType` branches, so formatting `m:ss` for Music is trivial. Movies continue storing minutes.
 
-### Why MusicBrainz as primary over Spotify/Deezer?
-- **Zero auth friction:** No API key, no OAuth, no account needed. Just a `User-Agent` header.
+### Why iTunes & MusicBrainz over Spotify?
+- **Zero auth friction:** No API key, no OAuth, no account needed. iTunes provides worldwide coverage and instant 600×600 artwork; MusicBrainz provides open community data.
 - **Open data:** Community-curated, Wikipedia-equivalent for music. No terms-of-service restrictions on caching.
 - **Structured relationships:** Artist → Release Groups → Releases → Recordings hierarchy maps perfectly to our Album → Track model.
 - **Cover Art Archive integration:** Direct MBID-based cover art URLs.
-- **Drawback:** 1 req/sec rate limit — mitigated by using Deezer (10 req/s, also no key) as fallback.
+- **Worldwide availability:** iTunes search and top charts work in all territories including India without geo-blocking.
 
 ---
 
@@ -657,7 +651,7 @@ Songs are typically 2-5 minutes. Storing in minutes loses precision. The existin
 1. **Feed One Phase at a Time:** Reference this plan file and say: *"Implement Phase 1 of `music_tracking_feature_plan.md`. Do not modify UI screens yet beyond fixing exhaustive `when (mediaType)` compile errors. Run `./gradlew testDebugUnitTest` when done."*
 2. **Protect Existing Data:** Remind Antigravity to keep `MIGRATION_20_21` using `ALTER TABLE ... ADD COLUMN ... DEFAULT ...` so existing user data is preserved.
 3. **Stop Description Pollution:** Ensure Antigravity does not re-add `Author: ` or `Developer: ` lines to `description`. Creator belongs strictly in the `creator` column.
-4. **Keep API Secrets Out of Git:** Add `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` to your local `.env` (already gitignored) and to GitHub Actions repository secrets. MusicBrainz and Deezer need no secrets.
+4. **Keep API Secrets Out of Git:** Add `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` to your local `.env` (already gitignored) and to GitHub Actions repository secrets. MusicBrainz and iTunes need no secrets.
 5. **Prevent Play Protect Regressions:** Do not add any new `AndroidManifest.xml` permissions — Music tracking uses only the existing `INTERNET` permission.
 6. **Respect MusicBrainz Rate Limits:** Always enforce `>= 1100ms` delay between MusicBrainz API calls. The 503 rate-limit response has no retry-after header — back off exponentially.
 7. **Test Duration Formatting:** Music's `durationMinutes` stores seconds. Ensure all display paths format correctly as `m:ss` for `MUSIC` and `Xh Ym` for other types.

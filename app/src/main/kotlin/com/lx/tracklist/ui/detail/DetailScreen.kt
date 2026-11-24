@@ -2495,7 +2495,7 @@ private fun DetailExternalTrackingCard(
                 if (hasValidId) {
                     val sourceLabel = when {
                         isMovieOrShow || entry.externalSource.equals("TMDB", ignoreCase = true) -> "TMDB"
-                        isMusic || entry.externalSource.equals("MusicBrainz", ignoreCase = true) || entry.externalSource.equals("Deezer", ignoreCase = true) -> entry.externalSource ?: "MusicBrainz"
+                        isMusic || entry.externalSource.equals("MusicBrainz", ignoreCase = true) || entry.externalSource.equals("Apple Music", ignoreCase = true) || entry.externalSource.equals("iTunes", ignoreCase = true) -> entry.externalSource ?: "MusicBrainz"
                         entry.externalSource.equals("MAL", ignoreCase = true) || entry.externalSource.equals("MyAnimeList", ignoreCase = true) -> "MAL"
                         !entry.externalSource.isNullOrBlank() -> entry.externalSource
                         isBook -> "Book"

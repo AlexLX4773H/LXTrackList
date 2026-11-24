@@ -569,7 +569,7 @@ fun SearchScreen(
                     }
                     val attributionText = when {
                         state.selectedCategory == SearchCategory.GAMES -> "Results from IGDB (RAWG fallback)"
-                        state.selectedCategory == SearchCategory.MUSIC -> "Results from iTunes, Deezer & MusicBrainz"
+                        state.selectedCategory == SearchCategory.MUSIC -> "Results from iTunes & MusicBrainz"
                         state.selectedCategory == SearchCategory.BOOKS -> "Results from Google Books (Open Library fallback)"
                         state.selectedCategory == SearchCategory.LIGHT_NOVELS -> "Results from AniList (Jikan/MAL fallback)"
                         hasMangaDex -> "Results from MangaDex (with MAL/AniList backup)"

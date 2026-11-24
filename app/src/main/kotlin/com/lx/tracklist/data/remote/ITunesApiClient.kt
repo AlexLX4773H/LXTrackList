@@ -218,4 +218,87 @@ object ITunesApiClient {
         if (query.isBlank()) return null
         return searchTracks(query, limit = 1).getOrNull()?.firstOrNull()?.coverUrl
     }
+
+    suspend fun fetchAlbumTracks(albumId: String): Result<MusicAlbumDetails> = withContext(Dispatchers.IO) {
+        try {
+            val url = "https://itunes.apple.com/lookup?id=$albumId&entity=song"
+            val request = Request.Builder()
+                .url(url)
+                .header("Accept", "application/json")
+                .header("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:120.0)")
+                .build()
+
+            val response = httpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("iTunes album lookup returned HTTP ${response.code}"))
+            }
+
+            val body = response.body?.string() ?: return@withContext Result.failure(Exception("Empty iTunes response"))
+            val root = gson.fromJson(body, JsonObject::class.java)
+            val results = root.getAsJsonArray("results") ?: return@withContext Result.failure(Exception("No results in album"))
+
+            var albumTitle = "Unknown Album"
+            var artistName = "Unknown Artist"
+            var coverUrl: String? = null
+            var releaseYear: String? = null
+            val tracks = mutableListOf<MusicSearchResult>()
+
+            for (i in 0 until results.size()) {
+                val item = results.get(i).asJsonObject
+                val wrapperType = item.get("wrapperType")?.asString
+
+                if (wrapperType == "collection") {
+                    albumTitle = item.get("collectionName")?.asString ?: albumTitle
+                    artistName = item.get("artistName")?.asString ?: artistName
+                    coverUrl = item.get("artworkUrl100")?.asString?.replace("100x100bb", "600x600bb")
+                    releaseYear = item.get("releaseDate")?.asString?.take(4)
+                } else if (wrapperType == "track") {
+                    val trackId = item.get("trackId")?.asString ?: continue
+                    val trackTitle = item.get("trackName")?.asString ?: "Unknown Track"
+                    val trackArtist = item.get("artistName")?.asString ?: artistName
+                    val trackNum = item.get("trackNumber")?.asInt
+                    val durationMs = item.get("trackTimeMillis")?.asLong
+                    val durationSec = durationMs?.let { (it / 1000).toInt() }
+                    val trackCover = item.get("artworkUrl100")?.asString?.replace("100x100bb", "600x600bb") ?: coverUrl
+                    val webUrl = item.get("trackViewUrl")?.asString ?: "https://music.apple.com"
+                    val preview = item.get("previewUrl")?.asString
+
+                    tracks.add(
+                        MusicSearchResult(
+                            externalId = trackId,
+                            externalSource = "Apple Music",
+                            title = trackTitle,
+                            artist = trackArtist,
+                            albumName = albumTitle,
+                            trackNumber = trackNum,
+                            durationSeconds = durationSec,
+                            coverUrl = trackCover,
+                            albumCoverUrl = coverUrl,
+                            releaseYear = releaseYear,
+                            musicAlbumId = albumId,
+                            webUrl = webUrl,
+                            previewUrl = preview
+                        )
+                    )
+                }
+            }
+
+            Result.success(
+                MusicAlbumDetails(
+                    albumId = albumId,
+                    title = albumTitle,
+                    artist = artistName,
+                    coverUrl = coverUrl,
+                    releaseYear = releaseYear,
+                    totalTracks = tracks.size,
+                    tracks = tracks,
+                    externalSource = "Apple Music",
+                    webUrl = "https://music.apple.com"
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "iTunes fetchAlbumTracks error", e)
+            Result.failure(e)
+        }
+    }
 }

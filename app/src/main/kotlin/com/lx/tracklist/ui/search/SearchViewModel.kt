@@ -50,7 +50,7 @@ enum class SearchCategory(val displayName: String, val sourceName: String) {
     BOOKS("Books", "Google Books / Open Library"),
     LIGHT_NOVELS("Light Novels", "AniList / MAL"),
     GAMES("Games", "IGDB / RAWG"),
-    MUSIC("Music", "MusicBrainz / Deezer / Spotify")
+    MUSIC("Music", "iTunes / MusicBrainz / Spotify")
 }
 
 data class SearchResultItem(
@@ -160,7 +160,6 @@ data class SearchResultItem(
             externalSource.equals("Kitsu", ignoreCase = true) -> "Open Kitsu"
             externalSource.equals("Google Books", ignoreCase = true) -> "Open Books"
             externalSource.equals("Open Library", ignoreCase = true) -> "Open Library"
-            externalSource.equals("Deezer", ignoreCase = true) -> "Open Deezer"
             externalSource.equals("MusicBrainz", ignoreCase = true) -> "Open MusicBrainz"
             externalSource.contains("Apple", ignoreCase = true) || externalSource.contains("iTunes", ignoreCase = true) -> "Open Apple Music"
             else -> "Open MAL"

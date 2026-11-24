@@ -58,7 +58,7 @@ enum class ExternalDbSource(val displayName: String, val shortName: String) {
     OPEN_LIBRARY("Open Library", "Open Library"),
     IGDB("IGDB", "IGDB"),
     RAWG("RAWG", "RAWG"),
-    MUSICBRAINZ("MusicBrainz / Deezer", "MusicBrainz"),
+    MUSICBRAINZ("MusicBrainz", "MusicBrainz"),
     @Deprecated("Use ANILIST instead")
     ANILIST_NOVEL("AniList", "AniList")
 }
@@ -594,7 +594,7 @@ class AddEditViewModel(
                                 gameResults = emptyList(),
                                 malResults = emptyList(),
                                 tmdbResults = emptyList(),
-                                errorMessage = if (list.isEmpty()) err ?: "No matches found on MusicBrainz / Deezer for '$cleanQuery'" else null
+                                errorMessage = if (list.isEmpty()) err ?: "No matches found on MusicBrainz for '$cleanQuery'" else null
                             )
                         }
                     }

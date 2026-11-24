@@ -124,7 +124,7 @@ data class MediaEntry(
     @SerializedName(value = "creator", alternate = ["artist", "author", "studio", "developer"])
     val creator: String? = null,
 
-    // Music album external ID (MusicBrainz Release Group MBID / Deezer Album ID)
+    // Music album external ID (MusicBrainz Release Group MBID / Apple Music Album ID)
     @SerializedName(value = "musicAlbumId", alternate = ["albumId"])
     val musicAlbumId: String? = null
 ) {

@@ -77,9 +77,9 @@ class MusicMetadataTest {
         assertNotNull(mbOption)
         assertEquals("https://musicbrainz.org/recording/mb_999", mbOption?.url)
 
-        val deezerOption = options.find { it.title.contains("Deezer") }
-        assertNotNull(deezerOption)
-        assertTrue(deezerOption?.url?.contains("deezer.com") == true)
+        val appleMusicOption = options.find { it.title.contains("Apple Music") }
+        assertNotNull(appleMusicOption)
+        assertTrue(appleMusicOption?.url?.contains("music.apple.com") == true)
 
         val spotifyOption = options.find { it.title.contains("Spotify") }
         assertNotNull(spotifyOption)

@@ -4612,7 +4612,7 @@ private fun SyncJobsContent(
                 }
 
                 Text(
-                    text = "Automated music search and metadata enrichment using Deezer API, MusicBrainz, Cover Art Archive, and iTunes Search API without requiring any API keys. High-resolution album artwork, artist attribution, genre tagging, track numbers, and track lengths are fetched automatically.",
+                    text = "Automated music search and metadata enrichment using Apple Music / iTunes Search API, MusicBrainz, and Cover Art Archive without requiring any API keys. High-resolution album artwork, artist attribution, genre tagging, track numbers, and track lengths are fetched automatically.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
@@ -4623,10 +4623,9 @@ private fun SyncJobsContent(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     listOf(
-                        "Deezer (HQ Covers & Audio)",
+                        "Apple Music / iTunes (Worldwide Search & Charts)",
                         "MusicBrainz (Catalog & ISRCs)",
-                        "Cover Art Archive",
-                        "iTunes (Artwork Fallback)"
+                        "Cover Art Archive"
                     ).forEach { provider ->
                         Box(
                             modifier = Modifier
@@ -4699,7 +4698,7 @@ private fun SyncJobsContent(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(
-                            text = "Spotify integration is completely optional. Music tracking already functions out of the box with Deezer and MusicBrainz without any credentials.\n\nTo use Spotify Web API features, enter your Client ID and Client Secret from developer.spotify.com:",
+                            text = "Spotify integration is completely optional. Music tracking already functions out of the box with Apple Music / iTunes and MusicBrainz without any credentials.\n\nTo use Spotify Web API features, enter your Client ID and Client Secret from developer.spotify.com:",
                             style = MaterialTheme.typography.bodySmall,
                             color = LXTextSecondary
                         )

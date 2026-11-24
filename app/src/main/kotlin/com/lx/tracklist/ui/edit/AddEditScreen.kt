@@ -408,7 +408,7 @@ fun AddEditScreen(
                                             ) {
                                                 Text("🎵", fontSize = 16.sp)
                                                 Column {
-                                                    Text("MusicBrainz / Deezer", fontWeight = FontWeight.Bold, color = LXTextPrimary)
+                                                    Text("MusicBrainz", fontWeight = FontWeight.Bold, color = LXTextPrimary)
                                                     Text("Music tracks, albums, artists & cover art", fontSize = 11.sp, color = LXTextSecondary)
                                                 }
                                             }

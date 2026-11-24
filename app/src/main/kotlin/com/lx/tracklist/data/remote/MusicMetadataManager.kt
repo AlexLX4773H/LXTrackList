@@ -17,18 +17,14 @@ object MusicMetadataManager {
         if (clean.isBlank()) return@withContext Result.success(emptyList())
 
         supervisorScope {
-            // Concurrently query iTunes (worldwide, robust, instant high-res covers),
-            // Deezer, and MusicBrainz.
+            // Concurrently query iTunes (worldwide, robust, instant high-res covers) and MusicBrainz.
             val iTunesDeferred = async { ITunesApiClient.searchTracks(clean, limit) }
-            val deezerDeferred = async { DeezerApiClient.searchTracks(clean, limit) }
             val mbDeferred = async { MusicBrainzApiClient.searchRecordings(clean, limit) }
 
             val iTunesRes = iTunesDeferred.await()
-            val deezerRes = deezerDeferred.await()
             val mbRes = mbDeferred.await()
 
             val iTunesList = iTunesRes.getOrDefault(emptyList())
-            val deezerList = deezerRes.getOrDefault(emptyList())
             val mbList = mbRes.getOrDefault(emptyList())
 
             val combined = mutableListOf<MusicSearchResult>()
@@ -42,15 +38,7 @@ object MusicMetadataManager {
                 }
             }
 
-            // 2. Add Deezer results (rich details, track numbers, 1000x1000 covers)
-            for (track in deezerList) {
-                val key = normalizeKey(track.title, track.artist)
-                if (seenKeys.add(key)) {
-                    combined.add(track)
-                }
-            }
-
-            // 3. Add MusicBrainz results that were not found in iTunes or Deezer
+            // 2. Add MusicBrainz results that were not found in iTunes
             for (track in mbList) {
                 val key = normalizeKey(track.title, track.artist)
                 if (seenKeys.add(key)) {
@@ -58,9 +46,8 @@ object MusicMetadataManager {
                 }
             }
 
-            if (combined.isEmpty() && iTunesRes.isFailure && deezerRes.isFailure && mbRes.isFailure) {
+            if (combined.isEmpty() && iTunesRes.isFailure && mbRes.isFailure) {
                 val err = iTunesRes.exceptionOrNull()
-                    ?: deezerRes.exceptionOrNull()
                     ?: mbRes.exceptionOrNull()
                     ?: Exception("Failed to search music")
                 Result.failure(err)
@@ -105,8 +92,8 @@ object MusicMetadataManager {
         }
     }
 
-    suspend fun fetchAlbumTracks(albumId: String, source: String = "Deezer"): Result<MusicAlbumDetails> {
-        return DeezerApiClient.fetchAlbumTracks(albumId)
+    suspend fun fetchAlbumTracks(albumId: String, source: String = "Apple Music"): Result<MusicAlbumDetails> {
+        return ITunesApiClient.fetchAlbumTracks(albumId)
     }
 
     suspend fun resolveCoverUrl(artist: String, title: String, existingCoverUrl: String?): String? {

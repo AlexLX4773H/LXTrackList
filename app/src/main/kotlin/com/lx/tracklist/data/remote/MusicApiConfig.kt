@@ -7,7 +7,6 @@ object MusicApiConfig {
 
     const val MUSICBRAINZ_BASE_URL = "https://musicbrainz.org/ws/2"
     const val COVER_ART_ARCHIVE_BASE_URL = "https://coverartarchive.org"
-    const val DEEZER_BASE_URL = "https://api.deezer.com"
     const val ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
 
     // MusicBrainz asks for descriptive User-Agent with app name, version, and contact info

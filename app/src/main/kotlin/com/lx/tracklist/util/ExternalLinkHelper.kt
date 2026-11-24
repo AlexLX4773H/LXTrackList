@@ -624,19 +624,17 @@ object ExternalLinkHelper {
             )
         )
 
-        // 2. Deezer
-        val deezerUrl = when {
-            externalSource.equals("Deezer", ignoreCase = true) && !externalId.isNullOrBlank() ->
-                webUrl ?: "https://www.deezer.com/track/$externalId"
-            webUrl != null && webUrl.contains("deezer.com", ignoreCase = true) -> webUrl
-            else -> "https://www.deezer.com/search/$encodedQuery"
+        // 2. Apple Music
+        val appleMusicUrl = when {
+            (externalSource?.contains("Apple", ignoreCase = true) == true || externalSource?.contains("iTunes", ignoreCase = true) == true) && !webUrl.isNullOrBlank() -> webUrl
+            else -> "https://music.apple.com/us/search?term=$encodedQuery"
         }
         list.add(
             ExternalOpenOption(
-                title = "Deezer",
-                subtitle = "deezer.com",
-                url = deezerUrl,
-                color = 0xFFFEAA2D
+                title = "Apple Music 🍎",
+                subtitle = "music.apple.com",
+                url = appleMusicUrl,
+                color = 0xFFFC3C44
             )
         )
 
