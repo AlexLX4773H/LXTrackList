@@ -7,7 +7,7 @@ import com.lx.tracklist.data.model.TrackingUnit
 
 data class MusicSearchResult(
     val externalId: String,
-    val externalSource: String, // "MusicBrainz", "iTunes", "Spotify"
+    val externalSource: String, // "MusicBrainz", "iTunes"
     val title: String,
     val artist: String,
     val alternateTitle: String? = null,

@@ -50,7 +50,7 @@ enum class SearchCategory(val displayName: String, val sourceName: String) {
     BOOKS("Books", "Google Books / Open Library"),
     LIGHT_NOVELS("Light Novels", "AniList / MAL"),
     GAMES("Games", "IGDB / RAWG"),
-    MUSIC("Music", "iTunes / MusicBrainz / Spotify")
+    MUSIC("Music", "iTunes / MusicBrainz")
 }
 
 data class SearchResultItem(

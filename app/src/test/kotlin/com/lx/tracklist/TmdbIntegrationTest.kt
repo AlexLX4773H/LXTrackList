@@ -320,7 +320,7 @@ class TmdbIntegrationTest {
         assertEquals("Google Books / Open Library", com.lx.tracklist.ui.search.SearchCategory.BOOKS.sourceName)
         assertEquals("AniList / MAL", com.lx.tracklist.ui.search.SearchCategory.LIGHT_NOVELS.sourceName)
         assertEquals("IGDB / RAWG", com.lx.tracklist.ui.search.SearchCategory.GAMES.sourceName)
-        assertEquals("iTunes / MusicBrainz / Spotify", com.lx.tracklist.ui.search.SearchCategory.MUSIC.sourceName)
+        assertEquals("iTunes / MusicBrainz", com.lx.tracklist.ui.search.SearchCategory.MUSIC.sourceName)
     }
 
     @Test
