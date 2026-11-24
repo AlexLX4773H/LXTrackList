@@ -286,20 +286,27 @@ object MangaDexApiClient {
 
         // Relationships (cover_art, author, artist)
         var coverFileName: String? = null
+        val authorList = mutableListOf<String>()
         val relArray = mangaObj.getAsJsonArray("relationships")
         relArray?.forEach { relElem ->
             if (relElem.isJsonObject) {
                 val relObj = relElem.asJsonObject
                 val relType = relObj.get("type")?.takeIf { !it.isJsonNull }?.asString
+                val relAttr = relObj.getAsJsonObject("attributes")
                 if (relType == "cover_art") {
-                    val relAttr = relObj.getAsJsonObject("attributes")
                     val fileName = relAttr?.get("fileName")?.takeIf { !it.isJsonNull }?.asString
                     if (!fileName.isNullOrBlank()) {
                         coverFileName = fileName
                     }
+                } else if (relType == "author" || relType == "artist") {
+                    val name = relAttr?.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                    if (!name.isNullOrBlank() && !authorList.contains(name)) {
+                        authorList.add(name)
+                    }
                 }
             }
         }
+        val authorsStr = authorList.joinToString(", ").takeIf { it.isNotBlank() }
 
         val posterUrl = if (!coverFileName.isNullOrBlank()) {
             buildCoverUrl(id, coverFileName)
@@ -329,7 +336,8 @@ object MangaDexApiClient {
             type = inferredType,
             sourceProvider = "MangaDex",
             url = webUrl,
-            originalLanguage = originalLanguage
+            originalLanguage = originalLanguage,
+            authors = authorsStr
         )
     }
 }

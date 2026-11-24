@@ -120,6 +120,8 @@ object MusicBrainzApiClient {
                     }
                 }
 
+                val detectedLang = ITunesApiClient.detectLanguageFromText("$title $artistName ${albumName.orEmpty()}")
+
                 results.add(
                     MusicSearchResult(
                         externalId = mbid,
@@ -135,7 +137,8 @@ object MusicBrainzApiClient {
                         albumCoverUrl = coverUrl,
                         genres = tags,
                         musicAlbumId = albumMbid ?: releaseMbid,
-                        webUrl = "https://musicbrainz.org/recording/$mbid"
+                        webUrl = "https://musicbrainz.org/recording/$mbid",
+                        originalLanguage = detectedLang
                     )
                 )
             }

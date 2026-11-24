@@ -22,7 +22,7 @@ data class MusicSearchResult(
     val isrc: String? = null,
     val webUrl: String? = null,
     val score: Float? = null,
-    val originalLanguage: String? = "en",
+    val originalLanguage: String? = null,
     val previewUrl: String? = null,
     val albumCoverUrl: String? = null,
     val relatedTracks: List<MusicSearchResult> = emptyList()
@@ -58,7 +58,7 @@ data class MusicSearchResult(
             description = null,
             airedStartDate = releaseDateMillis,
             trackingUnit = TrackingUnit.PERCENTAGE,
-            originalLanguage = originalLanguage ?: "en"
+            originalLanguage = originalLanguage
         )
     }
 }

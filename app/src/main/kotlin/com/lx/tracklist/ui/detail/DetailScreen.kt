@@ -2574,20 +2574,38 @@ private fun DetailExternalTrackingCard(
                             )
                         }
                         if (musicLinks.isNotEmpty()) {
-                            Row(
+                            Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                musicLinks.forEach { opt ->
-                                    OutlinedButton(
-                                        onClick = { ExternalLinkHelper.openUrlSafely(opt.url, uriHandler, context, clipboardManager) },
-                                        modifier = Modifier.weight(1f).height(32.dp),
-                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                                        shape = RoundedCornerShape(6.dp),
-                                        border = BorderStroke(1.dp, LXBorder),
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(opt.color))
+                                musicLinks.chunked(2).forEach { rowLinks ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Text(opt.title, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                                        rowLinks.forEach { opt ->
+                                            OutlinedButton(
+                                                onClick = { ExternalLinkHelper.openUrlSafely(opt.url, uriHandler, context, clipboardManager) },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(36.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                shape = RoundedCornerShape(8.dp),
+                                                border = BorderStroke(1.dp, LXBorder),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(opt.color))
+                                            ) {
+                                                Text(
+                                                    text = opt.title,
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                        if (rowLinks.size == 1) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        }
                                     }
                                 }
                             }

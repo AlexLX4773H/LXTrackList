@@ -133,51 +133,7 @@ fun MusicDiscoveryContent(
             Spacer(modifier = Modifier.height(10.dp))
         }
 
-        // 3. Quick Genre Selection Chips
-        Text(
-            text = if (selectedMusicMode == MusicDiscoveryMode.BY_GENRE) "Select Genre" else "Filter by Genre (Optional)",
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-            color = LXTextSecondary
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                val popularGenres = listOf(
-                    "All", "Pop", "Rock", "Hip-Hop", "Anime OST", "J-Pop", "K-Pop",
-                    "Dance", "Electronic", "R&B", "Metal", "Alternative", "Classical", "Country"
-                )
-                popularGenres.forEach { genre ->
-                    val isAll = genre == "All"
-                    val isSelected = if (isAll) selectedGenre == null else selectedGenre.equals(genre, ignoreCase = true)
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            if (isAll) {
-                                onSelectGenre(null)
-                            } else {
-                                onSelectGenre(if (isSelected) null else genre)
-                            }
-                        },
-                        label = { Text(genre, fontSize = 11.sp) },
-                        modifier = Modifier.height(30.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = LXPrimaryGreen.copy(alpha = 0.2f),
-                            selectedLabelColor = LXPrimaryGreen,
-                            containerColor = LXSurfaceElevated,
-                            labelColor = LXTextSecondary
-                        )
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // 4. Music Sort Order (if in BY_YEAR or BY_GENRE)
+        // 3. Music Sort Order (if in BY_YEAR or BY_GENRE)
         if (selectedMusicMode != MusicDiscoveryMode.TOP_CHARTS) {
             Text(
                 text = "Sort By",
@@ -246,15 +202,15 @@ fun MusicDiscoveryContent(
                     }
                     Column {
                         Text(
-                            text = "Music Tags / Subgenres",
+                            text = "Music Genres & Tags",
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
                             color = LXTextPrimary
                         )
                         val subtitle = when {
-                            musicIncludedTags.isEmpty() && musicExcludedTags.isEmpty() -> "Tap to filter by specific music subgenres"
-                            musicIncludedTags.isNotEmpty() && musicExcludedTags.isEmpty() -> "${musicIncludedTags.size} tags included"
-                            musicIncludedTags.isEmpty() && musicExcludedTags.isNotEmpty() -> "${musicExcludedTags.size} tags excluded"
-                            else -> "+${musicIncludedTags.size} / -${musicExcludedTags.size} tags"
+                            musicIncludedTags.isEmpty() && musicExcludedTags.isEmpty() -> "Tap to filter by music genres & subgenres"
+                            musicIncludedTags.isNotEmpty() && musicExcludedTags.isEmpty() -> "${musicIncludedTags.size} included"
+                            musicIncludedTags.isEmpty() && musicExcludedTags.isNotEmpty() -> "${musicExcludedTags.size} excluded"
+                            else -> "+${musicIncludedTags.size} / -${musicExcludedTags.size} selected"
                         }
                         Text(
                             text = subtitle,
@@ -319,13 +275,15 @@ fun MusicDiscoveryContent(
             selectedMusicEndYear != null -> "Up to $selectedMusicEndYear"
             else -> "$currentYear"
         }
+        val activeGenreLabel = selectedGenre?.takeIf { it.isNotBlank() } ?: musicIncludedTags.firstOrNull()
         val modeText = when (selectedMusicMode) {
-            MusicDiscoveryMode.TOP_CHARTS -> if (!selectedGenre.isNullOrBlank()) "Discover Top $selectedGenre Tracks" else "Discover Top Music Charts"
-            MusicDiscoveryMode.BY_GENRE -> if (!selectedGenre.isNullOrBlank()) "Discover $selectedGenre Tracks" else "Discover Music by Genre"
+            MusicDiscoveryMode.TOP_CHARTS -> if (!activeGenreLabel.isNullOrBlank() && musicIncludedTags.size <= 1 && musicExcludedTags.isEmpty()) "Discover Top $activeGenreLabel Tracks" else "Discover Top Music Charts"
+            MusicDiscoveryMode.BY_GENRE -> if (!activeGenreLabel.isNullOrBlank() && musicIncludedTags.size <= 1 && musicExcludedTags.isEmpty()) "Discover $activeGenreLabel Tracks" else "Discover Music by Genre"
             MusicDiscoveryMode.BY_YEAR -> "Discover Music $yearStr".trim()
         }
+        val showTagCounts = (selectedMusicMode == MusicDiscoveryMode.BY_YEAR || musicIncludedTags.size > 1 || musicExcludedTags.isNotEmpty())
         val tagsText = when {
-            musicIncludedTags.isNotEmpty() || musicExcludedTags.isNotEmpty() -> " (+${musicIncludedTags.size}/-${musicExcludedTags.size})"
+            showTagCounts && (musicIncludedTags.isNotEmpty() || musicExcludedTags.isNotEmpty()) -> " (+${musicIncludedTags.size}/-${musicExcludedTags.size})"
             else -> ""
         }
 

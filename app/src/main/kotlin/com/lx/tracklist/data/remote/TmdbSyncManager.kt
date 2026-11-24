@@ -105,6 +105,7 @@ object TmdbSyncManager {
         val missingDescription = (entry.description ?: entry.notes).isNullOrBlank()
         val missingExternalScore = entry.externalScore == null
         val missingRelated = entry.relatedEntriesJson.isNullOrBlank()
+        val missingCreator = entry.creator.isNullOrBlank()
         val isAiring = entry.isAiring
 
         return missingCover ||
@@ -118,6 +119,7 @@ object TmdbSyncManager {
                 missingDescription ||
                 missingExternalScore ||
                 missingRelated ||
+                missingCreator ||
                 isAiring
     }
 
@@ -707,9 +709,16 @@ object TmdbSyncManager {
                     details.originalLanguage
                 } else entry.originalLanguage
 
+                val resolvedCreator = details.resolveCreatorFor(isTv)
+                val newCreator = if (!resolvedCreator.isNullOrBlank() && (entry.creator.isNullOrBlank() || forceRefresh) && resolvedCreator != entry.creator) {
+                    hasChanges = true
+                    resolvedCreator
+                } else entry.creator
+
                 if (hasChanges) {
                     val updatedEntry = entry.copy(
                         coverImageUri = finalCoverUri ?: entry.coverImageUri,
+                        creator = newCreator,
                         durationMinutes = newDurationMinutes,
                         episodeLengthMinutes = newEpisodeLength,
                         totalEpisodes = newTotalEpisodes,

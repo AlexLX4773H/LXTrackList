@@ -548,5 +548,127 @@ class TmdbIntegrationTest {
         val effective = entry.getEffectiveAiredEpisodes()
         assertTrue("Effective aired episodes should be at least 8, was $effective", effective >= 8)
     }
+
+    @Test
+    fun testParseCreatorsAcrossTmdbJikanAniListAndMangaDex() {
+        val tmdbMovieJson = JsonParser.parseString(
+            """
+            {
+              "id": 27205,
+              "title": "Inception",
+              "credits": {
+                "crew": [
+                  {"job": "Producer", "name": "Emma Thomas"},
+                  {"job": "Director", "name": "Christopher Nolan"}
+                ]
+              },
+              "production_companies": [
+                {"name": "Syncopy"},
+                {"name": "Warner Bros. Pictures"}
+              ]
+            }
+            """.trimIndent()
+        ).asJsonObject
+        val movieDetails = TmdbApiClient.parseMovieDetails(tmdbMovieJson, 27205L)
+        assertEquals(listOf("Christopher Nolan"), movieDetails.directors)
+        assertEquals("Christopher Nolan", movieDetails.resolveCreatorFor(false))
+
+        val tmdbTvJson = JsonParser.parseString(
+            """
+            {
+              "id": 1396,
+              "name": "Breaking Bad",
+              "created_by": [
+                {"id": 66633, "name": "Vince Gilligan"}
+              ],
+              "networks": [
+                {"name": "AMC"}
+              ],
+              "production_companies": [
+                {"name": "Sony Pictures Television"}
+              ]
+            }
+            """.trimIndent()
+        ).asJsonObject
+        val tvDetails = TmdbApiClient.parseTvDetails(tmdbTvJson, 1396L)
+        assertEquals(listOf("Vince Gilligan"), tvDetails.creators)
+        assertEquals("Vince Gilligan", tvDetails.resolveCreatorFor(true))
+
+        val jikanAnimeJson = JsonParser.parseString(
+            """
+            {
+              "mal_id": 5114,
+              "title": "Fullmetal Alchemist: Brotherhood",
+              "type": "TV",
+              "studios": [{"mal_id": 4, "name": "Bones"}]
+            }
+            """.trimIndent()
+        ).asJsonObject
+        val animeDetails = com.lx.tracklist.data.remote.JikanApiClient.parseJikanData(jikanAnimeJson, 5114L)
+        assertEquals("Bones", animeDetails.authors)
+
+        val jikanMangaJson = JsonParser.parseString(
+            """
+            {
+              "mal_id": 2,
+              "title": "Berserk",
+              "type": "Manga",
+              "authors": [{"mal_id": 1868, "name": "Miura, Kentarou"}]
+            }
+            """.trimIndent()
+        ).asJsonObject
+        val mangaDetails = com.lx.tracklist.data.remote.JikanApiClient.parseJikanData(jikanMangaJson, 2L)
+        assertEquals("Miura, Kentarou", mangaDetails.authors)
+
+        val aniListAnimeJson = JsonParser.parseString(
+            """
+            {
+              "id": 16498,
+              "idMal": 16498,
+              "title": {"romaji": "Shingeki no Kyojin", "english": "Attack on Titan"},
+              "format": "TV",
+              "studios": {"nodes": [{"name": "Wit Studio"}]}
+            }
+            """.trimIndent()
+        ).asJsonObject
+        val aniAnime = com.lx.tracklist.data.remote.JikanApiClient.parseAniListMedia(aniListAnimeJson, 16498L)
+        assertEquals("Wit Studio", aniAnime.authors)
+
+        val aniListMangaJson = JsonParser.parseString(
+            """
+            {
+              "id": 30002,
+              "idMal": 2,
+              "title": {"romaji": "Berserk"},
+              "format": "MANGA",
+              "staff": {
+                "edges": [
+                  {"role": "Story & Art", "node": {"name": {"full": "Kentarou Miura"}}}
+                ]
+              }
+            }
+            """.trimIndent()
+        ).asJsonObject
+        val aniManga = com.lx.tracklist.data.remote.JikanApiClient.parseAniListMedia(aniListMangaJson, 2L)
+        assertEquals("Kentarou Miura", aniManga.authors)
+
+        val mangaDexJson = JsonParser.parseString(
+            """
+            {
+              "id": "md-123",
+              "attributes": {
+                "title": {"en": "Solo Leveling"},
+                "originalLanguage": "ko"
+              },
+              "relationships": [
+                {"type": "author", "attributes": {"name": "Chugong"}},
+                {"type": "artist", "attributes": {"name": "DUBU"}}
+              ]
+            }
+            """.trimIndent()
+        ).asJsonObject
+        val mdDetails = com.lx.tracklist.data.remote.MangaDexApiClient.parseMangaDexItem(mangaDexJson)
+        assertEquals("Chugong, DUBU", mdDetails?.authors)
+    }
 }
 

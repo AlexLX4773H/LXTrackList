@@ -23,6 +23,7 @@ object MusicTagRegistry {
         MusicGenreTag("Soundtrack"),
         MusicGenreTag("J-Pop"),
         MusicGenreTag("K-Pop"),
+        MusicGenreTag("Dance"),
         MusicGenreTag("Folk / Acoustic"),
         MusicGenreTag("Country"),
         MusicGenreTag("Blues"),

@@ -775,12 +775,15 @@ sealed class DiscoveryFilter {
 
         override val label: String
             get() {
+                val effectiveGenre = selectedGenre?.takeIf { it.isNotBlank() } ?: includedTags.firstOrNull()
                 val base = when (mode) {
                     MusicDiscoveryMode.TOP_CHARTS -> "🔥 Top Music Charts"
-                    MusicDiscoveryMode.BY_GENRE -> if (!selectedGenre.isNullOrBlank()) "🎸 $selectedGenre Music" else "🎸 Music by Genre"
+                    MusicDiscoveryMode.BY_GENRE -> if (!effectiveGenre.isNullOrBlank()) "🎸 $effectiveGenre Music" else "🎸 Music by Genre"
                     MusicDiscoveryMode.BY_YEAR -> "🗓️ Music $yearText".trim()
                 }
+                val isSingleGenreAsBase = (mode == MusicDiscoveryMode.BY_GENRE && selectedGenre.isNullOrBlank() && includedTags.size == 1 && excludedTags.isEmpty())
                 val tagsText = when {
+                    isSingleGenreAsBase -> ""
                     includedTags.isNotEmpty() && excludedTags.isNotEmpty() -> " • +${includedTags.size} / -${excludedTags.size} tags"
                     includedTags.isNotEmpty() -> " • +${includedTags.size} tags"
                     excludedTags.isNotEmpty() -> " • -${excludedTags.size} tags"

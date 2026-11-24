@@ -446,6 +446,8 @@ object JikanApiClient {
                 genres
                 countryOfOrigin
                 tags { name }
+                studios(isMain: true) { nodes { name } }
+                staff(perPage: 6) { edges { role node { name { full } } } }
                 nextAiringEpisode { id airingAt timeUntilAiring episode }
                 relations {
                   edges {
@@ -920,6 +922,8 @@ object JikanApiClient {
                   endDate { year month day }
                   genres
                   tags { name }
+                  studios(isMain: true) { nodes { name } }
+                  staff(perPage: 6) { edges { role node { name { full } } } }
                   nextAiringEpisode { id airingAt timeUntilAiring episode }
                 }
               }
@@ -950,6 +954,8 @@ object JikanApiClient {
                   endDate { year month day }
                   genres
                   tags { name }
+                  studios(isMain: true) { nodes { name } }
+                  staff(perPage: 6) { edges { role node { name { full } } } }
                   nextAiringEpisode { id airingAt timeUntilAiring episode }
                 }
               }
@@ -1111,6 +1117,8 @@ object JikanApiClient {
                 genres
                 countryOfOrigin
                 tags { name }
+                studios(isMain: true) { nodes { name } }
+                staff(perPage: 6) { edges { role node { name { full } } } }
                 nextAiringEpisode { id airingAt timeUntilAiring episode }
                 relations {
                   edges {
@@ -1154,6 +1162,8 @@ object JikanApiClient {
                 genres
                 countryOfOrigin
                 tags { name }
+                studios(isMain: true) { nodes { name } }
+                staff(perPage: 6) { edges { role node { name { full } } } }
                 nextAiringEpisode { id airingAt timeUntilAiring episode }
                 relations {
                   edges {
@@ -1380,6 +1390,19 @@ object JikanApiClient {
             else -> "ja"
         }
 
+        val creatorList = mutableListOf<String>()
+        dataObj.get("studios")?.takeIf { it.isJsonArray }?.asJsonArray?.forEach { elem ->
+            val name = elem?.takeIf { it.isJsonObject }?.asJsonObject?.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
+            if (!name.isNullOrBlank() && !creatorList.contains(name)) creatorList.add(name)
+        }
+        if (creatorList.isEmpty()) {
+            dataObj.get("authors")?.takeIf { it.isJsonArray }?.asJsonArray?.forEach { elem ->
+                val name = elem?.takeIf { it.isJsonObject }?.asJsonObject?.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                if (!name.isNullOrBlank() && !creatorList.contains(name)) creatorList.add(name)
+            }
+        }
+        val creatorStr = creatorList.joinToString(", ").takeIf { it.isNotBlank() }
+
         return JikanMediaDetails(
             malId = malId,
             title = title,
@@ -1404,6 +1427,7 @@ object JikanApiClient {
             broadcastTime = broadcastTime,
             nextAiringEpoch = nextAiringEpoch,
             isAdult = isAdult,
+            authors = creatorStr,
             originalLanguage = inferredLang,
             popularity = dataObj.get("members")?.takeIf { !it.isJsonNull }?.asInt
         )
@@ -1507,6 +1531,36 @@ object JikanApiClient {
         val isAdult = mediaObj.get("isAdult")?.takeIf { !it.isJsonNull }?.asBoolean
         val relations = parseAniListRelations(mediaObj)
 
+        val aniCreators = mutableListOf<String>()
+        if (isAnimeMedia) {
+            mediaObj.getSafeJsonObject("studios")?.get("nodes")?.takeIf { it.isJsonArray }?.asJsonArray?.forEach { node ->
+                val name = node?.takeIf { it.isJsonObject }?.asJsonObject?.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                if (!name.isNullOrBlank() && !aniCreators.contains(name)) aniCreators.add(name)
+            }
+        } else {
+            val staffEdges = mediaObj.getSafeJsonObject("staff")?.get("edges")?.takeIf { it.isJsonArray }?.asJsonArray
+            val fallbackStaff = mutableListOf<String>()
+            staffEdges?.forEach { edgeElem ->
+                val edge = edgeElem?.takeIf { it.isJsonObject }?.asJsonObject ?: return@forEach
+                val role = edge.get("role")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                val fullName = edge.getAsJsonObject("node")?.getAsJsonObject("name")?.get("full")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                if (!fullName.isNullOrBlank()) {
+                    if (role.contains("Story", ignoreCase = true) ||
+                        role.contains("Original", ignoreCase = true) ||
+                        role.contains("Author", ignoreCase = true) ||
+                        role.contains("Art", ignoreCase = true) ||
+                        role.contains("Illustration", ignoreCase = true)
+                    ) {
+                        if (!aniCreators.contains(fullName)) aniCreators.add(fullName)
+                    } else if (!fallbackStaff.contains(fullName)) {
+                        fallbackStaff.add(fullName)
+                    }
+                }
+            }
+            if (aniCreators.isEmpty()) aniCreators.addAll(fallbackStaff.take(2))
+        }
+        val creatorStr = aniCreators.joinToString(", ").takeIf { it.isNotBlank() }
+
         return JikanMediaDetails(
             malId = resolvedMalId,
             aniListId = aniId,
@@ -1532,6 +1586,7 @@ object JikanApiClient {
             broadcastTime = broadcastTime,
             nextAiringEpoch = nextAiringEpoch,
             isAdult = isAdult,
+            authors = creatorStr,
             originalLanguage = resolvedLang,
             popularity = mediaObj.get("popularity")?.takeIf { !it.isJsonNull }?.asInt,
             relatedMedia = relations.takeIf { it.isNotEmpty() }
@@ -2177,6 +2232,8 @@ object JikanApiClient {
                   genres
                   tags { name }
                   countryOfOrigin
+                  studios(isMain: true) { nodes { name } }
+                  staff(perPage: 6) { edges { role node { name { full } } } }
                   nextAiringEpisode { id airingAt timeUntilAiring episode }
                 }
               }
@@ -2719,6 +2776,8 @@ object JikanApiClient {
                   genres
                   tags { name }
                   countryOfOrigin
+                  studios(isMain: true) { nodes { name } }
+                  staff(perPage: 6) { edges { role node { name { full } } } }
                 }
               }
             }

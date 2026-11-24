@@ -1345,6 +1345,7 @@ object TachiyomiResolverManager {
             val updatedEntry = entry.copy(
                 title = cleanedOriginalTitle,
                 alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
+                creator = book.authorString.takeIf { it.isNotBlank() } ?: entry.creator,
                 externalSource = book.sourceProvider,
                 externalId = book.id,
                 coverImageUri = finalCover,
@@ -1526,6 +1527,7 @@ object TachiyomiResolverManager {
             val updatedEntry = entry.copy(
                 title = cleanedOriginalTitle,
                 alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
+                creator = (game.developers.firstOrNull() ?: game.publishers.firstOrNull())?.takeIf { it.isNotBlank() } ?: entry.creator,
                 externalSource = game.externalSource,
                 externalId = game.externalId,
                 coverImageUri = finalCover,
@@ -1642,6 +1644,7 @@ object TachiyomiResolverManager {
         val updatedEntry = entry.copy(
             title = cleanedOriginalTitle,
             alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
+            creator = matchDetails.authors?.takeIf { it.isNotBlank() } ?: entry.creator,
             externalSource = matchSource,
             externalId = matchExternalId,
             coverImageUri = finalCover,
@@ -1946,6 +1949,7 @@ object TachiyomiResolverManager {
         val updatedEntry = entry.copy(
             title = cleanedOriginalTitle,
             alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
+            creator = matchDetails.resolveCreatorFor(entry.mediaType == MediaType.SHOW || matchDetails.type == "TV") ?: entry.creator,
             externalSource = "TMDB",
             externalId = matchDetails.tmdbId.toString(),
             coverImageUri = finalCover,
@@ -2137,6 +2141,7 @@ object TachiyomiResolverManager {
         val updatedEntry = entry.copy(
             title = cleanedOriginalTitle,
             alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
+            creator = matchDetails.authors?.takeIf { it.isNotBlank() } ?: entry.creator,
             externalSource = matchSource,
             externalId = matchExternalId,
             coverImageUri = finalCover,

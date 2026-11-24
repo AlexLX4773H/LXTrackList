@@ -94,6 +94,19 @@ class MusicMetadataTest {
         assertEquals("27", ITunesApiClient.GENRE_MAP["J-Pop"])
         assertEquals("51", ITunesApiClient.GENRE_MAP["K-Pop"])
         assertEquals("29", ITunesApiClient.GENRE_MAP["Anime"])
+        assertEquals("18", ITunesApiClient.resolveGenreId("hip-hop / rap"))
+        assertEquals("17", ITunesApiClient.resolveGenreId("Dance"))
+        assertEquals("29", ITunesApiClient.resolveGenreId("Anime OST"))
+    }
+
+    @Test
+    fun testMusicLanguageDetection() {
+        assertEquals("ja", ITunesApiClient.detectLanguageFromText("アイドル YOASOBI"))
+        assertEquals("ko", ITunesApiClient.detectLanguageFromText("봄날 BTS"))
+        assertEquals("zh", ITunesApiClient.detectLanguageFromText("告白氣球 周杰倫"))
+        assertEquals("es", ITunesApiClient.detectLanguageFromText("Tití Me Preguntó Bad Bunny", "es", "es"))
+        assertEquals("es", ITunesApiClient.inferLanguageFromCountry("ES"))
+        assertEquals("ja", ITunesApiClient.inferLanguageFromCountry("jp"))
     }
 
     @Test
@@ -108,6 +121,14 @@ class MusicMetadataTest {
             selectedGenre = "Rock"
         )
         assertTrue(genreFilter.label.contains("Rock Music"))
+
+        val tagGenreFilter = com.lx.tracklist.ui.search.DiscoveryFilter.Music(
+            mode = com.lx.tracklist.ui.search.MusicDiscoveryMode.BY_GENRE,
+            includedTags = setOf("J-Pop"),
+            originalLanguages = setOf("ja")
+        )
+        assertTrue(tagGenreFilter.label.contains("J-Pop Music"))
+        assertTrue(tagGenreFilter.label.contains("Japanese"))
 
         val yearFilter = com.lx.tracklist.ui.search.DiscoveryFilter.Music(
             mode = com.lx.tracklist.ui.search.MusicDiscoveryMode.BY_YEAR,

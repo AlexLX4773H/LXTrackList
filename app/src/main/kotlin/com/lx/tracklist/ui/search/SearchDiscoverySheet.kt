@@ -345,7 +345,14 @@ fun SearchDiscoverySheet(
         mutableStateOf(musicFilter?.originalLanguages ?: emptySet())
     }
     var musicIncludedTags by remember {
-        mutableStateOf(musicFilter?.includedTags ?: emptySet())
+        val baseTags = musicFilter?.includedTags ?: emptySet()
+        val legacyGenre = musicFilter?.selectedGenre?.takeIf { it.isNotBlank() }
+        val merged = if (legacyGenre != null && baseTags.none { it.equals(legacyGenre, ignoreCase = true) }) {
+            baseTags + legacyGenre
+        } else {
+            baseTags
+        }
+        mutableStateOf(merged)
     }
     var musicExcludedTags by remember {
         mutableStateOf(musicFilter?.excludedTags ?: emptySet())
@@ -3121,7 +3128,7 @@ fun SearchDiscoverySheet(
                         onApply = {
                             val filter = DiscoveryFilter.Music(
                                 mode = selectedMusicMode,
-                                selectedGenre = selectedMusicGenre,
+                                selectedGenre = null,
                                 year = if (selectedMusicMode == MusicDiscoveryMode.BY_YEAR) (selectedMusicEndYear ?: selectedMusicStartYear ?: currentYear) else null,
                                 startYear = if (selectedMusicMode == MusicDiscoveryMode.BY_YEAR) selectedMusicStartYear else null,
                                 endYear = if (selectedMusicMode == MusicDiscoveryMode.BY_YEAR) selectedMusicEndYear else null,

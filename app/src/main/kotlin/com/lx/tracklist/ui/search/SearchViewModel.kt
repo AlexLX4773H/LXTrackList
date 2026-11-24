@@ -1002,7 +1002,10 @@ class SearchViewModel(
                         startYear = if (filter.mode == MusicDiscoveryMode.BY_YEAR) filter.startYear else null,
                         endYear = if (filter.mode == MusicDiscoveryMode.BY_YEAR) filter.endYear else null,
                         sortOrder = filter.sortOrder,
-                        limit = 30
+                        limit = 30,
+                        originalLanguages = filter.originalLanguages,
+                        includedTags = filter.includedTags,
+                        excludedTags = filter.excludedTags
                     )
                     if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to discover music")
                     res.getOrDefault(emptyList()).map { music -> mapMusicToSearchResult(music) }
@@ -1360,7 +1363,7 @@ class SearchViewModel(
             alternateTitle = music.alternateTitle,
             posterUrl = music.coverUrl ?: music.albumCoverUrl,
             releaseYear = music.releaseYear,
-            originalLanguage = music.originalLanguage ?: "en",
+            originalLanguage = music.originalLanguage,
             durationMinutes = music.durationSeconds,
             score = music.score,
             statusText = "Track",
@@ -1652,7 +1655,12 @@ class SearchViewModel(
                         }
                         is DiscoveryFilter.Music -> {
                             val list = if (query.isNotBlank()) {
-                                MusicMetadataManager.searchMusic(query, limit = 20).getOrThrow()
+                                MusicMetadataManager.searchMusic(
+                                    query = query,
+                                    limit = 20,
+                                    originalLanguages = activeFilter.originalLanguages,
+                                    excludedTags = activeFilter.excludedTags
+                                ).getOrThrow()
                             } else {
                                 MusicMetadataManager.discoverMusic(
                                     mode = activeFilter.mode,
@@ -1661,7 +1669,10 @@ class SearchViewModel(
                                     startYear = if (activeFilter.mode == MusicDiscoveryMode.BY_YEAR) activeFilter.startYear else null,
                                     endYear = if (activeFilter.mode == MusicDiscoveryMode.BY_YEAR) activeFilter.endYear else null,
                                     sortOrder = activeFilter.sortOrder,
-                                    limit = 30
+                                    limit = 30,
+                                    originalLanguages = activeFilter.originalLanguages,
+                                    includedTags = activeFilter.includedTags,
+                                    excludedTags = activeFilter.excludedTags
                                 ).getOrThrow()
                             }
                             return@withContext list.map { music -> mapMusicToSearchResult(music) }
@@ -2229,7 +2240,7 @@ class SearchViewModel(
                             alternateTitle = fullDetails?.alternateTitle ?: item.alternateTitle,
                             mediaType = MediaType.MOVIE,
                             status = status,
-                            creator = fullDetails?.studioString?.takeIf { it.isNotBlank() } ?: fullDetails?.publisherString?.takeIf { it.isNotBlank() } ?: item.creator,
+                            creator = fullDetails?.resolveCreatorFor(false) ?: item.creator,
                             customCategory = customCategory,
                             subCategory = subCategory,
                             externalId = item.externalId,
@@ -2255,7 +2266,7 @@ class SearchViewModel(
                             alternateTitle = fullDetails?.alternateTitle ?: item.alternateTitle,
                             mediaType = MediaType.SHOW,
                             status = status,
-                            creator = fullDetails?.studioString?.takeIf { it.isNotBlank() } ?: fullDetails?.publisherString?.takeIf { it.isNotBlank() } ?: item.creator,
+                            creator = fullDetails?.resolveCreatorFor(true) ?: item.creator,
                             customCategory = customCategory,
                             subCategory = subCategory,
                             externalId = item.externalId,
@@ -2298,7 +2309,7 @@ class SearchViewModel(
                         description = item.synopsis,
                         airedStartDate = null,
                         trackingUnit = TrackingUnit.PERCENTAGE,
-                        originalLanguage = item.originalLanguage ?: "en"
+                        originalLanguage = item.originalLanguage
                     )
                 } else {
                     // MAL / Jikan / Book / Light Novel item

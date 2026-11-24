@@ -689,17 +689,6 @@ fun AddEditScreen(
                 }
             }
 
-            // Universal Creator Field (Artist, Studio, Author, Developer, Director)
-            OutlinedTextField(
-                value = state.creator,
-                onValueChange = { viewModel.updateCreator(it) },
-                label = { Text("${state.mediaType.getCreatorRoleLabel()} (Optional)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                singleLine = true,
-                maxLines = 1,
-                modifier = Modifier.fillMaxWidth(),
-                colors = outlinedColors()
-            )
-
             // Status Chips
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Status", style = MaterialTheme.typography.titleSmall, color = LXTextPrimary)
@@ -2824,6 +2813,17 @@ fun AddEditScreen(
                     )
                 }
             }
+
+            // Universal Creator Field (Artist, Studio, Author, Developer, Director)
+            OutlinedTextField(
+                value = state.creator,
+                onValueChange = { viewModel.updateCreator(it) },
+                label = { Text("${state.mediaType.getCreatorRoleLabel()} (Optional)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                singleLine = true,
+                maxLines = 1,
+                modifier = Modifier.fillMaxWidth(),
+                colors = outlinedColors()
+            )
 
             // Save Button
             Button(

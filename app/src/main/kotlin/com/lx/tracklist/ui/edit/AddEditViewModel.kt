@@ -1001,7 +1001,7 @@ class AddEditViewModel(
                         title = cleanedOriginalTitle,
                         alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
                         alternateTitles = allAlts,
-                        creator = fullDetails?.studioString?.takeIf { it.isNotBlank() } ?: fullDetails?.publisherString?.takeIf { it.isNotBlank() } ?: current.creator,
+                        creator = fullDetails?.resolveCreatorFor(!isMovie) ?: current.creator,
                         mediaType = targetMediaType,
                         coverImageUri = fullDetails?.posterUrl ?: item.posterUrl ?: item.backdropUrl ?: current.coverImageUri,
                         externalId = item.tmdbId.toString(),

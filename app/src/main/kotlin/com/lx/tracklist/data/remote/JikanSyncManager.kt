@@ -173,6 +173,7 @@ object JikanSyncManager {
         val missingDescription = (entry.description ?: entry.notes).isNullOrBlank()
         val missingExternalScore = entry.externalScore == null
         val missingRelated = entry.relatedEntriesJson.isNullOrBlank()
+        val missingCreator = entry.creator.isNullOrBlank()
         val isAiring = entry.isAiring
 
         return missingCover ||
@@ -186,6 +187,7 @@ object JikanSyncManager {
                missingDescription ||
                missingExternalScore ||
                missingRelated ||
+               missingCreator ||
                isAiring
     }
 
@@ -852,9 +854,15 @@ object JikanSyncManager {
                     details.originalLanguage
                 } else entry.originalLanguage
 
+                val newCreator = if (!details.authors.isNullOrBlank() && (entry.creator.isNullOrBlank() || forceRefresh) && details.authors != entry.creator) {
+                    hasChanges = true
+                    details.authors
+                } else entry.creator
+
                 if (hasChanges) {
                     val updatedEntry = entry.copy(
                         userId = profileId,
+                        creator = newCreator,
                         coverImageUri = finalCoverUri ?: entry.coverImageUri,
                         episodeLengthMinutes = newEpisodeLength,
                         durationMinutes = newDurationMinutes,

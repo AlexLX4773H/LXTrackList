@@ -709,6 +709,45 @@ class DetailViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             _isRefreshingMetadata.value = true
             try {
+                if (cur.mediaType == MediaType.MUSIC) {
+                    val lookupMatch = if (!forceReLink && !cur.externalId.isNullOrBlank() && cur.externalId.all { it.isDigit() }) {
+                        com.lx.tracklist.data.remote.ITunesApiClient.lookupTrack(cur.externalId).getOrNull()
+                    } else null
+
+                    val match = lookupMatch ?: run {
+                        val searchQuery = listOfNotNull(cur.title.takeIf { it.isNotBlank() }, cur.creator?.takeIf { it.isNotBlank() })
+                            .joinToString(" ")
+                        com.lx.tracklist.data.remote.MusicMetadataManager.searchMusic(searchQuery, limit = 5)
+                            .getOrNull()?.firstOrNull()
+                    }
+
+                    if (match != null) {
+                        val now = System.currentTimeMillis()
+                        val updated = cur.copy(
+                            externalId = match.externalId.takeIf { it.isNotBlank() } ?: cur.externalId,
+                            externalSource = match.externalSource.takeIf { it.isNotBlank() } ?: cur.externalSource,
+                            creator = match.artist.takeIf { it.isNotBlank() } ?: cur.creator,
+                            movieSeriesName = match.albumName?.takeIf { it.isNotBlank() } ?: cur.movieSeriesName,
+                            movieSeriesNumber = match.trackNumber ?: cur.movieSeriesNumber,
+                            musicAlbumId = match.musicAlbumId?.takeIf { it.isNotBlank() } ?: cur.musicAlbumId,
+                            coverImageUri = (match.coverUrl ?: match.albumCoverUrl)?.takeIf { it.isNotBlank() } ?: cur.coverImageUri,
+                            durationMinutes = match.durationSeconds ?: cur.durationMinutes,
+                            tags = match.genres.joinToString(", ").takeIf { it.isNotBlank() } ?: cur.tags,
+                            airedStartDate = match.releaseDateMillis ?: cur.airedStartDate,
+                            originalLanguage = match.originalLanguage ?: cur.originalLanguage,
+                            updatedAt = now
+                        )
+                        repository.update(updated)
+                        _metadataRefreshMessage.value = "Metadata refreshed from ${match.externalSource} (${match.title})"
+                        loadedForEntryId = -1L
+                        loadRelatedEntries(updated, context)
+                        return@launch
+                    } else {
+                        _metadataRefreshMessage.value = "No matching music track found for \"${cur.title}\""
+                        return@launch
+                    }
+                }
+
                 if (cur.mediaType == MediaType.GAME) {
                     val gameId = if (forceReLink) null else cur.externalId ?: run {
                         val sRes = GameMetadataManager.searchGames(context, cur.title, limit = 1)
@@ -737,6 +776,9 @@ class DetailViewModel(
                         val updated = cur.copy(
                             externalId = details.externalId,
                             externalSource = details.externalSource,
+                            creator = details.developers.firstOrNull()?.takeIf { it.isNotBlank() }
+                                ?: details.publishers.firstOrNull()?.takeIf { it.isNotBlank() }
+                                ?: cur.creator,
                             coverImageUri = details.coverUrl ?: cur.coverImageUri,
                             alternateTitle = if (details.alternateTitles.isNotEmpty()) details.alternateTitles.joinToString("\n") else cur.alternateTitle,
                             airedStartDate = details.releaseDateMillis ?: cur.airedStartDate,
@@ -844,6 +886,7 @@ class DetailViewModel(
                         }
                         val updated = cur.copy(
                             coverImageUri = if (!bookDetails.coverUrl.isNullOrBlank()) bookDetails.coverUrl else cur.coverImageUri,
+                            creator = bookDetails.authorString.takeIf { it.isNotBlank() } ?: cur.creator,
                             alternateTitle = if (!bookDetails.subtitle.isNullOrBlank()) bookDetails.subtitle else cur.alternateTitle,
                             totalPages = if (bookDetails.pageCount != null && bookDetails.pageCount > 0) bookDetails.pageCount else cur.totalPages,
                             totalVolumes = if (bookDetails.totalVolumes != null && bookDetails.totalVolumes > 0) bookDetails.totalVolumes else cur.totalVolumes,
@@ -947,6 +990,7 @@ class DetailViewModel(
                             val updated = cur.copy(
                                 externalId = mdId,
                                 externalSource = "MangaDex",
+                                creator = details.authors?.takeIf { it.isNotBlank() } ?: cur.creator,
                                 coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else cur.coverImageUri,
                                 alternateTitle = if (!details.alternateTitle.isNullOrBlank()) details.alternateTitle else cur.alternateTitle,
                                 totalChapters = if (details.totalChapters != null && details.totalChapters > 0) details.totalChapters else cur.totalChapters,
@@ -1035,6 +1079,7 @@ class DetailViewModel(
                             val updated = cur.copy(
                                 externalId = newExtId,
                                 externalSource = resolvedSource,
+                                creator = details.authors?.takeIf { it.isNotBlank() } ?: cur.creator,
                                 coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else cur.coverImageUri,
                                 alternateTitle = if (!details.alternateTitle.isNullOrBlank()) details.alternateTitle else cur.alternateTitle,
                                 totalEpisodes = if (details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else cur.totalEpisodes,
@@ -1092,6 +1137,7 @@ class DetailViewModel(
                             val updated = cur.copy(
                                 externalId = details.tmdbId.toString(),
                                 externalSource = "TMDB",
+                                creator = details.resolveCreatorFor(isTv) ?: cur.creator,
                                 coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else cur.coverImageUri,
                                 alternateTitle = if (!details.alternateTitle.isNullOrBlank()) {
                                     details.alternateTitle

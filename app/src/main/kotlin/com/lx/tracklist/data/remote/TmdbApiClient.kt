@@ -52,13 +52,33 @@ data class TmdbMediaDetails(
     val movieSeriesNumber: Int? = null,
     val studios: List<String> = emptyList(),
     val publishers: List<String> = emptyList(),
-    val airedEpisodes: Int? = null
+    val airedEpisodes: Int? = null,
+    val directors: List<String> = emptyList(),
+    val creators: List<String> = emptyList()
 ) {
     val studioString: String
         get() = studios.joinToString(", ")
 
     val publisherString: String
         get() = publishers.joinToString(", ")
+
+    val directorString: String
+        get() = directors.joinToString(", ")
+
+    val creatorString: String
+        get() = creators.joinToString(", ")
+
+    fun resolveCreatorFor(isTv: Boolean): String? {
+        return if (isTv) {
+            creatorString.takeIf { it.isNotBlank() }
+                ?: publisherString.takeIf { it.isNotBlank() }
+                ?: studioString.takeIf { it.isNotBlank() }
+        } else {
+            directorString.takeIf { it.isNotBlank() }
+                ?: studioString.takeIf { it.isNotBlank() }
+                ?: publisherString.takeIf { it.isNotBlank() }
+        }
+    }
 
     fun buildDescriptionWithMetadata(): String {
         return buildMovieTvDescriptionWithMetadata(synopsis, studios, publishers)
@@ -1209,6 +1229,19 @@ object TmdbApiClient {
         val origLang = obj.get("original_language")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
             ?: obj.optJsonArray("spoken_languages")?.firstOrNull()?.takeIf { it.isJsonObject }?.asJsonObject?.get("iso_639_1")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
 
+        // Directors from credits.crew
+        val directorList = mutableListOf<String>()
+        obj.optJsonObject("credits")?.optJsonArray("crew")?.forEach { elem ->
+            if (elem.isJsonObject) {
+                val crewObj = elem.asJsonObject
+                val job = crewObj.get("job")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                val personName = crewObj.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                if (job.equals("Director", ignoreCase = true) && !personName.isNullOrBlank() && !directorList.contains(personName)) {
+                    directorList.add(personName)
+                }
+            }
+        }
+
         // Production companies (Studios)
         val studioList = mutableListOf<String>()
         obj.optJsonArray("production_companies")?.forEach { elem ->
@@ -1242,7 +1275,8 @@ object TmdbApiClient {
             originalLanguage = origLang,
             relatedItems = recList.takeIf { it.isNotEmpty() },
             movieSeriesName = movieSeriesName,
-            studios = studioList
+            studios = studioList,
+            directors = directorList
         )
     }
 
@@ -1424,6 +1458,17 @@ object TmdbApiClient {
             }
         }
 
+        // Creators from created_by
+        val creatorList = mutableListOf<String>()
+        obj.optJsonArray("created_by")?.forEach { elem ->
+            if (elem.isJsonObject) {
+                val creatorName = elem.asJsonObject.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
+                if (!creatorName.isNullOrBlank() && !creatorList.contains(creatorName)) {
+                    creatorList.add(creatorName)
+                }
+            }
+        }
+
         // Networks (Publishers / Broadcasters)
         val networkList = mutableListOf<String>()
         obj.optJsonArray("networks")?.forEach { elem ->
@@ -1460,7 +1505,8 @@ object TmdbApiClient {
             studios = studioList,
             publishers = networkList,
             airedEpisodes = obj.optJsonObject("last_episode_to_air")?.get("episode_number")?.takeIf { !it.isJsonNull }?.asInt
-                ?: if (isAiring) rawTotalEpisodes else null
+                ?: if (isAiring) rawTotalEpisodes else null,
+            creators = creatorList
         )
     }
 
