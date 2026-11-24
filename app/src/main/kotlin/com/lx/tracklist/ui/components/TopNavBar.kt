@@ -1,5 +1,11 @@
 package com.lx.tracklist.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,12 +43,14 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -123,6 +131,7 @@ fun TopNavBar(
     onLogoClick: () -> Unit = {},
     customCategoryTitle: String? = null,
     customCategories: List<com.lx.tracklist.data.model.CustomCategory> = emptyList(),
+    isSyncRunning: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
@@ -290,11 +299,27 @@ fun TopNavBar(
                     }
                 }
 
+                val infiniteTransition = rememberInfiniteTransition(label = "topNavSyncSpin")
+                val spinAngle by if (isSyncRunning) {
+                    infiniteTransition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 360f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(1000, easing = LinearEasing),
+                            repeatMode = RepeatMode.Restart
+                        ),
+                        label = "spin"
+                    )
+                } else {
+                    remember { mutableFloatStateOf(0f) }
+                }
+
                 IconButton(onClick = onRefresh) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Refresh",
-                        tint = LXTextSecondary
+                        tint = if (isSyncRunning) LXPrimaryGreen else LXTextSecondary,
+                        modifier = Modifier.rotate(spinAngle)
                     )
                 }
             }

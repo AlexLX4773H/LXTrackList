@@ -336,7 +336,7 @@ fun DetailScreen(
                 Button(
                     onClick = {
                         showRefreshConfirmDialog = false
-                        viewModel.refreshMetadataFromExternalSource(context)
+                        viewModel.refreshMetadataFromExternalSource(context, forceReLink = isFindingAndLinking)
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack)
                 ) {

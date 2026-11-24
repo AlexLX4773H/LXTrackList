@@ -939,12 +939,13 @@ data class MediaEntry(
     }
 
     fun getEffectiveAiredEpisodes(): Int {
-        if (airedEpisodes > 0) return airedEpisodes
-        if (isAiring && mediaType == MediaType.ANIME && airedStartDate != null && airedStartDate > 0L) {
+        if (isAiring && (mediaType == MediaType.ANIME || mediaType == MediaType.SHOW) && airedStartDate != null && airedStartDate > 0L) {
             val now = System.currentTimeMillis()
-            if (now < airedStartDate) return 0
-            val weeks = ((now - airedStartDate) / (7L * 24 * 60 * 60 * 1000L)).toInt() + 1
-            return if (totalEpisodes > 0) minOf(weeks, totalEpisodes) else weeks
+            if (now >= airedStartDate) {
+                val weeks = ((now - airedStartDate) / (7L * 24 * 60 * 60 * 1000L)).toInt() + 1
+                val calculated = if (totalEpisodes > 0) minOf(weeks, totalEpisodes) else weeks
+                return maxOf(airedEpisodes, calculated)
+            }
         }
         return airedEpisodes
     }

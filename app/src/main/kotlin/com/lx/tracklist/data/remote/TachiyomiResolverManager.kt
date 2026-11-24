@@ -1060,9 +1060,6 @@ object TachiyomiResolverManager {
         val primary = if (isTv) TmdbApiClient.searchTvMultiple(cleanSearch, context) else TmdbApiClient.searchMoviesMultiple(cleanSearch, context)
         pickFrom(primary.getOrDefault(emptyList()))?.let { return it }
 
-        val fallbackType = if (isTv) TmdbApiClient.searchMoviesMultiple(cleanSearch, context) else TmdbApiClient.searchTvMultiple(cleanSearch, context)
-        pickFrom(fallbackType.getOrDefault(emptyList()))?.let { return it }
-
         if (!cleanSearch.equals(rawSearch, ignoreCase = true) && rawSearch.isNotBlank()) {
             val rawResults = if (isTv) TmdbApiClient.searchTvMultiple(rawSearch, context) else TmdbApiClient.searchMoviesMultiple(rawSearch, context)
             pickFrom(rawResults.getOrDefault(emptyList()), tag = "raw ")?.let { return it }

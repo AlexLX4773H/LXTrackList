@@ -105,6 +105,7 @@ object TmdbSyncManager {
         val missingDescription = (entry.description ?: entry.notes).isNullOrBlank()
         val missingExternalScore = entry.externalScore == null
         val missingRelated = entry.relatedEntriesJson.isNullOrBlank()
+        val isAiring = entry.isAiring
 
         return missingCover ||
                 missingRuntime ||
@@ -116,7 +117,8 @@ object TmdbSyncManager {
                 missingTags ||
                 missingDescription ||
                 missingExternalScore ||
-                missingRelated
+                missingRelated ||
+                isAiring
     }
 
     fun startSync(
@@ -204,7 +206,7 @@ object TmdbSyncManager {
                 FailedCoverTracker.probeBrokenCovers(tmdbEntries)
             }
 
-            val eligible = tmdbEntries.filter { needsSync(it, forceRefresh) }
+            val eligible = if (targetEntryIds != null) tmdbEntries else tmdbEntries.filter { needsSync(it, forceRefresh) }
 
             val total = eligible.size
             if (total == 0) {
@@ -419,7 +421,11 @@ object TmdbSyncManager {
         profileId: Long,
         forceRefresh: Boolean
     ): TmdbSyncItemResult {
-        val tmdbId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull()
+        val isTvContaminatedMovie = entry.mediaType == MediaType.MOVIE && (
+            entry.alternateTitle?.contains("Dr. Hudson", ignoreCase = true) == true ||
+            (entry.title.equals("Black Widow", ignoreCase = true) && entry.externalId == "19345")
+        )
+        val tmdbId = if (isTvContaminatedMovie) null else (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull()
         val isTv = entry.mediaType == MediaType.SHOW
 
         var detailsResult = if (tmdbId != null) {
@@ -446,7 +452,7 @@ object TmdbSyncManager {
                 var finalExternalId: String? = entry.externalId
                 var finalExternalSource: String? = entry.externalSource
 
-                if (tmdbId == null && details.tmdbId > 0) {
+                if ((tmdbId == null || isTvContaminatedMovie) && details.tmdbId > 0) {
                     finalExternalId = details.tmdbId.toString()
                     finalExternalSource = "TMDB"
                     hasChanges = true
@@ -456,6 +462,7 @@ object TmdbSyncManager {
                 val needsPoster = entry.coverImageUri.isNullOrBlank() ||
                                   entry.coverImageUri.startsWith("file:") ||
                                   isCoverBroken ||
+                                  isTvContaminatedMovie ||
                                   forceRefresh
                 if (!details.posterUrl.isNullOrBlank() && needsPoster) {
                     finalCoverUri = details.posterUrl
@@ -570,11 +577,14 @@ object TmdbSyncManager {
 
                 // Alternate titles
                 val newAlternateTitle = if (!details.alternateTitle.isNullOrBlank() &&
-                    (entry.alternateTitle.isNullOrBlank() || forceRefresh) &&
+                    (entry.alternateTitle.isNullOrBlank() || forceRefresh || isTvContaminatedMovie) &&
                     details.alternateTitle != entry.alternateTitle
                 ) {
                     hasChanges = true
                     details.alternateTitle
+                } else if (isTvContaminatedMovie || (forceRefresh && details.alternateTitle.isNullOrBlank() && entry.alternateTitle?.contains("Dr. Hudson", ignoreCase = true) == true)) {
+                    hasChanges = true
+                    null
                 } else {
                     entry.alternateTitle
                 }
@@ -609,6 +619,32 @@ object TmdbSyncManager {
                     details.isAiring
                 } else {
                     entry.isAiring
+                }
+
+                // Aired episodes for show
+                val newAiredEpisodes = if (entry.mediaType == MediaType.SHOW) {
+                    if (details.airedEpisodes != null && details.airedEpisodes > 0 &&
+                        details.airedEpisodes != entry.airedEpisodes
+                    ) {
+                        hasChanges = true
+                        details.airedEpisodes
+                    } else if (newIsAiring) {
+                        val effective = entry.copy(
+                            airedStartDate = newAiredStartDate,
+                            totalEpisodes = newTotalEpisodes,
+                            isAiring = newIsAiring
+                        ).getEffectiveAiredEpisodes()
+                        if (effective > 0 && effective != entry.airedEpisodes) {
+                            hasChanges = true
+                            effective
+                        } else {
+                            entry.airedEpisodes
+                        }
+                    } else {
+                        entry.airedEpisodes
+                    }
+                } else {
+                    entry.airedEpisodes
                 }
 
                 // External Score
@@ -677,6 +713,7 @@ object TmdbSyncManager {
                         durationMinutes = newDurationMinutes,
                         episodeLengthMinutes = newEpisodeLength,
                         totalEpisodes = newTotalEpisodes,
+                        airedEpisodes = newAiredEpisodes,
                         totalSeasons = newTotalSeasons,
                         seasonEpisodesJson = newSeasonEpisodesJson,
                         airedStartDate = newAiredStartDate,

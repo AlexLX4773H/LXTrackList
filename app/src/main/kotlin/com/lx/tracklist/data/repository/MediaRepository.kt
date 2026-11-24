@@ -1045,10 +1045,14 @@ class MediaRepository(
                         durationMinutes = fullDetails?.durationMinutes,
                         tags = fullDetails?.tags,
                         description = fullDetails?.buildDescriptionWithMetadata() ?: fullDetails?.synopsis,
-                        airedStartDate = fullDetails?.airedStartDate
+                        airedStartDate = fullDetails?.airedStartDate,
+                        airedEndDate = fullDetails?.airedEndDate ?: fullDetails?.airedStartDate
                     )
                 } else {
                     val fullDetails = com.lx.tracklist.data.remote.TmdbApiClient.fetchTvDetails(tmdbId, context).getOrNull()
+                    val tvIsAiring = fullDetails?.isAiring ?: false
+                    val tvAiredStartDate = fullDetails?.airedStartDate
+                    val tvAiredEndDate = if (tvIsAiring) null else (fullDetails?.airedEndDate ?: tvAiredStartDate)
                     MediaEntry(
                         userId = effectiveUserId,
                         title = fullDetails?.title ?: item.title,
@@ -1066,8 +1070,9 @@ class MediaRepository(
                         episodeLengthMinutes = fullDetails?.durationMinutes,
                         tags = fullDetails?.tags,
                         description = fullDetails?.buildDescriptionWithMetadata() ?: fullDetails?.synopsis,
-                        airedStartDate = fullDetails?.airedStartDate,
-                        isAiring = fullDetails?.isAiring ?: false
+                        airedStartDate = tvAiredStartDate,
+                        airedEndDate = tvAiredEndDate,
+                        isAiring = tvIsAiring
                     )
                 }
             } else {

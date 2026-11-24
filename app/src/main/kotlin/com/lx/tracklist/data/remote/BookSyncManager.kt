@@ -167,7 +167,7 @@ object BookSyncManager {
                 FailedCoverTracker.probeBrokenCovers(bookEntries)
             }
 
-            val eligible = bookEntries.filter { needsSync(it, forceRefresh) }
+            val eligible = if (targetEntryIds != null) bookEntries else bookEntries.filter { needsSync(it, forceRefresh) }
             val total = eligible.size
 
             if (total == 0) {

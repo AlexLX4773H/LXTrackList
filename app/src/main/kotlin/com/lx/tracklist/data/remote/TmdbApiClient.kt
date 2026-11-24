@@ -3,6 +3,7 @@ package com.lx.tracklist.data.remote
 import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
@@ -50,7 +51,8 @@ data class TmdbMediaDetails(
     val movieSeriesName: String? = null,
     val movieSeriesNumber: Int? = null,
     val studios: List<String> = emptyList(),
-    val publishers: List<String> = emptyList()
+    val publishers: List<String> = emptyList(),
+    val airedEpisodes: Int? = null
 ) {
     val studioString: String
         get() = studios.joinToString(", ")
@@ -243,6 +245,16 @@ object TmdbApiClient {
         return builder.url(finalUrl).get().build()
     }
 
+    fun JsonObject.optJsonObject(key: String): JsonObject? {
+        val elem = get(key) ?: return null
+        return if (elem.isJsonObject) elem.asJsonObject else null
+    }
+
+    fun JsonObject.optJsonArray(key: String): JsonArray? {
+        val elem = get(key) ?: return null
+        return if (elem.isJsonArray) elem.asJsonArray else null
+    }
+
     fun fetchMovieDetails(
         tmdbId: Long,
         context: Context? = null,
@@ -350,11 +362,9 @@ object TmdbApiClient {
         baseUrl: String = DEFAULT_BASE_URL
     ): Result<TmdbMediaDetails> {
         return if (isTv) {
-            val tvResult = fetchTvDetails(tmdbId, context, baseUrl)
-            if (tvResult.isSuccess) tvResult else fetchMovieDetails(tmdbId, context, baseUrl)
+            fetchTvDetails(tmdbId, context, baseUrl)
         } else {
-            val movieResult = fetchMovieDetails(tmdbId, context, baseUrl)
-            if (movieResult.isSuccess) movieResult else fetchTvDetails(tmdbId, context, baseUrl)
+            fetchMovieDetails(tmdbId, context, baseUrl)
         }
     }
 
@@ -1091,28 +1101,6 @@ object TmdbApiClient {
             }
         }
 
-        // 3. Cross-fallback: if movie search failed, try TV (or vice versa)
-        val crossResult = if (isTv) {
-            searchMovieByTitle(cleanedTitle, context, baseUrl)
-        } else {
-            searchTvByTitle(cleanedTitle, context, baseUrl)
-        }
-        if (crossResult.isSuccess && !crossResult.getOrNull()?.posterUrl.isNullOrBlank()) {
-            return crossResult
-        }
-
-        // 4. Cross-fallback with raw title
-        if (cleanedTitle != rawTitle) {
-            val rawCrossResult = if (isTv) {
-                searchMovieByTitle(rawTitle, context, baseUrl)
-            } else {
-                searchTvByTitle(rawTitle, context, baseUrl)
-            }
-            if (rawCrossResult.isSuccess && !rawCrossResult.getOrNull()?.posterUrl.isNullOrBlank()) {
-                return rawCrossResult
-            }
-        }
-
         return primaryResult
     }
 
@@ -1137,13 +1125,13 @@ object TmdbApiClient {
         val externalScore = voteAvg?.takeIf { it > 0f }
 
         val overview = obj.get("overview")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
-        val extIdsObj = obj.getAsJsonObject("external_ids")
+        val extIdsObj = obj.optJsonObject("external_ids")
         val imdbId = obj.get("imdb_id")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
             ?: extIdsObj?.get("imdb_id")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
 
         // Genres
         val tagList = mutableListOf<String>()
-        obj.getAsJsonArray("genres")?.forEach { elem ->
+        obj.optJsonArray("genres")?.forEach { elem ->
             if (elem.isJsonObject) {
                 val gName = elem.asJsonObject.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
                 if (!gName.isNullOrBlank() && !tagList.contains(gName)) tagList.add(gName)
@@ -1156,8 +1144,8 @@ object TmdbApiClient {
         if (!originalTitle.isNullOrBlank() && !originalTitle.equals(title, ignoreCase = true)) {
             altList.add(originalTitle)
         }
-        val altTitlesObj = obj.getAsJsonObject("alternative_titles")
-        altTitlesObj?.getAsJsonArray("titles")?.forEach { elem ->
+        val altTitlesObj = obj.optJsonObject("alternative_titles")
+        altTitlesObj?.optJsonArray("titles")?.forEach { elem ->
             if (elem.isJsonObject) {
                 val t = elem.asJsonObject.get("title")?.takeIf { !it.isJsonNull }?.asString?.trim()
                 if (!t.isNullOrBlank() && !t.equals(title, ignoreCase = true) && !altList.contains(t)) {
@@ -1177,14 +1165,16 @@ object TmdbApiClient {
         val seenIds = mutableSetOf<Long>()
         seenIds.add(id)
 
-        val collectionObj = obj.getAsJsonObject("belongs_to_collection")
+        val collectionObj = obj.optJsonObject("belongs_to_collection")
         val movieSeriesName = collectionObj?.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
 
-        val recResults = obj.getAsJsonObject("recommendations")?.getAsJsonArray("results")
+        val recResults = obj.optJsonObject("recommendations")?.optJsonArray("results")
         if (recResults != null) {
             val currentRelDate = releaseDateStr ?: ""
             for (i in 0 until recResults.size().coerceAtMost(8)) {
-                val rec = recResults.get(i).asJsonObject
+                val elem = recResults.get(i)
+                if (!elem.isJsonObject) continue
+                val rec = elem.asJsonObject
                 val recId = rec.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
                 if (seenIds.contains(recId)) continue
                 seenIds.add(recId)
@@ -1217,11 +1207,11 @@ object TmdbApiClient {
         }
 
         val origLang = obj.get("original_language")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
-            ?: obj.getAsJsonArray("spoken_languages")?.firstOrNull()?.asJsonObject?.get("iso_639_1")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+            ?: obj.optJsonArray("spoken_languages")?.firstOrNull()?.takeIf { it.isJsonObject }?.asJsonObject?.get("iso_639_1")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
 
         // Production companies (Studios)
         val studioList = mutableListOf<String>()
-        obj.getAsJsonArray("production_companies")?.forEach { elem ->
+        obj.optJsonArray("production_companies")?.forEach { elem ->
             if (elem.isJsonObject) {
                 val compName = elem.asJsonObject.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
                 if (!compName.isNullOrBlank() && !studioList.contains(compName)) {
@@ -1240,7 +1230,7 @@ object TmdbApiClient {
             totalSeasons = null,
             alternateTitle = alternateTitle,
             airedStartDate = airedStartDate,
-            airedEndDate = null,
+            airedEndDate = airedStartDate,
             tags = tags,
             synopsis = overview,
             isAiring = isAiring,
@@ -1269,7 +1259,7 @@ object TmdbApiClient {
 
         // Episode runtime (array of ints, take first or average, fallback to episode objects)
         var durationMinutes: Int? = null
-        val runtimes = obj.getAsJsonArray("episode_run_time")
+        val runtimes = obj.optJsonArray("episode_run_time")
         if (runtimes != null && runtimes.size() > 0) {
             val first = runtimes.get(0)?.takeIf { !it.isJsonNull }?.asInt
             if (first != null && first > 0) {
@@ -1277,13 +1267,13 @@ object TmdbApiClient {
             }
         }
         if (durationMinutes == null) {
-            val lastEpRuntime = obj.getAsJsonObject("last_episode_to_air")?.get("runtime")?.takeIf { !it.isJsonNull }?.asInt
+            val lastEpRuntime = obj.optJsonObject("last_episode_to_air")?.get("runtime")?.takeIf { !it.isJsonNull }?.asInt
             if (lastEpRuntime != null && lastEpRuntime > 0) {
                 durationMinutes = lastEpRuntime
             }
         }
         if (durationMinutes == null) {
-            val nextEpRuntime = obj.getAsJsonObject("next_episode_to_air")?.get("runtime")?.takeIf { !it.isJsonNull }?.asInt
+            val nextEpRuntime = obj.optJsonObject("next_episode_to_air")?.get("runtime")?.takeIf { !it.isJsonNull }?.asInt
             if (nextEpRuntime != null && nextEpRuntime > 0) {
                 durationMinutes = nextEpRuntime
             }
@@ -1296,7 +1286,7 @@ object TmdbApiClient {
         }
 
         val seasonPairs = mutableListOf<Pair<Int, Int>>()
-        obj.getAsJsonArray("seasons")?.forEach { elem ->
+        obj.optJsonArray("seasons")?.forEach { elem ->
             if (elem.isJsonObject) {
                 val sObj = elem.asJsonObject
                 val sNum = sObj.get("season_number")?.takeIf { !it.isJsonNull }?.asInt ?: 0
@@ -1331,10 +1321,24 @@ object TmdbApiClient {
         }
         val totalSeasons = maxSeasonNum.takeIf { it > 0 } ?: rawTotalSeasons
 
+        val statusStr = obj.get("status")?.takeIf { !it.isJsonNull }?.asString
+        val isAiring = statusStr != null && (
+                statusStr.equals("Returning Series", ignoreCase = true) ||
+                        statusStr.equals("In Production", ignoreCase = true) ||
+                        statusStr.equals("Planned", ignoreCase = true)
+                )
+
         val firstAirDateStr = obj.get("first_air_date")?.takeIf { !it.isJsonNull }?.asString
         val lastAirDateStr = obj.get("last_air_date")?.takeIf { !it.isJsonNull }?.asString
+            ?: obj.optJsonObject("last_episode_to_air")?.get("air_date")?.takeIf { !it.isJsonNull }?.asString
+            ?: obj.optJsonArray("seasons")
+                ?.mapNotNull { if (it.isJsonObject) it.asJsonObject else null }
+                ?.filter { (it.get("season_number")?.takeIf { s -> !s.isJsonNull }?.asInt ?: 0) > 0 }
+                ?.maxByOrNull { it.get("season_number")?.asInt ?: 0 }
+                ?.get("air_date")?.takeIf { !it.isJsonNull }?.asString
+
         val airedStartDate = parseDateString(firstAirDateStr)
-        val airedEndDate = parseDateString(lastAirDateStr)
+        val airedEndDate = if (isAiring) null else parseDateString(lastAirDateStr)
 
         val voteAvg = obj.get("vote_average")?.takeIf { !it.isJsonNull }?.asFloat
         val externalScore = voteAvg?.takeIf { it > 0f }
@@ -1343,7 +1347,7 @@ object TmdbApiClient {
 
         // Genres
         val tagList = mutableListOf<String>()
-        obj.getAsJsonArray("genres")?.forEach { elem ->
+        obj.optJsonArray("genres")?.forEach { elem ->
             if (elem.isJsonObject) {
                 val gName = elem.asJsonObject.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
                 if (!gName.isNullOrBlank() && !tagList.contains(gName)) tagList.add(gName)
@@ -1356,8 +1360,8 @@ object TmdbApiClient {
         if (!originalName.isNullOrBlank() && !originalName.equals(name, ignoreCase = true)) {
             altList.add(originalName)
         }
-        val altTitlesObj = obj.getAsJsonObject("alternative_titles")
-        altTitlesObj?.getAsJsonArray("results")?.forEach { elem ->
+        val altTitlesObj = obj.optJsonObject("alternative_titles")
+        altTitlesObj?.optJsonArray("results")?.forEach { elem ->
             if (elem.isJsonObject) {
                 val t = elem.asJsonObject.get("title")?.takeIf { !it.isJsonNull }?.asString?.trim()
                 if (!t.isNullOrBlank() && !t.equals(name, ignoreCase = true) && !altList.contains(t)) {
@@ -1367,22 +1371,15 @@ object TmdbApiClient {
         }
         val alternateTitle = altList.distinct().joinToString("\n").takeIf { it.isNotBlank() }
 
-        val statusStr = obj.get("status")?.takeIf { !it.isJsonNull }?.asString
-        val isAiring = statusStr != null && (
-                statusStr.equals("Returning Series", ignoreCase = true) ||
-                        statusStr.equals("In Production", ignoreCase = true) ||
-                        statusStr.equals("Planned", ignoreCase = true)
-                )
-
         // Related recommendations (consolidated single-roundtrip)
         val recList = mutableListOf<RelatedMediaItem>()
         val seenIds = mutableSetOf<Long>()
         seenIds.add(id)
 
-        val recResults = obj.getAsJsonObject("recommendations")?.getAsJsonArray("results")
+        val recResults = obj.optJsonObject("recommendations")?.optJsonArray("results")
         if (recResults != null) {
             for (i in 0 until recResults.size().coerceAtMost(8)) {
-                val rec = recResults.get(i).asJsonObject
+                val rec = recResults.get(i).takeIf { it.isJsonObject }?.asJsonObject ?: continue
                 val recId = rec.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
                 if (seenIds.contains(recId)) continue
                 seenIds.add(recId)
@@ -1409,16 +1406,16 @@ object TmdbApiClient {
             }
         }
 
-        val tvExtIdsObj = obj.getAsJsonObject("external_ids")
+        val tvExtIdsObj = obj.optJsonObject("external_ids")
         val tvImdbId = obj.get("imdb_id")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
             ?: tvExtIdsObj?.get("imdb_id")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
 
         val tvOrigLang = obj.get("original_language")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
-            ?: obj.getAsJsonArray("spoken_languages")?.firstOrNull()?.asJsonObject?.get("iso_639_1")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
+            ?: obj.optJsonArray("spoken_languages")?.firstOrNull()?.takeIf { it.isJsonObject }?.asJsonObject?.get("iso_639_1")?.takeIf { !it.isJsonNull }?.asString?.trim()?.ifBlank { null }
 
         // Production companies (Studios)
         val studioList = mutableListOf<String>()
-        obj.getAsJsonArray("production_companies")?.forEach { elem ->
+        obj.optJsonArray("production_companies")?.forEach { elem ->
             if (elem.isJsonObject) {
                 val compName = elem.asJsonObject.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
                 if (!compName.isNullOrBlank() && !studioList.contains(compName)) {
@@ -1429,7 +1426,7 @@ object TmdbApiClient {
 
         // Networks (Publishers / Broadcasters)
         val networkList = mutableListOf<String>()
-        obj.getAsJsonArray("networks")?.forEach { elem ->
+        obj.optJsonArray("networks")?.forEach { elem ->
             if (elem.isJsonObject) {
                 val netName = elem.asJsonObject.get("name")?.takeIf { !it.isJsonNull }?.asString?.trim()
                 if (!netName.isNullOrBlank() && !networkList.contains(netName)) {
@@ -1461,7 +1458,9 @@ object TmdbApiClient {
             originalLanguage = tvOrigLang,
             relatedItems = recList.takeIf { it.isNotEmpty() },
             studios = studioList,
-            publishers = networkList
+            publishers = networkList,
+            airedEpisodes = obj.optJsonObject("last_episode_to_air")?.get("episode_number")?.takeIf { !it.isJsonNull }?.asInt
+                ?: if (isAiring) rawTotalEpisodes else null
         )
     }
 
@@ -1518,7 +1517,7 @@ object TmdbApiClient {
                     val currentReleaseDate = root.get("release_date")?.takeIf { !it.isJsonNull }?.asString ?: ""
 
                     // Check collection (sequels / prequels in franchise)
-                    val collectionObj = root.getAsJsonObject("belongs_to_collection")
+                    val collectionObj = root.optJsonObject("belongs_to_collection")
                     val collectionId = collectionObj?.get("id")?.takeIf { !it.isJsonNull }?.asLong
                     if (collectionId != null) {
                         val collectionEndpoint = "${baseUrl.trimEnd('/')}/collection/$collectionId"
@@ -1527,10 +1526,10 @@ object TmdbApiClient {
                         val colBody = colResp.body?.string() ?: ""
                         if (colResp.isSuccessful) {
                             val colJson = gson.fromJson(colBody, JsonObject::class.java)
-                            val parts = colJson.getAsJsonArray("parts")
+                            val parts = colJson?.optJsonArray("parts")
                             if (parts != null) {
                                 for (i in 0 until parts.size()) {
-                                    val part = parts.get(i).asJsonObject
+                                    val part = parts.get(i).takeIf { it.isJsonObject }?.asJsonObject ?: continue
                                     val partId = part.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
                                     if (seenIds.contains(partId)) continue
                                     seenIds.add(partId)
@@ -1565,10 +1564,10 @@ object TmdbApiClient {
                     }
 
                     // Also recommendations
-                    val recResults = root.getAsJsonObject("recommendations")?.getAsJsonArray("results")
+                    val recResults = root.optJsonObject("recommendations")?.optJsonArray("results")
                     if (recResults != null) {
                         for (i in 0 until recResults.size().coerceAtMost(6)) {
-                            val rec = recResults.get(i).asJsonObject
+                            val rec = recResults.get(i).takeIf { it.isJsonObject }?.asJsonObject ?: continue
                             val recId = rec.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
                             if (seenIds.contains(recId)) continue
                             seenIds.add(recId)
@@ -1602,10 +1601,10 @@ object TmdbApiClient {
                 val body = response.body?.string() ?: ""
                 if (response.isSuccessful) {
                     val root = gson.fromJson(body, JsonObject::class.java)
-                    val recResults = root.getAsJsonObject("recommendations")?.getAsJsonArray("results")
+                    val recResults = root?.optJsonObject("recommendations")?.optJsonArray("results")
                     if (recResults != null) {
                         for (i in 0 until recResults.size().coerceAtMost(6)) {
-                            val rec = recResults.get(i).asJsonObject
+                            val rec = recResults.get(i).takeIf { it.isJsonObject }?.asJsonObject ?: continue
                             val recId = rec.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
                             if (seenIds.contains(recId)) continue
                             seenIds.add(recId)

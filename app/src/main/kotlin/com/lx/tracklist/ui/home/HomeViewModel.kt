@@ -1,5 +1,6 @@
 package com.lx.tracklist.ui.home
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -9,6 +10,12 @@ import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.remote.BookSyncManager
+import com.lx.tracklist.data.remote.GameSyncManager
+import com.lx.tracklist.data.remote.JikanSyncManager
+import com.lx.tracklist.data.remote.SyncForegroundService
+import com.lx.tracklist.data.remote.TachiyomiResolverManager
+import com.lx.tracklist.data.remote.TmdbSyncManager
 import com.lx.tracklist.data.repository.MediaRepository
 import com.lx.tracklist.ui.components.SortOption
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +25,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+enum class HomeRefreshScope {
+    CURRENT_VIEW,
+    AIRING_ONLY,
+    CURRENT_CATEGORY,
+    ALL_CATEGORIES
+}
 
 data class HomeUiState(
     val selectedCategory: MediaType = MediaType.ANIME,
@@ -30,6 +44,11 @@ data class HomeUiState(
     val isCategorySheetOpen: Boolean = false,
     val isUserSwitcherOpen: Boolean = false,
     val isAddSubCategoryDialogOpen: Boolean = false,
+    val isRefreshDialogOpen: Boolean = false,
+    val isSyncRunning: Boolean = false,
+    val syncStatusMessage: String? = null,
+    val syncCompletedCount: Int = 0,
+    val syncTotalCount: Int = 0,
     val entries: List<MediaEntry> = emptyList(),
     val allUserEntries: List<MediaEntry> = emptyList(),
     val categoryEntries: List<MediaEntry> = emptyList(),
@@ -56,14 +75,23 @@ private data class FilterState(
     val sort: SortOption = SortOption.RECENTLY_UPDATED,
     val isSheetOpen: Boolean = false,
     val isUserSwitcherOpen: Boolean = false,
-    val isAddSubCategoryDialogOpen: Boolean = false
+    val isAddSubCategoryDialogOpen: Boolean = false,
+    val isRefreshDialogOpen: Boolean = false
+)
+
+private data class SyncProgressInfo(
+    val isRunning: Boolean = false,
+    val statusMessage: String? = null,
+    val completedCount: Int = 0,
+    val totalCount: Int = 0
 )
 
 private data class UserAndSettingsContext(
     val activeUser: UserProfile,
     val allUsers: List<UserProfile>,
     val isSwipeEnabled: Boolean,
-    val isUserInitialized: Boolean
+    val isUserInitialized: Boolean,
+    val syncInfo: SyncProgressInfo
 )
 
 class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
@@ -110,12 +138,44 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
         }
     }
 
+    private val syncProgressFlow = combine(
+        JikanSyncManager.syncState,
+        TmdbSyncManager.syncState,
+        BookSyncManager.syncState,
+        GameSyncManager.syncState,
+        TachiyomiResolverManager.resolveState
+    ) { j, t, b, g, r ->
+        val running = j.isRunning || t.isRunning || b.isRunning || g.isRunning || r.isRunning
+        val status = when {
+            r.isRunning -> r.statusMessage ?: "Resolving Tachiyomi entries..."
+            j.isRunning -> j.statusMessage ?: "Syncing Anime / Manga..."
+            t.isRunning -> t.statusMessage ?: "Syncing TV Shows / Movies..."
+            b.isRunning -> b.statusMessage ?: "Syncing Books..."
+            g.isRunning -> g.statusMessage ?: "Syncing Games..."
+            else -> null
+        }
+        val completed = (if (j.isRunning) j.completedCount else 0) +
+                (if (t.isRunning) t.completedCount else 0) +
+                (if (b.isRunning) b.completedCount else 0) +
+                (if (g.isRunning) g.completedCount else 0) +
+                (if (r.isRunning) r.completedCount else 0)
+        val total = (if (j.isRunning) j.totalCount else 0) +
+                (if (t.isRunning) t.totalCount else 0) +
+                (if (b.isRunning) b.totalCount else 0) +
+                (if (g.isRunning) g.totalCount else 0) +
+                (if (r.isRunning) r.totalCount else 0)
+        SyncProgressInfo(running, status, completed, total)
+    }
+
     private val userAndSettingsContextFlow = combine(
         repository.activeUser,
         repository.allUsers,
         repository.isSwipeToSwitchTabsEnabled,
-        repository.isUserInitialized
-    ) { active, all, swipe, initialized -> UserAndSettingsContext(active, all, swipe, initialized) }
+        repository.isUserInitialized,
+        syncProgressFlow
+    ) { active, all, swipe, initialized, syncInfo ->
+        UserAndSettingsContext(active, all, swipe, initialized, syncInfo)
+    }
 
     val uiState: StateFlow<HomeUiState> = combine(
         _filterState,
@@ -214,6 +274,11 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
             isCategorySheetOpen = filter.isSheetOpen,
             isUserSwitcherOpen = filter.isUserSwitcherOpen,
             isAddSubCategoryDialogOpen = filter.isAddSubCategoryDialogOpen,
+            isRefreshDialogOpen = filter.isRefreshDialogOpen,
+            isSyncRunning = ctx.syncInfo.isRunning,
+            syncStatusMessage = ctx.syncInfo.statusMessage,
+            syncCompletedCount = ctx.syncInfo.completedCount,
+            syncTotalCount = ctx.syncInfo.totalCount,
             entries = sortedActiveFiltered,
             allUserEntries = allEntries,
             categoryEntries = sortedCategoryEntries,
@@ -362,6 +427,108 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
     fun addRelatedToLibrary(item: com.lx.tracklist.data.model.RelatedMediaItem, status: MediaStatus, context: android.content.Context? = null) {
         viewModelScope.launch {
             repository.addRelatedItem(item, status, context, targetUserId = repository.activeUser.value.id)
+        }
+    }
+
+    fun setRefreshDialogOpen(open: Boolean) {
+        _filterState.update { it.copy(isRefreshDialogOpen = open) }
+    }
+
+    fun cancelSync(context: Context) {
+        SyncForegroundService.cancelAllSyncs(context)
+    }
+
+    fun startRefresh(context: Context, scope: HomeRefreshScope, forceRefresh: Boolean) {
+        val currentState = uiState.value
+        val targetEntries: List<MediaEntry> = when (scope) {
+            HomeRefreshScope.CURRENT_VIEW -> currentState.entries
+            HomeRefreshScope.AIRING_ONLY -> currentState.categoryEntries.filter { it.isAiring }
+            HomeRefreshScope.CURRENT_CATEGORY -> currentState.categoryEntries
+            HomeRefreshScope.ALL_CATEGORIES -> currentState.allUserEntries
+        }
+
+        if (targetEntries.isEmpty()) return
+
+        val jikanIds = mutableSetOf<Long>()
+        val tmdbIds = mutableSetOf<Long>()
+        val bookIds = mutableSetOf<Long>()
+        val gameIds = mutableSetOf<Long>()
+        val tachiyomiIds = mutableSetOf<Long>()
+
+        for (entry in targetEntries) {
+            val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim() ?: ""
+            if (JikanSyncManager.isTachiyomiSource(entry) && !JikanSyncManager.hasValidExternalId(entry)) {
+                tachiyomiIds.add(entry.id)
+            } else if (src.equals("IGDB", ignoreCase = true) || src.equals("RAWG", ignoreCase = true) || entry.mediaType == MediaType.GAME) {
+                gameIds.add(entry.id)
+            } else if (src.equals("TMDB", ignoreCase = true)) {
+                tmdbIds.add(entry.id)
+            } else if (src.equals("Google Books", ignoreCase = true) || src.equals("Open Library", ignoreCase = true)) {
+                bookIds.add(entry.id)
+            } else if (src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)) {
+                jikanIds.add(entry.id)
+            } else if (entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.SHOW) {
+                tmdbIds.add(entry.id)
+            } else if (entry.mediaType == MediaType.BOOK) {
+                if (src.equals("AniList", ignoreCase = true) || src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)) {
+                    jikanIds.add(entry.id)
+                } else {
+                    bookIds.add(entry.id)
+                }
+            } else {
+                jikanIds.add(entry.id)
+            }
+        }
+
+        val user = repository.activeUser.value
+        if (tachiyomiIds.isNotEmpty()) {
+            TachiyomiResolverManager.startResolution(
+                context = context,
+                repository = repository,
+                targetEntryIds = tachiyomiIds,
+                targetProfileId = user.id,
+                targetProfileName = user.name
+            )
+        }
+        if (jikanIds.isNotEmpty()) {
+            JikanSyncManager.startSync(
+                context = context,
+                repository = repository,
+                forceRefresh = forceRefresh,
+                targetEntryIds = jikanIds,
+                targetProfileId = user.id,
+                targetProfileName = user.name
+            )
+        }
+        if (tmdbIds.isNotEmpty()) {
+            TmdbSyncManager.startSync(
+                context = context,
+                repository = repository,
+                forceRefresh = forceRefresh,
+                targetEntryIds = tmdbIds,
+                targetProfileId = user.id,
+                targetProfileName = user.name
+            )
+        }
+        if (bookIds.isNotEmpty()) {
+            BookSyncManager.startSync(
+                context = context,
+                repository = repository,
+                forceRefresh = forceRefresh,
+                targetEntryIds = bookIds,
+                targetProfileId = user.id,
+                targetProfileName = user.name
+            )
+        }
+        if (gameIds.isNotEmpty()) {
+            GameSyncManager.syncLibrary(
+                context = context,
+                repository = repository,
+                profileId = user.id,
+                profileName = user.name,
+                forceRefresh = forceRefresh,
+                targetEntryIds = gameIds
+            )
         }
     }
 }

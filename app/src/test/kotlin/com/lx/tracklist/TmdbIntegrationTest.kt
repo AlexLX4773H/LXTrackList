@@ -156,6 +156,81 @@ class TmdbIntegrationTest {
     }
 
     @Test
+    fun testParseTvDetailsCompletedShowFallbacks() {
+        // Test TV show that ended but last_air_date is null, falling back to last_episode_to_air or seasons
+        val jsonWithEpisode = """
+            {
+                "id": 19885,
+                "name": "Sherlock",
+                "status": "Ended",
+                "first_air_date": "2010-07-25",
+                "last_episode_to_air": {
+                    "air_date": "2017-01-15",
+                    "episode_number": 3,
+                    "season_number": 4
+                },
+                "seasons": [
+                    {"season_number": 1, "air_date": "2010-07-25", "episode_count": 3},
+                    {"season_number": 4, "air_date": "2017-01-01", "episode_count": 3}
+                ]
+            }
+        """.trimIndent()
+        val detailsWithEp = TmdbApiClient.parseTvDetails(JsonParser.parseString(jsonWithEpisode).asJsonObject, 19885L)
+        assertEquals(false, detailsWithEp.isAiring)
+        assertNotNull(detailsWithEp.airedEndDate)
+        assertEquals(TmdbApiClient.parseDateString("2017-01-15"), detailsWithEp.airedEndDate)
+
+        // Test fallback to seasons when last_episode_to_air is also missing
+        val jsonWithSeasonOnly = """
+            {
+                "id": 19885,
+                "name": "Sherlock",
+                "status": "Ended",
+                "first_air_date": "2010-07-25",
+                "seasons": [
+                    {"season_number": 1, "air_date": "2010-07-25", "episode_count": 3},
+                    {"season_number": 4, "air_date": "2017-01-01", "episode_count": 3}
+                ]
+            }
+        """.trimIndent()
+        val detailsWithSeason = TmdbApiClient.parseTvDetails(JsonParser.parseString(jsonWithSeasonOnly).asJsonObject, 19885L)
+        assertEquals(false, detailsWithSeason.isAiring)
+        assertNotNull(detailsWithSeason.airedEndDate)
+        assertEquals(TmdbApiClient.parseDateString("2017-01-01"), detailsWithSeason.airedEndDate)
+    }
+
+    @Test
+    fun testParseTvDetailsAiringShowNullEndDate() {
+        val json = """
+            {
+                "id": 1000,
+                "name": "Ongoing Show",
+                "status": "Returning Series",
+                "first_air_date": "2024-01-10",
+                "last_air_date": "2024-05-20"
+            }
+        """.trimIndent()
+        val details = TmdbApiClient.parseTvDetails(JsonParser.parseString(json).asJsonObject, 1000L)
+        assertEquals(true, details.isAiring)
+        assertNotNull(details.airedStartDate)
+        assertNull(details.airedEndDate)
+    }
+
+    @Test
+    fun testParseMovieDetailsSetsAiredEndDate() {
+        val json = """
+            {
+                "id": 550,
+                "title": "Fight Club",
+                "release_date": "1999-10-15"
+            }
+        """.trimIndent()
+        val details = TmdbApiClient.parseMovieDetails(JsonParser.parseString(json).asJsonObject, 550L)
+        assertNotNull(details.airedStartDate)
+        assertEquals(details.airedStartDate, details.airedEndDate)
+    }
+
+    @Test
     fun testBuildMovieTvDescriptionWithMetadataDeduplication() {
         val baseOverview = "A great film about space exploration."
         val studios = listOf("Syncopy", "Legendary Pictures")
@@ -342,6 +417,135 @@ class TmdbIntegrationTest {
         assertEquals(3, details.totalSeasons)
         assertEquals(listOf(8, 10, 6), details.seasonEpisodes)
         assertEquals(24, details.totalEpisodes)
+    }
+
+    @Test
+    fun testParseTvDetailsExtractsAiredEpisodesFromLastEpisodeToAir() {
+        val sampleJson = """
+            {
+              "id": 999,
+              "name": "Weekly Series",
+              "status": "Returning Series",
+              "number_of_episodes": 24,
+              "last_episode_to_air": {
+                "air_date": "2024-03-15",
+                "episode_number": 11,
+                "season_number": 1
+              }
+            }
+        """.trimIndent()
+
+        val obj = com.google.gson.JsonParser.parseString(sampleJson).asJsonObject
+        val details = TmdbApiClient.parseTvDetails(obj, 999L)
+        assertEquals(11, details.airedEpisodes)
+        assertEquals(true, details.isAiring)
+    }
+
+    @Test
+    fun testEffectiveAiredEpisodesForShow() {
+        // Explicit airedEpisodes returns directly
+        val completedShow = com.lx.tracklist.data.model.MediaEntry(
+            id = 1L,
+            userId = 1L,
+            title = "Completed Show",
+            mediaType = com.lx.tracklist.data.model.MediaType.SHOW,
+            status = com.lx.tracklist.data.model.MediaStatus.COMPLETED,
+            isAiring = false,
+            totalEpisodes = 12,
+            airedEpisodes = 12
+        )
+        assertEquals(12, completedShow.getEffectiveAiredEpisodes())
+
+        // Airing show calculates from airedStartDate if totalEpisodes > 0 and airedEpisodes == 0
+        val airingShow = com.lx.tracklist.data.model.MediaEntry(
+            id = 2L,
+            userId = 1L,
+            title = "Airing Show",
+            mediaType = com.lx.tracklist.data.model.MediaType.SHOW,
+            status = com.lx.tracklist.data.model.MediaStatus.WATCHING,
+            isAiring = true,
+            totalEpisodes = 12,
+            airedEpisodes = 0,
+            airedStartDate = System.currentTimeMillis() - 21 * 24 * 60 * 60 * 1000L // 3 weeks ago
+        )
+        val calculated = airingShow.getEffectiveAiredEpisodes()
+        // Should calculate approximately 4 episodes (day 0 = ep 1, +3 weeks = 4)
+        assertTrue("Calculated should be >= 3, was $calculated", calculated >= 3)
+    }
+
+    @Test
+    fun testParseMovieDetailsWithNullCollectionsAndNullRecsDoesNotThrowClassCastException() {
+        // Simulates TMDB response for standalone movies like Marvel's Black Widow (ID 497698)
+        val json = """
+            {
+              "id": 497698,
+              "title": "Black Widow",
+              "runtime": 134,
+              "belongs_to_collection": null,
+              "recommendations": null,
+              "external_ids": null,
+              "release_date": "2021-07-07",
+              "overview": "Natasha Romanoff confronts the darker parts of her ledger...",
+              "vote_average": 7.3
+            }
+        """.trimIndent()
+
+        val parsedObj = JsonParser.parseString(json).asJsonObject
+        val details = TmdbApiClient.parseMovieDetails(parsedObj, 497698L)
+        assertEquals("Black Widow", details.title)
+        assertEquals(134, details.durationMinutes)
+        assertEquals(497698L, details.tmdbId)
+        assertNotNull(details.airedStartDate)
+        assertEquals(details.airedStartDate, details.airedEndDate)
+    }
+
+    @Test
+    fun testParseTvDetailsWithNullNextEpisodeDoesNotThrowClassCastException() {
+        // Simulates TMDB response for ended TV shows like Sherlock (ID 19885)
+        val json = """
+            {
+              "id": 19885,
+              "name": "Sherlock",
+              "status": "Ended",
+              "first_air_date": "2010-07-25",
+              "last_air_date": "2017-01-15",
+              "next_episode_to_air": null,
+              "last_episode_to_air": null,
+              "recommendations": null,
+              "external_ids": null,
+              "episode_run_time": null,
+              "seasons": [
+                {"season_number": 1, "air_date": "2010-07-25", "episode_count": 3},
+                {"season_number": 4, "air_date": "2017-01-01", "episode_count": 3}
+              ]
+            }
+        """.trimIndent()
+
+        val parsedObj = JsonParser.parseString(json).asJsonObject
+        val details = TmdbApiClient.parseTvDetails(parsedObj, 19885L)
+        assertEquals("Sherlock", details.title)
+        assertEquals(false, details.isAiring)
+        assertNotNull(details.airedStartDate)
+        assertNotNull(details.airedEndDate)
+        assertEquals(TmdbApiClient.parseDateString("2017-01-15"), details.airedEndDate)
+    }
+
+    @Test
+    fun testEffectiveAiredEpisodesProjectsCurrentWeek() {
+        val entry = com.lx.tracklist.data.model.MediaEntry(
+            id = 10L,
+            userId = 1L,
+            title = "Airing Anime",
+            mediaType = com.lx.tracklist.data.model.MediaType.ANIME,
+            status = com.lx.tracklist.data.model.MediaStatus.WATCHING,
+            isAiring = true,
+            totalEpisodes = 13,
+            airedEpisodes = 7, // Stored previously as 7
+            airedStartDate = System.currentTimeMillis() - (8 * 7 * 24 * 60 * 60 * 1000L) // 8 weeks ago
+        )
+        // 8 weeks ago + 1 = 9 episodes aired, which is > stored 7
+        val effective = entry.getEffectiveAiredEpisodes()
+        assertTrue("Effective aired episodes should be at least 8, was $effective", effective >= 8)
     }
 }
 

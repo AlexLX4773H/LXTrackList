@@ -2092,6 +2092,8 @@ class SearchViewModel(
                     val tmdbId = item.externalId.toLongOrNull() ?: 0L
                     if (item.mediaType == MediaType.MOVIE) {
                         val fullDetails = TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()
+                        val movieAiredStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate
+                        val movieAiredEndDate = fullDetails?.airedEndDate ?: movieAiredStartDate
                         MediaEntry(
                             userId = targetUserId,
                             title = fullDetails?.title ?: item.title,
@@ -2108,11 +2110,15 @@ class SearchViewModel(
                             durationMinutes = fullDetails?.durationMinutes ?: item.durationMinutes,
                             tags = fullDetails?.tags,
                             description = fullDetails?.buildDescriptionWithMetadata() ?: item.synopsis,
-                            airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate,
+                            airedStartDate = movieAiredStartDate,
+                            airedEndDate = movieAiredEndDate,
                             originalLanguage = fullDetails?.originalLanguage ?: item.originalLanguage ?: item.rawTmdbResult?.originalLanguage
                         )
                     } else {
                         val fullDetails = TmdbApiClient.fetchTvDetails(tmdbId, context).getOrNull()
+                        val tvIsAiring = fullDetails?.isAiring ?: false
+                        val tvAiredStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate
+                        val tvAiredEndDate = if (tvIsAiring) null else (fullDetails?.airedEndDate ?: fullDetails?.airedStartDate)
                         MediaEntry(
                             userId = targetUserId,
                             title = fullDetails?.title ?: item.title,
@@ -2132,8 +2138,9 @@ class SearchViewModel(
                             episodeLengthMinutes = fullDetails?.durationMinutes,
                             tags = fullDetails?.tags,
                             description = fullDetails?.buildDescriptionWithMetadata() ?: item.synopsis,
-                            airedStartDate = fullDetails?.airedStartDate ?: item.rawTmdbResult?.releaseDate,
-                            isAiring = fullDetails?.isAiring ?: false,
+                            airedStartDate = tvAiredStartDate,
+                            airedEndDate = tvAiredEndDate,
+                            isAiring = tvIsAiring,
                             originalLanguage = fullDetails?.originalLanguage ?: item.originalLanguage ?: item.rawTmdbResult?.originalLanguage
                         )
                     }

@@ -173,6 +173,7 @@ object JikanSyncManager {
         val missingDescription = (entry.description ?: entry.notes).isNullOrBlank()
         val missingExternalScore = entry.externalScore == null
         val missingRelated = entry.relatedEntriesJson.isNullOrBlank()
+        val isAiring = entry.isAiring
 
         return missingCover ||
                missingRuntime ||
@@ -184,7 +185,8 @@ object JikanSyncManager {
                missingTags ||
                missingDescription ||
                missingExternalScore ||
-               missingRelated
+               missingRelated ||
+               isAiring
     }
 
     fun startSync(
@@ -249,7 +251,7 @@ object JikanSyncManager {
                 FailedCoverTracker.probeBrokenCovers(malEntries)
             }
 
-            val eligible = malEntries.filter { needsSync(it, forceRefresh) }
+            val eligible = if (targetEntryIds != null) malEntries else malEntries.filter { needsSync(it, forceRefresh) }
 
             val total = eligible.size
             if (total == 0) {
@@ -489,8 +491,14 @@ object JikanSyncManager {
                 MangaDexApiClient.searchMangaDetailsByTitle(entry.title, isManhwa = true)
             aniListId != null ->
                 JikanApiClient.queryAniListById(aniListId = aniListId, isManga = isManga)
-            malId != null && malId > 0 ->
-                JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga, title = entry.title, isManhwa = isManhwa)
+            malId != null && malId > 0 -> {
+                if (entry.isAiring && !isManga) {
+                    val aniRes = JikanApiClient.queryAniList(malId = malId, isManga = false)
+                    if (aniRes.isSuccess) aniRes else JikanApiClient.fetchMediaDetails(malId = malId, isManga = false, title = entry.title, isManhwa = false)
+                } else {
+                    JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga, title = entry.title, isManhwa = isManhwa)
+                }
+            }
             else ->
                 JikanApiClient.searchMediaDetailsByTitle(title = entry.title, isManga = isManga, isManhwa = isManhwa)
         }
@@ -653,10 +661,12 @@ object JikanSyncManager {
                     entry.totalEpisodes
                 }
 
+                val isEntryAiring = details.isAiring ?: entry.isAiring
+
                 // Determine chapters & volumes for manga/manhwa/book
                 val newTotalChapters = if (isManga) {
                     if (details.totalChapters != null && details.totalChapters > 0 &&
-                        (entry.totalChapters == 0 || forceRefresh) &&
+                        (entry.totalChapters == 0 || forceRefresh || isEntryAiring) &&
                         details.totalChapters != entry.totalChapters
                     ) {
                         hasChanges = true
@@ -666,6 +676,18 @@ object JikanSyncManager {
                     }
                 } else {
                     entry.totalChapters
+                }
+
+                val newAiredChapters = if (isManga) {
+                    val cand = details.airedChapters ?: if (isEntryAiring && details.totalChapters != null && details.totalChapters > 0) details.totalChapters else null
+                    if (cand != null && cand > 0 && cand != entry.airedChapters) {
+                        hasChanges = true
+                        cand
+                    } else {
+                        entry.airedChapters
+                    }
+                } else {
+                    entry.airedChapters
                 }
 
                 val newTotalVolumes = if (isManga) {
@@ -838,6 +860,7 @@ object JikanSyncManager {
                         durationMinutes = newDurationMinutes,
                         totalEpisodes = newTotalEpisodes,
                         airedEpisodes = newAiredEpisodes,
+                        airedChapters = newAiredChapters,
                         broadcastTime = newBroadcastTime,
                         nextAiringEpoch = newNextAiringEpoch,
                         totalChapters = newTotalChapters,

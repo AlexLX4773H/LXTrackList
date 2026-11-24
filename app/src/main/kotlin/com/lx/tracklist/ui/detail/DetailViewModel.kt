@@ -693,7 +693,7 @@ class DetailViewModel(
         }
     }
 
-    fun refreshMetadataFromExternalSource(context: Context) {
+    fun refreshMetadataFromExternalSource(context: Context, forceReLink: Boolean = false) {
         val cur = entry.value ?: return
         if (_isRefreshingMetadata.value) return
 
@@ -701,11 +701,11 @@ class DetailViewModel(
             _isRefreshingMetadata.value = true
             try {
                 if (cur.mediaType == MediaType.GAME) {
-                    val gameId = cur.externalId ?: run {
+                    val gameId = if (forceReLink) null else cur.externalId ?: run {
                         val sRes = GameMetadataManager.searchGames(context, cur.title, limit = 1)
                         sRes.getOrNull()?.firstOrNull()?.externalId
                     }
-                    if (gameId == null) {
+                    if (gameId.isNullOrBlank()) {
                         _metadataRefreshMessage.value = "No matching game found for \"${cur.title}\""
                         return@launch
                     }
@@ -866,22 +866,37 @@ class DetailViewModel(
 
                 val isTachiyomi = JikanSyncManager.isTachiyomiSource(cur)
                 val hasValidId = JikanSyncManager.hasValidExternalId(cur)
-                val needsResolution = isTachiyomi || !hasValidId || cur.externalId.isNullOrBlank() || TachiyomiResolverManager.isEligibleForResolution(cur)
-                if (needsResolution) {
-                    val outcome = TachiyomiResolverManager.matchAndResolveEntry(cur, repository, context)
+                val isTvContaminatedMovie = cur.mediaType == MediaType.MOVIE && (
+                    cur.alternateTitle?.contains("Dr. Hudson", ignoreCase = true) == true ||
+                    (cur.title.equals("Black Widow", ignoreCase = true) && cur.externalId == "19345")
+                )
+                val needsResolution = forceReLink || isTvContaminatedMovie || isTachiyomi || !hasValidId || cur.externalId.isNullOrBlank() || TachiyomiResolverManager.isEligibleForResolution(cur)
+                if (needsResolution && (isTachiyomi || !hasValidId || cur.externalId.isNullOrBlank() || isTvContaminatedMovie || forceReLink)) {
+                    val outcome = TachiyomiResolverManager.matchAndResolveEntry(
+                        entry = cur,
+                        repository = repository,
+                        context = context,
+                        skipExistingIdCheck = forceReLink || isTvContaminatedMovie
+                    )
                     when (outcome) {
                         is TachiyomiResolverManager.ResolutionOutcome.Success -> {
                             val r = outcome.report
                             _metadataRefreshMessage.value = "Resolved & linked to ${r.resolvedSource} (#${r.resolvedExternalId}): ${r.resolvedTitle}"
+                            return@launch
                         }
                         is TachiyomiResolverManager.ResolutionOutcome.Skipped -> {
-                            _metadataRefreshMessage.value = "No confident exact match found for \"${cur.title}\""
+                            if (isTachiyomi) {
+                                _metadataRefreshMessage.value = "No confident exact match found for \"${cur.title}\""
+                                return@launch
+                            }
                         }
                         is TachiyomiResolverManager.ResolutionOutcome.Failed -> {
-                            _metadataRefreshMessage.value = "Failed to resolve: ${outcome.report.errorMessage}"
+                            if (isTachiyomi) {
+                                _metadataRefreshMessage.value = "Failed to resolve: ${outcome.report.errorMessage}"
+                                return@launch
+                            }
                         }
                     }
-                    return@launch
                 }
 
                 suspend fun attemptFallbackResolution(failurePrefix: String) {
@@ -906,7 +921,7 @@ class DetailViewModel(
                 }
 
                 val isMal = JikanSyncManager.isMalSource(cur) || isAnimeOrManga(cur)
-                val extIdStr = cur.externalId.trim()
+                val extIdStr = if (forceReLink || isTvContaminatedMovie) "" else cur.externalId?.trim().orEmpty()
                 val isManga = JikanSyncManager.isMangaType(cur.mediaType)
                 val extId = extIdStr.toLongOrNull()
                 val isMangaDex = cur.externalSource?.equals("MangaDex", ignoreCase = true) == true
@@ -928,7 +943,7 @@ class DetailViewModel(
                                 totalChapters = if (details.totalChapters != null && details.totalChapters > 0) details.totalChapters else cur.totalChapters,
                                 totalVolumes = if (details.totalVolumes != null && details.totalVolumes > 0) details.totalVolumes else cur.totalVolumes,
                                 airedStartDate = details.airedStartDate ?: cur.airedStartDate,
-                                airedEndDate = details.airedEndDate ?: cur.airedEndDate,
+                                airedEndDate = if (details.isAiring == true) null else (details.airedEndDate ?: cur.airedEndDate),
                                 externalScore = details.externalScore ?: cur.externalScore,
                                 externalScoreSource = details.externalScoreSource ?: "MangaDex",
                                 tags = if (!details.tags.isNullOrBlank()) details.tags else cur.tags,
@@ -1022,7 +1037,7 @@ class DetailViewModel(
                                 episodeLengthMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.episodeLengthMinutes,
                                 durationMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.durationMinutes,
                                 airedStartDate = details.airedStartDate ?: cur.airedStartDate,
-                                airedEndDate = details.airedEndDate ?: cur.airedEndDate,
+                                airedEndDate = if (details.isAiring == true) null else (details.airedEndDate ?: cur.airedEndDate),
                                 externalScore = details.externalScore ?: cur.externalScore,
                                 externalScoreSource = details.externalScoreSource ?: resolvedSource,
                                 tags = if (!details.tags.isNullOrBlank()) details.tags else cur.tags,
@@ -1069,18 +1084,24 @@ class DetailViewModel(
                                 externalId = details.tmdbId.toString(),
                                 externalSource = "TMDB",
                                 coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else cur.coverImageUri,
-                                alternateTitle = if (!details.alternateTitle.isNullOrBlank()) details.alternateTitle else cur.alternateTitle,
-                                totalEpisodes = if (details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else cur.totalEpisodes,
-                                totalSeasons = if (isTv && details.totalSeasons != null && details.totalSeasons > 0) details.totalSeasons else cur.totalSeasons,
+                                alternateTitle = if (!details.alternateTitle.isNullOrBlank()) {
+                                    details.alternateTitle
+                                } else if (forceReLink || isTvContaminatedMovie || cur.alternateTitle?.contains("Dr. Hudson", ignoreCase = true) == true) {
+                                    null
+                                } else {
+                                    cur.alternateTitle
+                                },
+                                totalEpisodes = if (isTv && details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else if (isTv) cur.totalEpisodes else 0,
+                                totalSeasons = if (isTv && details.totalSeasons != null && details.totalSeasons > 0) details.totalSeasons else if (isTv) cur.totalSeasons else 1,
                                 seasonEpisodesJson = if (cur.mediaType == MediaType.SHOW && details.seasonEpisodes != null) {
                                     MediaEntry.formatSeasonEpisodes(details.seasonEpisodes) ?: cur.seasonEpisodesJson
                                 } else {
                                     cur.seasonEpisodesJson
                                 },
                                 durationMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.durationMinutes,
-                                episodeLengthMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else cur.episodeLengthMinutes,
+                                episodeLengthMinutes = if (isTv && details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else if (isTv) cur.episodeLengthMinutes else null,
                                 airedStartDate = details.airedStartDate ?: cur.airedStartDate,
-                                airedEndDate = details.airedEndDate ?: cur.airedEndDate,
+                                airedEndDate = if (details.isAiring == true) null else (details.airedEndDate ?: cur.airedEndDate),
                                 externalScore = details.externalScore ?: cur.externalScore,
                                 externalScoreSource = "TMDB",
                                 tags = if (!details.tags.isNullOrBlank()) details.tags else cur.tags,
