@@ -2,11 +2,11 @@
 
 <p align="center">
   <strong>A fast, sleek, offline-first personal media tracking Android application.</strong><br>
-  Track Anime, Manga, Manhwa, Movies, TV Shows, Books, Games, and Custom Media in one unified place.
+  Track Anime, Manga, Manhwa, Movies, TV Shows, Books, Music, Games, and Custom Media in one unified place.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-0.6.17-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/Version-0.7.2-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/Platform-Android_8.0+_(API_26--36)-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Platform" />
   <img src="https://img.shields.io/badge/Language-Kotlin_2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Language" />
   <img src="https://img.shields.io/badge/UI-Jetpack_Compose_&_Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Compose" />
@@ -17,31 +17,26 @@
 
 ---
 
-## 🚀 What's New in v0.6.17
+## 🚀 What's New in v0.7.2
 
-- **⏱️ Dynamic Category-Adaptive Time Sorting (Spent Time & Time Remaining)**:
-  - Added two comprehensive time-based sort orders to both the **Home Tab** and **Library Tab**:
-    1. **Most Time Watched / Played / Read**: Ranks entries by total time already consumed/invested, factoring in runtime per episode/movie, chapters/pages read, game playtime/progress, and repeat completions (rewatches, re-reads, replays).
-    2. **Most Time To Watch / Play / Read**: Ranks in-progress and planned entries by estimated time remaining to complete (returning zero for completed media), computing remaining episodes, chapters, pages, or game hours/percentage targets against runtime metrics.
-  - **Context-Aware Dynamic Labels**: Sort labels dynamically adapt based on the selected media category:
-    - **Watch Categories** (Anime, TV Shows, Movies): *"Most Time Watched"* and *"Most Time To Watch"*.
-    - **Play Categories** (Video Games): *"Most Time Played"* and *"Most Time To Play"*.
-    - **Read Categories** (Manga, Manhwa, Books/Light Novels): *"Most Time Read"* and *"Most Time To Read"*.
-    - **Custom Categories**: Automatically resolves custom watch-type vs read-type category definitions.
-    - **All / Mixed Categories**: Defaults to *"Most Time Watched / Played / Read"* and *"Most Time To Watch / Play / Read"*.
-  - **Unified Duration Engine**: Standardized spent time and remaining time calculation across `MediaEntry`, Home and Library sort engines, and the Statistics dashboard for complete data consistency.
+- **🔄 Interactive Music Sync Job (`Settings → External Sync Jobs`)**:
+  - Replaced the static `Music Metadata & Services` info bar with a full **Music Sync** job card matching MAL, TMDB, MangaDex, Books, and Games sync jobs.
+  - Powered by `MusicSyncManager` with **Fetch Missing** (detects and populates missing covers, artist, album, album ID, track number, duration, release date, genres, language, and related tracks) and **Re-fetch All**, live progress bar, **Cancel Sync**, `SyncForegroundService` background execution, and dedicated progress/completion notifications.
+  - Routed batch Music syncing from **Home**, **Library multi-select**, and **Settings** through `MusicSyncManager` using Apple Music / iTunes & MusicBrainz (keeping iTunes and Apple Music external sources unified cleanly).
 
-- **🔍 Persistent Search Query with Discovery Filters**:
-  - In the **Search & Discover** tab, applying or switching Discover filters (e.g. `🔥 Most Popular Games`, `+PC`, seasonal anime, genres, tags) now preserves any active search query text (such as `"lord of the rings"`) instead of resetting it to empty.
-  - Automatically triggers an immediate scoped search combining both the active text query and the selected discovery filter constraints across all media categories (Games, Movies, TV Shows, Anime, Manga, Manhwa, Light Novels, and Books).
-  - Clearing discovery filters via the `✕` chip or reset action smoothly preserves the search text in the input bar and transitions back to an unconstrained search without wiping the results or input field.
-  - Upgraded Anime discovery search dispatch in `executeSearch` to route through `fetchAnimeDiscovery`, ensuring complete support for all discovery modes, tags, demographic filters, original languages, and adult content modes when searching with active queries.
+- **💿 Related Album Tracks & Album Metadata Sync**:
+  - Opening any **Music** entity details view now automatically populates the **Related** section with the other tracks from the same album, ordered cleanly by **disc number** and **track number** across both **Apple Music / iTunes** and **MusicBrainz** release groups/releases.
+  - Enhanced `RelatedItemDetailSheet` and `MediaRepository.addRelatedItem` so sibling album tracks display full track previews (duration, artist, album, genre tags, cover art), resolve direct provider links via **Open ▾**, and add or link cleanly into your library without duplicate conflicts.
 
-- **🎮 Game Hours Progress & Completion Time Integration**:
-  - In **Edit Entry** for Games, when Custom Units is set to "Hours" and no Total Target is specified, the entity automatically leverages the community **Avg 100% Completion Time** (from IGDB/HowLongToBeat) as the effective target for progress bar display and estimated time tracking in the Details page.
-  - Displays accurate **Est progress** in hours spent vs avg completion time (e.g. `Est: ~5.0 hrs spent / ~29.5 hrs avg`).
-  - Added decimal/floating-point support for Custom Units in Game progress tracking (allowing precise hour tracking like `12.5 hrs`).
-  - Fixed numeric input handling in Edit Entities so deleting an existing number clears the field completely rather than retaining a stuck leading `0`.
+- **🎧 Direct Spotify Track Deep-Linking & Music "Open ▾" Menu**:
+  - Fixed opening **Spotify** links for Music entries both **before** adding to your library (in **Search & Discover** result cards/previews and **Add / Edit**) and **after** adding (in **Details** and **Related** sheets).
+  - Instead of opening `https://open.spotify.com/search/<query>` in mobile browsers (where Spotify's web SPA drops the search query onto the empty Browse screen), `ExternalLinkHelper` dynamically resolves the Spotify track ID via stored links, **MusicBrainz** URL relationships (`url-rels`), **Odesli / Songlink** cross-platform lookup (`api.song.link`), and a search fallback.
+  - Opens `spotify:track:<id>` directly in the Spotify Android app when installed (with `https://open.spotify.com/track/<id>` browser fallback), or falls back cleanly to `spotify:search:<query>` in the Spotify app / Google `site:open.spotify.com/track` track search results.
+  - Fixed `SearchResultItem.webUrl` for Music so provider links resolve to Apple Music / MusicBrainz rather than falling through to MyAnimeList, and added the Music **Open ▾** dropdown (*MusicBrainz*, *Apple Music*, *Spotify*, *YouTube Music*) directly onto Search result cards.
+
+- **🎵 Full Music Tracking & Discovery (`v0.7.0`–`v0.7.1`)**:
+  - Added end-to-end **Music** (`MediaType.MUSIC`) tracking with Artist, Album, Track/Disc #, duration (`m:ss`), listening dates, relisten counts, and keyless metadata/artwork search via **Apple Music / iTunes**, **MusicBrainz**, and **Cover Art Archive**.
+  - Added **Music Discovery** (`Top Charts`, `By Genre`, `By Year`) with **Most Popular**, **Release Date**, and **Title (A–Z)** sorting, 21 preset genres (`MusicTagRegistry`), and language filters.
 
 ---
 
@@ -67,9 +62,11 @@ Discover what's airing, trending, and premiering directly inside the **Search & 
   - Sort by **Most Popular**, **Highest Rated**, **Release Date**, and **Box Office** (Movies) or **Premiere Date** (TV).
 - **Bidirectional Scoped Title Search & Query Persistence**:
   - **Type First or Filter First**: Type a search query first and then apply Discovery filters, or pick Discovery filters and then type—the search query text is seamlessly preserved across filter additions and modifications.
-  - **Active Filter Scoped Search**: When Discovery filters are active (e.g. seasonal anime, release year, platforms, genres/tags, adult mode), searches execute strictly within those constraints across all media categories (Games, Movies, TV Shows, Anime, Manga, Manhwa, Light Novels, and Books).
+  - **Active Filter Scoped Search**: When Discovery filters are active (e.g. seasonal anime, release year, platforms, genres/tags, adult mode), searches execute strictly within those constraints across all media categories (Games, Movies, TV Shows, Anime, Manga, Manhwa, Light Novels, Books, and Music).
   - **Seamless Filter Dismissal**: Tapping the `✕` chip on an active filter smoothly transitions back to an unconstrained catalog search for the active query without clearing the search bar or blanking results.
   - **Instant Discovery Restoration**: Clearing the search query via the search bar `✕` button immediately restores the full discovery catalog for the active filter.
+- **Music Discovery (`Top Charts`, `By Genre`, `By Year`)**:
+  - Browse top charts, filter by 21 curated music genres (`MusicTagRegistry`), pick release year ranges, filter by language, and sort by **Most Popular**, **Release Date**, or **Title (A–Z)**.
 - **On-Demand "Load More" Pagination**:
   - Clean, dedicated load-more button at the bottom of discovery and search result lists to smoothly paginate and append deeper archives.
 - **Game Platform Multi-Select & Exclusion (Discover Games)**:
@@ -115,10 +112,15 @@ Seamlessly open external media pages on authoritative platforms without screen c
     - **Manga & Manhwa**: *MangaDex*, *MyAnimeList (MAL)*, *AniList*, and *Kitsu*.
     - **Light Novels**: *AniList*, *MyAnimeList (MAL)*, *BookWalker 🇯🇵*, and *MangaDex*.
     - **Books**: *Google Books*, *Open Library*, and *Goodreads 📚*.
+    - **Music**: *MusicBrainz 🎵*, *Apple Music 🍎*, *Spotify 🎧*, and *YouTube Music ▶️*.
 - **Dynamic Kitsu Exact Slug Resolution (Zero 404s)**:
   - Kitsu's web frontend (SPA) requires exact database slugs (typically Romaji, e.g. `shingeki-no-kyojin`) rather than generic English titles or raw numeric IDs, which previously led to blank `kitsu.app/404` errors.
   - LX Track List dynamically resolves the exact slug via Kitsu's official mappings endpoint (`/mappings?filter[externalSite]=myanimelist&include=item`) using the MAL ID, or queries Kitsu's search API.
   - Features an in-memory resolution cache for instant subsequent launches and a guaranteed safe Google site search fallback (`site:kitsu.app/anime ...`) if an entry is unlisted, completely eliminating 404 dead ends.
+- **Dynamic Spotify Track Resolution & Deep-Linking**:
+  - Intercepts Spotify links in `ExternalLinkHelper` so Music entities open directly to the **song page** rather than Spotify's empty mobile web Browse screen (`open.spotify.com/search/...`).
+  - Resolves exact 22-character Spotify track IDs from stored URLs, MusicBrainz `url-rels`, **Odesli / Songlink** cross-platform track matching (`api.song.link`), and DuckDuckGo `site:open.spotify.com/track` fallback.
+  - Launches `spotify:track:<id>` directly in the Spotify Android app when installed (falling back to `https://open.spotify.com/track/<id>` in browser), or falls back cleanly to `spotify:search:<query>` in Spotify / Google track search results.
 
 ### ⏳ Universal "NYA" (Not Yet Aired) & "NYP" (Not Yet Published) Tracking
 Clear, accurate status tracking for upcoming and unreleased media across all entertainment categories:
@@ -188,10 +190,11 @@ Tailor the app's visual identity to your liking:
 - Protect your personal libraries, reading/watching history, and adult content filters from unauthorized access.
 - Seamless unlock dialog with persistent local hashing.
 
-### 🔗 Related Media & Franchise Graph
+### 🔗 Related Media, Albums & Franchise Graph
 - When viewing entry details, LX Track List automatically catalogs and visualizes related media:
-  - **Sequels**, **Prequels**, **Parent Story**, **Side Stories**, **Spin-offs**, and **Adaptations**.
-- One-tap addition of related franchise entries directly to your library, or quick jump to existing entries.
+  - **Sequels**, **Prequels**, **Parent Story**, **Side Stories**, **Spin-offs**, and **Adaptations** for Anime, Manga, Movies, TV, Books, and Games.
+  - **Album Sibling Tracks** for **Music**, listing other tracks from the same album sorted by disc and track number with rich track preview sheets, external links, and one-tap library addition or linking.
+- One-tap addition of related entries directly to your library, or quick jump to existing entries.
 
 ### 🎬 Comprehensive Media Support
 Track each medium with metrics tailored to its natural progression:
@@ -200,17 +203,19 @@ Track each medium with metrics tailored to its natural progression:
 - **Light Novels**: First-class support with dedicated AniList `NOVEL` GraphQL integration. Automatically maps to authoritative MyAnimeList manga IDs (`idMal`) to prevent mismatching with doujinshis or unrelated manga adaptations.
 - **Movies & Live-Action TV Shows**: Track standalone movies or full cinematic franchises, runtime in minutes, TV seasons, and current episode progress.
 - **Books**: Track pages read, total chapters, volume progress, ISBN, and authors via Google Books and Open Library.
+- **Music**: Track songs with Artist attribution, Album & Track/Disc numbers, exact track duration (`m:ss`), listening dates, relisten counts, genres, and automatic sibling album tracks via Apple Music / iTunes, MusicBrainz, and Cover Art Archive.
 - **Video Games**: Track game completion percentage (0–100%) or custom progress milestones (Levels, Cities, Chapters, Missions, Hours, Quests) with full decimal precision support (e.g. `10.5` hours). Manage multi-platform libraries with distinct, themed vector icons (PC, PS, Xbox, Switch, Mobile, Retro), play dates, replay counts, and franchise series progression.
 - **Custom Categories & Subcategories**: Create custom categories (e.g., *Donghua*, *Web Novels*, *Podcasts*, *Documentaries*) with custom tracking units (Episodes, Chapters, Volumes, Pages) and badge accent colors.
 
 ### 🌐 Multi-Source External DB & Cascading Sync
 LX Track List integrates with major metadata providers to enrich your library with covers, runtimes, episode counts, scores, and synopses:
 - **IGDB & RAWG (Video Games)**: Direct game search, platform identification, release dates, IGDB/RAWG critic scores, community average 100% completion times (`game_time_to_beats`), and high-resolution cover/grid artwork via SteamGridDB.
-- **Dedicated External Games Sync Job**: Full batch sync job under **Settings $\rightarrow$ External Sync Jobs** with status badge (`SYNCING`, `CONNECTED`, `ONLINE`), live progress bar, current title, pending/failed counts, and cancellation. Supports both **Fetch Missing** and **Re-fetch All**.
+- **Apple Music / iTunes, MusicBrainz & Cover Art Archive (Music)**: Keyless track/album search, cover art, release dates, track/disc numbering, genres, and album tracklists (`ITunesApiClient`, `MusicBrainzApiClient`, `MusicMetadataManager`).
+- **Dedicated External Games & Music Sync Jobs**: Full batch sync jobs under **Settings $\rightarrow$ External Sync Jobs** with status badge (`SYNCING`, `CONNECTED`, `ONLINE`), live progress bar, current title, pending/failed counts, and cancellation. Supports both **Fetch Missing** and **Re-fetch All**.
 - **MyAnimeList (Jikan API & AniList GraphQL)**: Fast, keyless search and metadata synchronization for Anime and Manga.
 - **Direct ID Hydration & Robust Sync**: Background and batch synchronization jobs prioritize authoritative direct ID queries (`fetchAnimeDetailsById`, `fetchMangaDetailsById`) via Jikan API v4 and official MyAnimeList OAuth, preventing sync job failures when titles have pre-existing MAL IDs.
 - **Official MyAnimeList (MAL) 2-Way Sync**: Built-in OAuth2 authentication allows opt-in, live bi-directional sync of progress, scores, and watch/read statuses directly to your MyAnimeList account.
-- **Foreground Sync Service (`SyncForegroundService`)**: Runs intensive batch sync jobs (MAL, TMDB, MangaDex, Books, Games, and ID Resolution) as an Android Foreground Service with live progress notifications and battery optimization management.
+- **Foreground Sync Service (`SyncForegroundService`)**: Runs intensive batch sync jobs (MAL, TMDB, MangaDex, Books, Games, Music, and ID Resolution) as an Android Foreground Service with live progress notifications and battery optimization management.
 - **The Movie Database (TMDB)**: Direct search, seasonal discovery, high-resolution poster retrieval, release dates, runtimes, and season/episode breakdowns for Movies and TV Shows.
   - **Studio & Publisher Metadata**: Automatically captures production companies (**Studio**) and networks (**Publisher**) into entry descriptions, formats search preview cards with metadata chips, and synchronizes across all update jobs.
   - **ISP Block Bypass**: Built-in DNS-over-HTTPS (DoH via Cloudflare & Google DNS) and automatic fallback routing (`api.themoviedb.org` $\leftrightarrow$ `api.tmdb.org`) ensures uninterrupted connectivity even on restricted networks.
@@ -260,8 +265,9 @@ Never worry about duplicate entries when restoring backups after names or IDs ch
   - **Movies / TV Shows**: Offers `TMDB`, `IMDb`, and `Rotten Tomatoes`.
   - **Anime**: Offers `MAL`, `AniList`, and `TMDB`.
   - **Books**: Offers `MAL` (for Light Novels), `MangaDex`, `Google Books`, and `Open Library`.
+  - **Music**: Offers `MusicBrainz` and `iTunes / Apple Music`.
 - Horizontally scrollable source pills with single-line enforcement prevent text wrapping.
-- Unified **"Open ▾"** button provides clean, one-tap access to IGDB, RAWG, SteamGridDB, TMDB, IMDb, Rotten Tomatoes, MAL, AniList, and Kitsu without cluttering the cards.
+- Unified **"Open ▾"** button provides clean, one-tap access to IGDB, RAWG, SteamGridDB, TMDB, IMDb, Rotten Tomatoes, MAL, AniList, Kitsu, MusicBrainz, Apple Music, Spotify, and YouTube Music without cluttering the cards.
 - Expandable result cards display high-res cover art, full synopsis, broadcast schedule, release year, ratings, and genre tags.
 
 ### 📊 Deep Statistics & Visual Analytics
@@ -282,6 +288,7 @@ Gain full visibility into your media consumption habits with precision calculati
 | **Manhwa** | Chapters & Volumes | `5 min` per chapter (or `60 min` per volume) | `(Chapters + (Reread × Total Ch)) × 5 min` *(or Volumes × 60m)* | `(Total Ch - Read Ch) × 5 min / 1440` *(or Remaining Vol × 60m)* | Reread cycles multiply total chapter/volume count and accumulate reading time |
 | **Light Novels** | Pages, Chapters, Volumes | `1.5 min` per page (fallback: `10 min`/ch, `180 min`/vol) | `(Pages + (Reread × Total Pages)) × 1.5 min` | `(Total Pages - Read Pages) × 1.5 min / 1440` | Rereads multiply total pages (or chapters/volumes) into cumulative read time |
 | **Books** | Pages, Chapters, Volumes | `1.5 min` per page (fallback: `10 min`/ch, `180 min`/vol) | `(Pages + (Reread × Total Pages)) × 1.5 min` | `(Total Pages - Read Pages) × 1.5 min / 1440` | Rereads multiply total pages (or chapters/volumes) into cumulative read time |
+| **Music** | Tracks & Duration (`m:ss`) | Track length in seconds (`durationMinutes / 60` min) | `((1 if Completed else 0) + Relistens) × Track Sec / 60` | `Track Sec / 60 / 1440` *(0 if Completed)* | Relisten counter multiplies track duration and accumulates total listening time |
 | **Video Games** | Custom Units & % | Average 100% completion time (IGDB/RAWG or manual hours) | `((Progress % / 100) + Replay) × Completion Time` *(or Hours × 60m)* | `((100 - Progress %) / 100) × Completion Time / 1440` (uncompleted titles) | Replay counter tracks total completed playthroughs ("Replayed") |
 | **Custom Categories**| Custom Units | Inherits Watch or Read rate depending on category type | Computed using respective Video or Reading formulas | Remaining units converted based on category type | Rewatch/reread multiplier mirrors primary media archetype |
 
@@ -328,7 +335,7 @@ app/src/main/kotlin/com/lx/tracklist/
 │   ├── importer/          # MAL XML, Tachiyomi, CSV, and JSON parsers
 │   ├── local/             # Room Database, DAOs, TypeConverters, Cover Cache, StorageHelper
 │   ├── model/             # MediaEntry, UserProfile, CustomCategory, Enums
-│   ├── remote/            # Jikan, TMDB, MangaDex, AniList, Kitsu, Books, IGDB, RAWG, MAL OAuth clients
+│   ├── remote/            # Jikan, TMDB, MangaDex, AniList, Kitsu, Books, IGDB, RAWG, Music, MAL OAuth clients
 │   │   ├── mal/           # MyAnimeList OAuth2 token store & 2-way sync manager
 │   │   ├── AniListNovelApiClient.kt # AniList Light Novel GraphQL & MAL ID mapping
 │   │   ├── AppUpdateChecker.kt     # GitHub Releases API client
@@ -339,14 +346,20 @@ app/src/main/kotlin/com/lx/tracklist/
 │   │   ├── GameSyncManager.kt      # Video Game metadata & completion time sync manager
 │   │   ├── GoogleBooksApiClient.kt # Google Books API client with multi-code language routing
 │   │   ├── IgdbApiClient.kt        # IGDB Twitch OAuth API client (genres, platforms, time to beat)
+│   │   ├── ITunesApiClient.kt      # Apple Music / iTunes track, chart & album search client
+│   │   ├── ITunesCoverApiClient.kt # High-resolution album cover art client
 │   │   ├── JikanApiClient.kt       # Jikan v4 & AniList GraphQL seasonal client
 │   │   ├── KitsuApiClient.kt       # Kitsu JSON:API client & slug resolver
 │   │   ├── MangaDexApiClient.kt
+│   │   ├── MusicBrainzApiClient.kt # MusicBrainz recording, album release & URL relationship client
+│   │   ├── MusicMetadataManager.kt # Unified Apple Music / iTunes & MusicBrainz music manager
+│   │   ├── MusicSyncManager.kt     # Music metadata, cover & album track batch sync manager
 │   │   ├── OpenLibraryApiClient.kt # Open Library Covers & Works API client
 │   │   ├── RawgApiClient.kt        # RAWG Video Games Database API client
 │   │   ├── SteamGridDbApiClient.kt # SteamGridDB vertical box art client
-│   │   ├── SyncForegroundService.kt # Foreground service for uninterrupted sync
+│   │   ├── SyncForegroundService.kt # Foreground service for uninterrupted batch sync
 │   │   ├── TmdbApiClient.kt        # TMDB API with DoH & ISP Block Bypass
+│   │   ├── TmdbDnsHelper.kt        # DNS-over-HTTPS resolver for restricted networks
 │   │   ├── TmdbSyncManager.kt      # Movie & TV metadata batch sync manager
 │   │   └── TachiyomiResolverManager.kt # Universal ID Resolution Engine (Anime, Books, Movies, Games)
 │   └── repository/        # MediaRepository (Single source of truth & deduplication)
@@ -358,19 +371,26 @@ app/src/main/kotlin/com/lx/tracklist/
 │   ├── home/              # Main dashboard with status tabs
 │   ├── library/           # Searchable library with multi-sort, NYA/NYP, Platform & Language filters
 │   ├── navigation/        # Compose Navigation graph and destinations
-│   ├── search/            # Unified local & multi-database search & Seasonal Discovery sheet
+│   ├── search/            # Unified local & multi-database search & Discovery sheet
+│   │   ├── AnimeTagRegistry.kt         # Anime/Manga preset genre & theme tags
+│   │   ├── BookTagRegistry.kt          # Book subject & genre taxonomy
 │   │   ├── DiscoveryModels.kt          # Discovery filters, seasons, sort enums & 3-state adult modes
+│   │   ├── GameDiscoveryContent.kt     # Game discovery filters, platforms & year ranges
 │   │   ├── GamePlatformRegistry.kt     # Comprehensive gaming platforms taxonomy & IGDB/RAWG mapping
 │   │   ├── GamePlatformsSubMenu.kt     # Multi-select platform include (OR) / exclude submenu
+│   │   ├── GameTagRegistry.kt          # IGDB genre filter taxonomy
+│   │   ├── MusicDiscoveryContent.kt    # Music Top Charts, By Genre & By Year discovery UI
+│   │   ├── MusicTagRegistry.kt         # Curated music genre presets
 │   │   ├── OriginalLanguageRegistry.kt # ISO 639 language registry, multi-select matching & category filtering
 │   │   ├── SearchDiscoveryLanguageSubMenu.kt # Discovery language picker with native script & flag badges
-│   │   ├── SearchDiscoverySheet.kt     # Modal discovery sheet (Anime 2x2, Movie/TV years, Games, 18+ toggle)
+│   │   ├── SearchDiscoverySheet.kt     # Modal discovery sheet (Anime, Movie/TV, Games, Music, Books)
 │   │   ├── SearchScreen.kt             # Search & Discover UI with scoped filters, rich previews & Load More
-│   │   └── SearchViewModel.kt          # Paging, scoped seasonal search, and discovery state
-│   ├── settings/          # Data import/export, profile management, conflict resolution & updater
+│   │   ├── SearchViewModel.kt          # Paging, scoped seasonal search, and discovery state
+│   │   └── TmdbTagRegistry.kt          # TMDB Movie & TV genre taxonomy
+│   ├── settings/          # Data import/export, External Sync Jobs, conflict resolution & updater
 │   ├── stats/             # Visualization charts, proportional status distribution & score histograms
 │   └── theme/             # Material 3 colors, typography, theme presets & custom accent picker
-└── util/                  # DurationFormatter, ExternalLinkHelper, notification helpers, system utilities
+└── util/                  # DurationFormatter, ExternalLinkHelper (Kitsu & Spotify resolution), NotificationHelper
 ```
 
 ### Key Libraries
@@ -403,13 +423,18 @@ app/src/main/kotlin/com/lx/tracklist/
    ```bash
    cp .env.example .env
    ```
-   Add your personal API credentials if you wish to use TMDB or official MAL OAuth:
+   Add your personal API credentials in `.env` if you wish to use TMDB, MAL OAuth, Google Books, or Video Game APIs (see `.env.example` for all keys):
    ```properties
    TMDB_API_KEY=your_tmdb_api_key_here
    TMDB_READ_ACCESS_TOKEN=your_tmdb_read_access_token_here
    MAL_CLIENT_ID=your_mal_client_id_here
+   GOOGLE_BOOKS_API_KEY=your_google_books_api_key_here
+   IGDB_CLIENT_ID=your_igdb_client_id_here
+   IGDB_CLIENT_SECRET=your_igdb_client_secret_here
+   RAWG_API_KEY=your_rawg_api_key_here
+   STEAMGRIDDB_API_KEY=your_steamgriddb_api_key_here
    ```
-   *(Note: Jikan, AniList, MangaDex, and Kitsu work out-of-the-box without requiring any API keys).*
+   *(Note: Jikan, AniList, MangaDex, Kitsu, Open Library, Apple Music / iTunes, MusicBrainz, Cover Art Archive, and Odesli work out-of-the-box without requiring any API keys).*
 
 3. **Build the APK**:
    ```bash
@@ -431,8 +456,9 @@ app/src/main/kotlin/com/lx/tracklist/
 - **Zero Telemetry**: No trackers, no ad networks, no analytics SDKs, and no external tracking servers.
 - **Local Storage**: All media records, notes, scores, and preferences reside solely on your device in local SQLite tables.
 - **Minimal Permissions**:
-  - `INTERNET`: Required solely for fetching metadata and cover art from Jikan, AniList, TMDB, MangaDex, and Kitsu, checking GitHub releases, or syncing with your official MAL account.
+  - `INTERNET`: Required solely for fetching metadata and cover art (Jikan, AniList, TMDB, MangaDex, Kitsu, Google Books, Open Library, IGDB, RAWG, SteamGridDB, Apple Music / iTunes, MusicBrainz, Cover Art Archive), resolving Spotify track links (Odesli), checking GitHub releases, or syncing with your official MAL account.
   - `POST_NOTIFICATIONS`: Optional for release/airing notifications, download progress, and background sync progress on Android 13+.
+  - `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC`: Keeps long-running batch sync jobs (MAL, TMDB, MangaDex, Books, Games, Music) active reliably in the background.
   - `MANAGE_EXTERNAL_STORAGE`: Optional for accessing `/LXTrackList` input, output, and data directories directly.
   - `REQUEST_INSTALL_PACKAGES`: Required solely for initiating direct in-app updates when a new APK is downloaded via the built-in update checker.
 
@@ -456,12 +482,14 @@ title,mediaType,status,score,currentEpisodes,totalEpisodes,currentChapters,total
 
 > **Supported CSV Columns**:
 > - `title` / `name` *(Required)*
-> - `mediaType` / `category` (`ANIME`, `MANGA`, `MANHWA`, `MOVIE`, `SHOW`, `BOOK`, `GAME`)
+> - `mediaType` / `category` (`ANIME`, `MANGA`, `MANHWA`, `MOVIE`, `SHOW`, `BOOK`, `GAME`, `MUSIC`)
 > - `status` (`WATCHING`, `COMPLETED`, `PLAN_TO_WATCH`, `ON_HOLD`, `DROPPED`)
 > - `score` / `rating` (0–10)
 > - `currentEpisodes` / `progress`, `totalEpisodes`
 > - `currentVolumes`, `totalVolumes`
 > - `currentChapters`, `totalChapters`
+> - `creator` / `artist` / `author` / `developer` / `director`
+> - `album` / `series`, `track` / `track_number`, `musicAlbumId`
 > - `description` / `notes`, `user_comments`
 > - `tags`, `subCategory`
 > - `foreign_database_id`, `foreign_database_source` (e.g. `MAL`, `TMDB`)
