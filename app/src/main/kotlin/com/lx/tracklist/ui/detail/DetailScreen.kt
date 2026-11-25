@@ -59,12 +59,14 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import com.lx.tracklist.ui.components.SteamGridDbPickerSheet
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Tv
@@ -142,8 +144,10 @@ import com.lx.tracklist.ui.search.OriginalLanguageRegistry
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.GameMetadataManager
+import com.lx.tracklist.data.remote.ITunesApiClient
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanSyncManager
+import com.lx.tracklist.data.remote.MusicMetadataManager
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.mal.MalSyncManager
@@ -260,10 +264,12 @@ fun DetailScreen(
         val isMovieOrShow = current.mediaType == MediaType.MOVIE || current.mediaType == MediaType.SHOW
         val isBook = current.mediaType == MediaType.BOOK
         val isGame = current.mediaType == MediaType.GAME
+        val isMusic = current.mediaType == MediaType.MUSIC
         val hasValidId = JikanSyncManager.hasValidExternalId(current)
         val isMal = JikanSyncManager.isMalSource(current) || current.mediaType == MediaType.ANIME || current.mediaType == MediaType.MANGA || current.mediaType == MediaType.MANHWA
         val sourceName = when {
             isGame -> current.externalSource?.takeIf { it.isNotBlank() } ?: "IGDB / RAWG"
+            isMusic -> current.externalSource?.takeIf { it.isNotBlank() } ?: "Apple Music / iTunes / MusicBrainz"
             isMovieOrShow -> "The Movie Database (TMDB)"
             isBook -> current.externalSource?.takeIf { it.isNotBlank() } ?: "Google Books / Open Library"
             isTachiyomi -> "Jikan / MangaDex / AniList / Kitsu"
@@ -289,6 +295,7 @@ fun DetailScreen(
                         text = if (isFindingAndLinking) {
                             when {
                                 isGame -> "Find & Link Game ID?"
+                                isMusic -> "Find & Link Music ID?"
                                 isMovieOrShow -> "Find & Link TMDB ID?"
                                 isBook -> "Find & Link Book ID?"
                                 else -> "Find & Link External ID?"
@@ -314,6 +321,7 @@ fun DetailScreen(
                         text = if (isFindingAndLinking) {
                             when {
                                 isGame -> "This will search IGDB/RAWG to link a valid game ID and update cover art, release date, platforms, genres, ratings, and synopsis."
+                                isMusic -> "This will search Apple Music / iTunes and MusicBrainz to link a track ID and update album artwork, artist, album info, duration, release date, and related album tracks."
                                 isMovieOrShow -> "This will search TMDB to link a valid ID and update poster, release dates, runtime, genres, scores, and synopsis."
                                 isBook -> "This will search Google Books and Open Library to link a valid book ID and update cover, pages, publication details, and synopsis."
                                 else -> "This will search databases to link a valid external ID (MAL, MangaDex, AniList, Kitsu) and update cover, chapters/episodes, and synopsis. Once linked, external tracking can be enabled."
@@ -321,6 +329,8 @@ fun DetailScreen(
                         } else {
                             if (isGame) {
                                 "This will update cover art, release dates, platforms, genres, scores, and synopsis to the latest information from $sourceName."
+                            } else if (isMusic) {
+                                "This will update album artwork, artist, album info, duration, genres, release date, and related album tracks from $sourceName."
                             } else if (isBook) {
                                 "This will update cover, page counts, publisher, published dates, ratings, and description to the latest information from $sourceName."
                             } else {
@@ -2616,7 +2626,7 @@ private fun DetailExternalTrackingCard(
                         isTachiyomi -> "Tachiyomi ID (Not Linked)"
                         isMovieOrShow -> "TMDB ID (Not Linked)"
                         isBook -> "Book ID (Not Linked)"
-                        isMusic -> "MusicBrainz ID (Not Linked)"
+                        isMusic -> "Music ID (Not Linked)"
                         isMal -> "MAL ID (Not Linked)"
                         else -> "No External ID Linked"
                     }
@@ -2676,6 +2686,56 @@ private fun DetailExternalTrackingCard(
                                     maxLines = 1,
                                     softWrap = false
                                 )
+                            }
+                        }
+                    }
+
+                    if (isMusic) {
+                        val musicLinks = remember(entry) {
+                            ExternalLinkHelper.buildMusicOpenOptions(
+                                title = entry.title,
+                                artist = entry.creator,
+                                album = entry.movieSeriesName,
+                                externalId = entry.externalId,
+                                externalSource = entry.externalSource,
+                                webUrl = null
+                            )
+                        }
+                        if (musicLinks.isNotEmpty()) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                musicLinks.chunked(2).forEach { rowLinks ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        rowLinks.forEach { opt ->
+                                            OutlinedButton(
+                                                onClick = { ExternalLinkHelper.openUrlSafely(opt.url, uriHandler, context, clipboardManager) },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(36.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                shape = RoundedCornerShape(8.dp),
+                                                border = BorderStroke(1.dp, LXBorder),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(opt.color))
+                                            ) {
+                                                Text(
+                                                    text = opt.title,
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                        if (rowLinks.size == 1) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -3423,7 +3483,7 @@ private fun RelatedItemRow(
     val relColor = when {
         item.relationship.contains("Sequel", ignoreCase = true) -> LXPrimaryGreen
         item.relationship.contains("Prequel", ignoreCase = true) -> Color(0xFF38BDF8)
-        item.relationship.contains("Collection", ignoreCase = true) || item.relationship.contains("Part", ignoreCase = true) -> LXScoreGold
+        item.relationship.contains("Collection", ignoreCase = true) || item.relationship.contains("Part", ignoreCase = true) || item.relationship.startsWith("Track", ignoreCase = true) || item.relationship.contains("Album", ignoreCase = true) -> LXScoreGold
         item.relationship.contains("Spin", ignoreCase = true) || item.relationship.contains("Side", ignoreCase = true) -> Color(0xFFA78BFA)
         else -> LXTextSecondary
     }
@@ -3455,9 +3515,11 @@ private fun RelatedItemRow(
                 )
             } else {
                 Icon(
-                    imageVector = when {
-                        item.mediaType == MediaType.BOOK -> Icons.Default.Book
-                        item.mediaType == MediaType.MOVIE -> Icons.Default.Movie
+                    imageVector = when (item.mediaType) {
+                        MediaType.BOOK -> Icons.Default.Book
+                        MediaType.MOVIE -> Icons.Default.Movie
+                        MediaType.MUSIC -> Icons.Default.MusicNote
+                        MediaType.GAME -> Icons.Default.SportsEsports
                         else -> Icons.Default.Tv
                     },
                     contentDescription = null,
@@ -3613,7 +3675,9 @@ private data class RelatedDetailedInfo(
     val externalId: String? = null,
     val externalSource: String? = null,
     val webUrl: String? = null,
-    val platforms: List<String> = emptyList()
+    val platforms: List<String> = emptyList(),
+    val artist: String? = null,
+    val albumName: String? = null
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -3764,6 +3828,47 @@ private fun RelatedItemDetailSheet(
                         webUrl = webUrl,
                         platforms = platformsList
                     )
+                } else if (item.mediaType == MediaType.MUSIC ||
+                    item.externalSource.equals("iTunes", ignoreCase = true) ||
+                    item.externalSource.equals("Apple Music", ignoreCase = true) ||
+                    item.externalSource.equals("MusicBrainz", ignoreCase = true)
+                ) {
+                    val mTrack = if (item.externalId.isNotBlank() && item.externalId.all { it.isDigit() }) {
+                        ITunesApiClient.lookupTrack(item.externalId).getOrNull()
+                    } else {
+                        null
+                    } ?: MusicMetadataManager.searchMusic(item.title, limit = 1).getOrNull()?.firstOrNull()
+
+                    val trackArtist = mTrack?.artist?.takeIf { it.isNotBlank() }
+                    val trackAlbum = mTrack?.albumName?.takeIf { it.isNotBlank() }
+                    val synopsisParts = listOfNotNull(
+                        trackArtist?.let { "Artist: $it" },
+                        trackAlbum?.let { "Album: $it" },
+                        mTrack?.trackNumber?.let { "Track #$it" }
+                    )
+                    val resolvedExtId = mTrack?.externalId?.takeIf { it.isNotBlank() } ?: item.externalId
+                    val resolvedSource = mTrack?.externalSource?.takeIf { it.isNotBlank() } ?: item.externalSource.ifBlank { "Apple Music" }
+                    val resolvedWebUrl = mTrack?.webUrl ?: if (resolvedSource.equals("MusicBrainz", ignoreCase = true) && resolvedExtId.isNotBlank()) {
+                        "https://musicbrainz.org/recording/$resolvedExtId"
+                    } else null
+
+                    detailedInfo = RelatedDetailedInfo(
+                        title = mTrack?.title ?: item.title,
+                        alternateTitle = trackArtist,
+                        synopsis = synopsisParts.joinToString("\n").takeIf { it.isNotBlank() },
+                        tags = mTrack?.genres?.joinToString(", ")?.takeIf { it.isNotBlank() },
+                        posterUrl = mTrack?.coverUrl ?: mTrack?.albumCoverUrl ?: item.posterUrl,
+                        score = mTrack?.score ?: item.score,
+                        scoreSource = resolvedSource,
+                        releaseYear = mTrack?.releaseYear ?: item.releaseYear,
+                        durationMinutes = mTrack?.durationSeconds,
+                        statusText = "Track",
+                        externalId = resolvedExtId,
+                        externalSource = resolvedSource,
+                        webUrl = resolvedWebUrl,
+                        artist = trackArtist,
+                        albumName = trackAlbum
+                    )
                 } else {
                     val malId = item.externalId.toLongOrNull() ?: 0L
                     val isManga = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA || item.mediaType == MediaType.BOOK
@@ -3857,6 +3962,10 @@ private fun RelatedItemDetailSheet(
                 "https://rawg.io/games/$displayExternalId"
             } else if (displayExternalSource.equals("MangaDex", ignoreCase = true)) {
                 "https://mangadex.org/title/$displayExternalId"
+            } else if (displayExternalSource.equals("MusicBrainz", ignoreCase = true)) {
+                "https://musicbrainz.org/recording/$displayExternalId"
+            } else if (displayExternalSource.equals("Apple Music", ignoreCase = true) || displayExternalSource.equals("iTunes", ignoreCase = true)) {
+                "https://music.apple.com/us/search?term=${Uri.encode(item.title.trim())}"
             } else if (displayExternalSource.equals("Kitsu", ignoreCase = true)) {
                 val typeStr = if (item.mediaType == MediaType.ANIME) "anime" else "manga"
                 if (!displayExternalId.isNullOrBlank() && !displayExternalId.all { it.isDigit() }) {
@@ -3881,7 +3990,7 @@ private fun RelatedItemDetailSheet(
     val relColor = when {
         item.relationship.contains("Sequel", ignoreCase = true) -> LXPrimaryGreen
         item.relationship.contains("Prequel", ignoreCase = true) -> Color(0xFF38BDF8)
-        item.relationship.contains("Collection", ignoreCase = true) || item.relationship.contains("Part", ignoreCase = true) -> LXScoreGold
+        item.relationship.contains("Collection", ignoreCase = true) || item.relationship.contains("Part", ignoreCase = true) || item.relationship.startsWith("Track", ignoreCase = true) || item.relationship.contains("Album", ignoreCase = true) -> LXScoreGold
         item.relationship.contains("Spin", ignoreCase = true) || item.relationship.contains("Side", ignoreCase = true) -> Color(0xFFA78BFA)
         else -> LXTextSecondary
     }
@@ -3977,7 +4086,13 @@ private fun RelatedItemDetailSheet(
                             )
                         } else {
                             Icon(
-                                imageVector = if (item.mediaType == MediaType.MOVIE) Icons.Default.Movie else Icons.Default.Tv,
+                                imageVector = when (item.mediaType) {
+                                    MediaType.MOVIE -> Icons.Default.Movie
+                                    MediaType.MUSIC -> Icons.Default.MusicNote
+                                    MediaType.BOOK -> Icons.Default.Book
+                                    MediaType.GAME -> Icons.Default.SportsEsports
+                                    else -> Icons.Default.Tv
+                                },
                                 contentDescription = null,
                                 tint = LXTextSecondary.copy(alpha = 0.5f),
                                 modifier = Modifier.size(36.dp)
@@ -4230,15 +4345,30 @@ private fun RelatedItemDetailSheet(
                 }
 
                 // Bottom Actions
-                if (!displayWebUrl.isNullOrBlank()) {
+                val isMusic = item.mediaType == MediaType.MUSIC
+                if (isMusic || !displayWebUrl.isNullOrBlank()) {
                     val isTmdb = displayExternalSource.equals("TMDB", ignoreCase = true)
+                    val musicOpenOptions = remember(displayTitle, detailedInfo?.artist, detailedInfo?.albumName, displayExternalId, displayExternalSource, displayWebUrl) {
+                        if (isMusic) {
+                            ExternalLinkHelper.buildMusicOpenOptions(
+                                title = displayTitle,
+                                artist = detailedInfo?.artist,
+                                album = detailedInfo?.albumName,
+                                externalId = displayExternalId,
+                                externalSource = displayExternalSource,
+                                webUrl = displayWebUrl
+                            )
+                        } else emptyList()
+                    }
                     var showDetailTmdbMenu by remember { mutableStateOf(false) }
 
                     Box(modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(
                             onClick = {
-                                if (isTmdb) {
+                                if (isTmdb || (isMusic && musicOpenOptions.size > 1)) {
                                     showDetailTmdbMenu = true
+                                } else if (isMusic && musicOpenOptions.isNotEmpty()) {
+                                    ExternalLinkHelper.openUrlSafely(musicOpenOptions.first().url, uriHandler, context, clipboardManager)
                                 } else {
                                     if (!displayWebUrl.isNullOrBlank()) {
                                         ExternalLinkHelper.openUrlSafely(displayWebUrl, uriHandler, context, clipboardManager)
@@ -4265,13 +4395,40 @@ private fun RelatedItemDetailSheet(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = (if (isTmdb) "Open ▾" else "Open") + (displayExternalId?.let { " (ID: $it)" } ?: ""),
+                                text = (if (isTmdb || (isMusic && musicOpenOptions.size > 1)) "Open ▾" else "Open") + (displayExternalId?.let { " (ID: $it)" } ?: ""),
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp
                             )
                         }
 
-                        if (isTmdb) {
+                        if (isMusic && musicOpenOptions.size > 1) {
+                            DropdownMenu(
+                                expanded = showDetailTmdbMenu,
+                                onDismissRequest = { showDetailTmdbMenu = false },
+                                modifier = Modifier.background(LXSurfaceElevated)
+                            ) {
+                                musicOpenOptions.forEachIndexed { idx, opt ->
+                                    if (idx > 0) {
+                                        HorizontalDivider(color = LXBorder)
+                                    }
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text(opt.title, fontWeight = FontWeight.Bold, color = Color(opt.color), fontSize = 13.sp)
+                                                Text(opt.subtitle, fontSize = 10.sp, color = LXTextSecondary)
+                                            }
+                                        },
+                                        leadingIcon = {
+                                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = Color(opt.color), modifier = Modifier.size(16.dp))
+                                        },
+                                        onClick = {
+                                            showDetailTmdbMenu = false
+                                            ExternalLinkHelper.openUrlSafely(opt.url, uriHandler, context, clipboardManager)
+                                        }
+                                    )
+                                }
+                            }
+                        } else if (isTmdb) {
                             DropdownMenu(
                                 expanded = showDetailTmdbMenu,
                                 onDismissRequest = { showDetailTmdbMenu = false },

@@ -23,6 +23,7 @@ object NotificationHelper {
     const val CHANNEL_TMDB_SYNC = "tmdb_sync_channel"
     const val CHANNEL_BOOK_SYNC = "book_sync_channel"
     const val CHANNEL_GAME_SYNC = "game_sync_channel"
+    const val CHANNEL_MUSIC_SYNC = "music_sync_channel"
     const val CHANNEL_TACHIYOMI_RESOLVE = "tachiyomi_resolve_channel"
     const val CHANNEL_SYNC_SERVICE = "sync_service_channel"
 
@@ -31,6 +32,7 @@ object NotificationHelper {
     const val NOTIFICATION_ID_TMDB = 47008
     const val NOTIFICATION_ID_BOOK = 47011
     const val NOTIFICATION_ID_GAME = 47012
+    const val NOTIFICATION_ID_MUSIC = 47013
     const val NOTIFICATION_ID_TACHIYOMI = 47009
     const val NOTIFICATION_ID_SYNC_SERVICE = 47000
 
@@ -79,6 +81,14 @@ object NotificationHelper {
                 description = "Shows real-time progress and completion when syncing covers and metadata from IGDB and RAWG"
             }
 
+            val musicChannel = NotificationChannel(
+                CHANNEL_MUSIC_SYNC,
+                "Music Sync",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Shows real-time progress and completion when syncing album art, metadata, and related tracks for Music"
+            }
+
             val tachiyomiChannel = NotificationChannel(
                 CHANNEL_TACHIYOMI_RESOLVE,
                 "Tachiyomi ID Resolution",
@@ -101,6 +111,7 @@ object NotificationHelper {
             manager.createNotificationChannel(tmdbChannel)
             manager.createNotificationChannel(bookChannel)
             manager.createNotificationChannel(gameChannel)
+            manager.createNotificationChannel(musicChannel)
             manager.createNotificationChannel(tachiyomiChannel)
             manager.createNotificationChannel(syncServiceChannel)
         }
@@ -514,6 +525,91 @@ object NotificationHelper {
             getLargeIcon(context)?.let { builder.setLargeIcon(it) }
 
             NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_GAME, builder.build())
+        } catch (_: Exception) {}
+    }
+
+    fun showMusicSyncProgress(
+        context: Context,
+        completed: Int,
+        total: Int,
+        currentTitle: String,
+        profileName: String? = null
+    ) {
+        if (!hasNotificationPermission(context)) return
+        if (com.lx.tracklist.data.remote.SyncForegroundService.isAnySyncRunning()) return
+
+        try {
+            val pendingIntent = getMainActivityPendingIntent(context)
+            val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
+            val text = if (currentTitle.isNotBlank()) "Fetching: $currentTitle" else "Updating Music entries..."
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_MUSIC_SYNC)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("${prefix}Syncing Music Metadata ($completed/$total)")
+                .setContentText(text)
+                .setProgress(total, completed, false)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+            getLargeIcon(context)?.let { builder.setLargeIcon(it) }
+
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_MUSIC, builder.build())
+        } catch (_: Exception) {}
+    }
+
+    fun showMusicSyncComplete(
+        context: Context,
+        completed: Int,
+        total: Int,
+        updated: Int,
+        failed: Int,
+        lastError: String?,
+        isCancelled: Boolean,
+        profileName: String? = null
+    ) {
+        if (!hasNotificationPermission(context)) return
+
+        try {
+            val pendingIntent = getMainActivityPendingIntent(context)
+            val prefix = if (!profileName.isNullOrBlank()) "[$profileName] " else ""
+            val title: String
+            val content: String
+            val expanded: String
+
+            if (isCancelled) {
+                title = "${prefix}Music Sync Cancelled"
+                content = "$completed / $total completed ($updated updated)"
+                expanded = "Music metadata sync was cancelled by user.\n• Profile: ${profileName ?: "Active"}\n• Processed: $completed / $total\n• Updated: $updated tracks"
+            } else if (total == 0) {
+                title = "${prefix}Music Sync"
+                content = if (lastError != null) lastError else "All music tracks are already up to date"
+                expanded = if (lastError != null) lastError else "All music entries already have album art, metadata, and related tracks."
+            } else if (failed == 0) {
+                title = "${prefix}Music Sync Completed"
+                content = "Updated $updated tracks with covers & album info"
+                expanded = "Successfully synced $total tracks for ${profileName ?: "profile"} from Apple Music & MusicBrainz!\n• Updated: $updated tracks with album art, genres, dates & related album tracks"
+            } else {
+                title = "${prefix}Music Sync Finished"
+                content = "$updated updated, $failed failed"
+                expanded = "Sync finished for ${profileName ?: "profile"} with issues:\n• Updated: $updated tracks\n• Failed: $failed tracks${if (!lastError.isNullOrBlank()) "\n• Note: $lastError" else ""}"
+            }
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_MUSIC_SYNC)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(title)
+                .setContentText(content)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
+                .setProgress(0, 0, false)
+                .setOngoing(false)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+            getLargeIcon(context)?.let { builder.setLargeIcon(it) }
+
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID_MUSIC, builder.build())
         } catch (_: Exception) {}
     }
 

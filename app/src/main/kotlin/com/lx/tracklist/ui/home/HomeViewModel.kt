@@ -13,6 +13,7 @@ import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.BookSyncManager
 import com.lx.tracklist.data.remote.GameSyncManager
 import com.lx.tracklist.data.remote.JikanSyncManager
+import com.lx.tracklist.data.remote.MusicSyncManager
 import com.lx.tracklist.data.remote.SyncForegroundService
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbSyncManager
@@ -139,30 +140,30 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
     }
 
     private val syncProgressFlow = combine(
-        JikanSyncManager.syncState,
-        TmdbSyncManager.syncState,
-        BookSyncManager.syncState,
-        GameSyncManager.syncState,
-        TachiyomiResolverManager.resolveState
-    ) { j, t, b, g, r ->
-        val running = j.isRunning || t.isRunning || b.isRunning || g.isRunning || r.isRunning
+        combine(JikanSyncManager.syncState, TmdbSyncManager.syncState, BookSyncManager.syncState) { j, t, b -> Triple(j, t, b) },
+        combine(GameSyncManager.syncState, MusicSyncManager.syncState, TachiyomiResolverManager.resolveState) { g, m, r -> Triple(g, m, r) }
+    ) { (j, t, b), (g, m, r) ->
+        val running = j.isRunning || t.isRunning || b.isRunning || g.isRunning || m.isRunning || r.isRunning
         val status = when {
             r.isRunning -> r.statusMessage ?: "Resolving Tachiyomi entries..."
             j.isRunning -> j.statusMessage ?: "Syncing Anime / Manga..."
             t.isRunning -> t.statusMessage ?: "Syncing TV Shows / Movies..."
             b.isRunning -> b.statusMessage ?: "Syncing Books..."
             g.isRunning -> g.statusMessage ?: "Syncing Games..."
+            m.isRunning -> m.statusMessage ?: "Syncing Music..."
             else -> null
         }
         val completed = (if (j.isRunning) j.completedCount else 0) +
                 (if (t.isRunning) t.completedCount else 0) +
                 (if (b.isRunning) b.completedCount else 0) +
                 (if (g.isRunning) g.completedCount else 0) +
+                (if (m.isRunning) m.completedCount else 0) +
                 (if (r.isRunning) r.completedCount else 0)
         val total = (if (j.isRunning) j.totalCount else 0) +
                 (if (t.isRunning) t.totalCount else 0) +
                 (if (b.isRunning) b.totalCount else 0) +
                 (if (g.isRunning) g.totalCount else 0) +
+                (if (m.isRunning) m.totalCount else 0) +
                 (if (r.isRunning) r.totalCount else 0)
         SyncProgressInfo(running, status, completed, total)
     }
@@ -453,6 +454,7 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
         val tmdbIds = mutableSetOf<Long>()
         val bookIds = mutableSetOf<Long>()
         val gameIds = mutableSetOf<Long>()
+        val musicIds = mutableSetOf<Long>()
         val tachiyomiIds = mutableSetOf<Long>()
 
         for (entry in targetEntries) {
@@ -461,6 +463,8 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
                 tachiyomiIds.add(entry.id)
             } else if (src.equals("IGDB", ignoreCase = true) || src.equals("RAWG", ignoreCase = true) || entry.mediaType == MediaType.GAME) {
                 gameIds.add(entry.id)
+            } else if (src.equals("iTunes", ignoreCase = true) || src.equals("Apple Music", ignoreCase = true) || src.equals("MusicBrainz", ignoreCase = true) || entry.mediaType == MediaType.MUSIC) {
+                musicIds.add(entry.id)
             } else if (src.equals("TMDB", ignoreCase = true)) {
                 tmdbIds.add(entry.id)
             } else if (src.equals("Google Books", ignoreCase = true) || src.equals("Open Library", ignoreCase = true)) {
@@ -528,6 +532,16 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
                 profileName = user.name,
                 forceRefresh = forceRefresh,
                 targetEntryIds = gameIds
+            )
+        }
+        if (musicIds.isNotEmpty()) {
+            MusicSyncManager.syncLibrary(
+                context = context,
+                repository = repository,
+                profileId = user.id,
+                profileName = user.name,
+                forceRefresh = forceRefresh,
+                targetEntryIds = musicIds
             )
         }
     }

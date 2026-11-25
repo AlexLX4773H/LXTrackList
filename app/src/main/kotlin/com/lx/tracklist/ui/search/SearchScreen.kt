@@ -1060,6 +1060,8 @@ private fun SearchResultCard(
                 ) {
                     if (item.webUrl != null) {
                         val isTmdb = item.externalSource.equals("TMDB", ignoreCase = true)
+                        val isMusic = item.mediaType == MediaType.MUSIC
+                        val hasOpenMenu = isTmdb || isMusic
                         var showCardMenu by remember { mutableStateOf(false) }
                         val context = LocalContext.current
                         val uriHandler = LocalUriHandler.current
@@ -1067,7 +1069,7 @@ private fun SearchResultCard(
                         Box {
                             IconButton(
                                 onClick = {
-                                    if (isTmdb) {
+                                    if (hasOpenMenu) {
                                         showCardMenu = true
                                     } else {
                                         ExternalLinkHelper.openUrlSafely(item.webUrl, uriHandler, context)
@@ -1081,6 +1083,57 @@ private fun SearchResultCard(
                                     tint = LXTextSecondary,
                                     modifier = Modifier.size(16.dp)
                                 )
+                            }
+
+                            if (isMusic) {
+                                val rawMusic = item.rawMusicResult
+                                val resolvedArtist = rawMusic?.artist ?: item.musicArtist ?: item.creator
+                                val resolvedAlbum = rawMusic?.albumName ?: item.albumName
+                                val musicOptions = remember(
+                                    item.title,
+                                    resolvedArtist,
+                                    resolvedAlbum,
+                                    item.externalId,
+                                    item.externalSource,
+                                    item.webUrl
+                                ) {
+                                    ExternalLinkHelper.buildMusicOpenOptions(
+                                        title = rawMusic?.title ?: item.title,
+                                        artist = resolvedArtist,
+                                        album = resolvedAlbum,
+                                        externalId = item.externalId,
+                                        externalSource = item.externalSource,
+                                        webUrl = item.webUrl
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showCardMenu,
+                                    onDismissRequest = { showCardMenu = false },
+                                    modifier = Modifier.background(LXSurfaceElevated)
+                                ) {
+                                    musicOptions.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Column {
+                                                    Text(
+                                                        text = option.title,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = Color(option.color)
+                                                    )
+                                                    Text(
+                                                        text = option.subtitle,
+                                                        fontSize = 11.sp,
+                                                        color = LXTextSecondary
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                showCardMenu = false
+                                                ExternalLinkHelper.openUrlSafely(option.url, uriHandler, context)
+                                            }
+                                        )
+                                    }
+                                }
                             }
 
                             if (isTmdb) {

@@ -1181,7 +1181,11 @@ data class MediaEntry(
         fun normalizeSource(source: String?): String? {
             if (source.isNullOrBlank()) return null
             val upper = source.trim().uppercase(Locale.US)
-            return if (upper == "MYANIMELIST") "MAL" else upper
+            return when (upper) {
+                "MYANIMELIST" -> "MAL"
+                "APPLE MUSIC", "ITUNES" -> "ITUNES"
+                else -> upper
+            }
         }
 
         fun formatSeasonEpisodes(counts: List<Int>): String? {

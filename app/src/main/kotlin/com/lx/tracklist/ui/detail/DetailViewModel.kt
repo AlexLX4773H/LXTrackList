@@ -16,6 +16,7 @@ import com.lx.tracklist.data.remote.GoogleBooksApiClient
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.MangaDexApiClient
+import com.lx.tracklist.data.remote.MusicMetadataManager
 import com.lx.tracklist.data.remote.OpenLibraryApiClient
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbApiClient
@@ -251,7 +252,7 @@ class DetailViewModel(
         loadedForEntryId = cur.id
 
         val localRelated = cur.getRelatedMediaItems()
-        if (!force && (localRelated.isNotEmpty() || (cur.relatedEntriesJson == "[]" && cur.mediaType != MediaType.BOOK))) {
+        if (!force && (localRelated.isNotEmpty() || (cur.relatedEntriesJson == "[]" && cur.mediaType != MediaType.BOOK && cur.mediaType != MediaType.MUSIC))) {
             _rawRelatedEntries.value = localRelated
             _isLoadingRelated.value = false
             _relatedErrorMessage.value = null
@@ -266,12 +267,13 @@ class DetailViewModel(
             try {
                 val isAnime = isAnimeOrManga(cur)
                 val isBook = cur.mediaType == MediaType.BOOK
+                val isMusic = cur.mediaType == MediaType.MUSIC
                 val isManga = (cur.mediaType == MediaType.MANGA || cur.mediaType == MediaType.MANHWA) && !isBook
                 val isVideo = cur.mediaType == MediaType.MOVIE || cur.mediaType == MediaType.SHOW
                 val src = cur.externalSource ?: ""
                 var extId = cur.externalId?.toLongOrNull()
 
-                if (!isBook && extId == null && cur.title.isNotBlank()) {
+                if (!isBook && !isMusic && cur.mediaType != MediaType.GAME && extId == null && cur.title.isNotBlank()) {
                     if (!isAnime && (src.equals("TMDB", ignoreCase = true) || isVideo)) {
                         val tmdbRes = if (cur.mediaType == MediaType.MOVIE) {
                             TmdbApiClient.searchMovieByTitle(cur.title, context).getOrNull()
@@ -286,6 +288,9 @@ class DetailViewModel(
                 }
 
                 val fetchResult: Result<List<RelatedMediaItem>> = when {
+                    isMusic -> {
+                        MusicMetadataManager.fetchRelatedAlbumTracks(cur)
+                    }
                     cur.mediaType == MediaType.GAME -> {
                         if (context != null) {
                             val gameId = cur.externalId ?: run {
@@ -718,16 +723,7 @@ class DetailViewModel(
             _isRefreshingMetadata.value = true
             try {
                 if (cur.mediaType == MediaType.MUSIC) {
-                    val lookupMatch = if (!forceReLink && !cur.externalId.isNullOrBlank() && cur.externalId.all { it.isDigit() }) {
-                        com.lx.tracklist.data.remote.ITunesApiClient.lookupTrack(cur.externalId).getOrNull()
-                    } else null
-
-                    val match = lookupMatch ?: run {
-                        val searchQuery = listOfNotNull(cur.title.takeIf { it.isNotBlank() }, cur.creator?.takeIf { it.isNotBlank() })
-                            .joinToString(" ")
-                        com.lx.tracklist.data.remote.MusicMetadataManager.searchMusic(searchQuery, limit = 5)
-                            .getOrNull()?.firstOrNull()
-                    }
+                    val match = MusicMetadataManager.resolveMusicMetadataForSync(cur, skipIdLookup = forceReLink).getOrNull()
 
                     if (match != null) {
                         val now = System.currentTimeMillis()
@@ -750,7 +746,9 @@ class DetailViewModel(
                             coverImageUri = (match.coverUrl ?: match.albumCoverUrl)?.takeIf { it.isNotBlank() } ?: latest.coverImageUri,
                             durationMinutes = match.durationSeconds ?: latest.durationMinutes,
                             tags = match.genres.joinToString(", ").takeIf { it.isNotBlank() } ?: latest.tags,
+                            description = latest.description?.takeIf { it.isNotBlank() } ?: match.albumName?.takeIf { it.isNotBlank() }?.let { "Album: $it" },
                             airedStartDate = match.releaseDateMillis ?: latest.airedStartDate,
+                            airedEndDate = match.releaseDateMillis ?: latest.airedEndDate,
                             originalLanguage = match.originalLanguage ?: latest.originalLanguage,
                             alternateTitle = mergedAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: latest.alternateTitle,
                             updatedAt = now

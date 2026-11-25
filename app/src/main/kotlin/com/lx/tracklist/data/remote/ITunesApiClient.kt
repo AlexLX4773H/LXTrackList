@@ -9,7 +9,9 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.net.URLEncoder
+import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 object ITunesApiClient {
@@ -155,6 +157,33 @@ object ITunesApiClient {
         return scriptLang ?: hintLang ?: inferLanguageFromCountry(hintCountry)
     }
 
+    internal fun parseReleaseDateMillis(dateStr: String?): Long? {
+        val clean = dateStr?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        val datePart = clean.take(10)
+        return try {
+            when {
+                datePart.length == 10 && datePart[4] == '-' && datePart[7] == '-' -> {
+                    SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                        timeZone = TimeZone.getTimeZone("UTC")
+                    }.parse(datePart)?.time
+                }
+                datePart.length >= 7 && datePart[4] == '-' -> {
+                    SimpleDateFormat("yyyy-MM", Locale.US).apply {
+                        timeZone = TimeZone.getTimeZone("UTC")
+                    }.parse(datePart.take(7))?.time
+                }
+                datePart.length >= 4 && datePart.take(4).all { it.isDigit() } -> {
+                    SimpleDateFormat("yyyy", Locale.US).apply {
+                        timeZone = TimeZone.getTimeZone("UTC")
+                    }.parse(datePart.take(4))?.time
+                }
+                else -> null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun searchTracks(
         query: String,
         limit: Int = 25,
@@ -193,12 +222,14 @@ object ITunesApiClient {
                 val album = item.get("collectionName")?.asString
                 val albumId = item.get("collectionId")?.asString
                 val trackNum = item.get("trackNumber")?.asInt
+                val discNum = item.get("discNumber")?.asInt
                 val durationMs = item.get("trackTimeMillis")?.asLong
                 val durationSec = durationMs?.let { (it / 1000).toInt() }
                 val rawArtwork = item.get("artworkUrl100")?.asString
                 val coverUrl = rawArtwork?.replace("100x100bb", "600x600bb")
                 val releaseDateStr = item.get("releaseDate")?.asString
                 val releaseYear = releaseDateStr?.take(4)?.toIntOrNull()
+                val releaseDateMillis = parseReleaseDateMillis(releaseDateStr)
                 val genre = item.get("primaryGenreName")?.asString
                 val webUrl = item.get("trackViewUrl")?.asString ?: "https://music.apple.com"
                 val previewUrl = item.get("previewUrl")?.asString
@@ -212,10 +243,12 @@ object ITunesApiClient {
                         artist = artist,
                         albumName = album,
                         trackNumber = trackNum,
+                        discNumber = discNum,
                         durationSeconds = durationSec,
                         coverUrl = coverUrl,
                         albumCoverUrl = coverUrl,
                         releaseYear = releaseYear?.toString(),
+                        releaseDateMillis = releaseDateMillis,
                         genres = listOfNotNull(genre),
                         musicAlbumId = albumId,
                         webUrl = webUrl,
@@ -293,6 +326,7 @@ object ITunesApiClient {
                 val relDateObj = entry.getAsJsonObject("im:releaseDate")
                 val releaseDateStr = relDateObj?.get("label")?.asString
                 val releaseYear = releaseDateStr?.take(4)?.toIntOrNull()
+                val releaseDateMillis = parseReleaseDateMillis(releaseDateStr)
 
                 // Links
                 var webUrl = "https://music.apple.com"
@@ -327,6 +361,7 @@ object ITunesApiClient {
                         coverUrl = coverUrl,
                         albumCoverUrl = coverUrl,
                         releaseYear = releaseYear?.toString(),
+                        releaseDateMillis = releaseDateMillis,
                         genres = listOfNotNull(genre),
                         webUrl = webUrl,
                         originalLanguage = detectedLang,
@@ -379,12 +414,14 @@ object ITunesApiClient {
                 val album = item.get("collectionName")?.asString
                 val albumId = item.get("collectionId")?.asString
                 val trackNum = item.get("trackNumber")?.asInt
+                val discNum = item.get("discNumber")?.asInt
                 val durationMs = item.get("trackTimeMillis")?.asLong
                 val durationSec = durationMs?.let { (it / 1000).toInt() }
                 val rawArtwork = item.get("artworkUrl100")?.asString
                 val coverUrl = rawArtwork?.replace("100x100bb", "600x600bb")
                 val releaseDateStr = item.get("releaseDate")?.asString
                 val releaseYear = releaseDateStr?.take(4)?.toIntOrNull()
+                val releaseDateMillis = parseReleaseDateMillis(releaseDateStr)
                 val genre = item.get("primaryGenreName")?.asString
                 val webUrl = item.get("trackViewUrl")?.asString ?: "https://music.apple.com"
                 val previewUrl = item.get("previewUrl")?.asString
@@ -399,10 +436,12 @@ object ITunesApiClient {
                         artist = artist,
                         albumName = album,
                         trackNumber = trackNum,
+                        discNumber = discNum,
                         durationSeconds = durationSec,
                         coverUrl = coverUrl,
                         albumCoverUrl = coverUrl,
                         releaseYear = releaseYear?.toString(),
+                        releaseDateMillis = releaseDateMillis,
                         genres = listOfNotNull(genre),
                         musicAlbumId = albumId,
                         webUrl = webUrl,
@@ -418,9 +457,70 @@ object ITunesApiClient {
         }
     }
 
-    suspend fun fetchAlbumTracks(albumId: String): Result<MusicAlbumDetails> = withContext(Dispatchers.IO) {
+    suspend fun searchAlbums(
+        query: String,
+        limit: Int = 5
+    ): Result<List<MusicAlbumDetails>> = withContext(Dispatchers.IO) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return@withContext Result.success(emptyList())
         try {
-            val url = "https://itunes.apple.com/lookup?id=$albumId&entity=song"
+            val encoded = URLEncoder.encode(trimmed, "UTF-8")
+            val url = "${MusicApiConfig.ITUNES_SEARCH_URL}?term=$encoded&media=music&entity=album&limit=$limit"
+            val request = Request.Builder()
+                .url(url)
+                .header("Accept", "application/json")
+                .header("User-Agent", "Mozilla/5.0 (Android; Mobile; rv:120.0)")
+                .build()
+            val response = httpClient.newCall(request).execute()
+            if (!response.isSuccessful) {
+                return@withContext Result.failure(Exception("iTunes album search returned HTTP ${response.code}"))
+            }
+            val body = response.body?.string() ?: return@withContext Result.success(emptyList())
+            val root = gson.fromJson(body, JsonObject::class.java)
+            val results = root.getAsJsonArray("results") ?: return@withContext Result.success(emptyList())
+
+            val albums = mutableListOf<MusicAlbumDetails>()
+            for (i in 0 until results.size()) {
+                val item = results.get(i).asJsonObject
+                val albumId = item.get("collectionId")?.asString ?: continue
+                val title = item.get("collectionName")?.asString ?: continue
+                val artist = item.get("artistName")?.asString ?: "Unknown Artist"
+                val coverUrl = item.get("artworkUrl100")?.asString?.replace("100x100bb", "600x600bb")
+                val releaseDateStr = item.get("releaseDate")?.asString
+                val releaseYear = releaseDateStr?.take(4)
+                val releaseDateMillis = parseReleaseDateMillis(releaseDateStr)
+                val trackCount = item.get("trackCount")?.asInt ?: 0
+                val genre = item.get("primaryGenreName")?.asString
+                val webUrl = item.get("collectionViewUrl")?.asString
+                albums.add(
+                    MusicAlbumDetails(
+                        albumId = albumId,
+                        title = title,
+                        artist = artist,
+                        coverUrl = coverUrl,
+                        releaseYear = releaseYear,
+                        releaseDateMillis = releaseDateMillis,
+                        totalTracks = trackCount,
+                        genres = listOfNotNull(genre),
+                        externalSource = "Apple Music",
+                        webUrl = webUrl
+                    )
+                )
+            }
+            Result.success(albums)
+        } catch (e: Exception) {
+            Log.e(TAG, "iTunes searchAlbums error for query=$query", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun fetchAlbumTracks(albumId: String): Result<MusicAlbumDetails> = withContext(Dispatchers.IO) {
+        val cleanAlbumId = albumId.trim()
+        if (cleanAlbumId.isBlank() || !cleanAlbumId.all { it.isDigit() }) {
+            return@withContext Result.failure(IllegalArgumentException("Invalid numeric iTunes album ID: $albumId"))
+        }
+        try {
+            val url = "https://itunes.apple.com/lookup?id=$cleanAlbumId&entity=song"
             val request = Request.Builder()
                 .url(url)
                 .header("Accept", "application/json")
@@ -440,6 +540,9 @@ object ITunesApiClient {
             var artistName = "Unknown Artist"
             var coverUrl: String? = null
             var releaseYear: String? = null
+            var albumReleaseMillis: Long? = null
+            var albumGenre: String? = null
+            var albumViewUrl: String? = null
             val tracks = mutableListOf<MusicSearchResult>()
 
             for (i in 0 until results.size()) {
@@ -450,17 +553,28 @@ object ITunesApiClient {
                     albumTitle = item.get("collectionName")?.asString ?: albumTitle
                     artistName = item.get("artistName")?.asString ?: artistName
                     coverUrl = item.get("artworkUrl100")?.asString?.replace("100x100bb", "600x600bb")
-                    releaseYear = item.get("releaseDate")?.asString?.take(4)
+                    val relDateStr = item.get("releaseDate")?.asString
+                    releaseYear = relDateStr?.take(4)
+                    albumReleaseMillis = parseReleaseDateMillis(relDateStr)
+                    albumGenre = item.get("primaryGenreName")?.asString
+                    albumViewUrl = item.get("collectionViewUrl")?.asString
                 } else if (wrapperType == "track") {
                     val trackId = item.get("trackId")?.asString ?: continue
                     val trackTitle = item.get("trackName")?.asString ?: "Unknown Track"
                     val trackArtist = item.get("artistName")?.asString ?: artistName
                     val trackNum = item.get("trackNumber")?.asInt
+                    val discNum = item.get("discNumber")?.asInt
                     val durationMs = item.get("trackTimeMillis")?.asLong
                     val durationSec = durationMs?.let { (it / 1000).toInt() }
                     val trackCover = item.get("artworkUrl100")?.asString?.replace("100x100bb", "600x600bb") ?: coverUrl
+                    val trackRelDateStr = item.get("releaseDate")?.asString
+                    val trackReleaseYear = trackRelDateStr?.take(4) ?: releaseYear
+                    val trackReleaseMillis = parseReleaseDateMillis(trackRelDateStr) ?: albumReleaseMillis
+                    val trackGenre = item.get("primaryGenreName")?.asString ?: albumGenre
                     val webUrl = item.get("trackViewUrl")?.asString ?: "https://music.apple.com"
                     val preview = item.get("previewUrl")?.asString
+                    val country = item.get("country")?.asString
+                    val detectedLang = detectLanguageFromText("$trackTitle $trackArtist $albumTitle", country, null)
 
                     tracks.add(
                         MusicSearchResult(
@@ -470,29 +584,39 @@ object ITunesApiClient {
                             artist = trackArtist,
                             albumName = albumTitle,
                             trackNumber = trackNum,
+                            discNumber = discNum,
                             durationSeconds = durationSec,
                             coverUrl = trackCover,
                             albumCoverUrl = coverUrl,
-                            releaseYear = releaseYear,
-                            musicAlbumId = albumId,
+                            releaseYear = trackReleaseYear,
+                            releaseDateMillis = trackReleaseMillis,
+                            genres = listOfNotNull(trackGenre),
+                            musicAlbumId = cleanAlbumId,
                             webUrl = webUrl,
+                            originalLanguage = detectedLang,
                             previewUrl = preview
                         )
                     )
                 }
             }
 
+            val sortedTracks = tracks.sortedWith(
+                compareBy({ it.discNumber ?: 1 }, { it.trackNumber ?: Int.MAX_VALUE })
+            )
+
             Result.success(
                 MusicAlbumDetails(
-                    albumId = albumId,
+                    albumId = cleanAlbumId,
                     title = albumTitle,
                     artist = artistName,
                     coverUrl = coverUrl,
                     releaseYear = releaseYear,
-                    totalTracks = tracks.size,
-                    tracks = tracks,
+                    releaseDateMillis = albumReleaseMillis,
+                    totalTracks = sortedTracks.size,
+                    genres = listOfNotNull(albumGenre),
+                    tracks = sortedTracks,
                     externalSource = "Apple Music",
-                    webUrl = "https://music.apple.com"
+                    webUrl = albumViewUrl ?: "https://music.apple.com"
                 )
             )
         } catch (e: Exception) {

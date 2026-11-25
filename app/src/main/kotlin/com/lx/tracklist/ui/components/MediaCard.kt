@@ -881,7 +881,7 @@ fun MediaCard(
                                 val relColor = when {
                                     relItem.relationship.contains("Sequel", ignoreCase = true) -> colors.primary
                                     relItem.relationship.contains("Prequel", ignoreCase = true) -> Color(0xFF38BDF8)
-                                    relItem.relationship.contains("Collection", ignoreCase = true) || relItem.relationship.contains("Part", ignoreCase = true) -> colors.scoreGold
+                                    relItem.relationship.contains("Collection", ignoreCase = true) || relItem.relationship.contains("Part", ignoreCase = true) || relItem.relationship.startsWith("Track", ignoreCase = true) || relItem.relationship.contains("Album", ignoreCase = true) -> colors.scoreGold
                                     relItem.relationship.contains("Spin", ignoreCase = true) || relItem.relationship.contains("Side", ignoreCase = true) -> Color(0xFFA78BFA)
                                     else -> colors.textSecondary
                                 }

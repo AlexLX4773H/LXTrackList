@@ -854,11 +854,14 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             val tmdbIds = mutableSetOf<Long>()
             val bookIds = mutableSetOf<Long>()
             val gameIds = mutableSetOf<Long>()
+            val musicIds = mutableSetOf<Long>()
 
             for (entry in selectedEntries) {
                 val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim() ?: ""
                 if (src.equals("IGDB", ignoreCase = true) || src.equals("RAWG", ignoreCase = true) || entry.mediaType == MediaType.GAME) {
                     gameIds.add(entry.id)
+                } else if (src.equals("iTunes", ignoreCase = true) || src.equals("Apple Music", ignoreCase = true) || src.equals("MusicBrainz", ignoreCase = true) || entry.mediaType == MediaType.MUSIC) {
+                    musicIds.add(entry.id)
                 } else if (src.equals("TMDB", ignoreCase = true)) {
                     tmdbIds.add(entry.id)
                 } else if (src.equals("Google Books", ignoreCase = true) || src.equals("Open Library", ignoreCase = true)) {
@@ -918,6 +921,16 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                         profileName = user.name,
                         forceRefresh = forceRefresh,
                         targetEntryIds = gameIds
+                    )
+                }
+                if (musicIds.isNotEmpty()) {
+                    com.lx.tracklist.data.remote.MusicSyncManager.syncLibrary(
+                        context = context,
+                        repository = repository,
+                        profileId = user.id,
+                        profileName = user.name,
+                        forceRefresh = forceRefresh,
+                        targetEntryIds = musicIds
                     )
                 }
             }

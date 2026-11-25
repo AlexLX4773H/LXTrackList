@@ -20,6 +20,7 @@ import com.lx.tracklist.data.remote.AppUpdateDownloader
 import com.lx.tracklist.data.remote.AppUpdateStatus
 import com.lx.tracklist.data.remote.BookSyncManager
 import com.lx.tracklist.data.remote.JikanSyncManager
+import com.lx.tracklist.data.remote.MusicSyncManager
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbSyncManager
 import com.lx.tracklist.data.model.CustomCategory
@@ -269,6 +270,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
     val tmdbSyncState = TmdbSyncManager.syncState
     val bookSyncState = BookSyncManager.syncState
     val gameSyncState = com.lx.tracklist.data.remote.GameSyncManager.syncState
+    val musicSyncState = MusicSyncManager.syncState
     val malSyncState = com.lx.tracklist.data.remote.mal.MalSyncManager.syncState
     val tachiyomiResolveState = TachiyomiResolverManager.resolveState
 
@@ -406,6 +408,21 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
 
     fun cancelGameSync(context: Context? = null) {
         com.lx.tracklist.data.remote.GameSyncManager.cancelSync(context)
+    }
+
+    fun startMusicSync(context: Context, forceRefresh: Boolean = false) {
+        val user = _uiState.value.activeUser
+        MusicSyncManager.syncLibrary(
+            context = context,
+            repository = repository,
+            profileId = user.id,
+            profileName = user.name,
+            forceRefresh = forceRefresh
+        )
+    }
+
+    fun cancelMusicSync(context: Context? = null) {
+        MusicSyncManager.cancelSync(context)
     }
 
     fun startTachiyomiResolution(context: Context) {

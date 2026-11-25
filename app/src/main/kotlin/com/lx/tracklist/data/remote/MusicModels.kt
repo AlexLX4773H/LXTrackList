@@ -13,6 +13,7 @@ data class MusicSearchResult(
     val alternateTitle: String? = null,
     val albumName: String? = null,
     val trackNumber: Int? = null,
+    val discNumber: Int? = null,
     val durationSeconds: Int? = null,
     val releaseYear: String? = null,
     val releaseDateMillis: Long? = null,

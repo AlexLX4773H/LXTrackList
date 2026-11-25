@@ -16,6 +16,8 @@ import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.BookMetadataManager
 import com.lx.tracklist.data.remote.GameMetadataManager
 import com.lx.tracklist.data.remote.GoogleBooksApiClient
+import com.lx.tracklist.data.remote.ITunesApiClient
+import com.lx.tracklist.data.remote.MusicMetadataManager
 import com.lx.tracklist.data.remote.OpenLibraryApiClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -138,6 +140,9 @@ class MediaRepository(
         try {
             com.lx.tracklist.data.remote.JikanSyncManager.cancelSync(context)
             com.lx.tracklist.data.remote.TmdbSyncManager.cancelSync(context)
+            com.lx.tracklist.data.remote.BookSyncManager.cancelSync(context)
+            com.lx.tracklist.data.remote.GameSyncManager.cancelSync(context)
+            com.lx.tracklist.data.remote.MusicSyncManager.cancelSync(context)
             com.lx.tracklist.data.remote.mal.MalSyncManager.cancelSync()
         } catch (_: Exception) {}
 
@@ -1030,6 +1035,58 @@ class MediaRepository(
                     description = fullGame?.buildDescriptionWithMetadata(),
                     durationMinutes = fullGame?.completionTimeMinutes,
                     relatedEntriesJson = if (fullGame != null && fullGame.relatedItems.isNotEmpty()) com.google.gson.Gson().toJson(fullGame.relatedItems) else null
+                )
+            } else if (item.mediaType == MediaType.MUSIC ||
+                item.externalSource.equals("iTunes", ignoreCase = true) ||
+                item.externalSource.equals("Apple Music", ignoreCase = true) ||
+                item.externalSource.equals("MusicBrainz", ignoreCase = true)
+            ) {
+                val track = if (item.externalId.isNotBlank() && item.externalId.all { it.isDigit() }) {
+                    ITunesApiClient.lookupTrack(item.externalId).getOrNull()
+                } else {
+                    null
+                } ?: MusicMetadataManager.searchMusic(item.title, limit = 1).getOrNull()?.firstOrNull()
+
+                val effectiveTitle = track?.title ?: item.title
+                val effectiveArtist = track?.artist?.takeIf { it.isNotBlank() }
+                val effectiveAlbum = track?.albumName?.takeIf { it.isNotBlank() }
+                val effectiveExtId = track?.externalId?.takeIf { it.isNotBlank() } ?: item.externalId
+                val effectiveExtSrc = track?.externalSource?.takeIf { it.isNotBlank() } ?: item.externalSource.ifBlank { "Apple Music" }
+                val relatedAlbumItems = MusicMetadataManager.fetchRelatedAlbumTracks(
+                    title = effectiveTitle,
+                    artist = effectiveArtist,
+                    albumName = effectiveAlbum,
+                    musicAlbumId = track?.musicAlbumId,
+                    externalId = effectiveExtId,
+                    externalSource = effectiveExtSrc
+                ).getOrNull()?.filter { rel ->
+                    !(rel.externalId.equals(effectiveExtId, ignoreCase = true) && rel.title.equals(effectiveTitle, ignoreCase = true)) &&
+                    !rel.title.equals(effectiveTitle, ignoreCase = true)
+                }
+
+                MediaEntry(
+                    userId = effectiveUserId,
+                    title = effectiveTitle,
+                    alternateTitle = track?.alternateTitle,
+                    mediaType = MediaType.MUSIC,
+                    status = status,
+                    creator = effectiveArtist,
+                    movieSeriesName = effectiveAlbum,
+                    movieSeriesNumber = track?.trackNumber,
+                    musicAlbumId = track?.musicAlbumId,
+                    externalId = effectiveExtId,
+                    externalSource = effectiveExtSrc,
+                    externalScore = track?.score ?: item.score,
+                    externalScoreSource = track?.externalSource ?: effectiveExtSrc,
+                    coverImageUri = track?.coverUrl ?: track?.albumCoverUrl ?: item.posterUrl,
+                    durationMinutes = track?.durationSeconds,
+                    tags = track?.genres?.joinToString(", ")?.takeIf { it.isNotBlank() },
+                    description = effectiveAlbum?.let { "Album: $it" },
+                    airedStartDate = track?.releaseDateMillis,
+                    airedEndDate = track?.releaseDateMillis,
+                    trackingUnit = TrackingUnit.PERCENTAGE,
+                    originalLanguage = track?.originalLanguage,
+                    relatedEntriesJson = if (!relatedAlbumItems.isNullOrEmpty()) com.google.gson.Gson().toJson(relatedAlbumItems) else null
                 )
             } else if (item.externalSource.equals("TMDB", ignoreCase = true)) {
                 val tmdbId = item.externalId.toLongOrNull() ?: 0L

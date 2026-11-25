@@ -1,6 +1,9 @@
 package com.lx.tracklist.data.remote
 
 import android.util.Log
+import com.lx.tracklist.data.model.MediaEntry
+import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.ui.search.MusicDiscoveryMode
 import com.lx.tracklist.ui.search.MusicSortOrder
 import com.lx.tracklist.ui.search.OriginalLanguageRegistry
@@ -10,6 +13,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 object MusicMetadataManager {
     private const val TAG = "MusicMetadataManager"
@@ -327,8 +331,261 @@ object MusicMetadataManager {
         return result
     }
 
+    private val albumTracksCache = ConcurrentHashMap<String, MusicAlbumDetails>()
+
     suspend fun fetchAlbumTracks(albumId: String, source: String = "Apple Music"): Result<MusicAlbumDetails> {
-        return ITunesApiClient.fetchAlbumTracks(albumId)
+        val cleanId = albumId.trim()
+        if (cleanId.isBlank()) return Result.failure(IllegalArgumentException("Blank album ID"))
+        val cacheKey = "${source.lowercase(Locale.ROOT)}:$cleanId"
+        albumTracksCache[cacheKey]?.let { return Result.success(it) }
+
+        val res = if (source.equals("MusicBrainz", ignoreCase = true) || !cleanId.all { it.isDigit() }) {
+            if (cleanId.all { it.isDigit() }) {
+                ITunesApiClient.fetchAlbumTracks(cleanId)
+            } else {
+                MusicBrainzApiClient.fetchAlbumTracks(cleanId)
+            }
+        } else {
+            ITunesApiClient.fetchAlbumTracks(cleanId)
+        }
+        res.getOrNull()?.let { details ->
+            if (details.tracks.isNotEmpty()) {
+                if (albumTracksCache.size > 100) albumTracksCache.clear()
+                albumTracksCache[cacheKey] = details
+            }
+        }
+        return res
+    }
+
+    suspend fun resolveMusicMetadataForSync(
+        entry: MediaEntry,
+        skipIdLookup: Boolean = false
+    ): Result<MusicSearchResult> = withContext(Dispatchers.IO) {
+        val extId = entry.externalId?.trim()
+        val lookupMatch = if (!skipIdLookup && !extId.isNullOrBlank() && extId.all { it.isDigit() }) {
+            ITunesApiClient.lookupTrack(extId).getOrNull()
+        } else null
+
+        if (lookupMatch != null) {
+            return@withContext Result.success(lookupMatch)
+        }
+
+        val queryWithArtist = listOfNotNull(
+            entry.title.trim().takeIf { it.isNotBlank() },
+            entry.creator?.trim()?.takeIf { it.isNotBlank() }
+        ).joinToString(" ")
+
+        val candidates = if (queryWithArtist.isNotBlank()) {
+            searchMusic(queryWithArtist, limit = 10).getOrDefault(emptyList())
+        } else emptyList()
+
+        val fallbackCandidates = if (candidates.isEmpty() && entry.title.isNotBlank() && queryWithArtist != entry.title.trim()) {
+            searchMusic(entry.title.trim(), limit = 10).getOrDefault(emptyList())
+        } else emptyList()
+
+        val allCandidates = candidates.ifEmpty { fallbackCandidates }
+        val best = pickBestMusicMatch(
+            targetTitle = entry.title,
+            targetArtist = entry.creator,
+            targetAlbum = entry.movieSeriesName,
+            candidates = allCandidates
+        )
+
+        if (best != null) {
+            return@withContext Result.success(best)
+        }
+        Result.failure(NoSuchElementException("No matching music track found for '${entry.title}'"))
+    }
+
+    suspend fun fetchRelatedAlbumTracks(entry: MediaEntry): Result<List<RelatedMediaItem>> {
+        return fetchRelatedAlbumTracks(
+            title = entry.title,
+            artist = entry.creator,
+            albumName = entry.movieSeriesName,
+            musicAlbumId = entry.musicAlbumId,
+            externalId = entry.externalId,
+            externalSource = entry.externalSource
+        )
+    }
+
+    suspend fun fetchRelatedAlbumTracks(
+        title: String,
+        artist: String? = null,
+        albumName: String? = null,
+        musicAlbumId: String? = null,
+        externalId: String? = null,
+        externalSource: String? = null
+    ): Result<List<RelatedMediaItem>> = withContext(Dispatchers.IO) {
+        try {
+            var resolvedAlbumId = musicAlbumId?.trim()?.takeIf { it.isNotBlank() }
+            var resolvedSource = externalSource?.trim().orEmpty()
+            var lastError: Throwable? = null
+
+            // 1. If we don't have a numeric iTunes album ID yet, try looking up the numeric track ID
+            if ((resolvedAlbumId == null || !resolvedAlbumId.all { it.isDigit() }) &&
+                !externalId.isNullOrBlank() && externalId.trim().all { it.isDigit() }
+            ) {
+                val trackRes = ITunesApiClient.lookupTrack(externalId.trim())
+                if (trackRes.isFailure) lastError = trackRes.exceptionOrNull()
+                val trackAlbumId = trackRes.getOrNull()?.musicAlbumId?.trim()?.takeIf { it.isNotBlank() }
+                if (trackAlbumId != null) {
+                    resolvedAlbumId = trackAlbumId
+                    resolvedSource = "Apple Music"
+                }
+            }
+
+            // 2. If still no iTunes album ID, search iTunes tracks & albums by title / artist / album
+            if (resolvedAlbumId == null || !resolvedAlbumId.all { it.isDigit() }) {
+                val trackQuery = listOfNotNull(
+                    title.trim().takeIf { it.isNotBlank() },
+                    artist?.trim()?.takeIf { it.isNotBlank() }
+                ).joinToString(" ")
+
+                if (trackQuery.isNotBlank()) {
+                    val searchRes = ITunesApiClient.searchTracks(trackQuery, limit = 10)
+                    if (searchRes.isFailure) lastError = searchRes.exceptionOrNull()
+                    val bestTrack = pickBestMusicMatch(
+                        targetTitle = title,
+                        targetArtist = artist,
+                        targetAlbum = albumName,
+                        candidates = searchRes.getOrDefault(emptyList())
+                    )
+                    val matchedAlbumId = bestTrack?.musicAlbumId?.trim()?.takeIf { it.isNotBlank() }
+                    if (matchedAlbumId != null) {
+                        resolvedAlbumId = matchedAlbumId
+                        resolvedSource = "Apple Music"
+                    }
+                }
+
+                if ((resolvedAlbumId == null || !resolvedAlbumId.all { it.isDigit() }) && !albumName.isNullOrBlank()) {
+                    val albumQuery = listOfNotNull(
+                        albumName.trim().takeIf { it.isNotBlank() },
+                        artist?.trim()?.takeIf { it.isNotBlank() }
+                    ).joinToString(" ")
+                    val albumSearchRes = ITunesApiClient.searchAlbums(albumQuery, limit = 6)
+                    if (albumSearchRes.isFailure) lastError = albumSearchRes.exceptionOrNull()
+                    val albums = albumSearchRes.getOrDefault(emptyList())
+                    val matchedAlbum = pickBestAlbumMatch(albumName, artist, albums)
+                    if (matchedAlbum != null) {
+                        resolvedAlbumId = matchedAlbum.albumId
+                        resolvedSource = "Apple Music"
+                    }
+                }
+            }
+
+            // 3. Fetch album tracks from iTunes (or MusicBrainz if UUID)
+            val effectiveAlbumId = resolvedAlbumId ?: musicAlbumId?.trim()?.takeIf { it.isNotBlank() }
+            if (effectiveAlbumId.isNullOrBlank()) {
+                return@withContext if (lastError != null) {
+                    Result.failure(lastError)
+                } else {
+                    Result.success(emptyList())
+                }
+            }
+
+            val albumRes = fetchAlbumTracks(
+                albumId = effectiveAlbumId,
+                source = if (effectiveAlbumId.all { it.isDigit() }) "Apple Music" else resolvedSource.ifBlank { "MusicBrainz" }
+            )
+
+            // If iTunes album lookup failed or returned empty and we had a MusicBrainz album ID, try MusicBrainz
+            val finalAlbumRes = if ((albumRes.isFailure || albumRes.getOrNull()?.tracks.isNullOrEmpty()) &&
+                !musicAlbumId.isNullOrBlank() && !musicAlbumId.trim().all { it.isDigit() }
+            ) {
+                fetchAlbumTracks(musicAlbumId.trim(), source = "MusicBrainz")
+            } else {
+                albumRes
+            }
+
+            if (finalAlbumRes.isFailure) {
+                return@withContext Result.failure(finalAlbumRes.exceptionOrNull() ?: Exception("Failed to fetch album tracks"))
+            }
+
+            val details = finalAlbumRes.getOrNull() ?: return@withContext Result.success(emptyList())
+            val items = details.tracks.map { track ->
+                val relLabel = if (track.trackNumber != null && track.trackNumber > 0) {
+                    "Track ${track.trackNumber}"
+                } else {
+                    "Album Track"
+                }
+                RelatedMediaItem(
+                    title = track.title,
+                    relationship = relLabel,
+                    externalId = track.externalId,
+                    externalSource = track.externalSource,
+                    mediaType = MediaType.MUSIC,
+                    posterUrl = track.coverUrl ?: track.albumCoverUrl ?: details.coverUrl,
+                    releaseYear = track.releaseYear ?: details.releaseYear,
+                    score = track.score
+                )
+            }
+            Result.success(items)
+        } catch (e: Exception) {
+            Log.e(TAG, "fetchRelatedAlbumTracks error for $title", e)
+            Result.failure(e)
+        }
+    }
+
+    internal fun pickBestMusicMatch(
+        targetTitle: String,
+        targetArtist: String?,
+        targetAlbum: String?,
+        candidates: List<MusicSearchResult>
+    ): MusicSearchResult? {
+        if (candidates.isEmpty()) return null
+        val normTitle = normalizeLoose(targetTitle)
+        val normArtist = targetArtist?.let { normalizeLoose(it) }.orEmpty()
+        val normAlbum = targetAlbum?.let { normalizeLoose(it) }.orEmpty()
+
+        return candidates.maxByOrNull { cand ->
+            var score = 0
+            val cTitle = normalizeLoose(cand.title)
+            val cArtist = normalizeLoose(cand.artist)
+            val cAlbum = cand.albumName?.let { normalizeLoose(it) }.orEmpty()
+
+            if (cTitle == normTitle) score += 100
+            else if (normTitle.isNotBlank() && (cTitle.contains(normTitle) || normTitle.contains(cTitle))) score += 40
+
+            if (normArtist.isNotBlank()) {
+                if (cArtist == normArtist) score += 60
+                else if (cArtist.contains(normArtist) || normArtist.contains(cArtist)) score += 30
+            }
+            if (normAlbum.isNotBlank() && cAlbum.isNotBlank()) {
+                if (cAlbum == normAlbum) score += 50
+                else if (cAlbum.contains(normAlbum) || normAlbum.contains(cAlbum)) score += 25
+            }
+            if (!cand.musicAlbumId.isNullOrBlank() && cand.musicAlbumId.all { it.isDigit() }) score += 20
+            if (cand.externalSource.equals("iTunes", ignoreCase = true) || cand.externalSource.equals("Apple Music", ignoreCase = true)) score += 10
+            if (!cand.coverUrl.isNullOrBlank()) score += 5
+            score
+        }
+    }
+
+    private fun pickBestAlbumMatch(
+        targetAlbum: String,
+        targetArtist: String?,
+        albums: List<MusicAlbumDetails>
+    ): MusicAlbumDetails? {
+        if (albums.isEmpty()) return null
+        val normAlbum = normalizeLoose(targetAlbum)
+        val normArtist = targetArtist?.let { normalizeLoose(it) }.orEmpty()
+
+        return albums.maxByOrNull { alb ->
+            var score = 0
+            val cAlbum = normalizeLoose(alb.title)
+            val cArtist = normalizeLoose(alb.artist)
+            if (cAlbum == normAlbum) score += 100
+            else if (cAlbum.contains(normAlbum) || normAlbum.contains(cAlbum)) score += 40
+            if (normArtist.isNotBlank()) {
+                if (cArtist == normArtist) score += 60
+                else if (cArtist.contains(normArtist) || normArtist.contains(cArtist)) score += 30
+            }
+            score
+        }
+    }
+
+    private fun normalizeLoose(text: String): String {
+        return text.lowercase(Locale.ROOT).replace(Regex("""[^a-z0-9]"""), "")
     }
 
     suspend fun resolveCoverUrl(artist: String, title: String, existingCoverUrl: String?): String? {

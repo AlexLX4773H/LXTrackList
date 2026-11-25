@@ -165,6 +165,7 @@ import com.lx.tracklist.data.remote.BookSyncProgress
 import com.lx.tracklist.data.remote.GameApiConfig
 import com.lx.tracklist.data.remote.GameSyncProgress
 import com.lx.tracklist.data.remote.JikanSyncProgress
+import com.lx.tracklist.data.remote.MusicSyncProgress
 import com.lx.tracklist.data.remote.TachiyomiResolveProgress
 import com.lx.tracklist.data.remote.TmdbConfig
 import com.lx.tracklist.data.remote.TmdbSyncProgress
@@ -211,6 +212,7 @@ fun SettingsScreen(
     val tmdbSyncState by viewModel.tmdbSyncState.collectAsState()
     val bookSyncState by viewModel.bookSyncState.collectAsState()
     val gameSyncState by viewModel.gameSyncState.collectAsState()
+    val musicSyncState by viewModel.musicSyncState.collectAsState()
     val malSyncState by viewModel.malSyncState.collectAsState()
     val tachiyomiResolveState by viewModel.tachiyomiResolveState.collectAsState()
     val context = LocalContext.current
@@ -1122,6 +1124,7 @@ fun SettingsScreen(
                         tmdbSyncState = tmdbSyncState,
                         bookSyncState = bookSyncState,
                         gameSyncState = gameSyncState,
+                        musicSyncState = musicSyncState,
                         selectedSubMenu = currentSelection,
                         onSelectSubMenu = { activeSubMenu = it },
                         onDismissStatusMessage = { viewModel.clearStatusMessage() }
@@ -1163,6 +1166,7 @@ fun SettingsScreen(
                             tmdbSyncState = tmdbSyncState,
                             bookSyncState = bookSyncState,
                             gameSyncState = gameSyncState,
+                            musicSyncState = musicSyncState,
                             tachiyomiResolveState = tachiyomiResolveState,
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
@@ -1184,6 +1188,11 @@ fun SettingsScreen(
                                 viewModel.startGameSync(context, force)
                             },
                             onCancelGameSync = { viewModel.cancelGameSync(context) },
+                            onStartMusicSync = { force ->
+                                ensureNotificationPermission()
+                                viewModel.startMusicSync(context, force)
+                            },
+                            onCancelMusicSync = { viewModel.cancelMusicSync(context) },
                             onStartTachiyomiResolution = {
                                 ensureNotificationPermission()
                                 viewModel.startTachiyomiResolution(context)
@@ -1266,6 +1275,7 @@ fun SettingsScreen(
                             tmdbSyncState = tmdbSyncState,
                             bookSyncState = bookSyncState,
                             gameSyncState = gameSyncState,
+                            musicSyncState = musicSyncState,
                             selectedSubMenu = null,
                             onSelectSubMenu = { activeSubMenu = it },
                             onDismissStatusMessage = { viewModel.clearStatusMessage() },
@@ -1312,6 +1322,7 @@ fun SettingsScreen(
                             tmdbSyncState = tmdbSyncState,
                             bookSyncState = bookSyncState,
                             gameSyncState = gameSyncState,
+                            musicSyncState = musicSyncState,
                             tachiyomiResolveState = tachiyomiResolveState,
                             onStartJikanSync = { force ->
                                 ensureNotificationPermission()
@@ -1333,6 +1344,11 @@ fun SettingsScreen(
                                 viewModel.startGameSync(context, force)
                             },
                             onCancelGameSync = { viewModel.cancelGameSync(context) },
+                            onStartMusicSync = { force ->
+                                ensureNotificationPermission()
+                                viewModel.startMusicSync(context, force)
+                            },
+                            onCancelMusicSync = { viewModel.cancelMusicSync(context) },
                             onStartTachiyomiResolution = {
                                 ensureNotificationPermission()
                                 viewModel.startTachiyomiResolution(context)
@@ -1575,6 +1591,7 @@ private fun SettingsMainMenu(
     tmdbSyncState: TmdbSyncProgress,
     bookSyncState: BookSyncProgress,
     gameSyncState: GameSyncProgress,
+    musicSyncState: MusicSyncProgress,
     selectedSubMenu: SettingsSubMenu?,
     onSelectSubMenu: (SettingsSubMenu) -> Unit,
     onDismissStatusMessage: () -> Unit = {},
@@ -1614,8 +1631,8 @@ private fun SettingsMainMenu(
                 onClick = { onSelectSubMenu(SettingsSubMenu.EXTERNAL_TRACKING) }
             )
 
-            // 2. External Sync Jobs (Jikan & TMDB metadata)
-            val isSyncing = jikanSyncState.isRunning || tmdbSyncState.isRunning || bookSyncState.isRunning || gameSyncState.isRunning
+            // 2. External Sync Jobs (Jikan, TMDB, Books, Games & Music metadata)
+            val isSyncing = jikanSyncState.isRunning || tmdbSyncState.isRunning || bookSyncState.isRunning || gameSyncState.isRunning || musicSyncState.isRunning
             SettingsMenuItem(
                 icon = Icons.Default.Sync,
                 iconBackgroundColor = Color(0xFF4DA8DA).copy(alpha = 0.15f),
@@ -3429,6 +3446,7 @@ private fun SyncJobsContent(
     tmdbSyncState: TmdbSyncProgress,
     bookSyncState: BookSyncProgress,
     gameSyncState: GameSyncProgress,
+    musicSyncState: MusicSyncProgress,
     tachiyomiResolveState: TachiyomiResolveProgress,
     onStartJikanSync: (Boolean) -> Unit,
     onCancelJikanSync: () -> Unit,
@@ -3438,6 +3456,8 @@ private fun SyncJobsContent(
     onCancelBookSync: () -> Unit,
     onStartGameSync: (Boolean) -> Unit,
     onCancelGameSync: () -> Unit,
+    onStartMusicSync: (Boolean) -> Unit,
+    onCancelMusicSync: () -> Unit,
     onStartTachiyomiResolution: () -> Unit,
     onCancelTachiyomiResolution: () -> Unit,
     modifier: Modifier = Modifier
@@ -3474,7 +3494,7 @@ private fun SyncJobsContent(
                     )
                 }
                 Text(
-                    text = "Automate fetching official high-resolution posters, runtimes, broadcast dates, season & episode counts, completion times, platforms, tags, and ratings from MyAnimeList (Jikan), MangaDex, AniList, The Movie Database (TMDB), Google Books, Open Library, IGDB, and RAWG.",
+                    text = "Automate fetching official high-resolution posters, runtimes, broadcast dates, season & episode counts, completion times, platforms, tags, album tracks, and ratings from MyAnimeList (Jikan), MangaDex, AniList, The Movie Database (TMDB), Google Books, Open Library, IGDB, RAWG, Apple Music / iTunes, and MusicBrainz.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
@@ -4555,7 +4575,7 @@ private fun SyncJobsContent(
             }
         }
 
-        // Music Metadata & Services Card
+        // Music Sync Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = LXSurfaceBlack),
@@ -4583,7 +4603,7 @@ private fun SyncJobsContent(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Music Metadata & Services",
+                            text = "Music Sync",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = LXTextPrimary,
                             maxLines = 1,
@@ -4591,49 +4611,181 @@ private fun SyncJobsContent(
                         )
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "FREE APIS ACTIVE",
-                            color = LXPrimaryGreen,
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            maxLines = 1,
-                            softWrap = false
-                        )
+                    if (musicSyncState.isRunning) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "SYNCING",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "ONLINE",
+                                color = LXPrimaryGreen,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
                     }
                 }
 
                 Text(
-                    text = "Automated music search and metadata enrichment using Apple Music / iTunes Search API, MusicBrainz, and Cover Art Archive without requiring any API keys. High-resolution album artwork, artist attribution, genre tagging, track numbers, and track lengths are fetched automatically.",
+                    text = "Fetches official album artwork, artist attribution, album names, track numbers, durations, release dates, genres, and related album tracks for Music from Apple Music / iTunes, MusicBrainz, and Cover Art Archive.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
 
-                // Active Provider Badges
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    listOf(
-                        "Apple Music / iTunes (Worldwide Search & Charts)",
-                        "MusicBrainz (Catalog & ISRCs)",
-                        "Cover Art Archive"
-                    ).forEach { provider ->
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXSurfaceElevated)
-                                .border(1.dp, LXBorder, RoundedCornerShape(6.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                if (musicSyncState.isRunning) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(LXSurfaceElevated)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "✓ $provider",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                text = if (musicSyncState.totalCount > 0) {
+                                    "Progress (${musicSyncState.completedCount}/${musicSyncState.totalCount}) • ${musicSyncState.updatedCount} updated"
+                                } else {
+                                    musicSyncState.statusMessage ?: "Preparing sync..."
+                                },
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                                 color = LXTextPrimary
+                            )
+                            if (musicSyncState.totalCount > 0) {
+                                Text(
+                                    text = "${(musicSyncState.progressFraction * 100).toInt()}%",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                                    color = LXPrimaryGreen
+                                )
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(LXBorder)
+                        ) {
+                            if (musicSyncState.totalCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(musicSyncState.progressFraction)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(LXPrimaryGreen)
+                                )
+                            } else {
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxSize(),
+                                    color = LXPrimaryGreen,
+                                    trackColor = LXBorder
+                                )
+                            }
+                        }
+
+                        if (musicSyncState.currentTitle.isNotBlank()) {
+                            Text(
+                                text = "Current: ${musicSyncState.currentTitle}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else if (!musicSyncState.statusMessage.isNullOrBlank() && musicSyncState.totalCount > 0) {
+                            Text(
+                                text = musicSyncState.statusMessage,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        if (musicSyncState.totalCount > 0) {
+                            Text(
+                                text = "Pending: ${musicSyncState.pendingCount} remaining${if (musicSyncState.failedCount > 0) " • ${musicSyncState.failedCount} failed" else ""}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = LXTextSecondary
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            OutlinedButton(
+                                onClick = onCancelMusicSync,
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = LXErrorRed),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, LXErrorRed.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Cancel Sync", fontSize = 12.sp, color = LXErrorRed)
+                            }
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { onStartMusicSync(false) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = LXPrimaryGreen,
+                                contentColor = LXBackgroundBlack
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Fetch Missing",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { onStartMusicSync(true) },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Re-fetch All",
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }

@@ -105,6 +105,13 @@ object JikanSyncManager {
         if (src.equals("Kitsu", ignoreCase = true)) {
             return id.isNotBlank()
         }
+        if (src.equals("MusicBrainz", ignoreCase = true) ||
+            src.equals("Apple Music", ignoreCase = true) ||
+            src.equals("iTunes", ignoreCase = true) ||
+            entry.mediaType == MediaType.MUSIC
+        ) {
+            return id.isNotBlank()
+        }
         if (isBook) {
             return id.isNotBlank()
         }

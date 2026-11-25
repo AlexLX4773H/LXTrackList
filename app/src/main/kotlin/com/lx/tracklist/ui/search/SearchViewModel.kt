@@ -84,6 +84,7 @@ data class SearchResultItem(
     val rawJikanDetails: JikanMediaDetails? = null,
     val rawTmdbResult: TmdbSearchResult? = null,
     val rawGameResult: GameSearchResult? = null,
+    val rawMusicResult: MusicSearchResult? = null,
     val gamePlatforms: List<String> = emptyList(),
     val gameGenres: List<String> = emptyList(),
     val gameDevelopers: List<String> = emptyList(),
@@ -101,14 +102,28 @@ data class SearchResultItem(
 
     val webUrl: String?
         get() {
+            if (rawMusicResult?.webUrl != null) return rawMusicResult.webUrl
             if (rawGameResult?.webUrl != null) return rawGameResult.webUrl
             if (rawJikanDetails?.webUrl != null) return rawJikanDetails.webUrl
             if (rawBookDetails?.infoUrl != null) return rawBookDetails.infoUrl
             if (rawTmdbResult != null) return rawTmdbResult.webUrl
+            if (!directSiteUrl.isNullOrBlank()) return directSiteUrl
             if (externalId.isBlank() || externalId == "0") return null
 
             val isMangaType = mediaType == MediaType.MANGA || mediaType == MediaType.MANHWA || mediaType == MediaType.BOOK
             return when {
+                externalSource.equals("MusicBrainz", ignoreCase = true) -> {
+                    "https://musicbrainz.org/recording/$externalId"
+                }
+                externalSource.contains("Apple", ignoreCase = true) || externalSource.contains("iTunes", ignoreCase = true) -> {
+                    val q = listOfNotNull(creator ?: musicArtist, title).joinToString(" ")
+                    val encoded = try {
+                        android.net.Uri.encode(q)
+                    } catch (_: Throwable) {
+                        java.net.URLEncoder.encode(q, "UTF-8").replace("+", "%20")
+                    }
+                    "https://music.apple.com/us/search?term=$encoded"
+                }
                 externalSource.equals("RAWG", ignoreCase = true) -> {
                     "https://rawg.io/games/$externalId"
                 }
@@ -1373,6 +1388,7 @@ class SearchViewModel(
             musicAlbumId = music.musicAlbumId,
             musicTrackNumber = music.trackNumber,
             musicArtist = music.artist,
+            rawMusicResult = music,
             directSiteUrl = music.webUrl
         )
     }
@@ -2287,13 +2303,28 @@ class SearchViewModel(
                         )
                     }
                 } else if (item.mediaType == MediaType.MUSIC) {
+                    val artistName = item.creator ?: item.musicArtist ?: item.rawMusicResult?.artist
+                    val relatedItems = MusicMetadataManager.fetchRelatedAlbumTracks(
+                        title = item.title,
+                        artist = artistName,
+                        albumName = item.albumName,
+                        musicAlbumId = item.musicAlbumId,
+                        externalId = item.externalId,
+                        externalSource = item.externalSource
+                    ).getOrNull()?.filter { rel ->
+                        !(rel.externalId.equals(item.externalId, ignoreCase = true) && rel.title.equals(item.title, ignoreCase = true)) &&
+                        !rel.title.equals(item.title, ignoreCase = true)
+                    }
+                    val releaseMillis = item.rawMusicResult?.releaseDateMillis
+                    val genresStr = item.rawMusicResult?.genres?.joinToString(", ")?.takeIf { it.isNotBlank() }
+
                     MediaEntry(
                         userId = targetUserId,
                         title = item.title,
                         alternateTitle = item.alternateTitle,
                         mediaType = MediaType.MUSIC,
                         status = status,
-                        creator = item.creator ?: item.musicArtist,
+                        creator = artistName,
                         movieSeriesName = item.albumName,
                         movieSeriesNumber = item.musicTrackNumber,
                         musicAlbumId = item.musicAlbumId,
@@ -2305,11 +2336,13 @@ class SearchViewModel(
                         externalScoreSource = item.externalSource,
                         coverImageUri = item.posterUrl,
                         durationMinutes = item.durationMinutes,
-                        tags = null,
+                        tags = genresStr,
                         description = item.synopsis,
-                        airedStartDate = null,
+                        airedStartDate = releaseMillis,
+                        airedEndDate = releaseMillis,
                         trackingUnit = TrackingUnit.PERCENTAGE,
-                        originalLanguage = item.originalLanguage
+                        originalLanguage = item.originalLanguage,
+                        relatedEntriesJson = if (!relatedItems.isNullOrEmpty()) com.google.gson.Gson().toJson(relatedItems) else null
                     )
                 } else {
                     // MAL / Jikan / Book / Light Novel item
