@@ -83,4 +83,5 @@ scratch/
 .env
 *.env.local
 
-
+# Ensure any report_fixes directories are ignored
+reports_fixes/
