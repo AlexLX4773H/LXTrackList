@@ -42,7 +42,7 @@
 
 ## 📖 Overview
 
-**LX Track List** is an open-source, all-in-one personal media tracking app designed for Android. Instead of fragmenting your watchlist across separate platforms (MyAnimeList, AniList, Letterboxd, TV Time, MangaDex, Tachiyomi, Goodreads), LX Track List consolidates all your entertainment into a single, cohesive, and private database.
+**LX Track List** is an open-source, all-in-one personal media tracking app designed for Android. Instead of fragmenting your collection across separate platforms (MyAnimeList, AniList, Letterboxd, TV Time, MangaDex, Tachiyomi, Goodreads, IGDB, MusicBrainz, Spotify), LX Track List consolidates your Anime, Manga, Manhwa, Movies, TV Shows, Books, **Music**, Video Games, and Custom Media into a single, cohesive, and private database.
 
 Built from the ground up with **Kotlin**, **Jetpack Compose (Material 3)**, and **Room (SQLite)**, the app emphasizes lightning-fast performance, elegant aesthetics (OLED pure black paired with `#A7EF60` electric neon accents, plus custom theme packs and user-defined accent colors), and total data sovereignty.
 
@@ -82,10 +82,10 @@ Discover what's airing, trending, and premiering directly inside the **Search & 
     3. **18+ Only**: Strictly isolates and returns **only** 18+ entities (*Hentai* for Anime via AniList `$isAdult: true` / Jikan `Rx`, and verified adult entities for TMDB Movies/TV).
     4. Next click cycles back to **Off**.
 - **Original Language Multi-Select & Discovery**:
-  - Filter discoveries by original language with multi-select `OR` logic across Movies, TV Shows, and Books.
+  - Filter discoveries by original language with multi-select `OR` logic across Movies, TV Shows, Books, Games, and Music.
   - Complete ISO 639-1 / 639-2 code mapping, localized native script names, and flag emojis (e.g., 🇯🇵 Japanese, 🇰🇷 Korean, 🇨🇳 Chinese, 🇪🇸 Spanish, 🇫🇷 French, 🇩🇪 German).
   - Full support for Indian languages: **Malayalam** (`മലയാളം` • `ml`), **Tamil** (`தமிழ்` • `ta`), **Telugu** (`తెలుగు` • `te`), and **Hindi** (`हिन्दी` • `hi`).
-  - Category-aware placement: placed in **Top for Movies** for films; placed in **Other Languages** for TV Shows and Books; omitted from Anime, Manga, Manhwa, and Light Novels to keep catalogs authentic.
+  - Category-aware placement: placed in **Top for Movies** for films; placed in **Other Languages** for TV Shows, Books, Games, and Music; omitted from Anime, Manga, Manhwa, and Light Novels to keep catalogs authentic.
 - **Multilingual Book Discovery (Google Books & Open Library)**:
   - Deep international book discovery across Google Books and Open Library without English category lockouts.
   - Uses language-native query resolution, Solr `*:*` wildcard base queries, multi-code terminology matching (`(language:chi OR language:zho)`), and explicit field hydration.
@@ -172,6 +172,20 @@ Comprehensive video game tracking with dedicated progress modes, platform icons,
 - **Automated "Resolve IDs" for Video Games**:
   - Automatically searches and matches unlinked or unverified game entries to official IGDB or RAWG entries using confident exact title matching.
 
+### 🎵 Music & Album Tracking
+Dedicated music library tracking with keyless metadata discovery, sibling album track linking, and direct Spotify track deep-linking:
+- **Music Discovery (`Top Charts`, `By Genre`, `By Year`)**:
+  - Browse trending charts or filter tracks by release year ranges, Original Languages, and 21 preset genres (`MusicTagRegistry`, from *Pop*, *Rock*, and *Hip-Hop / Rap* to *Anime OST*, *Video Game OST*, *J-Pop*, *K-Pop*, and *Ambient / Lo-Fi*), sorted by **Most Popular**, **Release Date**, or **Title (A–Z)**.
+- **Track, Artist & Album Metadata**:
+  - Tracks **Artist** attribution, **Album** name & ID, **Track & Disc numbers**, exact track length (`m:ss`), genres, release dates, listening dates (`My Listening Dates`), and relisten counts (**Listening**, **Completed**, **Plan to Listen**, **On-Hold**, **Dropped**, **Relistened**).
+- **Automatic Related Album Tracks**:
+  - Viewing any Music entity automatically loads the other tracks from the same album via **Apple Music / iTunes** or **MusicBrainz** release groups/releases, ordered by disc and track number in the **Related** section with rich track previews and one-tap library addition or linking.
+- **Unified Music "Open ▾" & Direct Spotify Deep-Linking**:
+  - Access *MusicBrainz 🎵*, *Apple Music 🍎*, *Spotify 🎧*, and *YouTube Music ▶️* from **Search & Discover**, **Add/Edit**, **Details**, and **Related** track sheets.
+  - Dynamically resolves exact 22-character Spotify track IDs via MusicBrainz `url-rels`, **Odesli / Songlink** (`api.song.link`), and search fallback so Spotify opens straight to the song page (in the Spotify app via `spotify:track:<id>` or browser via `open.spotify.com/track/<id>`) rather than Spotify's empty mobile web landing page.
+- **Dedicated External Music Sync Job (`MusicSyncManager`)**:
+  - Full batch sync under **Settings $\rightarrow$ External Sync Jobs** (as well as Home and Library multi-select) with **Fetch Missing**, **Re-fetch All**, live progress bar, **Cancel Sync**, `SyncForegroundService` background execution, and high-res album artwork caching via iTunes & Cover Art Archive.
+
 ### 🚀 In-App GitHub Releases & APK Auto-Updater
 Keep your app up to date effortlessly without opening a web browser:
 - **One-Tap Release Check**: Checks GitHub Releases API for new versions directly in **Settings**.
@@ -251,11 +265,11 @@ Never worry about duplicate entries when restoring backups after names or IDs ch
 
 ### 📑 Power Library & Batch Management
 - **Multi-Select Batch Actions**: Select multiple entries to perform bulk operations in seconds:
-  - **Set Status**: Bulk update to *Watching/Reading*, *Completed*, *On-Hold*, *Dropped*, or *Plan to Watch/Read*.
+  - **Set Status**: Bulk update to *Watching/Reading/Playing/Listening*, *Completed*, *On-Hold*, *Dropped*, or *Plan to Watch/Read/Play/Listen*.
   - **Set Category / Subcategory**: Bulk categorize your items.
   - **Batch DB Sync**: Bulk **Fetch Missing**, **Re-fetch All**, or **Resolve IDs** with background notifications.
   - **Delete**: Bulk removal with confirmation.
-- **10 Dynamic Sort Options**: Sort by Title (A-Z, Z-A), Score (Highest, Lowest), Progress (Highest, Lowest), Recently Updated, Most Re-watched / Replayed, Most Time Watched / Played / Read, or Most Time To Watch / Play / Read (with category-adaptive dynamic labels).
+- **10 Dynamic Sort Options**: Sort by Title (A-Z, Z-A), Score (Highest, Lowest), Progress (Highest, Lowest), Recently Updated, Most Re-watched / Replayed / Relistened, Most Time Watched / Played / Read, or Most Time To Watch / Play / Read (with category-adaptive dynamic labels).
 - **Granular Advanced Filters**: Filter simultaneously by Media Type, Status, Priority (Low, Medium, High), Airing Status (All, Airing/Publishing, NYA/NYP, Finished), Score, Custom Categories, **Game Platforms** (multi-select include/exclude for Games), and **Original Language** (native scripts and flag emojis for all media).
 
 ### ✏️ Context-Aware External DB Sync Dialog
@@ -272,10 +286,10 @@ Never worry about duplicate entries when restoring backups after names or IDs ch
 
 ### 📊 Deep Statistics & Visual Analytics
 Gain full visibility into your media consumption habits with precision calculations, proportional status distributions, and interactive score histograms:
-- **Comprehensive Status Distribution**: Visual proportional stacked bar charts and breakdown grids across statuses (*Watching/Reading/Playing*, *Plan to Watch/Read/Play*, *Completed*, *On-Hold*, *Dropped*) styled with authentic MAL/AniList theme tokens.
+- **Comprehensive Status Distribution**: Visual proportional stacked bar charts and breakdown grids across statuses (*Watching/Reading/Playing/Listening*, *Plan to Watch/Read/Play/Listen*, *Completed*, *On-Hold*, *Dropped*) styled with authentic MAL/AniList theme tokens.
 - **Precision Time Tracking & Dynamic Scaling (`DurationFormatter`)**: Converts total consumed minutes into exact 24-hour days (`Days Spent = Total Minutes / 1440.0`), alongside estimated days remaining to finish your backlog (`To Complete`). When hours become very large, values dynamically format into human intervals (days, weeks, months, years) without UI clipping.
 - **Unskewed Mean Scores & 10-Point Score Distribution**: Interactive 10-bar frequency histograms (Scores 1–10) with peak detection, percentage tooltips, and an arithmetic mean score that strictly excludes unrated entries (`score == 0` or unrated) to prevent skewing.
-- **Multi-Category Metric Breakdown**: Dedicated metrics tailored to each medium (Episodes, Chapters, Volumes, Pages, or Playtime Hours).
+- **Multi-Category Metric Breakdown**: Dedicated metrics tailored to each medium (Episodes, Chapters, Volumes, Pages, Track Listening Time, or Playtime Hours).
 
 #### 🧮 How Statistics, Time & Rewatches Are Calculated
 
@@ -353,6 +367,7 @@ app/src/main/kotlin/com/lx/tracklist/
 │   │   ├── MangaDexApiClient.kt
 │   │   ├── MusicBrainzApiClient.kt # MusicBrainz recording, album release & URL relationship client
 │   │   ├── MusicMetadataManager.kt # Unified Apple Music / iTunes & MusicBrainz music manager
+│   │   ├── MusicModels.kt          # Music search result & track/album data models
 │   │   ├── MusicSyncManager.kt     # Music metadata, cover & album track batch sync manager
 │   │   ├── OpenLibraryApiClient.kt # Open Library Covers & Works API client
 │   │   ├── RawgApiClient.kt        # RAWG Video Games Database API client
@@ -478,6 +493,7 @@ title,mediaType,status,score,currentEpisodes,totalEpisodes,currentChapters,total
 "Solo Leveling",MANHWA,WATCHING,9,0,0,150,200,"High action hunter story","action, fantasy","Webtoon"
 "Dune: Part Two",MOVIE,COMPLETED,9,0,0,0,0,"Epic sci-fi cinema","sci-fi, cinema",
 "Elden Ring",GAME,COMPLETED,10,0,0,0,0,"Completed 100% achievements","souls, rpg, goty",
+"Papercut",MUSIC,COMPLETED,10,0,0,0,0,"Hybrid Theory opening track","nu-metal, rock",
 ```
 
 > **Supported CSV Columns**:
@@ -538,6 +554,20 @@ The JSON importer accepts either a backup wrapper object or a raw JSON array of 
       "gameProgressPercent": 100,
       "isFavorite": true,
       "tags": "puzzle, sci-fi, comedy"
+    },
+    {
+      "title": "Papercut",
+      "mediaType": "MUSIC",
+      "status": "COMPLETED",
+      "score": 10,
+      "creator": "LINKIN PARK",
+      "movieSeriesName": "Hybrid Theory",
+      "movieSeriesNumber": 1,
+      "durationMinutes": 184,
+      "musicAlbumId": "528436018",
+      "externalSource": "Apple Music",
+      "externalId": "528436019",
+      "tags": "rock, nu-metal"
     }
   ]
 }
@@ -554,7 +584,7 @@ When exporting your library from **Settings > Backup & Restore > Export**, the a
   "app": "LX Track List",
   "version": 1,
   "exportedAt": 1732233600000,
-  "totalCount": 3,
+  "totalCount": 4,
   "entries": [
     {
       "id": 1,
@@ -617,6 +647,27 @@ When exporting your library from **Settings > Backup & Restore > Export**, the a
       "priority": "HIGH",
       "createdAt": 1710000000000,
       "updatedAt": 1732233600000
+    },
+    {
+      "id": 4,
+      "userId": 0,
+      "title": "Papercut",
+      "mediaType": "MUSIC",
+      "status": "COMPLETED",
+      "score": 10,
+      "creator": "LINKIN PARK",
+      "movieSeriesName": "Hybrid Theory",
+      "movieSeriesNumber": 1,
+      "musicAlbumId": "528436018",
+      "durationMinutes": 184,
+      "isFavorite": true,
+      "isExternallyTracked": false,
+      "externalId": "528436019",
+      "externalSource": "Apple Music",
+      "tags": "rock, nu-metal",
+      "priority": "MEDIUM",
+      "createdAt": 1715000000000,
+      "updatedAt": 1732233600000
     }
   ]
 }
@@ -644,5 +695,5 @@ This project is open-source and available under the terms of the **MIT License**
 ---
 
 <p align="center">
-  Crafted with care for media enthusiasts and collectors everywhere. 🎬📖🍿
+  Crafted with care for media enthusiasts and collectors everywhere. 🎬🎵🎮📖🍿
 </p>
