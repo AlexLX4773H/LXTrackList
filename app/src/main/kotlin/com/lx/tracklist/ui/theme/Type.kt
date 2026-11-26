@@ -7,6 +7,27 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 val Typography = Typography(
+    headlineLarge = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Bold,
+        fontSize = 32.sp,
+        lineHeight = 38.sp,
+        letterSpacing = 0.sp
+    ),
+    headlineMedium = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Bold,
+        fontSize = 26.sp,
+        lineHeight = 32.sp,
+        letterSpacing = 0.sp
+    ),
+    headlineSmall = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Bold,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
+        letterSpacing = 0.sp
+    ),
     titleLarge = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Bold,
@@ -62,5 +83,24 @@ val Typography = Typography(
         fontSize = 11.sp,
         lineHeight = 14.sp,
         letterSpacing = 0.5.sp
+    ),
+    labelSmall = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Medium,
+        fontSize = 10.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 0.4.sp
     )
 )
+
+/** Compact bold badge text style (10sp). */
+val Typography.badge: TextStyle
+    get() = labelSmall.copy(fontWeight = FontWeight.Bold, lineHeight = 12.sp)
+
+/** Helper/caption text style (11sp). */
+val Typography.caption: TextStyle
+    get() = bodySmall.copy(fontSize = 11.sp, lineHeight = 14.sp)
+
+/** Chip label text style (12sp Medium). */
+val Typography.chip: TextStyle
+    get() = labelLarge.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium, lineHeight = 16.sp)

@@ -62,7 +62,10 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
+import com.lx.tracklist.ui.components.LXConfirmDialog
+import com.lx.tracklist.ui.components.LXOpenMenu
 import com.lx.tracklist.ui.components.SteamGridDbPickerSheet
+import com.lx.tracklist.ui.components.getCategoryIcon
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
@@ -136,9 +139,12 @@ import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import com.lx.tracklist.R
+import com.lx.tracklist.data.model.CustomCategory
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.Priority
 import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.ui.search.OriginalLanguageRegistry
 import com.lx.tracklist.data.model.TrackingUnit
@@ -147,6 +153,8 @@ import com.lx.tracklist.data.remote.GameMetadataManager
 import com.lx.tracklist.data.remote.ITunesApiClient
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanSyncManager
+import com.lx.tracklist.data.remote.KitsuApiClient
+import com.lx.tracklist.data.remote.MangaDexApiClient
 import com.lx.tracklist.data.remote.MusicMetadataManager
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbApiClient
@@ -167,6 +175,7 @@ import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXSurfaceVariant
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import com.lx.tracklist.ui.theme.parseHexColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -198,6 +207,7 @@ fun DetailScreen(
     val isFetchingFromExternalTracker by viewModel.isFetchingFromExternalTracker.collectAsState()
     val externalSyncMessage by viewModel.externalSyncMessage.collectAsState()
     val vmActiveUser by viewModel.activeUser.collectAsState()
+    val customCategories by viewModel.customCategories.collectAsState()
     val effectiveUser = activeUser ?: vmActiveUser
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -260,23 +270,13 @@ fun DetailScreen(
 
     if (showRefreshConfirmDialog && entry != null) {
         val current = entry!!
-        val isTachiyomi = JikanSyncManager.isTachiyomiSource(current)
+        val refreshPlan = remember(current) { DetailViewModel.resolveDetailRefreshPlan(current) }
         val isMovieOrShow = current.mediaType == MediaType.MOVIE || current.mediaType == MediaType.SHOW
         val isBook = current.mediaType == MediaType.BOOK
         val isGame = current.mediaType == MediaType.GAME
         val isMusic = current.mediaType == MediaType.MUSIC
-        val hasValidId = JikanSyncManager.hasValidExternalId(current)
-        val isMal = JikanSyncManager.isMalSource(current) || current.mediaType == MediaType.ANIME || current.mediaType == MediaType.MANGA || current.mediaType == MediaType.MANHWA
-        val sourceName = when {
-            isGame -> current.externalSource?.takeIf { it.isNotBlank() } ?: "IGDB / RAWG"
-            isMusic -> current.externalSource?.takeIf { it.isNotBlank() } ?: "Apple Music / iTunes / MusicBrainz"
-            isMovieOrShow -> "The Movie Database (TMDB)"
-            isBook -> current.externalSource?.takeIf { it.isNotBlank() } ?: "Google Books / Open Library"
-            isTachiyomi -> "Jikan / MangaDex / AniList / Kitsu"
-            isMal -> "MyAnimeList (MAL)"
-            else -> current.externalSource?.takeIf { it.isNotBlank() } ?: "External Database"
-        }
-        val isFindingAndLinking = isTachiyomi || !hasValidId || TachiyomiResolverManager.isEligibleForResolution(current)
+        val sourceName = refreshPlan.sourceDisplayName
+        val isFindingAndLinking = refreshPlan.isFindingAndLinking
         val extId = current.externalId
 
         AlertDialog(
@@ -296,7 +296,7 @@ fun DetailScreen(
                             when {
                                 isGame -> "Find & Link Game ID?"
                                 isMusic -> "Find & Link Music ID?"
-                                isMovieOrShow -> "Find & Link TMDB ID?"
+                                refreshPlan.provider == DetailRefreshProvider.TMDB -> "Find & Link TMDB ID?"
                                 isBook -> "Find & Link Book ID?"
                                 else -> "Find & Link External ID?"
                             }
@@ -320,11 +320,11 @@ fun DetailScreen(
                     Text(
                         text = if (isFindingAndLinking) {
                             when {
-                                isGame -> "This will search IGDB/RAWG to link a valid game ID and update cover art, release date, platforms, genres, ratings, and synopsis."
-                                isMusic -> "This will search Apple Music / iTunes and MusicBrainz to link a track ID and update album artwork, artist, album info, duration, release date, and related album tracks."
-                                isMovieOrShow -> "This will search TMDB to link a valid ID and update poster, release dates, runtime, genres, scores, and synopsis."
-                                isBook -> "This will search Google Books and Open Library to link a valid book ID and update cover, pages, publication details, and synopsis."
-                                else -> "This will search databases to link a valid external ID (MAL, MangaDex, AniList, Kitsu) and update cover, chapters/episodes, and synopsis. Once linked, external tracking can be enabled."
+                                isGame -> "This will search $sourceName to link a valid game ID and update cover art, release date, platforms, genres, ratings, and synopsis."
+                                isMusic -> "This will search $sourceName to link a track ID and update album artwork, artist, album info, duration, release date, and related album tracks."
+                                refreshPlan.provider == DetailRefreshProvider.TMDB -> "This will search $sourceName to link a valid ID and update poster, release dates, runtime, genres, scores, and synopsis."
+                                isBook -> "This will search $sourceName to link a valid book ID and update cover, pages, publication details, and synopsis."
+                                else -> "This will search $sourceName to link a valid external ID and update cover, chapters/episodes, and synopsis. Once linked, external tracking can be enabled."
                             }
                         } else {
                             if (isGame) {
@@ -333,8 +333,10 @@ fun DetailScreen(
                                 "This will update album artwork, artist, album info, duration, genres, release date, and related album tracks from $sourceName."
                             } else if (isBook) {
                                 "This will update cover, page counts, publisher, published dates, ratings, and description to the latest information from $sourceName."
+                            } else if (isMovieOrShow && refreshPlan.provider == DetailRefreshProvider.TMDB) {
+                                "This will update posters, runtime, broadcast/release dates, scores, and synopsis to the latest information from $sourceName."
                             } else {
-                                "This will update posters, episode/chapter counts, runtime, broadcast/air dates, scores, and synopsis to the latest information from the external database."
+                                "This will update posters, episode/chapter counts, runtime, broadcast/air dates, scores, and synopsis to the latest information from $sourceName."
                             }
                         },
                         color = LXTextSecondary,
@@ -585,6 +587,13 @@ fun DetailScreen(
                                     contentScale = ContentScale.Fit
                                 )
                             }
+                            if (currentEntry.mediaType == MediaType.GAME) {
+                                DetailGameCoverEditBadge(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(10.dp)
+                                )
+                            }
                         }
 
                         CopyableEntityTitle(title = currentEntry.title)
@@ -607,93 +616,15 @@ fun DetailScreen(
                                 color = LXPrimaryGreen
                             )
                         }
-                        if (currentEntry.mediaType == MediaType.MUSIC && !currentEntry.movieSeriesName.isNullOrBlank()) {
-                            val trackPrefix = if ((currentEntry.movieSeriesNumber ?: 0) > 0) "Track ${currentEntry.movieSeriesNumber} • " else ""
-                            Text(
-                                text = "Album: $trackPrefix${currentEntry.movieSeriesName}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = LXTextSecondary
-                            )
-                        }
+                        DetailSeriesOrAlbumText(entry = currentEntry)
 
-                        // Badges
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            MetaChip(label = currentEntry.mediaType.displayName, color = LXPrimaryGreen)
-                            if (!currentEntry.customCategory.isNullOrBlank()) {
-                                MetaChip(label = currentEntry.customCategory, color = LXScoreGold)
-                            }
-                            if (!currentEntry.subCategory.isNullOrBlank()) {
-                                MetaChip(label = currentEntry.subCategory, color = LXScoreGold)
-                            }
-                            val displayLang = currentEntry.originalLanguage?.takeIf { it.isNotBlank() }
-                                ?: if (currentEntry.mediaType != MediaType.GAME) currentEntry.getEffectiveLanguage().takeIf { it.isNotBlank() } else null
-                            if (!displayLang.isNullOrBlank()) {
-                                val opt = OriginalLanguageRegistry.findByCode(displayLang)
-                                val label = if (opt != null) "${opt.flagEmoji} ${opt.displayName}" else "🌐 $displayLang"
-                                MetaChip(label = label, color = LXAiringBlue)
-                            }
-                            StatusDropdownChip(
-                                status = currentEntry.status,
-                                mediaType = currentEntry.mediaType,
-                                onStatusSelected = { viewModel.updateStatus(it) }
-                            )
-                            ScoreDropdownChip(
-                                score = currentEntry.score,
-                                onScoreSelected = { viewModel.updateScore(it) }
-                            )
-                            if (currentEntry.externalScore != null && currentEntry.externalScore > 0f) {
-                                ExternalScoreChip(
-                                    score = currentEntry.externalScore,
-                                    source = currentEntry.externalScoreSource
-                                )
-                            }
-                            if (currentEntry.mediaType == MediaType.MUSIC && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
-                                MetaChip(label = "⏱️ ${currentEntry.formatMusicDuration()}", color = LXPrimaryGreen)
-                            } else if (currentEntry.mediaType == MediaType.MOVIE && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
-                                val h = currentEntry.durationMinutes / 60
-                                val m = currentEntry.durationMinutes % 60
-                                val durStr = if (h > 0) "${h}h ${m}m" else "${m}m"
-                                MetaChip(label = "⏱️ $durStr", color = LXPrimaryGreen)
-                            } else if (currentEntry.mediaType == MediaType.GAME && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
-                                val durStr = DurationFormatter.formatMinutes(currentEntry.durationMinutes)
-                                MetaChip(label = "⏱️ Avg 100%: $durStr", color = LXPrimaryGreen)
-                            } else if (currentEntry.episodeLengthMinutes != null && currentEntry.episodeLengthMinutes > 0) {
-                                MetaChip(label = "⏱️ ${currentEntry.episodeLengthMinutes} min/ep", color = LXPrimaryGreen)
-                            }
-                            if (currentEntry.isRewatching) {
-                                val rewatchBadge = when {
-                                    currentEntry.mediaType == MediaType.MUSIC -> "RELISTENING"
-                                    currentEntry.mediaType == MediaType.GAME -> "REPLAYING"
-                                    currentEntry.mediaType.isReadType -> "REREADING"
-                                    else -> "REWATCHING"
-                                }
-                                MetaChip(label = rewatchBadge, color = LXPrimaryGreen)
-                            }
-                            if (currentEntry.rewatchCount > 0) {
-                                val rewatchLabel = when {
-                                    currentEntry.mediaType == MediaType.MUSIC -> "Relistened"
-                                    currentEntry.mediaType == MediaType.GAME -> "Replayed"
-                                    currentEntry.mediaType.isReadType -> "Reread"
-                                    else -> "Rewatched"
-                                }
-                                MetaChip(label = "$rewatchLabel ${currentEntry.rewatchCount}x", color = LXScoreGold)
-                            }
-                            if (currentEntry.mediaType == MediaType.GAME) {
-                                currentEntry.getGamePlatformList().forEach { platform ->
-                                    GamePlatformChip(platform = platform, color = LXPrimaryGreen)
-                                }
-                            }
-                            if (currentEntry.isNotYetAiredOrPublished) {
-                                val nyaLabel = if (currentEntry.mediaType == MediaType.GAME) "UNRELEASED" else if (currentEntry.mediaType.isWatchType) "NYA" else "NYP"
-                                MetaChip(label = nyaLabel, color = Color(0xFFF59E0B))
-                            } else if (currentEntry.isAiring) {
-                                val airingLabel = if (currentEntry.mediaType.isWatchType) "AIRING" else "PUBLISHING"
-                                MetaChip(label = airingLabel, color = LXAiringBlue)
-                            }
-                        }
+                        DetailMetadataChipsRow(
+                            entry = currentEntry,
+                            customCategories = customCategories,
+                            onStatusSelected = { viewModel.updateStatus(it) },
+                            onScoreSelected = { viewModel.updateScore(it) }
+                        )
+                        DetailOpenExternalButton(entry = currentEntry)
                     }
 
                     // Right Column (Progress, Dates, Description, User Comments, Tags)
@@ -810,6 +741,13 @@ fun DetailScreen(
                                     )
                                 )
                         )
+                        if (currentEntry.mediaType == MediaType.GAME) {
+                            DetailGameCoverEditBadge(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(12.dp)
+                            )
+                        }
                     }
 
                     Column(
@@ -838,92 +776,15 @@ fun DetailScreen(
                                 color = LXPrimaryGreen
                             )
                         }
-                        if (currentEntry.mediaType == MediaType.MUSIC && !currentEntry.movieSeriesName.isNullOrBlank()) {
-                            val trackPrefix = if ((currentEntry.movieSeriesNumber ?: 0) > 0) "Track ${currentEntry.movieSeriesNumber} • " else ""
-                            Text(
-                                text = "Album: $trackPrefix${currentEntry.movieSeriesName}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = LXTextSecondary
-                            )
-                        }
+                        DetailSeriesOrAlbumText(entry = currentEntry)
 
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            MetaChip(label = currentEntry.mediaType.displayName, color = LXPrimaryGreen)
-                            if (!currentEntry.customCategory.isNullOrBlank()) {
-                                MetaChip(label = currentEntry.customCategory, color = LXScoreGold)
-                            }
-                            if (!currentEntry.subCategory.isNullOrBlank()) {
-                                MetaChip(label = currentEntry.subCategory, color = LXScoreGold)
-                            }
-                            val displayLang = currentEntry.originalLanguage?.takeIf { it.isNotBlank() }
-                                ?: if (currentEntry.mediaType != MediaType.GAME) currentEntry.getEffectiveLanguage().takeIf { it.isNotBlank() } else null
-                            if (!displayLang.isNullOrBlank()) {
-                                val opt = OriginalLanguageRegistry.findByCode(displayLang)
-                                val label = if (opt != null) "${opt.flagEmoji} ${opt.displayName}" else "🌐 $displayLang"
-                                MetaChip(label = label, color = LXAiringBlue)
-                            }
-                            StatusDropdownChip(
-                                status = currentEntry.status,
-                                mediaType = currentEntry.mediaType,
-                                onStatusSelected = { viewModel.updateStatus(it) }
-                            )
-                            ScoreDropdownChip(
-                                score = currentEntry.score,
-                                onScoreSelected = { viewModel.updateScore(it) }
-                            )
-                            if (currentEntry.externalScore != null && currentEntry.externalScore > 0f) {
-                                ExternalScoreChip(
-                                    score = currentEntry.externalScore,
-                                    source = currentEntry.externalScoreSource
-                                )
-                            }
-                            if (currentEntry.mediaType == MediaType.MUSIC && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
-                                MetaChip(label = "⏱️ ${currentEntry.formatMusicDuration()}", color = LXPrimaryGreen)
-                            } else if (currentEntry.mediaType == MediaType.MOVIE && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
-                                val h = currentEntry.durationMinutes / 60
-                                val m = currentEntry.durationMinutes % 60
-                                val durStr = if (h > 0) "${h}h ${m}m" else "${m}m"
-                                MetaChip(label = "⏱️ $durStr", color = LXPrimaryGreen)
-                            } else if (currentEntry.mediaType == MediaType.GAME && currentEntry.durationMinutes != null && currentEntry.durationMinutes > 0) {
-                                val durStr = DurationFormatter.formatMinutes(currentEntry.durationMinutes)
-                                MetaChip(label = "⏱️ Avg 100%: $durStr", color = LXPrimaryGreen)
-                            } else if (currentEntry.episodeLengthMinutes != null && currentEntry.episodeLengthMinutes > 0) {
-                                MetaChip(label = "⏱️ ${currentEntry.episodeLengthMinutes} min/ep", color = LXPrimaryGreen)
-                            }
-                            if (currentEntry.isRewatching) {
-                                val rewatchBadge = when {
-                                    currentEntry.mediaType == MediaType.MUSIC -> "RELISTENING"
-                                    currentEntry.mediaType == MediaType.GAME -> "REPLAYING"
-                                    currentEntry.mediaType.isReadType -> "REREADING"
-                                    else -> "REWATCHING"
-                                }
-                                MetaChip(label = rewatchBadge, color = LXPrimaryGreen)
-                            }
-                            if (currentEntry.rewatchCount > 0) {
-                                val rewatchLabel = when {
-                                    currentEntry.mediaType == MediaType.MUSIC -> "Relistened"
-                                    currentEntry.mediaType == MediaType.GAME -> "Replayed"
-                                    currentEntry.mediaType.isReadType -> "Reread"
-                                    else -> "Rewatched"
-                                }
-                                MetaChip(label = "$rewatchLabel ${currentEntry.rewatchCount}x", color = LXScoreGold)
-                            }
-                            if (currentEntry.mediaType == MediaType.GAME) {
-                                currentEntry.getGamePlatformList().forEach { platform ->
-                                    GamePlatformChip(platform = platform, color = LXPrimaryGreen)
-                                }
-                            }
-                            if (currentEntry.isNotYetAiredOrPublished) {
-                                val nyaLabel = if (currentEntry.mediaType == MediaType.GAME) "UNRELEASED" else if (currentEntry.mediaType.isWatchType) "NYA" else "NYP"
-                                MetaChip(label = nyaLabel, color = Color(0xFFF59E0B))
-                            } else if (currentEntry.isAiring) {
-                                val airingLabel = if (currentEntry.mediaType.isWatchType) "AIRING" else "PUBLISHING"
-                                MetaChip(label = airingLabel, color = LXAiringBlue)
-                            }
-                        }
+                        DetailMetadataChipsRow(
+                            entry = currentEntry,
+                            customCategories = customCategories,
+                            onStatusSelected = { viewModel.updateStatus(it) },
+                            onScoreSelected = { viewModel.updateScore(it) }
+                        )
+                        DetailOpenExternalButton(entry = currentEntry)
 
                         DetailProgressCard(
                             entry = currentEntry,
@@ -974,24 +835,17 @@ fun DetailScreen(
     }
 
     if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Entry?", color = LXTextPrimary) },
-            text = { Text("Are you sure you want to delete this entry? This action cannot be undone.", color = LXTextSecondary) },
-            containerColor = LXSurfaceBlack,
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeleteDialog = false
-                    viewModel.deleteEntry()
-                }) {
-                    Text("Delete", color = LXErrorRed)
-                }
+        val deleteTitle = entry?.title?.let { "Delete \"$it\"?" } ?: "Delete Entry?"
+        LXConfirmDialog(
+            title = deleteTitle,
+            message = "This removes the entry from your library.",
+            confirmText = "Delete",
+            onConfirm = {
+                showDeleteDialog = false
+                viewModel.deleteEntry()
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel", color = LXTextPrimary)
-                }
-            }
+            onDismiss = { showDeleteDialog = false },
+            destructive = true
         )
     }
 
@@ -1138,6 +992,22 @@ private fun CopyableEntityTitle(title: String) {
     )
 }
 
+private fun progressEditPrompt(entry: MediaEntry): String = when (entry.mediaType) {
+    MediaType.ANIME, MediaType.SHOW -> "Enter episodes watched"
+    MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> when (entry.trackingUnit) {
+        TrackingUnit.VOLUMES -> "Enter volumes read"
+        TrackingUnit.PAGES -> "Enter pages read"
+        else -> "Enter chapters read"
+    }
+    MediaType.GAME -> if (entry.trackingUnit == TrackingUnit.CUSTOM) {
+        val label = entry.customUnitLabel?.takeIf { it.isNotBlank() } ?: "units"
+        "Enter $label completed"
+    } else {
+        "Enter progress %"
+    }
+    MediaType.MOVIE, MediaType.MUSIC -> "Enter progress"
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DetailProgressCard(
@@ -1183,57 +1053,93 @@ private fun DetailProgressCard(
             } else {
                 val total = entry.totalEpisodes
                 val totalStr = if (total > 0) "$total" else "?"
-                val seasonStr = if (entry.currentSeasons > 0) "S${entry.currentSeasons} • " else ""
+                val seasonStr = when {
+                    entry.totalSeasons > 1 -> "S${entry.currentSeasons}/${entry.totalSeasons} (${entry.totalSeasons} Seasons) • "
+                    entry.currentSeasons > 0 -> "S${entry.currentSeasons} • "
+                    else -> ""
+                }
                 ProgressInfo(entry.currentEpisodes, total, totalStr, "Eps", "${seasonStr}Episodes watched")
             }
         }
         MediaType.MANGA, MediaType.MANHWA -> {
-            when (entry.trackingUnit) {
+            val activeUnit = TrackingUnit.sanitizeForMediaType(entry.trackingUnit, entry.mediaType)
+            when (activeUnit) {
                 TrackingUnit.VOLUMES -> {
                     val total = entry.totalVolumes
                     val totalStr = if (total > 0) "$total" else "?"
-                    ProgressInfo(entry.currentVolumes, total, totalStr, "Vol", "Volumes read")
+                    ProgressInfo(
+                        entry.currentVolumes,
+                        total,
+                        totalStr,
+                        "Vol",
+                        buildReadingDescriptionWithOtherUnits(entry, activeUnit, "Volumes read")
+                    )
                 }
                 TrackingUnit.PAGES -> {
                     val total = entry.totalPages
                     val totalStr = if (total > 0) "$total" else "?"
-                    ProgressInfo(entry.currentPages, total, totalStr, "Pages", "Pages read")
+                    ProgressInfo(
+                        entry.currentPages,
+                        total,
+                        totalStr,
+                        "Pages",
+                        buildReadingDescriptionWithOtherUnits(entry, activeUnit, "Pages read")
+                    )
                 }
                 else -> {
                     val total = entry.totalChapters
                     val totalStr = if (total > 0) "$total" else "?"
-                    val sub = if (entry.currentVolumes > 0 || entry.totalVolumes > 0) {
-                        val vTot = if (entry.totalVolumes > 0) "${entry.totalVolumes}" else "?"
-                        "Vol ${entry.currentVolumes}/$vTot • Chapters read"
-                    } else {
-                        "Chapters read"
-                    }
-                    ProgressInfo(entry.currentChapters, total, totalStr, "Ch", sub)
+                    ProgressInfo(
+                        entry.currentChapters,
+                        total,
+                        totalStr,
+                        "Ch",
+                        buildReadingDescriptionWithOtherUnits(entry, activeUnit, "Chapters read")
+                    )
                 }
             }
         }
         MediaType.BOOK -> {
-            when (entry.trackingUnit) {
+            val activeUnit = TrackingUnit.sanitizeForMediaType(entry.trackingUnit, entry.mediaType)
+            when (activeUnit) {
                 TrackingUnit.PAGES -> {
                     val total = entry.totalPages
                     val totalStr = if (total > 0) "$total" else "?"
-                    ProgressInfo(entry.currentPages, total, totalStr, "Pages", "Pages read")
+                    ProgressInfo(
+                        entry.currentPages,
+                        total,
+                        totalStr,
+                        "Pages",
+                        buildReadingDescriptionWithOtherUnits(entry, activeUnit, "Pages read")
+                    )
                 }
-                TrackingUnit.CHAPTERS -> {
-                    val total = entry.totalChapters
-                    val totalStr = if (total > 0) "$total" else "?"
-                    ProgressInfo(entry.currentChapters, total, totalStr, "Ch", "Chapters read")
-                }
-                else -> {
+                TrackingUnit.VOLUMES -> {
                     val total = entry.totalVolumes
                     val totalStr = if (total > 0) "$total" else "?"
-                    ProgressInfo(entry.currentVolumes, total, totalStr, "Vol", "Volumes read")
+                    ProgressInfo(
+                        entry.currentVolumes,
+                        total,
+                        totalStr,
+                        "Vol",
+                        buildReadingDescriptionWithOtherUnits(entry, activeUnit, "Volumes read")
+                    )
+                }
+                else -> {
+                    val total = entry.totalChapters
+                    val totalStr = if (total > 0) "$total" else "?"
+                    ProgressInfo(
+                        entry.currentChapters,
+                        total,
+                        totalStr,
+                        "Ch",
+                        buildReadingDescriptionWithOtherUnits(entry, activeUnit, "Chapters read")
+                    )
                 }
             }
         }
         MediaType.MOVIE -> {
             val isDone = entry.status == MediaStatus.COMPLETED
-            ProgressInfo(if (isDone) 1 else 0, 1, "1", "Film", if (isDone) "Watched" else "Plan to watch")
+            ProgressInfo(if (isDone) 1 else 0, 1, "1", "Film", if (isDone) "Watched" else MediaStatus.PLAN_TO_WATCH.getDisplayLabel(MediaType.MOVIE))
         }
         MediaType.GAME -> {
             if (entry.trackingUnit == TrackingUnit.CUSTOM) {
@@ -1248,7 +1154,7 @@ private fun DetailProgressCard(
         MediaType.MUSIC -> {
             val isDone = entry.status == MediaStatus.COMPLETED
             val durStr = entry.formatMusicDuration().takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""
-            ProgressInfo(if (isDone) 1 else 0, 1, "1", "Track", if (isDone) "Listened$durStr" else "Plan to listen$durStr")
+            ProgressInfo(if (isDone) 1 else 0, 1, "1", "Track", if (isDone) "Listened$durStr" else "${MediaStatus.PLAN_TO_WATCH.getDisplayLabel(MediaType.MUSIC)}$durStr")
         }
     }
 
@@ -1304,7 +1210,7 @@ private fun DetailProgressCard(
                         )
                     }
                 } else if (entry.isNotYetAiredOrPublished) {
-                    val nyaLabel = if (entry.mediaType.isWatchType) "NYA" else "NYP"
+                    val nyaLabel = entry.mediaType.unreleasedBadge()
                     Surface(
                         color = Color(0xFFF59E0B).copy(alpha = 0.15f),
                         shape = RoundedCornerShape(6.dp),
@@ -1657,86 +1563,105 @@ private fun DetailProgressCard(
                 }
             }
 
-            // Airing / Release Status Panel
-            if ((entry.isAiring || entry.isNotYetAiredOrPublished) && (isVideo || isMangaOrBook)) {
-                val (readWatched, airedReleased, total) = if (isVideo) {
-                    Triple(entry.getTotalWatchedEpisodes(), entry.getEffectiveAiredEpisodes(), entry.getEffectiveTotalEpisodes())
-                } else {
-                    Triple(entry.currentChapters, entry.airedChapters, entry.totalChapters)
+            // Season count badge when TV show has multiple seasons without per-season episode counts
+            if (entry.mediaType == MediaType.SHOW && !hasSeasonTracking && entry.totalSeasons > 1) {
+                Surface(
+                    color = LXSurfaceElevated,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, LXBorder.copy(alpha = 0.6f))
+                ) {
+                    Text(
+                        text = "${entry.totalSeasons} Seasons • Season ${entry.currentSeasons} of ${entry.totalSeasons}",
+                        color = LXTextSecondary,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
                 }
+            }
 
+            // Airing / Release Status Panel & Unreleased Countdown
+            val showAiringStats = (entry.isAiring || entry.isNotYetAiredOrPublished) && (isVideo || isMangaOrBook)
+            val showReleaseCountdown = entry.isNotYetAiredOrPublished || (entry.isAiring && (entry.mediaType == MediaType.ANIME || entry.mediaType == MediaType.SHOW))
+            if (showAiringStats || showReleaseCountdown) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(LXSurfaceElevated)
-                            .border(1.dp, LXBorder.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceAround,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = if (isVideo) "Watched" else "Read",
-                                color = LXTextSecondary,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "$readWatched",
-                                color = LXPrimaryGreen,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+                    if (showAiringStats) {
+                        val (readWatched, airedReleased, total) = if (isVideo) {
+                            Triple(entry.getTotalWatchedEpisodes(), entry.getEffectiveAiredEpisodes(), entry.getEffectiveTotalEpisodes())
+                        } else {
+                            Triple(entry.currentChapters, entry.airedChapters, entry.totalChapters)
                         }
-
-                        Box(
+                        Row(
                             modifier = Modifier
-                                .height(26.dp)
-                                .width(1.dp)
-                                .background(LXBorder.copy(alpha = 0.6f))
-                        )
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(LXSurfaceElevated)
+                                .border(1.dp, LXBorder.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceAround,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = if (isVideo) "Watched" else "Read",
+                                    color = LXTextSecondary,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "$readWatched",
+                                    color = LXPrimaryGreen,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
 
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = if (isVideo) "Aired" else "Released",
-                                color = LXTextSecondary,
-                                style = MaterialTheme.typography.labelSmall
+                            Box(
+                                modifier = Modifier
+                                    .height(26.dp)
+                                    .width(1.dp)
+                                    .background(LXBorder.copy(alpha = 0.6f))
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = if (airedReleased > 0) "$airedReleased" else "-",
-                                color = if (airedReleased > 0) LXAiringBlue else LXTextSecondary,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        }
 
-                        Box(
-                            modifier = Modifier
-                                .height(26.dp)
-                                .width(1.dp)
-                                .background(LXBorder.copy(alpha = 0.6f))
-                        )
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = if (isVideo) "Aired" else "Released",
+                                    color = LXTextSecondary,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = if (airedReleased > 0) "$airedReleased" else "-",
+                                    color = if (airedReleased > 0) LXAiringBlue else LXTextSecondary,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
 
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "Total",
-                                color = LXTextSecondary,
-                                style = MaterialTheme.typography.labelSmall
+                            Box(
+                                modifier = Modifier
+                                    .height(26.dp)
+                                    .width(1.dp)
+                                    .background(LXBorder.copy(alpha = 0.6f))
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = if (total > 0) "$total" else "?",
-                                color = LXTextPrimary,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "Total",
+                                    color = LXTextSecondary,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = if (total > 0) "$total" else "?",
+                                    color = LXTextPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
                         }
                     }
 
-                    if (entry.isNotYetAiredOrPublished || (entry.isAiring && (entry.mediaType == MediaType.ANIME || entry.mediaType == MediaType.SHOW))) {
+                    if (showReleaseCountdown) {
                         val scheduleStr = entry.formatAiringSchedule(short = false)
                         val countdownStr = entry.getTimeUntilNextEpisode(prefixIn = true)
                         if (!scheduleStr.isNullOrBlank() || !countdownStr.isNullOrBlank()) {
@@ -1780,22 +1705,29 @@ private fun DetailProgressCard(
                         }
                     }
 
-                    if (airedReleased > 0) {
-                        val diff = airedReleased - readWatched
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = when {
-                                    diff > 0 -> "$diff ${if (isVideo) "episodes" else "chapters"} behind schedule"
-                                    diff == 0 -> "Up to date with latest release"
-                                    else -> "Ahead of latest release"
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (diff > 0) LXAiringBlue else LXPrimaryGreen
-                            )
+                    if (showAiringStats) {
+                        val (readWatched, airedReleased) = if (isVideo) {
+                            entry.getTotalWatchedEpisodes() to entry.getEffectiveAiredEpisodes()
+                        } else {
+                            entry.currentChapters to entry.airedChapters
+                        }
+                        if (airedReleased > 0) {
+                            val diff = airedReleased - readWatched
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = when {
+                                        diff > 0 -> "$diff ${if (isVideo) "episodes" else "chapters"} behind schedule"
+                                        diff == 0 -> "Up to date with latest release"
+                                        else -> "Ahead of latest release"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (diff > 0) LXAiringBlue else LXPrimaryGreen
+                                )
+                            }
                         }
                     }
                 }
@@ -1841,7 +1773,7 @@ private fun DetailProgressCard(
                             val totalSuffix = if (previewSeasonTotal > 0) " (S$previewSeason has $previewSeasonTotal eps)" else ""
                             "Enter current season and episode$totalSuffix:"
                         } else {
-                            "Enter current ${info.description.lowercase()}:"
+                            "${progressEditPrompt(entry)}:"
                         },
                         color = LXTextSecondary,
                         fontSize = 13.sp
@@ -1981,7 +1913,7 @@ private fun DetailDatesCard(entry: MediaEntry) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (hasAiredData) {
-                if (entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.GAME) {
+                if (entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.GAME || entry.mediaType == MediaType.MUSIC) {
                     val isNya = entry.isNotYetAiredOrPublished
                     val countdown = if (isNya) entry.getTimeUntilNextEpisode(prefixIn = true) else null
                     if (isNya && !countdown.isNullOrBlank()) {
@@ -2288,6 +2220,14 @@ private fun DetailExternalTrackingCard(
                 )
             }
 
+            if (!canTrack) {
+                Text(
+                    text = "MAL sync supports Anime, Manga, Manhwa and MAL-linked Light Novels",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LXTextSecondary
+                )
+            }
+
             if (entry.isExternallyTracked) {
                 // Clickable Status Pill that expands downwards on click
                 Surface(
@@ -2503,13 +2443,14 @@ private fun DetailExternalTrackingCard(
                 val isMal = JikanSyncManager.isMalSource(entry) || entry.mediaType == MediaType.ANIME
 
                 if (hasValidId) {
+                    val canonSource = ExternalSources.canonical(entry.externalSource, entry.externalId)
                     val sourceLabel = when {
-                        isMovieOrShow || entry.externalSource.equals("TMDB", ignoreCase = true) -> "TMDB"
-                        isMusic || entry.externalSource.equals("MusicBrainz", ignoreCase = true) || entry.externalSource.equals("Apple Music", ignoreCase = true) || entry.externalSource.equals("iTunes", ignoreCase = true) -> entry.externalSource ?: "MusicBrainz"
-                        entry.externalSource.equals("MAL", ignoreCase = true) || entry.externalSource.equals("MyAnimeList", ignoreCase = true) -> "MAL"
+                        isMovieOrShow || canonSource == ExternalSources.TMDB -> ExternalSources.TMDB
+                        isMusic -> canonSource ?: entry.externalSource?.takeIf { it.isNotBlank() } ?: ExternalSources.MUSICBRAINZ
+                        canonSource != null -> canonSource
                         !entry.externalSource.isNullOrBlank() -> entry.externalSource
                         isBook -> "Book"
-                        isMal -> "MAL"
+                        isMal -> ExternalSources.MAL
                         else -> "External"
                     }
                     Surface(
@@ -2568,56 +2509,6 @@ private fun DetailExternalTrackingCard(
                                     maxLines = 1,
                                     softWrap = false
                                 )
-                            }
-                        }
-                    }
-
-                    if (isMusic) {
-                        val musicLinks = remember(entry) {
-                            ExternalLinkHelper.buildMusicOpenOptions(
-                                title = entry.title,
-                                artist = entry.creator,
-                                album = entry.movieSeriesName,
-                                externalId = entry.externalId,
-                                externalSource = entry.externalSource,
-                                webUrl = null
-                            )
-                        }
-                        if (musicLinks.isNotEmpty()) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                musicLinks.chunked(2).forEach { rowLinks ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        rowLinks.forEach { opt ->
-                                            OutlinedButton(
-                                                onClick = { ExternalLinkHelper.openUrlSafely(opt.url, uriHandler, context, clipboardManager) },
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(36.dp),
-                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                                shape = RoundedCornerShape(8.dp),
-                                                border = BorderStroke(1.dp, LXBorder),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(opt.color))
-                                            ) {
-                                                Text(
-                                                    text = opt.title,
-                                                    fontSize = 11.5.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
-                                        if (rowLinks.size == 1) {
-                                            Spacer(modifier = Modifier.weight(1f))
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
@@ -2686,56 +2577,6 @@ private fun DetailExternalTrackingCard(
                                     maxLines = 1,
                                     softWrap = false
                                 )
-                            }
-                        }
-                    }
-
-                    if (isMusic) {
-                        val musicLinks = remember(entry) {
-                            ExternalLinkHelper.buildMusicOpenOptions(
-                                title = entry.title,
-                                artist = entry.creator,
-                                album = entry.movieSeriesName,
-                                externalId = entry.externalId,
-                                externalSource = entry.externalSource,
-                                webUrl = null
-                            )
-                        }
-                        if (musicLinks.isNotEmpty()) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                musicLinks.chunked(2).forEach { rowLinks ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        rowLinks.forEach { opt ->
-                                            OutlinedButton(
-                                                onClick = { ExternalLinkHelper.openUrlSafely(opt.url, uriHandler, context, clipboardManager) },
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(36.dp),
-                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                                shape = RoundedCornerShape(8.dp),
-                                                border = BorderStroke(1.dp, LXBorder),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(opt.color))
-                                            ) {
-                                                Text(
-                                                    text = opt.title,
-                                                    fontSize = 11.5.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
-                                        if (rowLinks.size == 1) {
-                                            Spacer(modifier = Modifier.weight(1f))
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
@@ -3515,13 +3356,7 @@ private fun RelatedItemRow(
                 )
             } else {
                 Icon(
-                    imageVector = when (item.mediaType) {
-                        MediaType.BOOK -> Icons.Default.Book
-                        MediaType.MOVIE -> Icons.Default.Movie
-                        MediaType.MUSIC -> Icons.Default.MusicNote
-                        MediaType.GAME -> Icons.Default.SportsEsports
-                        else -> Icons.Default.Tv
-                    },
+                    imageVector = getCategoryIcon(item.mediaType),
                     contentDescription = null,
                     tint = LXTextSecondary.copy(alpha = 0.6f),
                     modifier = Modifier.size(20.dp)
@@ -3707,7 +3542,8 @@ private fun RelatedItemDetailSheet(
         isLoadingDetails = true
         withContext(Dispatchers.IO) {
             try {
-                if (item.externalSource.equals("TMDB", ignoreCase = true)) {
+                val canonSrc = ExternalSources.canonical(item.externalSource, item.externalId)
+                if (canonSrc == ExternalSources.TMDB) {
                     val tmdbId = item.externalId.toLongOrNull() ?: 0L
                     if (item.mediaType == MediaType.MOVIE) {
                         val full = TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()
@@ -3758,7 +3594,7 @@ private fun RelatedItemDetailSheet(
                             webUrl = resolvedUrl
                         )
                     }
-                } else if (item.externalSource.equals("Google Books", ignoreCase = true)) {
+                } else if (canonSrc == ExternalSources.GOOGLE_BOOKS) {
                     val full = com.lx.tracklist.data.remote.GoogleBooksApiClient.fetchVolumeDetails(item.externalId, context).getOrNull()
                         ?: com.lx.tracklist.data.remote.BookMetadataManager.searchBooks(item.title, context, limit = 1).getOrNull()?.firstOrNull()
                     val yr = full?.publishedDate?.take(4) ?: item.releaseYear
@@ -3778,7 +3614,7 @@ private fun RelatedItemDetailSheet(
                         externalSource = "Google Books",
                         webUrl = full?.infoUrl ?: "https://books.google.com/books?id=${item.externalId}"
                     )
-                } else if (item.externalSource.equals("Open Library", ignoreCase = true)) {
+                } else if (canonSrc == ExternalSources.OPEN_LIBRARY) {
                     val workKey = item.externalId.removePrefix("/works/").removePrefix("/").trim()
                     val full = com.lx.tracklist.data.remote.OpenLibraryApiClient.fetchWorkDetails(workKey).getOrNull()
                         ?: com.lx.tracklist.data.remote.BookMetadataManager.searchBooks(item.title, context, limit = 1).getOrNull()?.firstOrNull()
@@ -3799,13 +3635,27 @@ private fun RelatedItemDetailSheet(
                         externalSource = "Open Library",
                         webUrl = full?.infoUrl ?: "https://openlibrary.org/works/$workKey"
                     )
-                } else if (item.mediaType == MediaType.GAME || item.externalSource.equals("IGDB", ignoreCase = true) || item.externalSource.equals("RAWG", ignoreCase = true)) {
-                    val gDetails = GameMetadataManager.getGameDetails(context, item.externalId, item.externalSource).getOrNull()
+                } else if (item.mediaType == MediaType.GAME || canonSrc == ExternalSources.IGDB || canonSrc == ExternalSources.RAWG) {
+                    val gDetails = GameMetadataManager.getGameDetails(
+                        context = context,
+                        externalId = item.externalId,
+                        externalSource = canonSrc ?: item.externalSource,
+                        title = item.title,
+                        releaseYear = item.releaseYear
+                    ).getOrNull()
                         ?: GameMetadataManager.searchGames(context, item.title, limit = 1).getOrNull()?.firstOrNull()?.let {
-                            GameMetadataManager.getGameDetails(context, it.externalId, it.externalSource).getOrNull()
+                            GameMetadataManager.getGameDetails(
+                                context = context,
+                                externalId = it.externalId,
+                                externalSource = it.externalSource,
+                                title = it.title,
+                                alternateTitle = it.alternateTitle,
+                                releaseYear = it.releaseYear
+                            ).getOrNull()
                         }
                     val yr = gDetails?.releaseYear ?: item.releaseYear
-                    val webUrl = if (item.externalSource.equals("RAWG", ignoreCase = true)) {
+                    val effectiveGameSrc = canonSrc ?: gDetails?.externalSource ?: ExternalSources.IGDB
+                    val webUrl = if (effectiveGameSrc == ExternalSources.RAWG) {
                         "https://rawg.io/games/${gDetails?.externalId ?: item.externalId}"
                     } else {
                         "https://www.igdb.com/games/${gDetails?.externalId ?: item.externalId}"
@@ -3818,21 +3668,17 @@ private fun RelatedItemDetailSheet(
                         tags = gDetails?.genres?.joinToString(", "),
                         posterUrl = gDetails?.coverUrl ?: item.posterUrl,
                         score = gDetails?.rating ?: item.score,
-                        scoreSource = gDetails?.ratingSource ?: if (item.externalSource.isNotBlank()) item.externalSource else "IGDB",
+                        scoreSource = gDetails?.ratingSource ?: effectiveGameSrc,
                         releaseYear = yr,
                         durationMinutes = gDetails?.normalTimeMinutes ?: gDetails?.completionTimeMinutes,
                         totalUnits = null,
                         statusText = "Game",
                         externalId = gDetails?.externalId ?: item.externalId,
-                        externalSource = gDetails?.externalSource ?: if (item.externalSource.isNotBlank()) item.externalSource else "IGDB",
+                        externalSource = effectiveGameSrc,
                         webUrl = webUrl,
                         platforms = platformsList
                     )
-                } else if (item.mediaType == MediaType.MUSIC ||
-                    item.externalSource.equals("iTunes", ignoreCase = true) ||
-                    item.externalSource.equals("Apple Music", ignoreCase = true) ||
-                    item.externalSource.equals("MusicBrainz", ignoreCase = true)
-                ) {
+                } else if (item.mediaType == MediaType.MUSIC || canonSrc == ExternalSources.APPLE_MUSIC || canonSrc == ExternalSources.MUSICBRAINZ) {
                     val mTrack = if (item.externalId.isNotBlank() && item.externalId.all { it.isDigit() }) {
                         ITunesApiClient.lookupTrack(item.externalId).getOrNull()
                     } else {
@@ -3847,7 +3693,10 @@ private fun RelatedItemDetailSheet(
                         mTrack?.trackNumber?.let { "Track #$it" }
                     )
                     val resolvedExtId = mTrack?.externalId?.takeIf { it.isNotBlank() } ?: item.externalId
-                    val resolvedSource = mTrack?.externalSource?.takeIf { it.isNotBlank() } ?: item.externalSource.ifBlank { "Apple Music" }
+                    val resolvedSource = ExternalSources.canonical(mTrack?.externalSource)
+                        ?: canonSrc
+                        ?: item.externalSource.takeIf { it.isNotBlank() }?.let { ExternalSources.canonical(it) ?: it }
+                        ?: ExternalSources.APPLE_MUSIC
                     val resolvedWebUrl = mTrack?.webUrl ?: if (resolvedSource.equals("MusicBrainz", ignoreCase = true) && resolvedExtId.isNotBlank()) {
                         "https://musicbrainz.org/recording/$resolvedExtId"
                     } else null
@@ -3870,9 +3719,22 @@ private fun RelatedItemDetailSheet(
                         albumName = trackAlbum
                     )
                 } else {
-                    val malId = item.externalId.toLongOrNull() ?: 0L
                     val isManga = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA || item.mediaType == MediaType.BOOK
-                    var full = if (malId > 0) JikanApiClient.fetchMediaDetails(malId, isManga).getOrNull() else null
+                    val numericId = item.externalId.trim().toLongOrNull() ?: 0L
+                    var full = when (canonSrc) {
+                        ExternalSources.ANILIST -> {
+                            if (numericId > 0) JikanApiClient.queryAniListById(aniListId = numericId, isManga = isManga).getOrNull() else null
+                        }
+                        ExternalSources.MANGADEX -> {
+                            if (item.externalId.isNotBlank()) MangaDexApiClient.fetchMangaDetails(item.externalId).getOrNull() else null
+                        }
+                        ExternalSources.KITSU -> {
+                            if (item.externalId.isNotBlank()) KitsuApiClient.fetchDetailsById(item.externalId, isAnime = !isManga).getOrNull() else null
+                        }
+                        else -> {
+                            if (numericId > 0) JikanApiClient.fetchMediaDetails(numericId, isManga).getOrNull() else null
+                        }
+                    }
                     if (full == null && item.title.isNotBlank()) {
                         full = JikanApiClient.queryAniListByTitle(item.title, isManga).getOrNull()
                     }
@@ -3880,21 +3742,29 @@ private fun RelatedItemDetailSheet(
                         val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = it }
                         cal.get(Calendar.YEAR).toString()
                     }
-                    val resolvedMalId = full?.malId?.takeIf { it > 0 } ?: malId.takeIf { it > 0 }
-                    val resolvedExtId = resolvedMalId?.toString() ?: item.externalId.takeIf { it.isNotBlank() && it != "0" }
-                    val resolvedSource = if (resolvedMalId != null) {
-                        "MAL"
+                    val fullRef = full?.preferredExternalRef()
+                    val hasItemSourceAndId = canonSrc != null && item.externalId.isNotBlank() && item.externalId != "0"
+                    val resolvedExtId = if (hasItemSourceAndId) {
+                        item.externalId
                     } else {
-                        full?.externalScoreSource ?: item.externalSource.ifBlank { "MAL" }
+                        fullRef?.second ?: item.externalId.takeIf { it.isNotBlank() && it != "0" }
+                    }
+                    val resolvedSource = if (hasItemSourceAndId) {
+                        canonSrc
+                    } else {
+                        fullRef?.first ?: ExternalSources.canonical(full?.sourceProvider) ?: ExternalSources.MAL
                     }
                     val typePath = if (isManga) "manga" else "anime"
                     val resolvedWebUrl = full?.webUrl ?: run {
-                        if (resolvedSource.equals("AniList", ignoreCase = true) && resolvedExtId != null) {
-                            "https://anilist.co/$typePath/$resolvedExtId"
-                        } else if (resolvedMalId != null) {
-                            "https://myanimelist.net/$typePath/$resolvedMalId"
-                        } else null
+                        when {
+                            resolvedSource == ExternalSources.ANILIST && resolvedExtId != null -> "https://anilist.co/$typePath/$resolvedExtId"
+                            resolvedSource == ExternalSources.MANGADEX && resolvedExtId != null -> "https://mangadex.org/title/$resolvedExtId"
+                            resolvedSource == ExternalSources.MAL && resolvedExtId != null -> "https://myanimelist.net/$typePath/$resolvedExtId"
+                            else -> null
+                        }
                     }
+                    val resolvedScoreSource = full?.externalScoreSource?.let { ExternalSources.canonical(it) ?: it }
+                        ?: resolvedSource
                     detailedInfo = RelatedDetailedInfo(
                         title = full?.title,
                         alternateTitle = full?.alternateTitle,
@@ -3902,7 +3772,7 @@ private fun RelatedItemDetailSheet(
                         tags = full?.tags,
                         posterUrl = full?.posterUrl,
                         score = full?.externalScore,
-                        scoreSource = full?.externalScoreSource ?: "MAL",
+                        scoreSource = resolvedScoreSource,
                         releaseYear = yr,
                         durationMinutes = full?.durationMinutes,
                         totalUnits = if (isManga) full?.totalChapters else full?.totalEpisodes,
@@ -3923,11 +3793,11 @@ private fun RelatedItemDetailSheet(
     val displayPoster = detailedInfo?.posterUrl ?: item.posterUrl
     val displayScore = detailedInfo?.score ?: item.score
     val displayScoreSource = detailedInfo?.scoreSource ?: when {
-        item.mediaType == MediaType.GAME -> if (item.externalSource.equals("RAWG", ignoreCase = true)) "RAWG" else "IGDB"
-        item.mediaType == MediaType.MOVIE || item.mediaType == MediaType.SHOW -> if (item.externalSource.isNotBlank()) item.externalSource else "TMDB"
-        item.mediaType == MediaType.BOOK -> if (item.externalSource.isNotBlank()) item.externalSource else "Google Books"
-        item.externalSource.isNotBlank() -> item.externalSource
-        else -> "MAL"
+        item.mediaType == MediaType.GAME -> ExternalSources.canonical(item.externalSource) ?: ExternalSources.IGDB
+        item.mediaType == MediaType.MOVIE || item.mediaType == MediaType.SHOW -> ExternalSources.canonical(item.externalSource) ?: ExternalSources.TMDB
+        item.mediaType == MediaType.BOOK -> ExternalSources.canonical(item.externalSource) ?: ExternalSources.GOOGLE_BOOKS
+        item.externalSource.isNotBlank() -> ExternalSources.canonical(item.externalSource) ?: item.externalSource
+        else -> ExternalSources.MAL
     }
     val displayYear = detailedInfo?.releaseYear ?: item.releaseYear
     val displayAlternate = detailedInfo?.alternateTitle
@@ -3935,53 +3805,43 @@ private fun RelatedItemDetailSheet(
     val displayTags = detailedInfo?.tags
     val displayExternalId = detailedInfo?.externalId ?: item.externalId.takeIf { it.isNotBlank() && it != "0" }
     val displayExternalSource = detailedInfo?.externalSource
+        ?: ExternalSources.canonical(item.externalSource, item.externalId)
         ?: when {
-            item.mediaType == MediaType.GAME -> {
-                if (item.externalSource.equals("RAWG", ignoreCase = true)) "RAWG" else "IGDB"
-            }
-            item.mediaType == MediaType.MOVIE || item.mediaType == MediaType.SHOW -> {
-                if (item.externalSource.isNotBlank()) item.externalSource else "TMDB"
-            }
-            item.mediaType == MediaType.BOOK -> {
-                if (item.externalSource.isNotBlank()) item.externalSource else "Google Books"
-            }
-            item.externalSource.equals("AniList", ignoreCase = true) -> "AniList"
-            item.externalSource.equals("MangaDex", ignoreCase = true) -> "MangaDex"
-            item.externalSource.equals("Kitsu", ignoreCase = true) -> "Kitsu"
-            item.externalSource.isNotBlank() -> item.externalSource
-            else -> "MAL"
+            item.mediaType == MediaType.GAME -> ExternalSources.IGDB
+            item.mediaType == MediaType.MOVIE || item.mediaType == MediaType.SHOW -> ExternalSources.TMDB
+            item.mediaType == MediaType.BOOK -> ExternalSources.GOOGLE_BOOKS
+            else -> ExternalSources.MAL
         }
+    val displayCanonSource = ExternalSources.canonical(displayExternalSource, displayExternalId) ?: displayExternalSource
     val displayWebUrl = detailedInfo?.webUrl ?: run {
         if (displayExternalId != null) {
-            if (displayExternalSource.equals("TMDB", ignoreCase = true)) {
-                val typeStr = if (item.mediaType == MediaType.MOVIE) "movie" else "tv"
-                "https://www.themoviedb.org/$typeStr/$displayExternalId"
-            } else if (displayExternalSource.equals("IGDB", ignoreCase = true)) {
-                "https://www.igdb.com/games/$displayExternalId"
-            } else if (displayExternalSource.equals("RAWG", ignoreCase = true)) {
-                "https://rawg.io/games/$displayExternalId"
-            } else if (displayExternalSource.equals("MangaDex", ignoreCase = true)) {
-                "https://mangadex.org/title/$displayExternalId"
-            } else if (displayExternalSource.equals("MusicBrainz", ignoreCase = true)) {
-                "https://musicbrainz.org/recording/$displayExternalId"
-            } else if (displayExternalSource.equals("Apple Music", ignoreCase = true) || displayExternalSource.equals("iTunes", ignoreCase = true)) {
-                "https://music.apple.com/us/search?term=${Uri.encode(item.title.trim())}"
-            } else if (displayExternalSource.equals("Kitsu", ignoreCase = true)) {
-                val typeStr = if (item.mediaType == MediaType.ANIME) "anime" else "manga"
-                if (!displayExternalId.isNullOrBlank() && !displayExternalId.all { it.isDigit() }) {
-                    "https://kitsu.app/$typeStr/$displayExternalId"
-                } else {
-                    val encoded = Uri.encode(item.title.trim())
-                    val kitsuId = displayExternalId.takeIf { it.all { c -> c.isDigit() } } ?: "0"
-                    "kitsu-resolve://$typeStr?title=$encoded&kitsuId=$kitsuId"
+            when (displayCanonSource) {
+                ExternalSources.TMDB -> {
+                    val typeStr = if (item.mediaType == MediaType.MOVIE) "movie" else "tv"
+                    "https://www.themoviedb.org/$typeStr/$displayExternalId"
                 }
-            } else {
-                val isManga = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA || item.mediaType == MediaType.BOOK
-                val typeStr = if (isManga) "manga" else "anime"
-                if (displayExternalSource.equals("AniList", ignoreCase = true)) {
-                    "https://anilist.co/$typeStr/$displayExternalId"
-                } else {
-                    "https://myanimelist.net/$typeStr/$displayExternalId"
+                ExternalSources.IGDB -> "https://www.igdb.com/games/$displayExternalId"
+                ExternalSources.RAWG -> "https://rawg.io/games/$displayExternalId"
+                ExternalSources.MANGADEX -> "https://mangadex.org/title/$displayExternalId"
+                ExternalSources.MUSICBRAINZ -> "https://musicbrainz.org/recording/$displayExternalId"
+                ExternalSources.APPLE_MUSIC -> "https://music.apple.com/us/search?term=${Uri.encode(item.title.trim())}"
+                ExternalSources.KITSU -> {
+                    val typeStr = if (item.mediaType == MediaType.ANIME) "anime" else "manga"
+                    if (!displayExternalId.all { it.isDigit() }) {
+                        "https://kitsu.app/$typeStr/$displayExternalId"
+                    } else {
+                        val encoded = Uri.encode(item.title.trim())
+                        "kitsu-resolve://$typeStr?title=$encoded&kitsuId=$displayExternalId"
+                    }
+                }
+                else -> {
+                    val isManga = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA || item.mediaType == MediaType.BOOK
+                    val typeStr = if (isManga) "manga" else "anime"
+                    if (displayCanonSource == ExternalSources.ANILIST) {
+                        "https://anilist.co/$typeStr/$displayExternalId"
+                    } else {
+                        "https://myanimelist.net/$typeStr/$displayExternalId"
+                    }
                 }
             }
         } else null
@@ -4086,13 +3946,7 @@ private fun RelatedItemDetailSheet(
                             )
                         } else {
                             Icon(
-                                imageVector = when (item.mediaType) {
-                                    MediaType.MOVIE -> Icons.Default.Movie
-                                    MediaType.MUSIC -> Icons.Default.MusicNote
-                                    MediaType.BOOK -> Icons.Default.Book
-                                    MediaType.GAME -> Icons.Default.SportsEsports
-                                    else -> Icons.Default.Tv
-                                },
+                                imageVector = getCategoryIcon(item.mediaType),
                                 contentDescription = null,
                                 tint = LXTextSecondary.copy(alpha = 0.5f),
                                 modifier = Modifier.size(36.dp)
@@ -4321,7 +4175,7 @@ private fun RelatedItemDetailSheet(
                 }
 
                 // TMDB Attribution Notice
-                if (item.externalSource == "TMDB") {
+                if (ExternalSources.canonical(displayExternalSource, displayExternalId) == ExternalSources.TMDB) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -4347,10 +4201,20 @@ private fun RelatedItemDetailSheet(
                 // Bottom Actions
                 val isMusic = item.mediaType == MediaType.MUSIC
                 if (isMusic || !displayWebUrl.isNullOrBlank()) {
-                    val isTmdb = displayExternalSource.equals("TMDB", ignoreCase = true)
-                    val musicOpenOptions = remember(displayTitle, detailedInfo?.artist, detailedInfo?.albumName, displayExternalId, displayExternalSource, displayWebUrl) {
-                        if (isMusic) {
-                            ExternalLinkHelper.buildMusicOpenOptions(
+                    val isTmdb = ExternalSources.canonical(displayExternalSource, displayExternalId) == ExternalSources.TMDB
+                    val relatedOpenOptions = remember(
+                        isMusic,
+                        isTmdb,
+                        displayTitle,
+                        detailedInfo?.artist,
+                        detailedInfo?.albumName,
+                        displayExternalId,
+                        displayExternalSource,
+                        displayWebUrl,
+                        item.mediaType
+                    ) {
+                        when {
+                            isMusic -> ExternalLinkHelper.buildMusicOpenOptions(
                                 title = displayTitle,
                                 artist = detailedInfo?.artist,
                                 album = detailedInfo?.albumName,
@@ -4358,24 +4222,34 @@ private fun RelatedItemDetailSheet(
                                 externalSource = displayExternalSource,
                                 webUrl = displayWebUrl
                             )
-                        } else emptyList()
+                            isTmdb -> ExternalLinkHelper.buildTmdbOpenOptions(
+                                title = displayTitle,
+                                tmdbId = displayExternalId,
+                                isMovie = item.mediaType == MediaType.MOVIE,
+                                webUrl = displayWebUrl
+                            )
+                            !displayWebUrl.isNullOrBlank() -> listOf(
+                                ExternalLinkHelper.ExternalOpenOption(
+                                    title = "Open in Browser",
+                                    subtitle = "Open link",
+                                    url = displayWebUrl
+                                )
+                            )
+                            else -> emptyList()
+                        }
                     }
-                    var showDetailTmdbMenu by remember { mutableStateOf(false) }
+                    var showDetailOpenMenu by remember { mutableStateOf(false) }
 
                     Box(modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(
                             onClick = {
-                                if (isTmdb || (isMusic && musicOpenOptions.size > 1)) {
-                                    showDetailTmdbMenu = true
-                                } else if (isMusic && musicOpenOptions.isNotEmpty()) {
-                                    ExternalLinkHelper.openUrlSafely(musicOpenOptions.first().url, uriHandler, context, clipboardManager)
+                                if (relatedOpenOptions.size > 1) {
+                                    showDetailOpenMenu = true
+                                } else if (relatedOpenOptions.isNotEmpty()) {
+                                    ExternalLinkHelper.openUrlSafely(relatedOpenOptions.first().url, uriHandler, context, clipboardManager)
                                 } else {
-                                    if (!displayWebUrl.isNullOrBlank()) {
-                                        ExternalLinkHelper.openUrlSafely(displayWebUrl, uriHandler, context, clipboardManager)
-                                    } else {
-                                        clipboardManager.setText(AnnotatedString(displayExternalId ?: ""))
-                                        Toast.makeText(context, "Copied ID $displayExternalId", Toast.LENGTH_SHORT).show()
-                                    }
+                                    clipboardManager.setText(AnnotatedString(displayExternalId ?: ""))
+                                    Toast.makeText(context, "Copied ID $displayExternalId", Toast.LENGTH_SHORT).show()
                                 }
                             },
                             modifier = Modifier
@@ -4395,92 +4269,21 @@ private fun RelatedItemDetailSheet(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = (if (isTmdb || (isMusic && musicOpenOptions.size > 1)) "Open ▾" else "Open") + (displayExternalId?.let { " (ID: $it)" } ?: ""),
+                                text = (if (relatedOpenOptions.size > 1) "Open ▾" else "Open") + (displayExternalId?.let { " (ID: $it)" } ?: ""),
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp
                             )
                         }
 
-                        if (isMusic && musicOpenOptions.size > 1) {
-                            DropdownMenu(
-                                expanded = showDetailTmdbMenu,
-                                onDismissRequest = { showDetailTmdbMenu = false },
-                                modifier = Modifier.background(LXSurfaceElevated)
-                            ) {
-                                musicOpenOptions.forEachIndexed { idx, opt ->
-                                    if (idx > 0) {
-                                        HorizontalDivider(color = LXBorder)
-                                    }
-                                    DropdownMenuItem(
-                                        text = {
-                                            Column {
-                                                Text(opt.title, fontWeight = FontWeight.Bold, color = Color(opt.color), fontSize = 13.sp)
-                                                Text(opt.subtitle, fontSize = 10.sp, color = LXTextSecondary)
-                                            }
-                                        },
-                                        leadingIcon = {
-                                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = Color(opt.color), modifier = Modifier.size(16.dp))
-                                        },
-                                        onClick = {
-                                            showDetailTmdbMenu = false
-                                            ExternalLinkHelper.openUrlSafely(opt.url, uriHandler, context, clipboardManager)
-                                        }
-                                    )
+                        if (relatedOpenOptions.size > 1) {
+                            LXOpenMenu(
+                                options = relatedOpenOptions,
+                                expanded = showDetailOpenMenu,
+                                onDismiss = { showDetailOpenMenu = false },
+                                onOpen = { opt ->
+                                    ExternalLinkHelper.openUrlSafely(opt.url, uriHandler, context, clipboardManager)
                                 }
-                            }
-                        } else if (isTmdb) {
-                            DropdownMenu(
-                                expanded = showDetailTmdbMenu,
-                                onDismissRequest = { showDetailTmdbMenu = false },
-                                modifier = Modifier.background(LXSurfaceElevated)
-                            ) {
-                                DropdownMenuItem(
-                                    text = {
-                                        Column {
-                                            Text("The Movie Database (TMDB)", fontWeight = FontWeight.Bold, color = LXTextPrimary, fontSize = 13.sp)
-                                            Text("themoviedb.org", fontSize = 10.sp, color = LXTextSecondary)
-                                        }
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(16.dp))
-                                    },
-                                    onClick = {
-                                        showDetailTmdbMenu = false
-                                        ExternalLinkHelper.openUrlSafely(displayWebUrl, uriHandler, context, clipboardManager)
-                                    }
-                                )
-                                HorizontalDivider(color = LXBorder)
-                                DropdownMenuItem(
-                                    text = {
-                                        Column {
-                                            Text("IMDb ⭐", fontWeight = FontWeight.Bold, color = Color(0xFFF5C518), fontSize = 13.sp)
-                                            Text("Search on IMDb", fontSize = 10.sp, color = LXTextSecondary)
-                                        }
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = Color(0xFFF5C518), modifier = Modifier.size(16.dp))
-                                    },
-                                    onClick = {
-                                        showDetailTmdbMenu = false
-                                        ExternalLinkHelper.openUrlSafely(ExternalLinkHelper.buildImdbUrl(displayTitle), uriHandler, context, clipboardManager)
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = {
-                                        Column {
-                                            Text("Rotten Tomatoes 🍅", fontWeight = FontWeight.Bold, color = Color(0xFFFF523B), fontSize = 13.sp)
-                                            Text("Search on Rotten Tomatoes", fontSize = 10.sp, color = LXTextSecondary)
-                                        }
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = Color(0xFFFF523B), modifier = Modifier.size(16.dp))
-                                    },
-                                    onClick = {
-                                        showDetailTmdbMenu = false
-                                        ExternalLinkHelper.openUrlSafely(ExternalLinkHelper.buildRottenTomatoesUrl(displayTitle), uriHandler, context, clipboardManager)
-                                    }
-                                )
-                            }
+                            )
                         }
                     }
                 }
@@ -4548,4 +4351,233 @@ private fun RelatedItemDetailSheet(
             }
         }
     }
+}
+
+@Composable
+private fun DetailGameCoverEditBadge(modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        color = LXBackgroundBlack.copy(alpha = 0.78f),
+        border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.55f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Edit,
+                contentDescription = "Change Cover Art",
+                tint = LXPrimaryGreen,
+                modifier = Modifier.size(13.dp)
+            )
+            Text(
+                text = "Cover",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = LXPrimaryGreen
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailSeriesOrAlbumText(entry: MediaEntry) {
+    when {
+        entry.mediaType == MediaType.MUSIC && !entry.movieSeriesName.isNullOrBlank() -> {
+            val trackPrefix = if ((entry.movieSeriesNumber ?: 0) > 0) "Track ${entry.movieSeriesNumber} • " else ""
+            Text(
+                text = "Album: $trackPrefix${entry.movieSeriesName}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = LXTextSecondary
+            )
+        }
+        entry.mediaType == MediaType.MOVIE && !entry.movieSeriesName.isNullOrBlank() -> {
+            val numSuffix = entry.movieSeriesNumber?.takeIf { it > 0 }?.let { " #$it" } ?: ""
+            Text(
+                text = "Series: ${entry.movieSeriesName}$numSuffix",
+                style = MaterialTheme.typography.bodyMedium,
+                color = LXTextSecondary
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DetailMetadataChipsRow(
+    entry: MediaEntry,
+    customCategories: List<CustomCategory>,
+    onStatusSelected: (MediaStatus) -> Unit,
+    onScoreSelected: (Int?) -> Unit
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        MetaChip(label = entry.mediaType.displayName, color = LXPrimaryGreen)
+        if (!entry.customCategory.isNullOrBlank()) {
+            val customColor = customCategories
+                .firstOrNull { it.name.equals(entry.customCategory, ignoreCase = true) }
+                ?.colorHex
+                ?.let { parseHexColor(it, fallback = LXScoreGold) }
+                ?: LXScoreGold
+            MetaChip(label = entry.customCategory, color = customColor)
+        }
+        if (!entry.subCategory.isNullOrBlank()) {
+            MetaChip(label = entry.subCategory, color = LXScoreGold)
+        }
+        val displayLang = entry.originalLanguage?.takeIf { it.isNotBlank() }
+        if (!displayLang.isNullOrBlank()) {
+            val opt = OriginalLanguageRegistry.findByCode(displayLang)
+            val label = if (opt != null) "${opt.flagEmoji} ${opt.displayName}" else "🌐 $displayLang"
+            MetaChip(label = label, color = LXAiringBlue)
+        }
+        StatusDropdownChip(
+            status = entry.status,
+            mediaType = entry.mediaType,
+            onStatusSelected = onStatusSelected
+        )
+        ScoreDropdownChip(
+            score = entry.score,
+            onScoreSelected = onScoreSelected
+        )
+        if (entry.externalScore != null && entry.externalScore > 0f) {
+            ExternalScoreChip(
+                score = entry.externalScore,
+                source = entry.externalScoreSource
+            )
+        }
+        if (entry.priority != Priority.MEDIUM) {
+            val priorityColor = when (entry.priority) {
+                Priority.HIGH -> LXErrorRed
+                Priority.LOW -> LXTextSecondary
+                Priority.MEDIUM -> LXPrimaryGreen
+            }
+            MetaChip(
+                label = "Priority: ${entry.priority.displayName}",
+                color = priorityColor
+            )
+        }
+        if (entry.mediaType == MediaType.MUSIC && entry.durationMinutes != null && entry.durationMinutes > 0) {
+            MetaChip(label = "⏱️ ${entry.formatMusicDuration()}", color = LXPrimaryGreen)
+        } else if (entry.mediaType == MediaType.MOVIE && entry.durationMinutes != null && entry.durationMinutes > 0) {
+            val h = entry.durationMinutes / 60
+            val m = entry.durationMinutes % 60
+            val durStr = if (h > 0) "${h}h ${m}m" else "${m}m"
+            MetaChip(label = "⏱️ $durStr", color = LXPrimaryGreen)
+        } else if (entry.mediaType == MediaType.GAME && entry.durationMinutes != null && entry.durationMinutes > 0) {
+            val durStr = DurationFormatter.formatMinutes(entry.durationMinutes)
+            MetaChip(label = "⏱️ Avg 100%: $durStr", color = LXPrimaryGreen)
+        } else if (entry.episodeLengthMinutes != null && entry.episodeLengthMinutes > 0) {
+            MetaChip(label = "⏱️ ${entry.episodeLengthMinutes} min/ep", color = LXPrimaryGreen)
+        }
+        if (entry.isRewatching) {
+            MetaChip(label = entry.mediaType.repeatingLabel().uppercase(Locale.ROOT), color = LXPrimaryGreen)
+        }
+        if (entry.rewatchCount > 0) {
+            MetaChip(
+                label = "${entry.mediaType.repeatedLabel()} ${entry.rewatchCount}x",
+                color = LXScoreGold
+            )
+        }
+        if (entry.mediaType == MediaType.GAME) {
+            entry.getGamePlatformList().forEach { platform ->
+                GamePlatformChip(platform = platform, color = LXPrimaryGreen)
+            }
+        }
+        val releaseBadge = entry.releaseBadge()
+        if (releaseBadge != null) {
+            val badgeColor = if (entry.isNotYetAiredOrPublished) Color(0xFFF59E0B) else LXAiringBlue
+            MetaChip(label = releaseBadge, color = badgeColor)
+        }
+    }
+}
+
+@Composable
+private fun DetailOpenExternalButton(
+    entry: MediaEntry,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val clipboardManager = LocalClipboardManager.current
+    var expanded by remember(entry.id, entry.externalId, entry.externalSource, entry.mediaType) {
+        mutableStateOf(false)
+    }
+    val openOptions = remember(
+        entry.id,
+        entry.title,
+        entry.creator,
+        entry.movieSeriesName,
+        entry.mediaType,
+        entry.externalId,
+        entry.externalSource,
+        entry.subCategory,
+        entry.customCategory
+    ) {
+        ExternalLinkHelper.buildOpenOptionsForEntry(entry)
+    }
+
+    if (openOptions.isNotEmpty()) {
+        Box(modifier = modifier) {
+            OutlinedButton(
+                onClick = { expanded = true },
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, LXBorder),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = LXSurfaceBlack,
+                    contentColor = LXPrimaryGreen
+                ),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                modifier = Modifier.height(34.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                    contentDescription = null,
+                    modifier = Modifier.size(15.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Open",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
+                )
+                Spacer(modifier = Modifier.width(2.dp))
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = "Open external links",
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            LXOpenMenu(
+                options = openOptions,
+                expanded = expanded,
+                onDismiss = { expanded = false },
+                onOpen = { opt ->
+                    ExternalLinkHelper.openUrlSafely(opt.url, uriHandler, context, clipboardManager)
+                }
+            )
+        }
+    }
+}
+
+private fun buildReadingDescriptionWithOtherUnits(
+    entry: MediaEntry,
+    activeUnit: TrackingUnit,
+    primaryDescription: String
+): String {
+    val extras = mutableListOf<String>()
+    if (activeUnit != TrackingUnit.VOLUMES && (entry.currentVolumes > 0 || entry.totalVolumes > 0)) {
+        val totalStr = if (entry.totalVolumes > 0) "${entry.totalVolumes}" else "?"
+        extras.add("Vol ${entry.currentVolumes}/$totalStr")
+    }
+    if (activeUnit != TrackingUnit.CHAPTERS && activeUnit != TrackingUnit.COMBINED && (entry.currentChapters > 0 || entry.totalChapters > 0)) {
+        val totalStr = if (entry.totalChapters > 0) "${entry.totalChapters}" else "?"
+        extras.add("Ch ${entry.currentChapters}/$totalStr")
+    }
+    if (activeUnit != TrackingUnit.PAGES && (entry.currentPages > 0 || entry.totalPages > 0)) {
+        val totalStr = if (entry.totalPages > 0) "${entry.totalPages}" else "?"
+        extras.add("${entry.currentPages}/$totalStr p")
+    }
+    return if (extras.isEmpty()) primaryDescription else "${extras.joinToString(" • ")} • $primaryDescription"
 }

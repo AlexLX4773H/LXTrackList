@@ -8,6 +8,7 @@ import coil.request.ImageRequest
 import com.google.gson.Gson
 import com.lx.tracklist.LXApplication
 import com.lx.tracklist.data.local.FailedCoverTracker
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.repository.MediaRepository
@@ -57,12 +58,12 @@ object MusicSyncManager {
     }
 
     fun isMusicSource(entry: MediaEntry): Boolean {
-        if (!isEligibleMediaForMusic(entry.mediaType)) return false
-        val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim().orEmpty()
-        return src.isBlank() ||
-                src.equals("iTunes", ignoreCase = true) ||
-                src.equals("Apple Music", ignoreCase = true) ||
-                src.equals("MusicBrainz", ignoreCase = true)
+        if (SyncRouter.jobFor(entry) != SyncJob.MUSIC) return false
+        val rawSrc = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim()
+        val canonSrc = ExternalSources.canonical(rawSrc, entry.externalId ?: entry.foreignDatabaseId)
+        return canonSrc == null ||
+            canonSrc == ExternalSources.APPLE_MUSIC ||
+            canonSrc == ExternalSources.MUSICBRAINZ
     }
 
     fun needsSync(entry: MediaEntry, forceRefresh: Boolean): Boolean {
@@ -112,7 +113,9 @@ object MusicSyncManager {
         val effectiveAlbumName = match.albumName?.takeIf { it.isNotBlank() } ?: entry.movieSeriesName
         val effectiveAlbumId = match.musicAlbumId?.takeIf { it.isNotBlank() } ?: entry.musicAlbumId
         val effectiveExtId = match.externalId.takeIf { it.isNotBlank() } ?: entry.externalId
-        val effectiveExtSource = match.externalSource.takeIf { it.isNotBlank() } ?: entry.externalSource
+        val effectiveExtSource = com.lx.tracklist.data.model.ExternalSources.canonical(match.externalSource, effectiveExtId)
+            ?: com.lx.tracklist.data.model.ExternalSources.canonical(entry.externalSource, effectiveExtId)
+            ?: entry.externalSource
 
         val relatedRes = MusicMetadataManager.fetchRelatedAlbumTracks(
             title = entry.title.ifBlank { match.title },
@@ -217,7 +220,7 @@ object MusicSyncManager {
             latest.airedStartDate
         }
 
-        val newLanguage = if (latest.originalLanguage.isNullOrBlank() || forceRefresh) {
+        val newLanguage = if (latest.originalLanguage.isNullOrBlank()) {
             match.originalLanguage ?: latest.originalLanguage
         } else {
             latest.originalLanguage
@@ -229,6 +232,7 @@ object MusicSyncManager {
             latest.description
         }
 
+        val now = System.currentTimeMillis()
         val updated = latest.copy(
             title = latest.title,
             externalId = effectiveExtId,
@@ -246,10 +250,11 @@ object MusicSyncManager {
             originalLanguage = newLanguage,
             alternateTitle = mergedAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: latest.alternateTitle,
             relatedEntriesJson = relatedJson,
-            updatedAt = System.currentTimeMillis()
+            lastMetadataSyncAt = now,
+            updatedAt = now
         )
 
-        repository.update(updated)
+        repository.updateMetadataOnly(updated)
         return Result.success(updated)
     }
 
@@ -290,11 +295,11 @@ object MusicSyncManager {
                     allEntries
                 }
 
-                val musicEntries = pool.filter { isEligibleMediaForMusic(it.mediaType) && it.title.isNotBlank() }
+                val musicEntries = pool.filter { isMusicSource(it) && it.title.isNotBlank() }
 
                 if (!forceRefresh && musicEntries.isNotEmpty()) {
                     _syncState.update { it.copy(statusMessage = "Checking cover images...") }
-                    FailedCoverTracker.probeBrokenCovers(musicEntries)
+                    FailedCoverTracker.probeBrokenCovers(musicEntries, context)
                 }
 
                 val targetEntries = musicEntries.filter { needsSync(it, forceRefresh) }

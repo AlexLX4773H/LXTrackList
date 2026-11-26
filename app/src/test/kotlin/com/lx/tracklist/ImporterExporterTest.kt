@@ -7,12 +7,18 @@ import com.lx.tracklist.data.importer.CsvImporter
 import com.lx.tracklist.data.importer.JsonImporter
 import com.lx.tracklist.data.importer.MalXmlImporter
 import com.lx.tracklist.data.importer.TachiyomiImporter
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.Priority
 import com.lx.tracklist.data.model.TrackingUnit
+import com.lx.tracklist.data.remote.BookSyncManager
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanSyncManager
+import com.lx.tracklist.data.remote.SyncJob
+import com.lx.tracklist.data.remote.SyncRouter
+import com.lx.tracklist.data.remote.TmdbSyncManager
 import com.lx.tracklist.ui.settings.ExportDestination
 import com.lx.tracklist.ui.settings.ExportPreviewState
 import com.lx.tracklist.ui.settings.ImportPreviewState
@@ -295,7 +301,7 @@ class ImporterExporterTest {
         assertEquals(375, berserk.currentChapters)
         assertEquals(0, berserk.totalChapters)
         assertEquals(TrackingUnit.CHAPTERS, berserk.trackingUnit)
-        assertEquals("ANILIST", berserk.externalSource)
+        assertEquals(ExternalSources.ANILIST, berserk.externalSource)
         assertEquals("30002", berserk.externalId)
         assertTrue(berserk.tags?.contains("Dark Fantasy") == true)
         assertTrue(berserk.notes?.contains("Author: Kentaro Miura") == true)
@@ -855,7 +861,9 @@ class ImporterExporterTest {
         assertTrue(JikanSyncManager.isMalSource(mangaMal))
         assertTrue(JikanSyncManager.isMalSource(manhwaMal))
         assertTrue(JikanSyncManager.isMalSource(movieMal))
-        assertTrue(JikanSyncManager.isMalSource(bookMal))
+        // JOB-04: Books (including LNs) belong exclusively to BookSyncManager, not JikanSyncManager
+        assertFalse(JikanSyncManager.isMalSource(bookMal))
+        assertTrue(BookSyncManager.isBookSource(bookMal))
         assertTrue(JikanSyncManager.isMalSource(anilistEntry))
         assertFalse(JikanSyncManager.isMalSource(unsupportedEntry))
 
@@ -996,6 +1004,218 @@ class ImporterExporterTest {
         )
         assertEquals("7.18 (MAL)", entryWithScore.formatExternalScore())
         assertEquals(9, entryWithScore.score)
+    }
+
+    @Test
+    fun testCsvImporterReadmeSampleHasNullExternalSourceAndIsSyncEligible() {
+        val readmeCsv = """
+            title,mediaType,status,score,currentEpisodes,totalEpisodes,currentChapters,totalChapters,notes,tags,subCategory
+            "Frieren: Beyond Journey's End",ANIME,COMPLETED,10,28,28,0,0,"Masterpiece fantasy journey","fantasy, adventure",
+            "Solo Leveling",MANHWA,WATCHING,9,0,0,150,200,"High action hunter story","action, fantasy","Webtoon"
+            "Dune: Part Two",MOVIE,COMPLETED,9,0,0,0,0,"Epic sci-fi cinema","sci-fi, cinema",
+            "Elden Ring",GAME,COMPLETED,10,0,0,0,0,"Completed 100% achievements","souls, rpg, goty",
+            "Papercut",MUSIC,COMPLETED,10,0,0,0,0,"Hybrid Theory opening track","nu-metal, rock",
+        """.trimIndent()
+
+        val entries = CsvImporter.parse(ByteArrayInputStream(readmeCsv.toByteArray(Charsets.UTF_8)))
+        assertEquals(5, entries.size)
+        entries.forEach { entry ->
+            assertNull("Expected null externalId for '${entry.title}'", entry.externalId)
+            assertNull("Expected null externalSource for '${entry.title}'", entry.externalSource)
+        }
+
+        // Sync jobs pick up README CSV rows cleanly
+        assertTrue(JikanSyncManager.isMalSource(entries[0]))
+        assertTrue(JikanSyncManager.isMalSource(entries[1]))
+        assertTrue(TmdbSyncManager.isTmdbSource(entries[2]))
+        assertEquals(SyncJob.JIKAN, SyncRouter.jobFor(entries[0]))
+        assertEquals(SyncJob.JIKAN, SyncRouter.jobFor(entries[1]))
+        assertEquals(SyncJob.TMDB, SyncRouter.jobFor(entries[2]))
+        assertEquals(SyncJob.GAMES, SyncRouter.jobFor(entries[3]))
+        assertEquals(SyncJob.MUSIC, SyncRouter.jobFor(entries[4]))
+
+        // Explicit source column normalizes via ExternalSources.canonical() and ignores "CSV"
+        val sourcedCsv = """
+            title,mediaType,foreign_database_id,foreign_database_source
+            "Vinland Saga",ANIME,37521,MyAnimeList
+            "Custom Row",ANIME,,CSV
+        """.trimIndent()
+        val sourced = CsvImporter.parse(ByteArrayInputStream(sourcedCsv.toByteArray(Charsets.UTF_8)))
+        assertEquals(2, sourced.size)
+        assertEquals("Vinland Saga", sourced.first().title)
+        assertEquals("37521", sourced[0].externalId)
+        assertEquals("MAL", sourced[0].externalSource)
+        assertNull(sourced[1].externalId)
+        assertNull(sourced[1].externalSource)
+    }
+
+    @Test
+    fun testJsonImporterReadmeSampleAndPerRowErrors() {
+        val readmeJson = """
+            {
+              "app": "LX Track List",
+              "version": 1,
+              "entries": [
+                {
+                  "title": "Steins;Gate",
+                  "alternateTitle": "シュタインズ・ゲート",
+                  "mediaType": "ANIME",
+                  "status": "COMPLETED",
+                  "score": 10,
+                  "currentEpisodes": 24,
+                  "totalEpisodes": 24,
+                  "isFavorite": true,
+                  "description": "A scientist invents time travel through a microwave.",
+                  "userComments": "One of my absolute favorite sci-fi series.",
+                  "tags": "sci-fi, thriller, time-travel"
+                },
+                {
+                  "title": "Berserk",
+                  "mediaType": "MANGA",
+                  "status": "WATCHING",
+                  "score": 10,
+                  "currentChapters": 375,
+                  "totalChapters": 0,
+                  "trackingUnit": "CHAPTERS",
+                  "isFavorite": true,
+                  "tags": "dark fantasy, seinen"
+                },
+                {
+                  "title": "Portal 2",
+                  "mediaType": "GAME",
+                  "status": "COMPLETED",
+                  "score": 10,
+                  "gamePlatforms": "PC, Xbox, PS",
+                  "gameProgressPercent": 100,
+                  "isFavorite": true,
+                  "tags": "puzzle, sci-fi, comedy"
+                },
+                {
+                  "title": "Papercut",
+                  "mediaType": "MUSIC",
+                  "status": "COMPLETED",
+                  "score": 10,
+                  "creator": "LINKIN PARK",
+                  "movieSeriesName": "Hybrid Theory",
+                  "movieSeriesNumber": 1,
+                  "durationMinutes": 184,
+                  "musicAlbumId": "528436018",
+                  "externalSource": "Apple Music",
+                  "externalId": "528436019",
+                  "tags": "rock, nu-metal"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val readmeResult = JsonImporter.parseWithReport(ByteArrayInputStream(readmeJson.toByteArray(Charsets.UTF_8)))
+        assertTrue("Expected no JSON errors: ${readmeResult.errors}", readmeResult.errors.isEmpty())
+        assertEquals(4, readmeResult.entries.size)
+        readmeResult.entries.forEach { entry ->
+            assertEquals(Priority.MEDIUM, entry.priority)
+            assertEquals(TrackingUnit.CHAPTERS, entry.trackingUnit)
+            assertEquals(1, entry.totalSeasons)
+            assertEquals(1, entry.currentSeasons)
+            assertEquals(1, entry.seasonNumber)
+            assertTrue(entry.createdAt > 0L)
+            assertTrue(entry.updatedAt > 0L)
+        }
+        assertEquals("Apple Music", readmeResult.entries[3].externalSource)
+
+        // Minimal array with string aliases + one invalid row -> reports row error cleanly while keeping valid row
+        val mixedArrayJson = """
+            [
+              { "title": "Andor", "mediaType": "TV", "status": "PLAN_TO_READ" },
+              { "mediaType": "ANIME", "status": "WATCHING" }
+            ]
+        """.trimIndent()
+        val mixedResult = JsonImporter.parseWithReport(ByteArrayInputStream(mixedArrayJson.toByteArray(Charsets.UTF_8)))
+        assertEquals(1, mixedResult.entries.size)
+        assertEquals("Andor", mixedResult.entries[0].title)
+        assertEquals(MediaType.SHOW, mixedResult.entries[0].mediaType)
+        assertEquals(MediaStatus.PLAN_TO_WATCH, mixedResult.entries[0].status)
+        assertEquals(Priority.MEDIUM, mixedResult.entries[0].priority)
+        assertEquals(TrackingUnit.CHAPTERS, mixedResult.entries[0].trackingUnit)
+        assertEquals(1, mixedResult.entries[0].totalSeasons)
+        assertEquals(1, mixedResult.errors.size)
+        assertTrue(mixedResult.errors[0].contains("Row 2"))
+    }
+
+    @Test
+    fun testTachiyomiImporterPerTrackerStatusesScoresAndPriority() {
+        val rootOut = ByteArrayOutputStream()
+
+        fun writeTrackedManga(title: String, trackers: List<Triple<Long, Long, Pair<Long, Float>>>) {
+            val mOut = ByteArrayOutputStream()
+            writeStringField(mOut, 3, title)
+            for ((syncId, mediaId, statusScore) in trackers) {
+                val (status, score) = statusScore
+                val tOut = ByteArrayOutputStream()
+                writeVarintField(tOut, 1, syncId)
+                writeVarintField(tOut, 2, mediaId)
+                writeVarintField(tOut, 3, mediaId)
+                writeFloatField(tOut, 8, score)
+                writeVarintField(tOut, 9, status)
+                writeMessageField(mOut, 18, tOut.toByteArray())
+            }
+            writeMessageField(rootOut, 1, mOut.toByteArray())
+        }
+
+        // 1. AniList status 2 -> COMPLETED, score 85 -> 9
+        writeTrackedManga("AniList Completed", listOf(Triple(2L, 101L, 2L to 85f)))
+        // 2. AniList status 5 -> PLAN_TO_WATCH
+        writeTrackedManga("AniList Planned", listOf(Triple(2L, 102L, 5L to 0f)))
+        // 3. AniList status 6 -> WATCHING + isRewatching = true
+        writeTrackedManga("AniList Rereading", listOf(Triple(2L, 103L, 6L to 90f)))
+        // 4. Kitsu status 2 -> COMPLETED, score 18 (2-20 scale) -> 9, canonical source "Kitsu"
+        writeTrackedManga("Kitsu Completed", listOf(Triple(3L, 201L, 2L to 18f)))
+        // 5. MAL + AniList both present -> MAL wins; MAL status 7 -> WATCHING + isRewatching = true
+        writeTrackedManga(
+            "MAL Over AniList",
+            listOf(
+                Triple(2L, 999L, 5L to 40f),
+                Triple(1L, 888L, 7L to 9f)
+            )
+        )
+        // 6. Bangumi status 1 -> PLAN_TO_WATCH; MangaUpdates status 3 -> DROPPED
+        writeTrackedManga("Bangumi Planned", listOf(Triple(5L, 301L, 1L to 0f)))
+        writeTrackedManga("MangaUpdates Dropped", listOf(Triple(7L, 401L, 3L to 0f)))
+
+        val entries = TachiyomiImporter.parse(ByteArrayInputStream(gzipBytes(rootOut.toByteArray())))
+        assertEquals(7, entries.size)
+
+        // 1. AniList Completed
+        assertEquals(MediaStatus.COMPLETED, entries[0].status)
+        assertEquals(9, entries[0].score)
+        assertEquals(ExternalSources.ANILIST, entries[0].externalSource)
+        assertEquals("101", entries[0].externalId)
+        assertFalse(entries[0].isRewatching)
+
+        // 2. AniList Plan to Read
+        assertEquals(MediaStatus.PLAN_TO_WATCH, entries[1].status)
+        assertEquals(ExternalSources.ANILIST, entries[1].externalSource)
+
+        // 3. AniList Rereading
+        assertEquals(MediaStatus.WATCHING, entries[2].status)
+        assertTrue(entries[2].isRewatching)
+
+        // 4. Kitsu score / 2
+        assertEquals(MediaStatus.COMPLETED, entries[3].status)
+        assertEquals(9, entries[3].score)
+        assertEquals(ExternalSources.KITSU, entries[3].externalSource)
+        assertEquals("201", entries[3].externalId)
+
+        // 5. MAL preferred over AniList
+        assertEquals(ExternalSources.MAL, entries[4].externalSource)
+        assertEquals("888", entries[4].externalId)
+        assertEquals(MediaStatus.WATCHING, entries[4].status)
+        assertTrue(entries[4].isRewatching)
+        assertEquals(9, entries[4].score)
+
+        // 6 & 7. Bangumi + MangaUpdates + MediaStatus.fromMalStatus(7)
+        assertEquals(MediaStatus.PLAN_TO_WATCH, entries[5].status)
+        assertEquals(MediaStatus.DROPPED, entries[6].status)
+        assertEquals(MediaStatus.WATCHING, MediaStatus.fromMalStatus(7))
     }
 
     private fun writeVarint(out: ByteArrayOutputStream, value: Long) {

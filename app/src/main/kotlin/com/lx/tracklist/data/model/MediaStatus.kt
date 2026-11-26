@@ -9,12 +9,30 @@ enum class MediaStatus(val defaultLabel: String) {
 
     fun getDisplayLabel(mediaType: MediaType): String {
         return when (this) {
-            WATCHING -> if (mediaType.isListenType) "Listening" else if (mediaType.isPlayType) "Playing" else if (mediaType.isReadType) "Reading" else "Watching"
-            PLAN_TO_WATCH -> if (mediaType.isListenType) "Plan to Listen" else if (mediaType.isPlayType) "Plan to Play" else if (mediaType.isReadType) "Plan to Read" else "Plan to Watch"
+            WATCHING -> mediaType.consumeVerbIng()
+            PLAN_TO_WATCH -> "Plan to ${mediaType.consumeVerb()}"
             COMPLETED -> "Completed"
             ON_HOLD -> "On Hold"
             DROPPED -> "Dropped"
         }
+    }
+
+    /** Neutral status label for mixed-category views (e.g. All tab, mixed batch dialogs). */
+    fun getNeutralLabel(): String = when (this) {
+        WATCHING -> "In Progress"
+        PLAN_TO_WATCH -> "Planned"
+        COMPLETED -> "Completed"
+        ON_HOLD -> "On Hold"
+        DROPPED -> "Dropped"
+    }
+
+    /**
+     * Returns the category-specific display label if [types] resolves to a single [MediaType],
+     * or [getNeutralLabel] when [types] is empty or spans multiple media types.
+     */
+    fun labelFor(types: Collection<MediaType>): String {
+        val distinct = types.distinct()
+        return if (distinct.size == 1) getDisplayLabel(distinct.first()) else getNeutralLabel()
     }
 
     companion object {
@@ -32,7 +50,7 @@ enum class MediaStatus(val defaultLabel: String) {
 
         fun fromMalStatus(status: Int): MediaStatus {
             return when (status) {
-                1 -> WATCHING
+                1, 7 -> WATCHING
                 2 -> COMPLETED
                 3 -> ON_HOLD
                 4 -> DROPPED

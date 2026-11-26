@@ -1,5 +1,6 @@
 package com.lx.tracklist.data.remote
 
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
@@ -23,8 +24,16 @@ data class BookDetails(
     val averageScore: Float? = null,
     val sourceProvider: String = "Google Books",
     val language: String? = null,
-    val infoUrl: String? = null
+    val infoUrl: String? = null,
+    val scoreSource: String? = null
 ) {
+    fun preferredExternalRef(): Pair<String, String>? {
+        val cleanId = id.trim().takeIf { it.isNotBlank() } ?: return null
+        val canonicalSrc = ExternalSources.canonical(sourceProvider)
+            ?: sourceProvider.trim().takeIf { it.isNotBlank() }
+            ?: ExternalSources.GOOGLE_BOOKS
+        return canonicalSrc to cleanId
+    }
     val authorString: String
         get() = authors.joinToString(", ")
 

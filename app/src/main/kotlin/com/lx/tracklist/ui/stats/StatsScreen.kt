@@ -93,6 +93,7 @@ import com.lx.tracklist.ui.theme.LXTextDisabled
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
 import com.lx.tracklist.ui.theme.ThemeManager
+import com.lx.tracklist.ui.theme.parseHexColor
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -352,9 +353,10 @@ fun StatsScreen(
                             )
                         }
                         items(state.customCategories) { customCat ->
+                            val customKey = customStatsKey(customCat.name)
                             FilterChip(
-                                selected = inlineMalCategoryKey.equals(customCat.name, ignoreCase = true),
-                                onClick = { inlineMalCategoryKey = customCat.name },
+                                selected = inlineMalCategoryKey.equals(customKey, ignoreCase = true),
+                                onClick = { inlineMalCategoryKey = customKey },
                                 label = { Text(customCat.name, fontSize = 12.sp) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = LXPrimaryGreen,
@@ -470,21 +472,22 @@ private fun CategoryBreakdownCard(
 
                 // If any custom categories exist, display them as well
                 state.customCategories.forEach { customCat ->
-                    val count = state.allEntries.count { it.customCategory.equals(customCat.name, ignoreCase = true) }
+                    val count = countEntriesForCustomCategory(state.allEntries, customCat.name)
                     val fraction = if (state.totalEntries > 0) count.toFloat() / state.totalEntries else 0f
+                    val catColor = parseHexColor(customCat.colorHex, fallback = LXScoreGold)
 
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(4.dp))
-                            .clickable { onCategoryClick(customCat.name) }
+                            .clickable { onCategoryClick(customStatsKey(customCat.name)) }
                             .padding(vertical = 2.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(customCat.name, color = LXScoreGold, style = MaterialTheme.typography.bodyMedium)
+                            Text(customCat.name, color = catColor, style = MaterialTheme.typography.bodyMedium)
                             Text("$count", color = LXTextSecondary, style = MaterialTheme.typography.bodyMedium)
                         }
                         Spacer(modifier = Modifier.height(4.dp))
@@ -500,7 +503,7 @@ private fun CategoryBreakdownCard(
                                     .fillMaxHeight()
                                     .fillMaxWidth(fraction)
                                     .clip(RoundedCornerShape(3.dp))
-                                    .background(LXScoreGold)
+                                    .background(catColor)
                             )
                         }
                     }
@@ -547,7 +550,7 @@ private fun StatusBreakdownCard(state: StatsUiState, modifier: Modifier = Modifi
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(st.defaultLabel, color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
+                            Text(st.getNeutralLabel(), color = LXTextPrimary, style = MaterialTheme.typography.bodyMedium)
                             Text("$count", color = LXTextSecondary, style = MaterialTheme.typography.bodyMedium)
                         }
                         Spacer(modifier = Modifier.height(4.dp))
@@ -812,17 +815,17 @@ fun MalCategoryStatsCard(
                     )
                     MalStatusRow(
                         color = Color(0xFF2980B9),
-                        label = "Completed",
+                        label = summary.getStatusLabel(MediaStatus.COMPLETED),
                         count = completedCount
                     )
                     MalStatusRow(
                         color = Color(0xFFF1C40F),
-                        label = "On-Hold",
+                        label = summary.getStatusLabel(MediaStatus.ON_HOLD),
                         count = onHoldCount
                     )
                     MalStatusRow(
                         color = Color(0xFFE74C3C),
-                        label = "Dropped",
+                        label = summary.getStatusLabel(MediaStatus.DROPPED),
                         count = droppedCount
                     )
                 }
@@ -1073,9 +1076,10 @@ private fun CategoryDistributionSheet(
                     }
 
                     items(customCategories) { customCat ->
+                        val customKey = customStatsKey(customCat.name)
                         FilterChip(
-                            selected = selectedCategoryKey.equals(customCat.name, ignoreCase = true),
-                            onClick = { selectedCategoryKey = customCat.name },
+                            selected = selectedCategoryKey.equals(customKey, ignoreCase = true),
+                            onClick = { selectedCategoryKey = customKey },
                             label = { Text(customCat.name) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = LXPrimaryGreen,
@@ -1231,7 +1235,7 @@ private fun CategoryDistributionSheet(
                     }
 
                     customCatsWithEntries.forEach { customCat ->
-                        val subSummary = calculateCategoryStatSummary(entries, customCat.name, customCategories)
+                        val subSummary = calculateCategoryStatSummary(entries, customStatsKey(customCat.name), customCategories)
                         MalCategoryStatsCard(summary = subSummary)
                     }
                 }
@@ -1272,10 +1276,15 @@ private fun ScoreDistributionSheet(
     val selectedCategoryDisplayName = remember(selectedCategoryKey, customCategories) {
         when {
             selectedCategoryKey == "ALL" -> "All"
-            MediaType.entries.any { it.name.equals(selectedCategoryKey, ignoreCase = true) } -> {
-                MediaType.valueOf(selectedCategoryKey).displayName
+            selectedCategoryKey.startsWith(STATS_CUSTOM_KEY_PREFIX) -> {
+                val customName = selectedCategoryKey.removePrefix(STATS_CUSTOM_KEY_PREFIX)
+                customCategories.firstOrNull { it.name.equals(customName, ignoreCase = true) }?.name ?: customName
             }
-            else -> customCategories.firstOrNull { it.name.equals(selectedCategoryKey, ignoreCase = true) }?.name ?: selectedCategoryKey
+            else -> {
+                MediaType.entries.firstOrNull { it.name.equals(selectedCategoryKey, ignoreCase = true) }?.displayName
+                    ?: customCategories.firstOrNull { it.name.equals(selectedCategoryKey, ignoreCase = true) }?.name
+                    ?: selectedCategoryKey
+            }
         }
     }
 
@@ -1426,11 +1435,12 @@ private fun ScoreDistributionSheet(
                     }
 
                     items(customCategories) { customCat ->
-                        val isSelected = selectedCategoryKey.equals(customCat.name, ignoreCase = true)
+                        val customKey = customStatsKey(customCat.name)
+                        val isSelected = selectedCategoryKey.equals(customKey, ignoreCase = true)
                         FilterChip(
                             selected = isSelected,
                             onClick = {
-                                selectedCategoryKey = customCat.name
+                                selectedCategoryKey = customKey
                                 inspectedScore = null
                             },
                             label = { Text(customCat.name) },

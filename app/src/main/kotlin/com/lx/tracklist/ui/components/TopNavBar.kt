@@ -67,6 +67,7 @@ import coil.compose.AsyncImage
 import com.lx.tracklist.R
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.model.effectiveMediaTypeFor
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
@@ -74,6 +75,7 @@ import com.lx.tracklist.ui.theme.LXSurfaceVariant
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
 import com.lx.tracklist.ui.theme.ThemeManager
+import com.lx.tracklist.ui.theme.parseHexColor
 import kotlinx.coroutines.delay
 
 enum class SortOption(val displayName: String) {
@@ -91,20 +93,19 @@ enum class SortOption(val displayName: String) {
         customCategories: List<com.lx.tracklist.data.model.CustomCategory> = emptyList()
     ): String {
         val resolvedMediaType = if (customCategoryTitle != null) {
-            val custom = customCategories.firstOrNull { it.name.equals(customCategoryTitle, ignoreCase = true) }
-            if (custom != null) {
-                if (custom.isWatchType) MediaType.ANIME else MediaType.MANGA
-            } else mediaType
+            customCategories.effectiveMediaTypeFor(customCategoryTitle) ?: mediaType
         } else mediaType
 
         return when (this) {
             TIME_SPENT_DESC -> when {
+                resolvedMediaType?.isListenType == true -> "Most Time Listened"
                 resolvedMediaType?.isPlayType == true -> "Most Time Played"
                 resolvedMediaType?.isReadType == true -> "Most Time Read"
                 resolvedMediaType?.isWatchType == true -> "Most Time Watched"
                 else -> "Most Time Watched / Played / Read"
             }
             TIME_REMAINING_DESC -> when {
+                resolvedMediaType?.isListenType == true -> "Most Time To Listen"
                 resolvedMediaType?.isPlayType == true -> "Most Time To Play"
                 resolvedMediaType?.isReadType == true -> "Most Time To Read"
                 resolvedMediaType?.isWatchType == true -> "Most Time To Watch"
@@ -382,18 +383,4 @@ fun TopNavBar(
             }
         }
     )
-}
-
-private fun parseHexColor(hex: String): Color {
-    return try {
-        val clean = hex.removePrefix("#")
-        val colorInt = clean.toLong(16)
-        if (clean.length == 6) {
-            Color(colorInt or 0xFF000000)
-        } else {
-            Color(colorInt)
-        }
-    } catch (_: Exception) {
-        LXPrimaryGreen
-    }
 }

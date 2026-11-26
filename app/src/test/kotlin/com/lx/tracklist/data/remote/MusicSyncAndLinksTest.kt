@@ -30,8 +30,8 @@ class MusicSyncAndLinksTest {
 
     @Test
     fun `media entry source normalization treats Apple Music and iTunes consistently`() {
-        assertEquals("ITUNES", MediaEntry.normalizeSource("Apple Music"))
-        assertEquals("ITUNES", MediaEntry.normalizeSource("iTunes"))
+        assertEquals("APPLE MUSIC", MediaEntry.normalizeSource("Apple Music"))
+        assertEquals("APPLE MUSIC", MediaEntry.normalizeSource("iTunes"))
     }
 
     @Test

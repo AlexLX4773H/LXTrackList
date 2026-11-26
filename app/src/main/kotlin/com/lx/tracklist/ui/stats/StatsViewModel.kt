@@ -7,6 +7,7 @@ import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.effectiveMediaType
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -42,23 +43,57 @@ data class CategoryStatSummary(
     val favoritesCount: Int
 ) {
     fun getStatusLabel(status: MediaStatus): String {
-        return when (status) {
-            MediaStatus.WATCHING -> when {
-                isMusic -> "Listening"
-                isGame -> "Playing"
-                isVideo -> "Watching"
-                else -> "Reading"
-            }
-            MediaStatus.PLAN_TO_WATCH -> when {
-                isMusic -> "Plan to Listen"
-                isGame -> "Plan to Play"
-                isVideo -> "Plan to Watch"
-                else -> "Plan to Read"
-            }
-            MediaStatus.COMPLETED -> "Completed"
-            MediaStatus.ON_HOLD -> "On Hold"
-            MediaStatus.DROPPED -> "Dropped"
+        val representativeType = when {
+            isMusic -> MediaType.MUSIC
+            isGame -> MediaType.GAME
+            isVideo -> MediaType.ANIME
+            else -> MediaType.MANGA
         }
+        return status.getDisplayLabel(representativeType)
+    }
+}
+
+const val STATS_CUSTOM_KEY_PREFIX = "custom:"
+
+/** Builds a non-colliding Stats chip key for a custom category. */
+fun customStatsKey(name: String): String = "$STATS_CUSTOM_KEY_PREFIX$name"
+
+private fun parseCustomStatsName(categoryKey: String?): String? =
+    categoryKey?.takeIf { it.startsWith(STATS_CUSTOM_KEY_PREFIX) }
+        ?.removePrefix(STATS_CUSTOM_KEY_PREFIX)
+
+private fun findStandardMediaType(categoryKey: String?): MediaType? {
+    if (categoryKey.isNullOrBlank() || categoryKey.startsWith(STATS_CUSTOM_KEY_PREFIX)) return null
+    return MediaType.entries.firstOrNull { it.name.equals(categoryKey, ignoreCase = true) }
+}
+
+fun belongsToBuiltInCategoryBucket(
+    entry: MediaEntry,
+    targetType: MediaType,
+    activeCustomNamesLower: Set<String>
+): Boolean {
+    if (entry.mediaType != targetType) return false
+    val customName = entry.customCategory?.trim()?.takeIf { it.isNotEmpty() } ?: return true
+    return customName.lowercase() !in activeCustomNamesLower
+}
+
+fun calculateBuiltInCategoryCounts(
+    entries: List<MediaEntry>,
+    customCategories: List<CustomCategory>
+): Map<MediaType, Int> {
+    val activeCustomNamesLower = customCategories.map { it.name.trim().lowercase() }.toSet()
+    return MediaType.entries.associateWith { cat ->
+        entries.count { belongsToBuiltInCategoryBucket(it, cat, activeCustomNamesLower) }
+    }
+}
+
+fun countEntriesForCustomCategory(
+    entries: List<MediaEntry>,
+    customCategoryName: String
+): Int {
+    val cleanTarget = customCategoryName.trim()
+    return entries.count {
+        it.customCategory?.trim()?.equals(cleanTarget, ignoreCase = true) == true
     }
 }
 
@@ -67,14 +102,24 @@ fun calculateCategoryStatSummary(
     categoryKey: String,
     customCategories: List<CustomCategory>
 ): CategoryStatSummary {
-    val isStandardMediaType = MediaType.entries.any { it.name.equals(categoryKey, ignoreCase = true) }
-    val filteredEntries = if (categoryKey.equals("ALL", ignoreCase = true)) {
-        entries
-    } else if (isStandardMediaType) {
-        val type = MediaType.valueOf(categoryKey.uppercase())
-        entries.filter { it.mediaType == type && it.customCategory == null }
-    } else {
-        entries.filter { it.customCategory != null && it.customCategory.equals(categoryKey, ignoreCase = true) }
+    val explicitCustomName = parseCustomStatsName(categoryKey)
+    val standardType = findStandardMediaType(categoryKey)
+    val isAll = categoryKey.equals("ALL", ignoreCase = true)
+    val activeCustomNamesLower = customCategories.map { it.name.trim().lowercase() }.toSet()
+
+    val filteredEntries = when {
+        isAll -> entries
+        explicitCustomName != null -> {
+            val cleanCustom = explicitCustomName.trim()
+            entries.filter { it.customCategory?.trim()?.equals(cleanCustom, ignoreCase = true) == true }
+        }
+        standardType != null -> {
+            entries.filter { belongsToBuiltInCategoryBucket(it, standardType, activeCustomNamesLower) }
+        }
+        else -> {
+            val cleanKey = categoryKey.trim()
+            entries.filter { it.customCategory?.trim()?.equals(cleanKey, ignoreCase = true) == true }
+        }
     }
 
     val total = filteredEntries.size
@@ -91,32 +136,43 @@ fun calculateCategoryStatSummary(
     val volumes = filteredEntries.sumOf { it.currentVolumes }
     val favs = filteredEntries.count { it.isFavorite }
 
-    val isVideo = if (categoryKey.equals("ALL", ignoreCase = true)) {
-        episodes >= chapters
-    } else if (isStandardMediaType) {
-        val type = MediaType.valueOf(categoryKey.uppercase())
-        type == MediaType.ANIME || type == MediaType.SHOW || type == MediaType.MOVIE
-    } else {
-        val custom = customCategories.firstOrNull { it.name.equals(categoryKey, ignoreCase = true) }
-        custom?.isWatchType ?: true
+    val customNameLookup = explicitCustomName ?: if (standardType == null && !isAll) categoryKey else null
+    val customCategory = customNameLookup?.let { name ->
+        customCategories.firstOrNull { it.name.equals(name, ignoreCase = true) }
+    }
+    val customEffectiveType = customCategory?.effectiveMediaType()
+
+    val isVideo = when {
+        isAll -> episodes >= chapters
+        customNameLookup != null -> {
+            if (customEffectiveType != null) {
+                customEffectiveType == MediaType.ANIME || customEffectiveType == MediaType.SHOW || customEffectiveType == MediaType.MOVIE
+            } else {
+                customCategory?.isWatchType ?: true
+            }
+        }
+        standardType != null -> standardType == MediaType.ANIME || standardType == MediaType.SHOW || standardType == MediaType.MOVIE
+        else -> true
     }
 
-    val isGame = if (categoryKey.equals("ALL", ignoreCase = true)) {
-        false
-    } else if (isStandardMediaType) {
-        val type = MediaType.valueOf(categoryKey.uppercase())
-        type == MediaType.GAME
-    } else {
-        categoryKey.equals(MediaType.GAME.name, ignoreCase = true) || categoryKey.equals("Games", ignoreCase = true)
+    val isGame = when {
+        isAll -> false
+        customNameLookup != null -> {
+            customEffectiveType == MediaType.GAME ||
+                (customEffectiveType == null && (customNameLookup.equals(MediaType.GAME.name, ignoreCase = true) || customNameLookup.equals("Games", ignoreCase = true)))
+        }
+        standardType != null -> standardType == MediaType.GAME
+        else -> false
     }
 
-    val isMusic = if (categoryKey.equals("ALL", ignoreCase = true)) {
-        false
-    } else if (isStandardMediaType) {
-        val type = MediaType.valueOf(categoryKey.uppercase())
-        type == MediaType.MUSIC
-    } else {
-        categoryKey.equals(MediaType.MUSIC.name, ignoreCase = true) || categoryKey.equals("Music", ignoreCase = true)
+    val isMusic = when {
+        isAll -> false
+        customNameLookup != null -> {
+            customEffectiveType == MediaType.MUSIC ||
+                (customEffectiveType == null && customNameLookup.equals(MediaType.MUSIC.name, ignoreCase = true))
+        }
+        standardType != null -> standardType == MediaType.MUSIC
+        else -> false
     }
 
     var totalMinutes = 0.0
@@ -130,9 +186,10 @@ fun calculateCategoryStatSummary(
     val daysRem = remainingMinutes / 1440.0
 
     val displayName = when {
-        categoryKey.equals("ALL", ignoreCase = true) -> "All Categories"
-        isStandardMediaType -> MediaType.valueOf(categoryKey.uppercase()).displayName
-        else -> customCategories.firstOrNull { it.name.equals(categoryKey, ignoreCase = true) }?.name ?: categoryKey
+        isAll -> "All Categories"
+        customNameLookup != null -> customCategory?.name ?: customNameLookup
+        standardType != null -> standardType.displayName
+        else -> categoryKey
     }
 
     return CategoryStatSummary(
@@ -161,16 +218,26 @@ fun calculateScoreDistribution(
     categoryKey: String? = null,
     completedOnly: Boolean = false
 ): ScoreDistributionData {
-    val isStandardMediaType = MediaType.entries.any { it.name.equals(categoryKey, ignoreCase = true) }
-    val categoryFiltered = if (categoryKey == null || categoryKey.equals("ALL", ignoreCase = true)) {
-        entries
-    } else if (isStandardMediaType) {
-        entries.filter { entry ->
-            entry.mediaType.name.equals(categoryKey, ignoreCase = true) && entry.customCategory == null
+    val explicitCustomName = parseCustomStatsName(categoryKey)
+    val standardType = findStandardMediaType(categoryKey)
+    val isAll = categoryKey == null || categoryKey.equals("ALL", ignoreCase = true)
+
+    val categoryFiltered = when {
+        isAll -> entries
+        explicitCustomName != null -> {
+            entries.filter { entry ->
+                entry.customCategory != null && entry.customCategory.equals(explicitCustomName, ignoreCase = true)
+            }
         }
-    } else {
-        entries.filter { entry ->
-            entry.customCategory != null && entry.customCategory.equals(categoryKey, ignoreCase = true)
+        standardType != null -> {
+            entries.filter { entry ->
+                entry.mediaType == standardType && entry.customCategory == null
+            }
+        }
+        else -> {
+            entries.filter { entry ->
+                entry.customCategory != null && entry.customCategory.equals(categoryKey, ignoreCase = true)
+            }
         }
     }
 
@@ -195,7 +262,7 @@ fun calculateScoreDistribution(
     val maxFreq = dist.values.maxOrNull() ?: 0
 
     return ScoreDistributionData(
-        categoryName = categoryKey ?: "All",
+        categoryName = explicitCustomName ?: categoryKey ?: "All",
         scoredCount = scoredCount,
         meanScore = mean,
         distribution = dist,
@@ -251,9 +318,7 @@ class StatsViewModel(private val repository: MediaRepository) : ViewModel() {
             scoredEntries.map { it.score!! }.average()
         } else 0.0
 
-        val catCounts = MediaType.entries.associateWith { cat ->
-            entries.count { it.mediaType == cat }
-        }
+        val catCounts = calculateBuiltInCategoryCounts(entries, customCats)
 
         val stCounts = MediaStatus.entries.associateWith { st ->
             entries.count { it.status == st }

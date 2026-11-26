@@ -1,5 +1,6 @@
 package com.lx.tracklist.data.importer
 
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
@@ -77,8 +78,15 @@ object CsvImporter {
             val title = cols[titleIdx].trim()
             if (title.isBlank()) continue
 
-            val mediaType = if (typeIdx in cols.indices) MediaType.fromString(cols[typeIdx]) else MediaType.ANIME
-            val subCategory = if (subCategoryIdx in cols.indices) cols[subCategoryIdx].trim().takeIf { it.isNotBlank() } else null
+            val rawType = if (typeIdx in cols.indices) cols[typeIdx].trim() else ""
+            val isLightNovelImport = MediaEntry.isLightNovelTypeToken(rawType)
+            val mediaType = when {
+                isLightNovelImport -> MediaType.BOOK
+                typeIdx in cols.indices -> MediaType.fromString(rawType)
+                else -> MediaType.ANIME
+            }
+            val parsedSubCat = if (subCategoryIdx in cols.indices) cols[subCategoryIdx].trim().takeIf { it.isNotBlank() } else null
+            val subCategory = parsedSubCat ?: if (isLightNovelImport) "Light Novel" else null
             val status = if (statusIdx in cols.indices) MediaStatus.fromString(cols[statusIdx]) else MediaStatus.WATCHING
             val score = if (scoreIdx in cols.indices) cols[scoreIdx].toIntOrNull()?.takeIf { it in 0..10 } else null
 
@@ -98,7 +106,8 @@ object CsvImporter {
             val finalUserComments = explicitUserComments ?: legacyComments
             val tags = if (tagsIdx in cols.indices) cols[tagsIdx].takeIf { it.isNotBlank() } else null
             val foreignId = if (foreignDbIdIdx in cols.indices) cols[foreignDbIdIdx].trim().takeIf { it.isNotBlank() } else null
-            val foreignSource = if (foreignDbSourceIdx in cols.indices) cols[foreignDbSourceIdx].trim().takeIf { it.isNotBlank() } else if (foreignId != null) "CSV" else null
+            val rawForeignSource = if (foreignDbSourceIdx in cols.indices) cols[foreignDbSourceIdx].trim().takeIf { it.isNotBlank() } else null
+            val foreignSource = ExternalSources.canonical(rawForeignSource)
             val rewatchCount = if (rewatchCountIdx in cols.indices) cols[rewatchCountIdx].toIntOrNull() ?: 0 else 0
             val isRewatching = if (isRewatchingIdx in cols.indices) {
                 val v = cols[isRewatchingIdx].trim().lowercase()
@@ -131,7 +140,7 @@ object CsvImporter {
                     tags = tags,
                     priority = Priority.MEDIUM,
                     externalId = foreignId,
-                    externalSource = foreignSource ?: "CSV",
+                    externalSource = foreignSource,
                     rewatchCount = rewatchCount,
                     isRewatching = isRewatching,
                     episodeLengthMinutes = if (mediaType != MediaType.MOVIE && mediaType != MediaType.MUSIC) parsedLength else null,

@@ -21,3 +21,26 @@ val LXErrorRed: Color get() = ThemeManager.currentColors.error
 
 val LXScoreGold: Color get() = ThemeManager.currentColors.scoreGold
 val LXAiringBlue: Color get() = ThemeManager.currentColors.airingBlue
+val LXSuccessGreen: Color get() = ThemeManager.currentColors.success
+val LXWarningAmber: Color get() = ThemeManager.currentColors.warning
+val LXInfoBlue: Color get() = ThemeManager.currentColors.info
+val LXOnAccent: Color get() = ThemeManager.currentColors.onAccent
+val LXAccent: Color get() = ThemeManager.currentColors.accent
+
+/**
+ * Parses a 6- or 8-digit `#RRGGBB` / `#AARRGGBB` hex string into a Compose [Color],
+ * returning [fallback] if parsing fails.
+ */
+fun parseHexColor(hex: String, fallback: Color = LXPrimaryGreen): Color {
+    return try {
+        val clean = hex.removePrefix("#")
+        val colorInt = clean.toLong(16)
+        if (clean.length == 6) {
+            Color(colorInt or 0xFF000000)
+        } else {
+            Color(colorInt)
+        }
+    } catch (_: Exception) {
+        fallback
+    }
+}

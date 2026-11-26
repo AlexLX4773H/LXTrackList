@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.ui.search.OriginalLanguageRegistry
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -148,7 +149,7 @@ object AniListNovelApiClient {
         }
     }
 
-    private fun parseAniListNovelMedia(mediaObj: JsonObject): JikanMediaDetails {
+    internal fun parseAniListNovelMedia(mediaObj: JsonObject): JikanMediaDetails {
         val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull && it.asLong > 0 }?.asLong
         val aniId = mediaObj.get("id")?.takeIf { !it.isJsonNull && it.asLong > 0 }?.asLong
 
@@ -251,9 +252,9 @@ object AniListNovelApiClient {
             synopsis = fullSynopsis,
             isAiring = isAiring,
             externalScore = avgScore,
-            externalScoreSource = "AniList",
+            externalScoreSource = ExternalSources.ANILIST,
             type = "Light Novel",
-            sourceProvider = "AniList",
+            sourceProvider = ExternalSources.ANILIST,
             url = siteUrl,
             totalPages = null,
             isbn = null,

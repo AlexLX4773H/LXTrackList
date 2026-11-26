@@ -222,6 +222,7 @@ fun AppNavigation() {
                 PasskeyVerificationDialog(
                     profileName = homeState.activeUser.name,
                     expectedPasskey = activePasskey ?: "",
+                    profileId = homeState.activeUser.id,
                     title = "Unlock Profile",
                     subtitle = "Enter 4-digit passkey to access \"${homeState.activeUser.name}\"",
                     dismissButtonText = "Exit App",
@@ -244,21 +245,23 @@ fun AppNavigation() {
             UserSwitcherSheet(
                 activeUser = homeState.activeUser,
                 allUsers = homeState.allUsers,
-                onSelectUser = { targetUser ->
+                requirePinForActive = true,
+                onSelectUser = { targetUser, passkeyVerified ->
                     homeViewModel.switchUser(targetUser)
-                    if (targetUser.passKey.isNullOrBlank()) {
+                    if (targetUser.passKey.isNullOrBlank() || passkeyVerified) {
                         isAppUnlocked = true
                         showUnlockDialog = false
                     } else {
-                        isAppUnlocked = true
-                        showUnlockDialog = false
+                        isAppUnlocked = false
+                        showUnlockDialog = true
                     }
                     homeViewModel.setUserSwitcherOpen(false)
                 },
                 onCreateUser = { name, color, avatarUri, passKey ->
-                    homeViewModel.createUser(name, color, avatarUri, passKey)
-                    isAppUnlocked = true
-                    showUnlockDialog = false
+                    homeViewModel.createUser(name, color, avatarUri, passKey) {
+                        isAppUnlocked = true
+                        showUnlockDialog = false
+                    }
                     homeViewModel.setUserSwitcherOpen(false)
                 },
                 onUpdateUser = { homeViewModel.updateUser(it) },
@@ -468,8 +471,9 @@ fun AppNavigation() {
         UserSwitcherSheet(
             activeUser = homeState.activeUser,
             allUsers = homeState.allUsers,
-            onSelectUser = {
-                homeViewModel.switchUser(it)
+            requirePinForActive = false,
+            onSelectUser = { targetUser, _ ->
+                homeViewModel.switchUser(targetUser)
                 backStack = listOf(NavDestination.Home)
             },
             onCreateUser = { name, color, avatarUri, passKey ->
@@ -780,19 +784,5 @@ fun AppNavigation() {
                 ScreenContent()
             }
         }
-    }
-}
-
-private fun parseHexColor(hex: String): Color {
-    return try {
-        val clean = hex.removePrefix("#")
-        val colorInt = clean.toLong(16)
-        if (clean.length == 6) {
-            Color(colorInt or 0xFF000000)
-        } else {
-            Color(colorInt)
-        }
-    } catch (_: Exception) {
-        LXPrimaryGreen
     }
 }

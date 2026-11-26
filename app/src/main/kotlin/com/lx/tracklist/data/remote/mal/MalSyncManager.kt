@@ -8,9 +8,12 @@ import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.repository.ConflictStrategy
 import com.lx.tracklist.data.repository.MediaRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,8 +40,52 @@ data class MalSyncProgress(
 object MalSyncManager {
 
     private const val TAG = "MalSyncManager"
+    private const val PUSH_SPACING_MS = 1_000L
     private val scope = CoroutineScope(Dispatchers.IO)
     private var pullJob: Job? = null
+
+    internal var pushDelayMs: Long = PUSH_SPACING_MS
+    internal var customPushDispatcher: (suspend (Context?, MediaEntry) -> Result<Unit>)? = null
+
+    private data class MalPushRequest(
+        val context: Context?,
+        val entry: MediaEntry
+    )
+
+    private val pushChannel = Channel<MalPushRequest>(Channel.UNLIMITED)
+
+    init {
+        // BUG-18: Serialize background MAL pushes with spacing to avoid burst PATCH calls & rate limits.
+        scope.launch {
+            var lastFinishedAtMs = 0L
+            for (request in pushChannel) {
+                val remainingDelay = pushDelayMs - (System.currentTimeMillis() - lastFinishedAtMs)
+                if (lastFinishedAtMs > 0L && remainingDelay > 0L) {
+                    delay(remainingDelay)
+                }
+                try {
+                    val targetContext = try {
+                        request.context?.applicationContext ?: request.context
+                    } catch (_: RuntimeException) {
+                        request.context
+                    }
+                    val custom = customPushDispatcher
+                    if (custom != null) {
+                        custom(targetContext, request.entry)
+                    } else if (targetContext != null) {
+                        pushUpdateSync(targetContext, request.entry)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    try {
+                        Log.w(TAG, "Background push to MAL failed for entry: ${request.entry.title}", e)
+                    } catch (_: RuntimeException) {}
+                }
+                lastFinishedAtMs = System.currentTimeMillis()
+            }
+        }
+    }
 
     private val _syncState = MutableStateFlow(MalSyncProgress())
     val syncState: StateFlow<MalSyncProgress> = _syncState.asStateFlow()
@@ -66,18 +113,15 @@ object MalSyncManager {
     }
 
     /**
-     * Pushes a local entry update (progress, score, status, rewatch) to MyAnimeList in the background.
+     * Enqueues a local entry update (progress, score, status, rewatch) to push sequentially to MyAnimeList.
      */
     fun pushUpdateInBackground(context: Context, entry: MediaEntry) {
-        if (!isEligibleForMalSync(entry)) return
+        enqueuePush(context, entry)
+    }
 
-        scope.launch {
-            try {
-                pushUpdateSync(context, entry)
-            } catch (e: Exception) {
-                Log.w(TAG, "Background push to MAL failed for entry: ${entry.title}", e)
-            }
-        }
+    internal fun enqueuePush(context: Context?, entry: MediaEntry) {
+        if (!isEligibleForMalSync(entry)) return
+        pushChannel.trySend(MalPushRequest(context, entry))
     }
 
     /**
@@ -200,7 +244,7 @@ object MalSyncManager {
                     rewatchCount = listStatus.numTimesRewatched,
                     updatedAt = System.currentTimeMillis()
                 )
-                repository.update(updatedEntry)
+                repository.updateMetadataOnly(updatedEntry)
                 Result.success(updatedEntry)
             }
             MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> {
@@ -225,7 +269,7 @@ object MalSyncManager {
                     rewatchCount = listStatus.numTimesReread,
                     updatedAt = System.currentTimeMillis()
                 )
-                repository.update(updatedEntry)
+                repository.updateMetadataOnly(updatedEntry)
                 Result.success(updatedEntry)
             }
             else -> Result.failure(Exception("Unsupported media type for MyAnimeList tracking"))
@@ -352,34 +396,7 @@ object MalSyncManager {
                     val items = mangaResponse.data ?: emptyList()
                     mangaCount += items.size
                     for (item in items) {
-                        val node = item.node
-                        val listStatus = item.listStatus
-                        val entry = MediaEntry(
-                            userId = userId,
-                            title = node.title,
-                            alternateTitle = node.alternativeTitles?.en ?: node.alternativeTitles?.ja,
-                            mediaType = MediaType.MANGA,
-                            status = mapMalStatusToLx(listStatus?.status),
-                            score = listStatus?.score?.takeIf { it > 0 },
-                            externalScore = node.mean,
-                            externalScoreSource = "MAL",
-                            externalId = node.id.toString(),
-                            externalSource = "MAL",
-                            isExternallyTracked = true,
-                            coverImageUri = node.mainPicture?.large ?: node.mainPicture?.medium,
-                            currentVolumes = listStatus?.numVolumesRead ?: 0,
-                            totalVolumes = node.numVolumes,
-                            currentChapters = listStatus?.numChaptersRead ?: 0,
-                            totalChapters = node.numChapters,
-                            trackingUnit = TrackingUnit.CHAPTERS,
-                            isRewatching = listStatus?.isRereading ?: false,
-                            rewatchCount = listStatus?.numTimesReread ?: 0,
-                            description = node.synopsis,
-                            tags = node.genres?.joinToString(", ") { it.name },
-                            airedStartDate = parseMalDateToMillis(node.startDate),
-                            airedEndDate = parseMalDateToMillis(node.endDate)
-                        )
-                        pulledEntries.add(entry)
+                        pulledEntries.add(mapMalMangaItemToEntry(item, userId))
                     }
 
                     val nextUrl = mangaResponse.paging?.next
@@ -440,6 +457,43 @@ object MalSyncManager {
         _syncState.value = MalSyncProgress(isRunning = false, statusMessage = "Sync canceled")
         val ctx = context ?: com.lx.tracklist.LXApplication.instance
         com.lx.tracklist.data.remote.SyncForegroundService.checkAndStop(ctx)
+    }
+
+    /**
+     * Maps a MAL v2 manga-list item into a local [MediaEntry], preserving Light Novel
+     * identity (`MediaType.BOOK` + `"Light Novel"` subcategory) when `node.mediaType`
+     * indicates a novel.
+     */
+    internal fun mapMalMangaItemToEntry(item: MalMangaListItem, userId: Long): MediaEntry {
+        val node = item.node
+        val listStatus = item.listStatus
+        val isLightNovel = MediaEntry.isLightNovelTypeToken(node.mediaType)
+        return MediaEntry(
+            userId = userId,
+            title = node.title,
+            alternateTitle = node.alternativeTitles?.en ?: node.alternativeTitles?.ja,
+            mediaType = if (isLightNovel) MediaType.BOOK else MediaType.MANGA,
+            subCategory = if (isLightNovel) "Light Novel" else null,
+            status = mapMalStatusToLx(listStatus?.status),
+            score = listStatus?.score?.takeIf { it > 0 },
+            externalScore = node.mean,
+            externalScoreSource = "MAL",
+            externalId = node.id.toString(),
+            externalSource = "MAL",
+            isExternallyTracked = true,
+            coverImageUri = node.mainPicture?.large ?: node.mainPicture?.medium,
+            currentVolumes = listStatus?.numVolumesRead ?: 0,
+            totalVolumes = node.numVolumes,
+            currentChapters = listStatus?.numChaptersRead ?: 0,
+            totalChapters = node.numChapters,
+            trackingUnit = TrackingUnit.CHAPTERS,
+            isRewatching = listStatus?.isRereading ?: false,
+            rewatchCount = listStatus?.numTimesReread ?: 0,
+            description = node.synopsis,
+            tags = node.genres?.joinToString(", ") { it.name },
+            airedStartDate = parseMalDateToMillis(node.startDate),
+            airedEndDate = parseMalDateToMillis(node.endDate)
+        )
     }
 
     private fun parseMalDateToMillis(dateStr: String?): Long? {

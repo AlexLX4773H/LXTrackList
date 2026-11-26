@@ -148,6 +148,8 @@ import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.model.effectiveMediaType
+import com.lx.tracklist.data.model.effectiveMediaTypeFor
 import com.lx.tracklist.ui.components.AddRelatedToLibraryDialog
 import com.lx.tracklist.ui.components.MediaCard
 import com.lx.tracklist.ui.components.UserAvatarButton
@@ -162,6 +164,7 @@ import com.lx.tracklist.ui.theme.LXSurfaceVariant
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
 import com.lx.tracklist.ui.theme.ThemeManager
+import com.lx.tracklist.ui.theme.parseHexColor
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -306,14 +309,18 @@ fun LibraryScreen(
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(LXSurfaceBlack)
                                         .clickable {
-                                            val targetType = customCat.mediaType ?: if (customCat.isWatchType) MediaType.ANIME else MediaType.MANGA
+                                            val targetType = customCat.effectiveMediaType()
                                             viewModel.batchUpdateCategory(targetType, customCat.name)
                                             showCategoryBatchDialog = false
                                         }
                                         .padding(horizontal = 12.dp, vertical = 12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(customCat.name, color = LXPrimaryGreen, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        customCat.name,
+                                        color = parseHexColor(customCat.colorHex),
+                                        fontWeight = FontWeight.Medium
+                                    )
                                 }
                             }
                         }
@@ -421,14 +428,15 @@ fun LibraryScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    val selectedTypes = remember(state.selectedIds, state.entries) {
+                        state.entries
+                            .asSequence()
+                            .filter { it.id in state.selectedIds }
+                            .map { it.mediaType }
+                            .toSet()
+                    }
                     MediaStatus.entries.forEach { st ->
-                        val statusLabel = when (st) {
-                            MediaStatus.WATCHING -> "Watching / Reading / Playing"
-                            MediaStatus.PLAN_TO_WATCH -> "Plan to Watch / Read / Play"
-                            MediaStatus.COMPLETED -> "Completed"
-                            MediaStatus.ON_HOLD -> "On Hold"
-                            MediaStatus.DROPPED -> "Dropped"
-                        }
+                        val statusLabel = st.labelFor(selectedTypes)
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -598,7 +606,12 @@ fun LibraryScreen(
                 }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Text(
                         text = "\"${targetIncrementEntry.title}\" is currently in $planLabel. Would you like to change its status to $statusLabel?",
                         color = LXTextPrimary,
@@ -664,7 +677,12 @@ fun LibraryScreen(
                 }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Text(
                         text = "Search and update posters, runtimes, broadcast dates, season/episode counts, platforms, and metadata for the selected ${state.selectedIds.size} entries using MyAnimeList (Jikan), The Movie Database (TMDB), Google Books, Open Library, IGDB / RAWG, and Apple Music / MusicBrainz.",
                         color = LXTextSecondary
@@ -675,7 +693,7 @@ fun LibraryScreen(
                         fontSize = 12.sp
                     )
                     Text(
-                        text = "Tap 'Resolve IDs' to find and link official IDs (MAL, MangaDex, AniList, Kitsu, TMDB, Google Books, Open Library) for Manga, Manhwa, Books, Novels, Movies, and TV Shows with confident exact title matching and audit reports.",
+                        text = "Tap 'Resolve IDs' to find and link official IDs (MAL, MangaDex, AniList, Kitsu, TMDB, Google Books, Open Library, IGDB, RAWG) for Anime, Manga, Manhwa, Books, Novels, Movies, TV Shows, and Games. Music tracks are skipped (not supported by ID resolution).",
                         color = LXScoreGold.copy(alpha = 0.9f),
                         fontSize = 11.sp
                     )
@@ -1363,8 +1381,11 @@ fun LibraryScreen(
             if (!state.isSelectionMode && onAddNewEntry != null) {
                 ThemedFloatingActionButton(
                     onClick = {
+                        val resolvedMediaType = state.selectedCategoryFilter
+                            ?: state.selectedCustomCategoryFilter?.let { state.customCategories.effectiveMediaTypeFor(it) }
+                            ?: MediaType.ANIME
                         onAddNewEntry(
-                            state.selectedCategoryFilter ?: MediaType.ANIME,
+                            resolvedMediaType,
                             state.selectedCustomCategoryFilter,
                             state.selectedSubCategoryFilter,
                             state.selectedStatusFilter ?: MediaStatus.WATCHING
@@ -1696,20 +1717,8 @@ fun LibraryScreen(
                 }
             }
 
-            // Active Filter Removable Badges (if filters active)
-            val hasActiveFilters = state.selectedCategoryFilter != null ||
-                    state.selectedCustomCategoryFilter != null ||
-                    state.selectedSubCategoryFilter != null ||
-                    state.selectedStatusFilter != null ||
-                    state.minScore != null ||
-                    state.onlyUnrated ||
-                    state.includedTags.isNotEmpty() ||
-                    state.excludedTags.isNotEmpty() ||
-                    state.favoritesFilter != InclusionFilterOption.ALL ||
-                    state.rewatchingFilter != InclusionFilterOption.ALL ||
-                    state.airingFilter != AiringFilterOption.ALL ||
-                    state.externalTrackingFilter != InclusionFilterOption.ALL ||
-                    state.coverImageFilter != CoverImageFilterOption.ALL
+            // Active Filter Removable Badges (if filters active — single source of truth via activeFilterCount)
+            val hasActiveFilters = state.activeFilterCount > 0
 
             if (hasActiveFilters) {
                 LazyRow(
@@ -1753,8 +1762,14 @@ fun LibraryScreen(
                     }
                     state.selectedStatusFilter?.let { status ->
                         item {
+                            val statusLabel = resolveLibraryStatusLabel(
+                                status = status,
+                                selectedCategory = state.selectedCategoryFilter,
+                                selectedCustomCategory = state.selectedCustomCategoryFilter,
+                                customCategories = state.customCategories
+                            )
                             RemovableFilterBadge(
-                                label = "Status: ${status.name.lowercase().replaceFirstChar { it.uppercase() }}",
+                                label = "Status: $statusLabel",
                                 onRemove = { viewModel.setStatusFilter(null) }
                             )
                         }
@@ -1812,9 +1827,10 @@ fun LibraryScreen(
                         }
                     }
 
-                    val isReadType = state.selectedCategoryFilter?.isReadType == true
-                    val isPlayType = state.selectedCategoryFilter?.isPlayType == true
-                    val rewatchTerm = if (isReadType) "Rereading" else if (isPlayType) "Replaying" else "Rewatching"
+                    val resolvedBadgeCategory = state.selectedCategoryFilter
+                        ?: state.selectedCustomCategoryFilter?.let { state.customCategories.effectiveMediaTypeFor(it) }
+                    val isReadType = resolvedBadgeCategory?.isReadType == true
+                    val rewatchTerm = resolvedBadgeCategory?.repeatingLabel() ?: "Rewatching"
 
                     if (state.rewatchingFilter == InclusionFilterOption.INCLUDE_ONLY) {
                         item {
@@ -1873,6 +1889,43 @@ fun LibraryScreen(
                             RemovableFilterBadge(
                                 label = "-Not Tracked",
                                 onRemove = { viewModel.setExternalTrackingFilter(InclusionFilterOption.ALL) }
+                            )
+                        }
+                    }
+
+                    if (state.includedPlatforms.isNotEmpty() || state.excludedPlatforms.isNotEmpty()) {
+                        item {
+                            RemovableFilterBadge(
+                                label = formatPlatformsBadgeLabel(
+                                    includedCount = state.includedPlatforms.size,
+                                    excludedCount = state.excludedPlatforms.size
+                                ),
+                                onRemove = { viewModel.clearPlatformFilters() }
+                            )
+                        }
+                    }
+
+                    if (state.includedLanguages.isNotEmpty()) {
+                        item {
+                            RemovableFilterBadge(
+                                label = formatLanguagesBadgeLabel(state.includedLanguages),
+                                onRemove = { viewModel.clearLanguageFilters() }
+                            )
+                        }
+                    }
+
+                    if (state.validExternalIdFilter == InclusionFilterOption.INCLUDE_ONLY) {
+                        item {
+                            RemovableFilterBadge(
+                                label = "Valid ID only",
+                                onRemove = { viewModel.setValidExternalIdFilter(InclusionFilterOption.ALL) }
+                            )
+                        }
+                    } else if (state.validExternalIdFilter == InclusionFilterOption.EXCLUDE) {
+                        item {
+                            RemovableFilterBadge(
+                                label = "-Valid ID",
+                                onRemove = { viewModel.setValidExternalIdFilter(InclusionFilterOption.ALL) }
                             )
                         }
                     }
@@ -1986,6 +2039,7 @@ fun LibraryScreen(
                             onToggleSelect = { viewModel.toggleSelect(entry.id) },
                             onLongClick = { viewModel.toggleSelect(entry.id) },
                             allLibraryEntries = state.allUserEntries,
+                            customCategories = state.customCategories,
                             onRelatedEntryClick = { onEntryClick(it) },
                             onAddRelatedItem = { item -> relatedItemToAdd = item }
                         )
@@ -2995,22 +3049,34 @@ private fun AdvancedFilterSheet(
                 excludedPlatforms = state.excludedPlatforms,
                 onCyclePlatform = { viewModel.cyclePlatformState(it) },
                 onClearAll = { viewModel.clearPlatformFilters() },
-                onDismiss = { showPlatformsSubMenu = false }
+                onDismiss = { showPlatformsSubMenu = false },
+                umbrellaOnly = true
             )
         } else if (showLanguageSubMenu) {
-            val searchCat = when (state.selectedCategoryFilter) {
+            val resolvedLangCategory = state.selectedCategoryFilter
+                ?: state.selectedCustomCategoryFilter?.let { state.customCategories.effectiveMediaTypeFor(it) }
+            val searchCat = when (resolvedLangCategory) {
                 MediaType.ANIME -> SearchCategory.ANIME
                 MediaType.MANGA -> {
                     val custom = state.selectedCustomCategoryFilter?.lowercase() ?: ""
                     val sub = state.selectedSubCategoryFilter?.lowercase() ?: ""
                     if (custom.contains("manhwa") || sub.contains("manhwa")) SearchCategory.MANHWA
-                    else if (custom.contains("novel") || sub.contains("novel")) SearchCategory.LIGHT_NOVELS
                     else SearchCategory.MANGA
                 }
                 MediaType.MANHWA -> SearchCategory.MANHWA
                 MediaType.MOVIE -> SearchCategory.MOVIES
                 MediaType.SHOW -> SearchCategory.TV_SHOWS
-                MediaType.BOOK -> SearchCategory.BOOKS
+                MediaType.BOOK -> if (
+                    MediaEntry.isLightNovelCategory(
+                        mediaType = MediaType.BOOK,
+                        customCategory = state.selectedCustomCategoryFilter,
+                        subCategory = state.selectedSubCategoryFilter
+                    )
+                ) {
+                    SearchCategory.LIGHT_NOVELS
+                } else {
+                    SearchCategory.BOOKS
+                }
                 MediaType.GAME -> SearchCategory.GAMES
                 MediaType.MUSIC -> SearchCategory.MUSIC
                 null -> SearchCategory.MOVIES
@@ -3083,10 +3149,16 @@ private fun AdvancedFilterSheet(
 
                             MediaStatus.entries.forEach { st ->
                                 val isSelected = state.selectedStatusFilter == st
+                                val chipLabel = resolveLibraryStatusLabel(
+                                    status = st,
+                                    selectedCategory = state.selectedCategoryFilter,
+                                    selectedCustomCategory = state.selectedCustomCategoryFilter,
+                                    customCategories = state.customCategories
+                                )
                                 FilterChip(
                                     selected = isSelected,
                                     onClick = { viewModel.setStatusFilter(if (isSelected) null else st) },
-                                    label = { Text(st.defaultLabel, fontSize = 11.sp) },
+                                    label = { Text(chipLabel, fontSize = 11.sp) },
                                     modifier = Modifier.height(30.dp),
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = LXPrimaryGreen,
@@ -3333,11 +3405,14 @@ private fun AdvancedFilterSheet(
                     }
                 }
 
-                // Platforms Filter Section (Specifically for Games or when viewing All)
+                // Platforms Filter Section (Games, All, or while a platform filter is active)
                 val isGameCategory = state.selectedCategoryFilter == MediaType.GAME
                 val isAllCategories = state.selectedCategoryFilter == null
-                val showPlatformsFilter = isGameCategory || isAllCategories
-                val showLanguageFilter = state.selectedCategoryFilter != MediaType.GAME
+                val showPlatformsFilter = isGameCategory ||
+                    isAllCategories ||
+                    state.includedPlatforms.isNotEmpty() ||
+                    state.excludedPlatforms.isNotEmpty()
+                val showLanguageFilter = true
 
                 if (showPlatformsFilter) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -3610,7 +3685,9 @@ private fun AdvancedFilterSheet(
                     )
 
                     // Ongoing / Airing / Publishing / NYA / NYP Filter
-                    val isReadType = state.selectedCategoryFilter?.isReadType == true
+                    val resolvedExtraCategory = state.selectedCategoryFilter
+                        ?: state.selectedCustomCategoryFilter?.let { state.customCategories.effectiveMediaTypeFor(it) }
+                    val isReadType = resolvedExtraCategory?.isReadType == true
                     val ongoingWord = if (isReadType) "Publishing" else "Ongoing"
                     val nyaWord = if (isReadType) "NYP" else "NYA"
                     AiringFilterRow(
@@ -3640,8 +3717,8 @@ private fun AdvancedFilterSheet(
                         onClick = { viewModel.cycleFavoritesFilter() }
                     )
 
-                    // Rewatching / Rereading / Replaying Filter
-                    val rewatchTitle = if (isReadType) "Rereading" else if (state.selectedCategoryFilter?.isPlayType == true) "Replaying" else "Rewatching"
+                    // Rewatching / Rereading / Replaying / Relistening Filter
+                    val rewatchTitle = resolvedExtraCategory?.repeatingLabel() ?: "Rewatching"
                     TriStateFilterRow(
                         title = rewatchTitle,
                         subtitle = when (state.rewatchingFilter) {

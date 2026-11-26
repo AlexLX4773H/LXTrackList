@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.GameSeriesItem
 import com.lx.tracklist.data.model.GameSeriesItemStatus
 import com.lx.tracklist.data.model.MediaEntry
@@ -48,6 +49,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.roundToInt
 
 enum class ExternalDbSource(val displayName: String, val shortName: String) {
     MAL("MyAnimeList (MAL)", "MAL"),
@@ -183,6 +185,8 @@ class AddEditViewModel(
     private val _savedEvent = Channel<Unit>(Channel.BUFFERED)
     val savedEvent = _savedEvent.receiveAsFlow()
 
+    private var originalEntry: MediaEntry? = null
+
     val customCategories = repository.customCategories
 
     val currentCategoryKey: String
@@ -206,6 +210,7 @@ class AddEditViewModel(
             viewModelScope.launch {
                 val entry = repository.getEntryByIdSync(id)
                 if (entry != null) {
+                    originalEntry = entry
                     val altTitles = entry.getAlternateTitles()
                     val effectiveStartDate = if (entry.status == MediaStatus.WATCHING && entry.startDate == null) {
                         todayStartTimestamp()
@@ -253,7 +258,7 @@ class AddEditViewModel(
                             episodeLengthMinutes = entry.episodeLengthMinutes,
                             currentTimeMinutes = entry.currentTimeMinutes,
                             isAiring = entry.isAiring,
-                            trackingUnit = entry.trackingUnit,
+                            trackingUnit = TrackingUnit.sanitizeForMediaType(entry.trackingUnit, entry.mediaType),
                             currentVolumes = entry.currentVolumes,
                             totalVolumes = entry.totalVolumes,
                             currentChapters = entry.currentChapters,
@@ -281,6 +286,7 @@ class AddEditViewModel(
                 }
             }
         } else {
+            originalEntry = null
             val status = initialStatus ?: MediaStatus.WATCHING
             _uiState.value = AddEditUiState(
                 userId = repository.activeUser.value.id,
@@ -344,6 +350,7 @@ class AddEditViewModel(
                 mediaType = value,
                 customCategory = null,
                 subCategory = null,
+                trackingUnit = TrackingUnit.sanitizeForMediaType(current.trackingUnit, value),
                 startDate = effectiveStartDate
             )
         }
@@ -362,6 +369,7 @@ class AddEditViewModel(
                 mediaType = mediaType,
                 customCategory = customCategory,
                 subCategory = null,
+                trackingUnit = TrackingUnit.sanitizeForMediaType(current.trackingUnit, mediaType),
                 startDate = effectiveStartDate
             )
         }
@@ -429,7 +437,9 @@ class AddEditViewModel(
     fun updateCurrentTimeMinutes(value: Int?) = _uiState.update { it.copy(currentTimeMinutes = value) }
     fun updateIsAiring(value: Boolean) = _uiState.update { it.copy(isAiring = value) }
 
-    fun updateTrackingUnit(value: TrackingUnit) = _uiState.update { it.copy(trackingUnit = value) }
+    fun updateTrackingUnit(value: TrackingUnit) = _uiState.update {
+        it.copy(trackingUnit = TrackingUnit.sanitizeForMediaType(value, it.mediaType))
+    }
     fun updateCurrentVolumes(value: Int) = _uiState.update { it.copy(currentVolumes = value) }
     fun updateTotalVolumes(value: Int) = _uiState.update { it.copy(totalVolumes = value) }
     fun updateCurrentChapters(value: Int) = _uiState.update { it.copy(currentChapters = value) }
@@ -468,80 +478,10 @@ class AddEditViewModel(
         }
 
         viewModelScope.launch {
-            val formattedAltTitle = MediaEntry.formatAlternateTitles(
-                if (s.alternateTitles.isNotEmpty()) s.alternateTitles
-                else if (s.alternateTitle.isNotBlank()) listOf(s.alternateTitle)
-                else emptyList()
-            )
-            val effectiveStartDate = if (s.status == MediaStatus.WATCHING && s.startDate == null) {
-                todayStartTimestamp()
-            } else {
-                s.startDate
-            }
-            val effectiveUserId = if (s.userId > 0L) s.userId else repository.activeUser.value.id
-            val effectiveSeasonEpisodesJson = if (s.mediaType == MediaType.SHOW) {
-                val sliced = s.seasonEpisodes.take(s.totalSeasons.coerceAtLeast(1))
-                MediaEntry.formatSeasonEpisodes(sliced)
-            } else null
-            val entry = MediaEntry(
-                id = s.id,
-                userId = effectiveUserId,
-                title = s.title.trim(),
-                alternateTitle = formattedAltTitle,
-                mediaType = s.mediaType,
-                customCategory = s.customCategory?.trim()?.ifBlank { null },
-                subCategory = s.subCategory?.trim()?.ifBlank { null },
-                originalLanguage = if (s.mediaType != MediaType.GAME) s.originalLanguage?.trim()?.ifBlank { null } else null,
-                status = s.status,
-                score = s.score,
-                externalScore = s.externalScore,
-                externalScoreSource = s.externalScoreSource.trim().ifBlank { null },
-                priority = s.priority,
-                coverImageUri = s.coverImageUri.trim().ifBlank { null },
-                isFavorite = s.isFavorite,
-                isExternallyTracked = s.isExternallyTracked,
-                rewatchCount = s.rewatchCount,
-                isRewatching = s.isRewatching,
-                externalId = s.externalId.trim().ifBlank { null },
-                externalSource = s.externalSource.trim().ifBlank { null },
-                description = s.description.trim().ifBlank { null },
-                userComments = s.userComments.trim().ifBlank { null },
-                tags = s.tags.trim().ifBlank { null },
-                startDate = effectiveStartDate,
-                finishDate = s.finishDate,
-                airedStartDate = s.airedStartDate,
-                airedEndDate = s.airedEndDate,
-                currentEpisodes = s.currentEpisodes,
-                totalEpisodes = s.totalEpisodes,
-                airedEpisodes = s.airedEpisodes,
-                seasonNumber = s.seasonNumber,
-                currentSeasons = s.currentSeasons.coerceAtLeast(1),
-                totalSeasons = s.totalSeasons.coerceAtLeast(1),
-                seasonEpisodesJson = effectiveSeasonEpisodesJson,
-                episodeLengthMinutes = s.episodeLengthMinutes,
-                currentTimeMinutes = if (s.mediaType == MediaType.ANIME || s.mediaType == MediaType.SHOW || s.mediaType == MediaType.MOVIE) s.currentTimeMinutes else null,
-                isAiring = s.isAiring,
-                trackingUnit = s.trackingUnit,
-                currentVolumes = s.currentVolumes,
-                totalVolumes = s.totalVolumes,
-                currentChapters = s.currentChapters,
-                totalChapters = s.totalChapters,
-                airedChapters = s.airedChapters,
-                currentPages = s.currentPages,
-                totalPages = s.totalPages,
-                movieSeriesName = s.movieSeriesName.trim().ifBlank { null },
-                movieSeriesNumber = s.movieSeriesNumber,
-                durationMinutes = s.durationMinutes,
-                creator = s.creator.trim().ifBlank { null },
-                musicAlbumId = s.musicAlbumId?.trim()?.ifBlank { null },
-                gamePlatforms = s.gamePlatforms.trim().ifBlank { null },
-                isGameFranchise = false,
-                gameSeriesEntriesJson = null,
-                gameProgressPercent = s.gameProgressPercent.coerceIn(0, 100),
-                customUnitLabel = s.customUnitLabel.trim().ifBlank { null },
-                customUnitCurrent = s.customUnitCurrent.coerceAtLeast(0.0),
-                customUnitTotal = s.customUnitTotal?.takeIf { it > 0.0 } ?: 0.0,
-                updatedAt = System.currentTimeMillis()
+            val entry = applyEdits(
+                original = originalEntry,
+                s = s,
+                activeUserId = repository.activeUser.value.id
             )
 
             if (entry.id == 0L) {
@@ -550,7 +490,7 @@ class AddEditViewModel(
                 repository.update(entry)
             }
 
-            _uiState.update { it.copy(isSaved = true, startDate = effectiveStartDate) }
+            _uiState.update { it.copy(isSaved = true, startDate = entry.startDate) }
             _savedEvent.send(Unit)
         }
     }
@@ -862,38 +802,17 @@ class AddEditViewModel(
                 current.mediaType
             }
 
-            val externalSrc = when (item.sourceProvider) {
-                "MangaDex" -> "MangaDex"
-                "Kitsu" -> "Kitsu"
-                "AniList" -> "AniList"
-                "Google Books" -> "Google Books"
-                "Open Library" -> "Open Library"
-                else -> if (item.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
-            }
-            val scoreSrc = item.externalScoreSource ?: externalSrc
+            val preferredRef = item.preferredExternalRef()
+            val canonProvider = ExternalSources.canonical(item.sourceProvider)
+            val externalSrc = preferredRef?.first ?: canonProvider ?: ExternalSources.MAL
+            val scoreSrc = item.externalScoreSource?.let { ExternalSources.canonical(it) ?: it } ?: externalSrc
 
-            val resolvedExtId = when (item.sourceProvider) {
-                "MangaDex" -> item.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: current.externalId
-                "Google Books", "Open Library" -> {
-                    val u = item.url
-                    val fromUrl = when {
-                        u != null && u.contains("id=") -> Regex("[?&]id=([^&]+)").find(u)?.groupValues?.get(1)
-                        u != null -> u.substringAfterLast('/').removePrefix("/works/").removePrefix("/").takeIf { it.isNotBlank() }
-                        else -> null
-                    }
-                    fromUrl ?: (item.isbn ?: current.externalId)
-                }
-                "AniList" -> {
-                    (item.malId ?: 0L).takeIf { it > 0 }?.toString()
-                        ?: item.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-                        ?: current.externalId
-                }
-                else -> (item.malId ?: 0L).takeIf { it > 0 }?.toString() ?: current.externalId
-            }
+            val resolvedExtId = preferredRef?.second ?: current.externalId
 
             val isBookSource = targetMediaType == MediaType.BOOK ||
                     item.type.equals("Book", ignoreCase = true) ||
-                    item.sourceProvider in listOf("Google Books", "Open Library")
+                    canonProvider == ExternalSources.GOOGLE_BOOKS ||
+                    canonProvider == ExternalSources.OPEN_LIBRARY
 
             val hasPages = item.totalPages != null && item.totalPages > 0
             val hasVolumes = item.totalVolumes != null && item.totalVolumes > 0
@@ -958,80 +877,30 @@ class AddEditViewModel(
 
             withContext(Dispatchers.Main) {
                 _uiState.update { current ->
-                    val isMovie = item.isMovie
-                    val queryTitle = current.title.trim()
-                    val cleanedOriginalTitle = TachiyomiResolverManager.stripBracketedSuffixes(queryTitle).takeIf { it.isNotBlank() } ?: queryTitle
-                    val candidateTitle = (fullDetails?.title ?: item.title).trim().takeIf { it.isNotBlank() }
-                    val targetTitle = if ((entryId != null && entryId > 0) || current.title.isNotBlank()) current.title else (candidateTitle ?: cleanedOriginalTitle)
-
-                    val candidateAlts = mutableListOf<String>()
-                    fullDetails?.alternateTitle?.split("\n")?.forEach { line ->
-                        val clean = line.trim()
-                        if (clean.isNotBlank() && !clean.equals(targetTitle, ignoreCase = true)) {
-                            candidateAlts.add(clean)
-                        }
-                    }
-                    if (!item.originalTitle.isNullOrBlank() && !item.originalTitle.equals(targetTitle, ignoreCase = true)) {
-                        candidateAlts.add(item.originalTitle.trim())
-                    }
-
-                    val currentAlts = (current.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() } + current.alternateTitles
-                    val extraAlts = (listOfNotNull(candidateTitle, cleanedOriginalTitle.takeIf { it != targetTitle }))
-                        .filter { it.isNotBlank() && !it.equals(targetTitle, ignoreCase = true) }
-
-                    val allAlts = (extraAlts + candidateAlts + currentAlts)
-                        .distinct()
-                        .filter { !it.equals(targetTitle, ignoreCase = true) }
-
-                    val targetMediaType = if (isMovie) MediaType.MOVIE else MediaType.SHOW
-                    val descWithMeta = fullDetails?.buildDescriptionWithMetadata() ?: item.overview
-                    val baseDesc = if (current.description.isBlank() && !descWithMeta.isNullOrBlank()) {
-                        descWithMeta
-                    } else current.description
-
-                    val duration = if (isMovie) {
-                        if (fullDetails?.durationMinutes != null && fullDetails.durationMinutes > 0) fullDetails.durationMinutes else current.durationMinutes
-                    } else current.durationMinutes
-
-                    val epLength = if (!isMovie) {
-                        if (fullDetails?.durationMinutes != null && fullDetails.durationMinutes > 0) fullDetails.durationMinutes else current.episodeLengthMinutes
-                    } else current.episodeLengthMinutes
-
-                    current.copy(
-                        title = targetTitle,
-                        alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
-                        alternateTitles = allAlts,
-                        creator = fullDetails?.resolveCreatorFor(!isMovie) ?: current.creator,
-                        mediaType = targetMediaType,
-                        coverImageUri = fullDetails?.posterUrl ?: item.posterUrl ?: item.backdropUrl ?: current.coverImageUri,
-                        externalId = item.tmdbId.toString(),
-                        externalSource = "TMDB",
-                        externalScore = fullDetails?.externalScore ?: item.voteAverage ?: current.externalScore,
-                        externalScoreSource = "TMDB",
-                        description = baseDesc,
-                        tags = (if (current.tags.isBlank() && !fullDetails?.tags.isNullOrBlank()) fullDetails?.tags else current.tags) ?: "",
-                        airedStartDate = fullDetails?.airedStartDate ?: item.releaseDate ?: current.airedStartDate,
-                        airedEndDate = fullDetails?.airedEndDate ?: current.airedEndDate,
-                        isAiring = fullDetails?.isAiring ?: current.isAiring,
-                        durationMinutes = duration,
-                        episodeLengthMinutes = epLength,
-                        totalEpisodes = if (!isMovie && fullDetails?.totalEpisodes != null && fullDetails.totalEpisodes > 0 && (current.totalEpisodes == 0 || ((fullDetails.totalSeasons ?: 0) > 1 && current.totalEpisodes <= 1))) fullDetails.totalEpisodes else current.totalEpisodes,
-                        totalSeasons = if (!isMovie && fullDetails?.totalSeasons != null && fullDetails.totalSeasons > 0 && current.totalSeasons <= 1) fullDetails.totalSeasons else current.totalSeasons,
-                        originalLanguage = fullDetails?.originalLanguage ?: item.originalLanguage ?: current.originalLanguage,
-                        seasonEpisodes = if (!isMovie && !fullDetails?.seasonEpisodes.isNullOrEmpty() && current.seasonEpisodes.all { it <= 0 }) {
-                            fullDetails.seasonEpisodes.orEmpty()
-                        } else current.seasonEpisodes
-                    )
+                    applyTmdbSelection(current, item, fullDetails, entryId)
                 }
                 _syncState.update { it.copy(successMessage = "Applied '${item.title}' from TMDB!") }
             }
         }
     }
 
+    internal fun applyTmdbSelectionToUiState(
+        current: AddEditUiState,
+        item: TmdbSearchResult,
+        fullDetails: TmdbMediaDetails?
+    ): AddEditUiState = applyTmdbSelection(current, item, fullDetails, entryId)
+
     fun applySelectedGameResult(item: GameSearchResult, context: Context? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             val fullDetails = if (context != null) {
-                GameMetadataManager.getGameDetails(context, item.externalId, item.externalSource).getOrNull()
+                GameMetadataManager.getGameDetails(
+                    context = context,
+                    externalId = item.externalId,
+                    externalSource = item.externalSource,
+                    title = item.title,
+                    alternateTitle = item.alternateTitle,
+                    releaseYear = item.releaseYear
+                ).getOrNull()
             } else null
 
             withContext(Dispatchers.Main) {
@@ -1079,7 +948,8 @@ class AddEditViewModel(
                     }
 
                     val newScore = fullDetails?.rating ?: item.score ?: current.externalScore
-                    val scoreSrc = fullDetails?.ratingSource ?: item.externalSource
+                    val canonicalGameSrc = ExternalSources.canonical(item.externalSource, item.externalId) ?: item.externalSource
+                    val scoreSrc = (fullDetails?.ratingSource ?: canonicalGameSrc).let { ExternalSources.canonical(it) ?: it }
                     val releaseDate = fullDetails?.releaseDateMillis ?: item.releaseDateMillis ?: current.airedStartDate
 
                     current.copy(
@@ -1090,7 +960,7 @@ class AddEditViewModel(
                         mediaType = MediaType.GAME,
                         coverImageUri = fullDetails?.coverUrl ?: item.coverUrl ?: current.coverImageUri,
                         externalId = item.externalId,
-                        externalSource = item.externalSource,
+                        externalSource = canonicalGameSrc,
                         externalScore = newScore,
                         externalScoreSource = scoreSrc,
                         description = baseDesc,
@@ -1164,6 +1034,427 @@ class AddEditViewModel(
             }.timeInMillis
         }
     }
+}
+
+data class FieldParseResult<T>(
+    val value: T?,
+    val error: String? = null
+) {
+    val isValid: Boolean get() = error == null
+}
+
+/**
+ * Pure input parsers and formatters for Add/Edit text fields so raw typing is preserved until
+ * commit (IME Done, focus loss, or Save) and invalid inputs surface clear validation errors.
+ */
+object AddEditInputParsers {
+
+    private val DURATION_WORDS_REGEX = Regex(
+        """^\s*(?:(\d+)\s*(?:h|hr|hrs|hour|hours)\b)?\s*(?:(\d+)\s*(?:m|min|mins|minute|minutes)\b)?\s*$"""
+    )
+
+    fun parseMusicDurationSeconds(input: String): FieldParseResult<Int?> {
+        val clean = input.trim()
+        if (clean.isEmpty()) return FieldParseResult(null, null)
+
+        if (clean.contains(':')) {
+            val parts = clean.split(':')
+            if (parts.size != 2) {
+                return FieldParseResult(null, "Use m:ss (e.g. 3:05) or seconds")
+            }
+            val m = parts[0].trim().toIntOrNull()
+            val s = parts[1].trim().toIntOrNull()
+            if (m == null || s == null || m < 0) {
+                return FieldParseResult(null, "Use m:ss (e.g. 3:05) or seconds")
+            }
+            if (s !in 0..59) {
+                return FieldParseResult(null, "Seconds must be between 0 and 59")
+            }
+            val total = m * 60 + s
+            return FieldParseResult(total.takeIf { it > 0 }, null)
+        }
+
+        val secs = clean.toIntOrNull()
+        if (secs == null || secs < 0) {
+            return FieldParseResult(null, "Enter seconds (e.g. 225) or m:ss (e.g. 3:05)")
+        }
+        return FieldParseResult(secs.takeIf { it > 0 }, null)
+    }
+
+    fun formatMusicDurationSeconds(seconds: Int?): String {
+        return if (seconds != null && seconds > 0) MediaEntry.formatMusicDuration(seconds) else ""
+    }
+
+    fun parsePlaybackTimeMinutes(input: String): FieldParseResult<Int?> {
+        val clean = input.trim().lowercase(Locale.US)
+        if (clean.isEmpty()) return FieldParseResult(null, null)
+
+        if (clean.contains(':')) {
+            val parts = clean.split(':')
+            return when (parts.size) {
+                2 -> {
+                    val m = parts[0].trim().toIntOrNull()
+                    val s = parts[1].trim().toIntOrNull()
+                    if (m == null || s == null || m < 0) {
+                        FieldParseResult(null, "Use minutes, mm:ss (e.g. 12:30), or 1h 15m")
+                    } else if (s !in 0..59) {
+                        FieldParseResult(null, "Seconds must be between 0 and 59")
+                    } else {
+                        val total = m + if (s >= 30) 1 else 0
+                        FieldParseResult(total.takeIf { it > 0 }, null)
+                    }
+                }
+                3 -> {
+                    val h = parts[0].trim().toIntOrNull()
+                    val m = parts[1].trim().toIntOrNull()
+                    val s = parts[2].trim().toIntOrNull()
+                    if (h == null || m == null || s == null || h < 0) {
+                        FieldParseResult(null, "Use minutes, hh:mm:ss, or 1h 15m")
+                    } else if (m !in 0..59 || s !in 0..59) {
+                        FieldParseResult(null, "Minutes and seconds must be 0–59")
+                    } else {
+                        val total = h * 60 + m + if (s >= 30) 1 else 0
+                        FieldParseResult(total.takeIf { it > 0 }, null)
+                    }
+                }
+                else -> FieldParseResult(null, "Use minutes (15), mm:ss (12:30), or 1h 15m")
+            }
+        }
+
+        val wordsMatch = DURATION_WORDS_REGEX.matchEntire(clean)
+        if (wordsMatch != null && (wordsMatch.groupValues[1].isNotEmpty() || wordsMatch.groupValues[2].isNotEmpty())) {
+            val h = wordsMatch.groupValues[1].takeIf { it.isNotEmpty() }?.toIntOrNull()
+            val m = wordsMatch.groupValues[2].takeIf { it.isNotEmpty() }?.toIntOrNull()
+            if ((wordsMatch.groupValues[1].isNotEmpty() && h == null) ||
+                (wordsMatch.groupValues[2].isNotEmpty() && m == null)
+            ) {
+                return FieldParseResult(null, "Use minutes (15), mm:ss (12:30), or 1h 15m")
+            }
+            if (h != null && m != null && m !in 0..59) {
+                return FieldParseResult(null, "Minutes must be 0–59 when hours are included")
+            }
+            val total = (h ?: 0) * 60 + (m ?: 0)
+            return FieldParseResult(total.takeIf { it > 0 }, null)
+        }
+
+        val direct = clean.toIntOrNull()
+        if (direct == null || direct < 0) {
+            return FieldParseResult(null, "Use minutes (15), mm:ss (12:30), or 1h 15m")
+        }
+        return FieldParseResult(direct.takeIf { it > 0 }, null)
+    }
+
+    fun formatPlaybackMinutes(minutes: Int?): String {
+        return if (minutes != null && minutes > 0) minutes.toString() else ""
+    }
+
+    fun parseGameHoursToMinutes(input: String): FieldParseResult<Int?> {
+        val clean = input.trim().replace(',', '.')
+        if (clean.isEmpty()) return FieldParseResult(null, null)
+
+        val hours = clean.toDoubleOrNull()
+        if (hours == null || hours.isNaN() || hours.isInfinite() || hours < 0.0) {
+            return FieldParseResult(null, "Enter hours ≥ 0 (e.g. 10.5)")
+        }
+        val mins = (hours * 60.0).roundToInt()
+        return FieldParseResult(mins.takeIf { it > 0 }, null)
+    }
+
+    fun formatMinutesAsHours(totalMinutes: Int?): String {
+        if (totalMinutes == null || totalMinutes <= 0) return ""
+        val h = totalMinutes / 60
+        val m = totalMinutes % 60
+        return if (m == 0) h.toString() else String.format(Locale.US, "%.2f", totalMinutes.toDouble() / 60.0).trimEnd('0').trimEnd('.')
+    }
+
+    fun externalScoreRangeForSource(scoreSource: String?): ClosedFloatingPointRange<Float> {
+        val normalized = scoreSource?.trim()?.lowercase(Locale.US).orEmpty()
+        return when {
+            normalized == "metacritic" ||
+                normalized == "rotten tomatoes" ||
+                normalized == "opencritic" -> 0f..100f
+            else -> 0f..10f
+        }
+    }
+
+    fun parseExternalScore(input: String, scoreSource: String?): FieldParseResult<Float?> {
+        val clean = input.trim().replace(',', '.')
+        if (clean.isEmpty()) return FieldParseResult(null, null)
+
+        val range = externalScoreRangeForSource(scoreSource)
+        val maxInt = range.endInclusive.toInt()
+        val parsed = clean.toFloatOrNull()
+        if (parsed == null || parsed.isNaN() || parsed.isInfinite()) {
+            return FieldParseResult(null, "Enter a valid number (0–$maxInt)")
+        }
+        if (parsed < range.start || parsed > range.endInclusive) {
+            return FieldParseResult(null, "Score must be 0–$maxInt for ${scoreSource?.ifBlank { "default" } ?: "default"}")
+        }
+        return FieldParseResult(parsed, null)
+    }
+
+    fun formatEditableScore(score: Float?): String {
+        if (score == null || score < 0f) return ""
+        return if (score % 1.0f == 0.0f) {
+            score.toInt().toString()
+        } else {
+            String.format(Locale.US, "%.2f", score).trimEnd('0').trimEnd('.')
+        }
+    }
+}
+
+/**
+ * Builds the [MediaEntry] to persist from the Add/Edit form state [s].
+ * When [original] is non-null, preserves all non-form metadata (`createdAt`, `broadcastTime`,
+ * `nextAiringEpoch`, `relatedEntriesJson`, `isGameFranchise`, `gameSeriesEntriesJson`,
+ * `lastMetadataSyncAt`) via `original.copy(...)`.
+ */
+fun applyEdits(
+    original: MediaEntry?,
+    s: AddEditUiState,
+    activeUserId: Long = s.userId,
+    now: Long = System.currentTimeMillis()
+): MediaEntry {
+    val formattedAltTitle = MediaEntry.formatAlternateTitles(
+        if (s.alternateTitles.isNotEmpty()) s.alternateTitles
+        else if (s.alternateTitle.isNotBlank()) listOf(s.alternateTitle)
+        else emptyList()
+    )
+    val effectiveStartDate = if (s.status == MediaStatus.WATCHING && s.startDate == null) {
+        AddEditViewModel.todayStartTimestamp()
+    } else {
+        s.startDate
+    }
+    val effectiveUserId = if (s.userId > 0L) s.userId else activeUserId
+    val effectiveSeasonEpisodesJson = if (s.mediaType == MediaType.SHOW) {
+        val sliced = s.seasonEpisodes.take(s.totalSeasons.coerceAtLeast(1))
+        MediaEntry.formatSeasonEpisodes(sliced)
+    } else {
+        null
+    }
+
+    val customCat = s.customCategory?.trim()?.ifBlank { null }
+    val subCat = s.subCategory?.trim()?.ifBlank { null }
+    val origLang = if (s.mediaType != MediaType.GAME) s.originalLanguage?.trim()?.ifBlank { null } else null
+    val extId = s.externalId.trim().ifBlank { null }
+    val rawExtSrc = s.externalSource.trim().ifBlank { null }
+    val extSrc = rawExtSrc?.let { ExternalSources.canonical(it, extId) ?: it }
+    val rawScoreSrc = s.externalScoreSource.trim().ifBlank { null }
+    val extScoreSrc = rawScoreSrc?.let { ExternalSources.canonical(it) ?: it }
+    val coverUri = s.coverImageUri.trim().ifBlank { null }
+    val desc = s.description.trim().ifBlank { null }
+    val comments = s.userComments.trim().ifBlank { null }
+    val tagsVal = s.tags.trim().ifBlank { null }
+    val curSeasons = s.currentSeasons.coerceAtLeast(1)
+    val totSeasons = s.totalSeasons.coerceAtLeast(1)
+    val curTime = if (s.mediaType == MediaType.ANIME || s.mediaType == MediaType.SHOW || s.mediaType == MediaType.MOVIE) {
+        s.currentTimeMinutes
+    } else {
+        null
+    }
+    val movSeriesName = s.movieSeriesName.trim().ifBlank { null }
+    val creatorVal = s.creator.trim().ifBlank { null }
+    val albumId = s.musicAlbumId?.trim()?.ifBlank { null }
+    val platforms = s.gamePlatforms.trim().ifBlank { null }
+    val gamePct = s.gameProgressPercent.coerceIn(0, 100)
+    val unitLabel = s.customUnitLabel.trim().ifBlank { null }
+    val unitCur = s.customUnitCurrent.coerceAtLeast(0.0)
+    val unitTotal = s.customUnitTotal?.takeIf { it > 0.0 } ?: 0.0
+    val effectiveTrackingUnit = TrackingUnit.sanitizeForMediaType(s.trackingUnit, s.mediaType)
+
+    return original?.copy(
+        userId = effectiveUserId,
+        title = s.title.trim(),
+        alternateTitle = formattedAltTitle,
+        mediaType = s.mediaType,
+        customCategory = customCat,
+        subCategory = subCat,
+        originalLanguage = origLang,
+        status = s.status,
+        score = s.score,
+        externalScore = s.externalScore,
+        externalScoreSource = extScoreSrc,
+        priority = s.priority,
+        coverImageUri = coverUri,
+        isFavorite = s.isFavorite,
+        isExternallyTracked = s.isExternallyTracked,
+        rewatchCount = s.rewatchCount,
+        isRewatching = s.isRewatching,
+        externalId = extId,
+        externalSource = extSrc,
+        description = desc,
+        userComments = comments,
+        tags = tagsVal,
+        startDate = effectiveStartDate,
+        finishDate = s.finishDate,
+        airedStartDate = s.airedStartDate,
+        airedEndDate = s.airedEndDate,
+        currentEpisodes = s.currentEpisodes,
+        totalEpisodes = s.totalEpisodes,
+        airedEpisodes = s.airedEpisodes,
+        seasonNumber = s.seasonNumber,
+        currentSeasons = curSeasons,
+        totalSeasons = totSeasons,
+        seasonEpisodesJson = effectiveSeasonEpisodesJson,
+        episodeLengthMinutes = s.episodeLengthMinutes,
+        currentTimeMinutes = curTime,
+        isAiring = s.isAiring,
+        trackingUnit = effectiveTrackingUnit,
+        currentVolumes = s.currentVolumes,
+        totalVolumes = s.totalVolumes,
+        currentChapters = s.currentChapters,
+        totalChapters = s.totalChapters,
+        airedChapters = s.airedChapters,
+        currentPages = s.currentPages,
+        totalPages = s.totalPages,
+        movieSeriesName = movSeriesName,
+        movieSeriesNumber = s.movieSeriesNumber,
+        durationMinutes = s.durationMinutes,
+        creator = creatorVal,
+        musicAlbumId = albumId,
+        gamePlatforms = platforms,
+        gameProgressPercent = gamePct,
+        customUnitLabel = unitLabel,
+        customUnitCurrent = unitCur,
+        customUnitTotal = unitTotal,
+        updatedAt = now
+    ) ?: MediaEntry(
+        id = s.id,
+        userId = effectiveUserId,
+        title = s.title.trim(),
+        alternateTitle = formattedAltTitle,
+        mediaType = s.mediaType,
+        customCategory = customCat,
+        subCategory = subCat,
+        originalLanguage = origLang,
+        status = s.status,
+        score = s.score,
+        externalScore = s.externalScore,
+        externalScoreSource = extScoreSrc,
+        priority = s.priority,
+        coverImageUri = coverUri,
+        isFavorite = s.isFavorite,
+        isExternallyTracked = s.isExternallyTracked,
+        rewatchCount = s.rewatchCount,
+        isRewatching = s.isRewatching,
+        externalId = extId,
+        externalSource = extSrc,
+        description = desc,
+        userComments = comments,
+        tags = tagsVal,
+        startDate = effectiveStartDate,
+        finishDate = s.finishDate,
+        airedStartDate = s.airedStartDate,
+        airedEndDate = s.airedEndDate,
+        currentEpisodes = s.currentEpisodes,
+        totalEpisodes = s.totalEpisodes,
+        airedEpisodes = s.airedEpisodes,
+        seasonNumber = s.seasonNumber,
+        currentSeasons = curSeasons,
+        totalSeasons = totSeasons,
+        seasonEpisodesJson = effectiveSeasonEpisodesJson,
+        episodeLengthMinutes = s.episodeLengthMinutes,
+        currentTimeMinutes = curTime,
+        isAiring = s.isAiring,
+        trackingUnit = effectiveTrackingUnit,
+        currentVolumes = s.currentVolumes,
+        totalVolumes = s.totalVolumes,
+        currentChapters = s.currentChapters,
+        totalChapters = s.totalChapters,
+        airedChapters = s.airedChapters,
+        currentPages = s.currentPages,
+        totalPages = s.totalPages,
+        movieSeriesName = movSeriesName,
+        movieSeriesNumber = s.movieSeriesNumber,
+        durationMinutes = s.durationMinutes,
+        creator = creatorVal,
+        musicAlbumId = albumId,
+        gamePlatforms = platforms,
+        isGameFranchise = false,
+        gameSeriesEntriesJson = null,
+        gameProgressPercent = gamePct,
+        customUnitLabel = unitLabel,
+        customUnitCurrent = unitCur,
+        customUnitTotal = unitTotal,
+        updatedAt = now
+    )
+}
+
+internal fun applyTmdbSelection(
+    current: AddEditUiState,
+    item: TmdbSearchResult,
+    fullDetails: TmdbMediaDetails?,
+    entryId: Long? = null
+): AddEditUiState {
+    val isMovie = item.isMovie
+    val queryTitle = current.title.trim()
+    val cleanedOriginalTitle = TachiyomiResolverManager.stripBracketedSuffixes(queryTitle).takeIf { it.isNotBlank() } ?: queryTitle
+    val candidateTitle = (fullDetails?.title ?: item.title).trim().takeIf { it.isNotBlank() }
+    val targetTitle = if ((entryId != null && entryId > 0) || current.title.isNotBlank()) current.title else (candidateTitle ?: cleanedOriginalTitle)
+
+    val candidateAlts = mutableListOf<String>()
+    fullDetails?.alternateTitle?.split("\n")?.forEach { line ->
+        val clean = line.trim()
+        if (clean.isNotBlank() && !clean.equals(targetTitle, ignoreCase = true)) {
+            candidateAlts.add(clean)
+        }
+    }
+    if (!item.originalTitle.isNullOrBlank() && !item.originalTitle.equals(targetTitle, ignoreCase = true)) {
+        candidateAlts.add(item.originalTitle.trim())
+    }
+
+    val currentAlts = (current.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() } + current.alternateTitles
+    val extraAlts = (listOfNotNull(candidateTitle, cleanedOriginalTitle.takeIf { it != targetTitle }))
+        .filter { it.isNotBlank() && !it.equals(targetTitle, ignoreCase = true) }
+
+    val allAlts = (extraAlts + candidateAlts + currentAlts)
+        .distinct()
+        .filter { !it.equals(targetTitle, ignoreCase = true) }
+
+    // Only re-type between MOVIE and SHOW; applying TMDB metadata to ANIME keeps MediaType.ANIME.
+    val targetMediaType = if (current.mediaType == MediaType.MOVIE || current.mediaType == MediaType.SHOW) {
+        if (isMovie) MediaType.MOVIE else MediaType.SHOW
+    } else {
+        current.mediaType
+    }
+    val descWithMeta = fullDetails?.buildDescriptionWithMetadata() ?: item.overview
+    val baseDesc = if (current.description.isBlank() && !descWithMeta.isNullOrBlank()) {
+        descWithMeta
+    } else current.description
+
+    val duration = if (isMovie) {
+        if (fullDetails?.durationMinutes != null && fullDetails.durationMinutes > 0) fullDetails.durationMinutes else current.durationMinutes
+    } else current.durationMinutes
+
+    val epLength = if (!isMovie || targetMediaType == MediaType.ANIME) {
+        if (fullDetails?.durationMinutes != null && fullDetails.durationMinutes > 0) fullDetails.durationMinutes else current.episodeLengthMinutes
+    } else current.episodeLengthMinutes
+
+    return current.copy(
+        title = targetTitle,
+        alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: current.alternateTitle,
+        alternateTitles = allAlts,
+        creator = fullDetails?.resolveCreatorFor(!isMovie) ?: current.creator,
+        mediaType = targetMediaType,
+        coverImageUri = fullDetails?.posterUrl ?: item.posterUrl ?: item.backdropUrl ?: current.coverImageUri,
+        externalId = item.tmdbId.toString(),
+        externalSource = ExternalSources.TMDB,
+        externalScore = fullDetails?.externalScore ?: item.voteAverage ?: current.externalScore,
+        externalScoreSource = ExternalSources.TMDB,
+        description = baseDesc,
+        tags = (if (current.tags.isBlank() && !fullDetails?.tags.isNullOrBlank()) fullDetails?.tags else current.tags) ?: "",
+        airedStartDate = fullDetails?.airedStartDate ?: item.releaseDate ?: current.airedStartDate,
+        airedEndDate = fullDetails?.airedEndDate ?: current.airedEndDate,
+        isAiring = fullDetails?.isAiring ?: current.isAiring,
+        durationMinutes = duration,
+        episodeLengthMinutes = epLength,
+        totalEpisodes = if (!isMovie && fullDetails?.totalEpisodes != null && fullDetails.totalEpisodes > 0 && (current.totalEpisodes == 0 || ((fullDetails.totalSeasons ?: 0) > 1 && current.totalEpisodes <= 1))) fullDetails.totalEpisodes else current.totalEpisodes,
+        totalSeasons = if (targetMediaType == MediaType.SHOW && fullDetails?.totalSeasons != null && fullDetails.totalSeasons > 0 && current.totalSeasons <= 1) fullDetails.totalSeasons else current.totalSeasons,
+        originalLanguage = fullDetails?.originalLanguage ?: item.originalLanguage ?: current.originalLanguage,
+        seasonEpisodes = if (targetMediaType == MediaType.SHOW && !fullDetails?.seasonEpisodes.isNullOrEmpty() && current.seasonEpisodes.all { it <= 0 }) {
+            fullDetails.seasonEpisodes.orEmpty()
+        } else current.seasonEpisodes
+    )
 }
 
 class AddEditViewModelFactory(

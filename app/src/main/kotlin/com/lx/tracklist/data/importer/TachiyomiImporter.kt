@@ -1,6 +1,7 @@
 package com.lx.tracklist.data.importer
 
 import com.google.gson.JsonParser
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
@@ -561,24 +562,31 @@ object TachiyomiImporter {
         val sourceName = sourceMap[manga.source]
 
         // In .tachibk, categories mentioned in the file are equivalent to sub categories in the app
-        val subCategory = resolvedCategories.firstOrNull {
+        val isLightNovelCat = resolvedCategories.any { MediaEntry.isLightNovelMarker(it) }
+        val rawSubCategory = resolvedCategories.firstOrNull {
             it.isNotBlank() && !isGenericCategory(it)
         }?.trim()
-
-        // 1. Determine MediaType (MANGA vs MANHWA)
-        // In .tachibk, entries are manga/manhwa; Tachiyomi categories are sub-categories under Manga or Manhwa
-        val mediaType = if (isManhwa(manga, resolvedCategories, sourceName)) {
-            MediaType.MANHWA
+        val subCategory = if (isLightNovelCat && (rawSubCategory == null || MediaEntry.isLightNovelMarker(rawSubCategory))) {
+            "Light Novel"
         } else {
-            MediaType.MANGA
+            rawSubCategory
         }
 
+        // 1. Determine MediaType (BOOK for Light Novels, MANHWA vs MANGA otherwise)
+        val mediaType = when {
+            isLightNovelCat -> MediaType.BOOK
+            isManhwa(manga, resolvedCategories, sourceName) -> MediaType.MANHWA
+            else -> MediaType.MANGA
+        }
+
+        val orderedTracking = manga.tracking.sortedBy { trackerPriority(it.syncId) }
+
         // 2. Determine Progress (Current & Total Chapters/Episodes)
-        val trackedTotal = manga.tracking.map { it.totalChapters }.firstOrNull { it > 0 } ?: 0
+        val trackedTotal = orderedTracking.map { it.totalChapters }.firstOrNull { it > 0 } ?: 0
         val maxChapterFromList = manga.chapters.maxOfOrNull { it.chapterNumber }?.toInt() ?: 0
         val chapterCount = manga.chapters.size
 
-        val trackedRead = manga.tracking.map { it.lastChapterRead.toInt() }.firstOrNull { it > 0 } ?: 0
+        val trackedRead = orderedTracking.map { it.lastChapterRead.toInt() }.firstOrNull { it > 0 } ?: 0
         val readCount = manga.chapters.count { it.read }
         val maxReadChapter = manga.chapters.filter { it.read }.maxOfOrNull { it.chapterNumber }?.toInt() ?: 0
         val chapterReadProgress = if (maxReadChapter > 0) maxReadChapter else readCount
@@ -596,20 +604,19 @@ object TachiyomiImporter {
             totalChapters = currentChapters
         }
 
-        // 3. Determine Status
-        val status = determineStatus(manga, resolvedCategories, currentChapters, totalChapters)
+        // 3. Determine Status & Rewatching
+        val (status, isRewatching) = determineStatusAndRewatching(
+            orderedTracking = orderedTracking,
+            categoryNames = resolvedCategories,
+            currentChapters = currentChapters,
+            totalChapters = totalChapters
+        )
         val isOngoing = manga.status == 2 || (status != MediaStatus.COMPLETED && manga.status != 1)
         val airedChapters = if (isOngoing && maxChapterFromList > 0) maxChapterFromList else 0
 
-        // 4. Score
-        val rawScore = manga.tracking.map { it.score }.firstOrNull { it > 0f }
-        val score = rawScore?.let { s ->
-            when {
-                s in 1f..10f -> s.roundToInt()
-                s in 11f..100f -> (s / 10f).roundToInt()
-                else -> null
-            }
-        }
+        // 4. Score (prefer highest-priority tracker; normalize Kitsu 2..20 and AniList /100 scales)
+        val score = orderedTracking.firstOrNull { it.score > 0f }
+            ?.let { normalizeTrackerScore(it.syncId, it.score) }
 
         // 5. Tags & Description
         val allTags = (manga.genres + resolvedCategories).map { it.trim() }.filter { it.isNotBlank() }.distinct()
@@ -633,7 +640,7 @@ object TachiyomiImporter {
         // 6. Cover image URL
         val coverImageUri = manga.thumbnailUrl?.takeIf { it.isNotBlank() }
 
-        // 7. External Tracker mapping
+        // 7. External Tracker mapping (prefer MAL -> AniList -> Kitsu with canonical names)
         fun extractTrackerId(track: TachiyomiTracking): String? {
             return when {
                 track.mediaId > 0L -> track.mediaId.toString()
@@ -647,20 +654,25 @@ object TachiyomiImporter {
             }
         }
 
-        val malId = manga.tracking.firstOrNull { it.syncId == 1 }?.let { extractTrackerId(it) }
-        val aniId = manga.tracking.firstOrNull { it.syncId == 2 }?.let { extractTrackerId(it) }
-        val (externalSource, externalId) = when {
-            !malId.isNullOrBlank() && malId != "0" -> Pair("MAL", malId)
-            !aniId.isNullOrBlank() && aniId != "0" -> Pair("ANILIST", aniId)
-            else -> {
-                val id = if (manga.url.isNotBlank()) manga.url else manga.title
-                Pair("TACHIYOMI", id)
-            }
+        val resolvedExternal = orderedTracking.firstNotNullOfOrNull { track ->
+            val rawSource = when (track.syncId) {
+                SYNC_ID_MAL -> ExternalSources.MAL
+                SYNC_ID_ANILIST -> ExternalSources.ANILIST
+                SYNC_ID_KITSU -> ExternalSources.KITSU
+                else -> null
+            } ?: return@firstNotNullOfOrNull null
+            val id = extractTrackerId(track)?.takeIf { it.isNotBlank() && it != "0" }
+                ?: return@firstNotNullOfOrNull null
+            ExternalSources.canonical(rawSource, id)?.let { it to id }
         }
+        val (externalSource, externalId) = resolvedExternal ?: Pair(
+            ExternalSources.TACHIYOMI,
+            if (manga.url.isNotBlank()) manga.url else manga.title
+        )
 
         // 8. Timestamps
-        val startDate = manga.tracking.mapNotNull { normalizeDate(it.startedReadingDate) }.firstOrNull()
-        val finishDate = manga.tracking.mapNotNull { normalizeDate(it.finishedReadingDate) }.firstOrNull()
+        val startDate = orderedTracking.mapNotNull { normalizeDate(it.startedReadingDate) }.firstOrNull()
+        val finishDate = orderedTracking.mapNotNull { normalizeDate(it.finishedReadingDate) }.firstOrNull()
         val createdAt = normalizeDate(manga.dateAdded) ?: System.currentTimeMillis()
         val lastRead = manga.history.mapNotNull { normalizeDate(it.lastRead) }.maxOrNull()
         val updatedAt = lastRead ?: createdAt
@@ -679,6 +691,7 @@ object TachiyomiImporter {
             subCategory = subCategory,
             status = status,
             score = score,
+            isRewatching = isRewatching,
             startDate = startDate,
             finishDate = finishDate,
             description = desc,
@@ -750,51 +763,132 @@ object TachiyomiImporter {
         return false
     }
 
-    private fun determineStatus(
-        manga: TachiyomiManga,
+    // Tracker IDs verified from mihonapp/mihon TrackerManager, MyAnimeList, Anilist, Kitsu,
+    // Shikimori, Bangumi, and MangaUpdates definitions.
+    internal const val SYNC_ID_MAL = 1
+    internal const val SYNC_ID_ANILIST = 2
+    internal const val SYNC_ID_KITSU = 3
+    internal const val SYNC_ID_SHIKIMORI = 4
+    internal const val SYNC_ID_BANGUMI = 5
+    internal const val SYNC_ID_MANGAUPDATES = 7
+
+    private fun trackerPriority(syncId: Int): Int = when (syncId) {
+        SYNC_ID_MAL -> 0
+        SYNC_ID_ANILIST -> 1
+        SYNC_ID_KITSU -> 2
+        SYNC_ID_SHIKIMORI -> 3
+        SYNC_ID_BANGUMI -> 4
+        SYNC_ID_MANGAUPDATES -> 5
+        else -> 10 + syncId
+    }
+
+    internal fun mapTrackerStatus(syncId: Int, status: Int): Pair<MediaStatus, Boolean>? {
+        return when (syncId) {
+            SYNC_ID_MAL -> when (status) {
+                1 -> MediaStatus.WATCHING to false
+                2 -> MediaStatus.COMPLETED to false
+                3 -> MediaStatus.ON_HOLD to false
+                4 -> MediaStatus.DROPPED to false
+                6 -> MediaStatus.PLAN_TO_WATCH to false
+                7 -> MediaStatus.WATCHING to true
+                else -> null
+            }
+            SYNC_ID_ANILIST, SYNC_ID_KITSU, SYNC_ID_SHIKIMORI -> when (status) {
+                1 -> MediaStatus.WATCHING to false
+                2 -> MediaStatus.COMPLETED to false
+                3 -> MediaStatus.ON_HOLD to false
+                4 -> MediaStatus.DROPPED to false
+                5 -> MediaStatus.PLAN_TO_WATCH to false
+                6 -> if (syncId == SYNC_ID_KITSU) null else MediaStatus.WATCHING to true
+                else -> null
+            }
+            SYNC_ID_BANGUMI -> when (status) {
+                1 -> MediaStatus.PLAN_TO_WATCH to false
+                2 -> MediaStatus.COMPLETED to false
+                3 -> MediaStatus.WATCHING to false
+                4 -> MediaStatus.ON_HOLD to false
+                5 -> MediaStatus.DROPPED to false
+                else -> null
+            }
+            SYNC_ID_MANGAUPDATES -> when (status) {
+                0 -> MediaStatus.WATCHING to false
+                1 -> MediaStatus.PLAN_TO_WATCH to false
+                2 -> MediaStatus.COMPLETED to false
+                3 -> MediaStatus.DROPPED to false
+                4 -> MediaStatus.ON_HOLD to false
+                else -> null
+            }
+            else -> if (status > 0) {
+                when (status) {
+                    1 -> MediaStatus.WATCHING to false
+                    2 -> MediaStatus.COMPLETED to false
+                    3 -> MediaStatus.ON_HOLD to false
+                    4 -> MediaStatus.DROPPED to false
+                    5 -> MediaStatus.PLAN_TO_WATCH to false
+                    else -> null
+                }
+            } else null
+        }
+    }
+
+    internal fun normalizeTrackerScore(syncId: Int, rawScore: Float): Int? {
+        if (rawScore <= 0f) return null
+        return when (syncId) {
+            SYNC_ID_MAL -> when {
+                rawScore in 1f..10f -> rawScore.roundToInt().coerceIn(1, 10)
+                rawScore in 11f..100f -> (rawScore / 10f).roundToInt().coerceIn(1, 10)
+                else -> null
+            }
+            SYNC_ID_KITSU -> (rawScore / 2f).roundToInt().coerceIn(1, 10)
+            SYNC_ID_ANILIST, SYNC_ID_SHIKIMORI, SYNC_ID_BANGUMI, SYNC_ID_MANGAUPDATES -> when {
+                rawScore > 10f -> (rawScore / 10f).roundToInt().coerceIn(1, 10)
+                rawScore >= 1f -> rawScore.roundToInt().coerceIn(1, 10)
+                else -> null
+            }
+            else -> when {
+                rawScore in 1f..10f -> rawScore.roundToInt().coerceIn(1, 10)
+                rawScore in 11f..100f -> (rawScore / 10f).roundToInt().coerceIn(1, 10)
+                else -> null
+            }
+        }
+    }
+
+    private fun determineStatusAndRewatching(
+        orderedTracking: List<TachiyomiTracking>,
         categoryNames: List<String>,
         currentChapters: Int,
         totalChapters: Int
-    ): MediaStatus {
-        // 1. Category check
-        for (cat in categoryNames) {
-            val lower = cat.lowercase()
-            when {
-                lower.contains("plan to read") || lower.contains("to read") || lower.contains("backlog") || lower.contains("planned") -> return MediaStatus.PLAN_TO_WATCH
-                lower.contains("completed") || lower.contains("finished") || lower.contains("done") -> return MediaStatus.COMPLETED
-                lower.contains("on hold") || lower.contains("hold") || lower.contains("paused") -> return MediaStatus.ON_HOLD
-                lower.contains("dropped") -> return MediaStatus.DROPPED
-                lower.contains("reading") || lower.contains("currently reading") -> return MediaStatus.WATCHING
+    ): Pair<MediaStatus, Boolean> {
+        // 1. Authoritative tracker mapping (ordered MAL -> AniList -> Kitsu -> ...)
+        for (track in orderedTracking) {
+            val hasStatus = (track.syncId == SYNC_ID_MANGAUPDATES && track.status >= 0) || track.status > 0
+            if (hasStatus) {
+                val mapped = mapTrackerStatus(track.syncId, track.status)
+                if (mapped != null) return mapped
             }
         }
 
-        // 2. Tracking check
-        for (track in manga.tracking) {
-            if (track.status > 0) {
-                if (track.syncId == 1) { // MAL
-                    return MediaStatus.fromMalStatus(track.status)
-                } else { // AniList or others
-                    return when (track.status) {
-                        1 -> MediaStatus.WATCHING
-                        2 -> MediaStatus.PLAN_TO_WATCH
-                        3 -> MediaStatus.COMPLETED
-                        4 -> MediaStatus.DROPPED
-                        5 -> MediaStatus.ON_HOLD
-                        else -> MediaStatus.WATCHING
-                    }
-                }
+        // 2. Category fallback for untracked entries
+        for (cat in categoryNames) {
+            val lower = cat.lowercase()
+            when {
+                lower.contains("plan to read") || lower.contains("to read") || lower.contains("backlog") || lower.contains("planned") -> return MediaStatus.PLAN_TO_WATCH to false
+                lower.contains("completed") || lower.contains("finished") || lower.contains("done") -> return MediaStatus.COMPLETED to false
+                lower.contains("on hold") || lower.contains("hold") || lower.contains("paused") -> return MediaStatus.ON_HOLD to false
+                lower.contains("dropped") -> return MediaStatus.DROPPED to false
+                lower.contains("reading") || lower.contains("currently reading") -> return MediaStatus.WATCHING to false
             }
         }
 
         // 3. Chapter progress fallback
         return if (currentChapters > 0) {
             if (totalChapters > 0 && currentChapters >= totalChapters) {
-                MediaStatus.COMPLETED
+                MediaStatus.COMPLETED to false
             } else {
-                MediaStatus.WATCHING
+                MediaStatus.WATCHING to false
             }
         } else {
-            MediaStatus.PLAN_TO_WATCH
+            MediaStatus.PLAN_TO_WATCH to false
         }
     }
 

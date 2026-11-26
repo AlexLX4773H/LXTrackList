@@ -9,6 +9,7 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.lx.tracklist.data.local.FailedCoverTracker
 import com.lx.tracklist.data.local.StorageHelper
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.TrackingUnit
@@ -111,6 +112,7 @@ object TachiyomiResolverManager {
     }
 
     fun isEligibleForResolution(entry: MediaEntry): Boolean {
+        if (entry.mediaType == MediaType.MUSIC) return false
         if (entry.title.isBlank()) return false
         if (entry.mediaType == MediaType.GAME) {
             val hasValidGameSource = entry.externalSource.equals("IGDB", ignoreCase = true) ||
@@ -118,11 +120,11 @@ object TachiyomiResolverManager {
             return entry.externalId.isNullOrBlank() || !hasValidGameSource
         }
         if (entry.mediaType == MediaType.BOOK) {
-            val hasValidBookSource = entry.externalSource.equals("Google Books", ignoreCase = true) ||
-                    entry.externalSource.equals("Open Library", ignoreCase = true) ||
-                    entry.externalSource.equals("AniList", ignoreCase = true) ||
-                    entry.externalSource.equals("MAL", ignoreCase = true) ||
-                    entry.externalSource.equals("MyAnimeList", ignoreCase = true)
+            val canonBookSrc = ExternalSources.canonical(entry.externalSource, entry.externalId)
+            val hasValidBookSource = canonBookSrc == ExternalSources.GOOGLE_BOOKS ||
+                    canonBookSrc == ExternalSources.OPEN_LIBRARY ||
+                    canonBookSrc == ExternalSources.ANILIST ||
+                    canonBookSrc == ExternalSources.MAL
             return entry.externalId.isNullOrBlank() || !hasValidBookSource
         }
         val isReadingType = entry.mediaType == MediaType.MANGA ||
@@ -136,11 +138,11 @@ object TachiyomiResolverManager {
         val isWatchType = entry.mediaType == MediaType.MOVIE ||
                 entry.mediaType == MediaType.SHOW
         if (isWatchType) {
-            val hasValidWatchSource = entry.externalSource.equals("TMDB", ignoreCase = true) ||
-                    entry.externalSource.equals("MAL", ignoreCase = true) ||
-                    entry.externalSource.equals("MyAnimeList", ignoreCase = true) ||
-                    entry.externalSource.equals("AniList", ignoreCase = true) ||
-                    entry.externalSource.equals("Kitsu", ignoreCase = true)
+            val canonWatchSrc = ExternalSources.canonical(entry.externalSource, entry.externalId)
+            val hasValidWatchSource = canonWatchSrc == ExternalSources.TMDB ||
+                    canonWatchSrc == ExternalSources.MAL ||
+                    canonWatchSrc == ExternalSources.ANILIST ||
+                    canonWatchSrc == ExternalSources.KITSU
             return entry.externalId.isNullOrBlank() || !hasValidWatchSource
         }
         if (entry.mediaType == MediaType.ANIME) {
@@ -169,16 +171,6 @@ object TachiyomiResolverManager {
         if (src == "mal" || src == "myanimelist" || src == "anilist" || src == "kitsu") return true
         val desc = (entry.description ?: entry.notes)?.lowercase(Locale.ROOT) ?: ""
         if (desc.contains("anilist.co/anime") || desc.contains("myanimelist.net/anime")) return true
-        return false
-    }
-
-    fun isLightNovelOrWebNovel(entry: MediaEntry): Boolean {
-        val tags = entry.tags?.lowercase(Locale.ROOT) ?: ""
-        if (tags.contains("light novel") || tags.contains("web novel") || tags.contains("webnovel") || tags.contains("ranobe")) return true
-        val subCat = entry.subCategory?.lowercase(Locale.ROOT) ?: ""
-        if (subCat.contains("light novel") || subCat.contains("web novel") || subCat.contains("webnovel") || subCat.contains("novel")) return true
-        val title = entry.title.lowercase(Locale.ROOT)
-        if (title.contains("(light novel)") || title.contains("[light novel]") || title.contains("(novel)") || title.contains("[novel]")) return true
         return false
     }
 
@@ -233,59 +225,7 @@ object TachiyomiResolverManager {
      * fell back to MangaDex, AniList, or Kitsu.
      */
     fun extractCandidateSourceAndId(cand: JikanMediaDetails): Pair<String, String>? {
-        val provider = cand.sourceProvider.trim()
-
-        // 1. MangaDex
-        if (provider.equals("MangaDex", ignoreCase = true)) {
-            val uuid = cand.url?.let { JikanSyncManager.extractMangaDexUuid(it) }
-                ?: cand.url?.substringAfterLast('/')?.trim()?.takeIf { it.isNotBlank() }
-            if (!uuid.isNullOrBlank()) {
-                return Pair("MangaDex", uuid)
-            }
-        }
-
-        // 2. MAL / Jikan
-        if (provider.equals("Jikan", ignoreCase = true) || provider.equals("MAL", ignoreCase = true) || provider.startsWith("MAL", ignoreCase = true)) {
-            val malId = cand.malId?.takeIf { it > 0 }
-            if (malId != null) {
-                return Pair("MAL", malId.toString())
-            }
-        }
-
-        // 3. AniList
-        if (provider.contains("AniList", ignoreCase = true)) {
-            if (provider.startsWith("MAL", ignoreCase = true) && cand.malId != null && cand.malId > 0) {
-                return Pair("MAL", cand.malId.toString())
-            }
-            val id = cand.malId?.takeIf { it > 0 }?.toString()
-                ?: cand.url?.substringAfterLast('/')?.trim()?.takeIf { it.isNotBlank() }
-            if (!id.isNullOrBlank()) {
-                return Pair("AniList", id)
-            }
-        }
-
-        // 4. Kitsu
-        if (provider.equals("Kitsu", ignoreCase = true)) {
-            val id = cand.malId?.takeIf { it > 0 }?.toString()
-                ?: cand.url?.substringAfterLast('/')?.trim()?.takeIf { it.isNotBlank() }
-            if (!id.isNullOrBlank()) {
-                return Pair("Kitsu", id)
-            }
-        }
-
-        // Generic fallback if provider was not explicitly classified:
-        if (cand.malId != null && cand.malId > 0) {
-            val src = if (provider.isNotBlank()) provider else "MAL"
-            return Pair(src, cand.malId.toString())
-        }
-        val urlId = cand.url?.let { JikanSyncManager.extractMangaDexUuid(it) }
-            ?: cand.url?.substringAfterLast('/')?.trim()?.takeIf { it.isNotBlank() }
-        if (!urlId.isNullOrBlank()) {
-            val src = if (provider.isNotBlank()) provider else "MangaDex"
-            return Pair(src, urlId)
-        }
-
-        return null
+        return cand.preferredExternalRef()
     }
 
     /**
@@ -431,6 +371,27 @@ object TachiyomiResolverManager {
         return false
     }
 
+    internal fun partitionResolutionEntries(
+        pool: List<MediaEntry>,
+        hasTargetSelection: Boolean
+    ): Pair<List<MediaEntry>, List<SkippedItemReport>> {
+        if (!hasTargetSelection) {
+            return pool.filter { isEligibleForResolution(it) } to emptyList()
+        }
+        val skippedMusic = pool
+            .filter { it.mediaType == MediaType.MUSIC }
+            .map { entry ->
+                SkippedItemReport(
+                    entryId = entry.id,
+                    title = entry.title,
+                    externalId = entry.externalId,
+                    reason = "skipped — not supported (${entry.mediaType.singularName})"
+                )
+            }
+        val eligible = pool.filter { it.title.isNotBlank() && it.mediaType != MediaType.MUSIC }
+        return eligible to skippedMusic
+    }
+
     fun startResolution(
         context: Context,
         repository: MediaRepository,
@@ -460,15 +421,13 @@ object TachiyomiResolverManager {
                 allEntries
             }
 
-            val eligible = if (targetEntryIds != null) {
-                pool.filter { it.title.isNotBlank() }
-            } else {
-                allEntries.filter { isEligibleForResolution(it) }
-            }
-            val total = eligible.size
+            val (eligible, preSkippedReports) = partitionResolutionEntries(pool, hasTargetSelection = targetEntryIds != null)
+            val total = eligible.size + preSkippedReports.size
 
             val resolvedItems = mutableListOf<ResolvedItemReport>()
-            val skippedItems = mutableListOf<SkippedItemReport>()
+            val skippedItems = mutableListOf<SkippedItemReport>().apply {
+                addAll(preSkippedReports)
+            }
             val failedItems = mutableListOf<FailedItemReport>()
 
             _resolveState.value = TachiyomiResolveProgress(
@@ -476,7 +435,9 @@ object TachiyomiResolverManager {
                 profileId = profileId,
                 profileName = profileName,
                 totalCount = total,
-                pendingCount = total,
+                completedCount = preSkippedReports.size,
+                pendingCount = eligible.size,
+                skippedCount = preSkippedReports.size,
                 statusMessage = if (total > 0) "Starting ID resolution ($total items)..." else "No entries found."
             )
 
@@ -497,9 +458,9 @@ object TachiyomiResolverManager {
                 return@launch
             }
 
-            var completed = 0
+            var completed = preSkippedReports.size
             var resolvedCount = 0
-            var skippedCount = 0
+            var skippedCount = preSkippedReports.size
             var failedCount = 0
 
             var currentBatchSize = 5
@@ -1079,6 +1040,16 @@ object TachiyomiResolverManager {
         context: Context?,
         skipExistingIdCheck: Boolean = false
     ): ResolutionOutcome {
+        if (entry.mediaType == MediaType.MUSIC) {
+            return ResolutionOutcome.Skipped(
+                SkippedItemReport(
+                    entryId = entry.id,
+                    title = entry.title,
+                    externalId = entry.externalId,
+                    reason = "skipped — not supported (${entry.mediaType.singularName})"
+                )
+            )
+        }
         if (entry.mediaType == MediaType.GAME) {
             return matchAndResolveGame(entry, repository, context, skipExistingIdCheck)
         }
@@ -1124,7 +1095,7 @@ object TachiyomiResolverManager {
     ): ResolutionOutcome {
         val queryTitle = entry.title.trim()
         val cleanTitle = stripBracketedSuffixes(queryTitle).takeIf { it.isNotBlank() } ?: queryTitle
-        val isLightNovel = isLightNovelOrWebNovel(entry)
+        val isLightNovel = entry.isLightNovel()
         val evaluatedCandidateNames = mutableListOf<String>()
         val combinedAltTitlesList = getCombinedAlternateTitles(entry)
         val combinedAltTitlesStr = combinedAltTitlesList.joinToString("\n").takeIf { it.isNotBlank() }
@@ -1341,11 +1312,12 @@ object TachiyomiResolverManager {
                 else -> entry.trackingUnit
             }
 
+            val canonicalBookSource = ExternalSources.canonical(book.sourceProvider) ?: book.sourceProvider
             val updatedEntry = entry.copy(
                 title = entry.title,
                 alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
                 creator = book.authorString.takeIf { it.isNotBlank() } ?: entry.creator,
-                externalSource = book.sourceProvider,
+                externalSource = canonicalBookSource,
                 externalId = book.id,
                 coverImageUri = finalCover,
                 totalPages = if (book.pageCount != null && book.pageCount > 0) book.pageCount else entry.totalPages,
@@ -1355,14 +1327,16 @@ object TachiyomiResolverManager {
                 airedStartDate = publishEpoch ?: entry.airedStartDate,
                 airedEndDate = publishEpoch ?: entry.airedEndDate ?: entry.airedStartDate,
                 externalScore = book.averageScore ?: entry.externalScore,
-                externalScoreSource = if (book.averageScore != null) book.sourceProvider else entry.externalScoreSource,
+                externalScoreSource = if (book.averageScore != null) {
+                    (book.scoreSource ?: canonicalBookSource).let { ExternalSources.canonical(it) ?: it }
+                } else entry.externalScoreSource,
                 description = if ((entry.description ?: entry.notes).isNullOrBlank() && !book.description.isNullOrBlank()) book.description else (entry.description ?: entry.notes),
                 tags = if (entry.tags.isNullOrBlank() && book.categories.isNotEmpty()) book.categories.joinToString(", ") else entry.tags,
                 originalLanguage = book.language ?: entry.originalLanguage,
                 updatedAt = System.currentTimeMillis()
             )
 
-            repository.update(updatedEntry)
+            repository.updateMetadataOnly(updatedEntry)
 
             val titleChanged = false
 
@@ -1375,7 +1349,7 @@ object TachiyomiResolverManager {
                     alternateTitles = allAlts,
                     originalSource = entry.externalSource,
                     originalExternalId = entry.externalId,
-                    resolvedSource = book.sourceProvider,
+                    resolvedSource = canonicalBookSource,
                     resolvedExternalId = book.id,
                     webUrl = book.infoUrl,
                     coverUpdated = coverUpdated,
@@ -1428,7 +1402,14 @@ object TachiyomiResolverManager {
 
         // 1. Try existing external ID if present
         if (!skipExistingIdCheck && !extIdStr.isNullOrBlank()) {
-            val candidateRes = GameMetadataManager.getGameDetails(context, extIdStr, srcStr)
+            val candidateRes = GameMetadataManager.getGameDetails(
+                context = context,
+                externalId = extIdStr,
+                externalSource = srcStr,
+                title = cleanTitle,
+                alternateTitle = combinedAltTitlesStr,
+                releaseYear = entry.airedStartDate?.let { MediaEntry.extractYearFromMillis(it) }
+            )
             val candidate = candidateRes.getOrNull()
             if (candidate != null) {
                 evaluatedCandidateNames.add("${candidate.externalSource}(ID): ${candidate.title}")
@@ -1525,11 +1506,13 @@ object TachiyomiResolverManager {
                 entry.relatedEntriesJson
             }
 
+            val canonicalGameSource = ExternalSources.canonical(game.externalSource, game.externalId) ?: game.externalSource
+            val canonicalRatingSource = game.ratingSource?.let { ExternalSources.canonical(it) ?: it }
             val updatedEntry = entry.copy(
                 title = entry.title,
                 alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
                 creator = (game.developers.firstOrNull() ?: game.publishers.firstOrNull())?.takeIf { it.isNotBlank() } ?: entry.creator,
-                externalSource = game.externalSource,
+                externalSource = canonicalGameSource,
                 externalId = game.externalId,
                 coverImageUri = finalCover,
                 gamePlatforms = platformsStr,
@@ -1539,13 +1522,13 @@ object TachiyomiResolverManager {
                 } else entry.durationMinutes,
                 airedStartDate = game.releaseDateMillis ?: entry.airedStartDate,
                 externalScore = game.rating ?: entry.externalScore,
-                externalScoreSource = game.ratingSource,
+                externalScoreSource = canonicalRatingSource,
                 description = if ((entry.description ?: entry.notes).isNullOrBlank() && !game.summary.isNullOrBlank()) game.buildDescriptionWithMetadata() else (entry.description ?: entry.notes),
                 tags = if (entry.tags.isNullOrBlank() && game.genres.isNotEmpty()) game.genres.joinToString(", ") else entry.tags,
                 updatedAt = System.currentTimeMillis()
             )
 
-            repository.update(updatedEntry)
+            repository.updateMetadataOnly(updatedEntry)
 
             val titleChanged = false
 
@@ -1641,11 +1624,13 @@ object TachiyomiResolverManager {
             }
         }
 
+        val canonicalMatchSource = ExternalSources.canonical(matchSource, matchExternalId) ?: matchSource
+        val canonicalScoreSource = matchDetails.externalScoreSource?.let { ExternalSources.canonical(it) ?: it } ?: canonicalMatchSource
         val updatedEntry = entry.copy(
             title = entry.title,
             alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
             creator = matchDetails.authors?.takeIf { it.isNotBlank() } ?: entry.creator,
-            externalSource = matchSource,
+            externalSource = canonicalMatchSource,
             externalId = matchExternalId,
             coverImageUri = finalCover,
             totalChapters = if (matchDetails.totalChapters != null && matchDetails.totalChapters > 0 && entry.totalChapters == 0) matchDetails.totalChapters else entry.totalChapters,
@@ -1653,7 +1638,7 @@ object TachiyomiResolverManager {
             airedStartDate = matchDetails.airedStartDate ?: entry.airedStartDate,
             airedEndDate = matchDetails.airedEndDate ?: entry.airedEndDate,
             externalScore = matchDetails.externalScore ?: entry.externalScore,
-            externalScoreSource = matchDetails.externalScoreSource ?: matchSource,
+            externalScoreSource = canonicalScoreSource,
             tags = if (entry.tags.isNullOrBlank() && !matchDetails.tags.isNullOrBlank()) matchDetails.tags else entry.tags,
             description = finalDesc,
             isAiring = matchDetails.isAiring ?: entry.isAiring,
@@ -1661,7 +1646,7 @@ object TachiyomiResolverManager {
             updatedAt = System.currentTimeMillis()
         )
 
-        repository.update(updatedEntry)
+        repository.updateMetadataOnly(updatedEntry)
 
         val titleChanged = false
 
@@ -1701,12 +1686,13 @@ object TachiyomiResolverManager {
 
         val extIdStr = (entry.externalId ?: entry.foreignDatabaseId)?.trim()
         val srcStr = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim()
+        val canonSrc = ExternalSources.canonical(srcStr, extIdStr)
         val extractedUuid = if (!extIdStr.isNullOrBlank()) JikanSyncManager.extractMangaDexUuid(extIdStr) else null
-        val existingAniListId = if (!extIdStr.isNullOrBlank() && srcStr?.equals("AniList", ignoreCase = true) == true) {
+        val existingAniListId = if (!extIdStr.isNullOrBlank() && canonSrc == ExternalSources.ANILIST) {
             extIdStr.toLongOrNull()?.takeIf { it > 0 }
         } else null
         val extractedMalId = if (!extIdStr.isNullOrBlank() && existingAniListId == null) {
-            val isExplicitMal = srcStr?.equals("MAL", ignoreCase = true) == true || srcStr?.equals("MyAnimeList", ignoreCase = true) == true
+            val isExplicitMal = canonSrc == ExternalSources.MAL
             val hasMalUrl = extIdStr.contains("myanimelist.net", ignoreCase = true)
             if (isExplicitMal || hasMalUrl) JikanSyncManager.extractNumericMalId(extIdStr) else null
         } else null
@@ -1968,7 +1954,7 @@ object TachiyomiResolverManager {
             updatedAt = System.currentTimeMillis()
         )
 
-        repository.update(updatedEntry)
+        repository.updateMetadataOnly(updatedEntry)
 
         val titleChanged = false
         val webUrl = if (entry.mediaType == MediaType.SHOW || matchDetails.type == "TV") {
@@ -2012,11 +1998,12 @@ object TachiyomiResolverManager {
 
         val extIdStr = (entry.externalId ?: entry.foreignDatabaseId)?.trim()
         val srcStr = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim()
-        val existingAniListId = if (!extIdStr.isNullOrBlank() && srcStr?.equals("AniList", ignoreCase = true) == true) {
+        val canonSrc = ExternalSources.canonical(srcStr, extIdStr)
+        val existingAniListId = if (!extIdStr.isNullOrBlank() && canonSrc == ExternalSources.ANILIST) {
             extIdStr.toLongOrNull()?.takeIf { it > 0 }
         } else null
         val extractedMalId = if (!extIdStr.isNullOrBlank() && existingAniListId == null) {
-            val isExplicitMal = srcStr?.equals("MAL", ignoreCase = true) == true || srcStr?.equals("MyAnimeList", ignoreCase = true) == true
+            val isExplicitMal = canonSrc == ExternalSources.MAL
             val hasMalUrl = extIdStr.contains("myanimelist.net", ignoreCase = true)
             if (isExplicitMal || hasMalUrl) JikanSyncManager.extractNumericMalId(extIdStr) else null
         } else null
@@ -2136,11 +2123,13 @@ object TachiyomiResolverManager {
             }
         }
 
+        val canonicalMatchSource = ExternalSources.canonical(matchSource, matchExternalId) ?: matchSource
+        val canonicalScoreSource = matchDetails.externalScoreSource?.let { ExternalSources.canonical(it) ?: it } ?: canonicalMatchSource
         val updatedEntry = entry.copy(
             title = entry.title,
             alternateTitle = allAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: entry.alternateTitle,
             creator = matchDetails.authors?.takeIf { it.isNotBlank() } ?: entry.creator,
-            externalSource = matchSource,
+            externalSource = canonicalMatchSource,
             externalId = matchExternalId,
             coverImageUri = finalCover,
             totalEpisodes = if (matchDetails.totalEpisodes != null && matchDetails.totalEpisodes > 0 && entry.totalEpisodes == 0) matchDetails.totalEpisodes else entry.totalEpisodes,
@@ -2149,7 +2138,7 @@ object TachiyomiResolverManager {
             airedStartDate = matchDetails.airedStartDate ?: entry.airedStartDate,
             airedEndDate = matchDetails.airedEndDate ?: entry.airedEndDate,
             externalScore = matchDetails.externalScore ?: entry.externalScore,
-            externalScoreSource = matchDetails.externalScoreSource ?: matchSource,
+            externalScoreSource = canonicalScoreSource,
             tags = if (entry.tags.isNullOrBlank() && !matchDetails.tags.isNullOrBlank()) matchDetails.tags else entry.tags,
             description = if ((entry.description ?: entry.notes).isNullOrBlank() && !matchDetails.synopsis.isNullOrBlank()) matchDetails.synopsis else (entry.description ?: entry.notes),
             isAiring = matchDetails.isAiring ?: entry.isAiring,
@@ -2157,7 +2146,7 @@ object TachiyomiResolverManager {
             updatedAt = System.currentTimeMillis()
         )
 
-        repository.update(updatedEntry)
+        repository.updateMetadataOnly(updatedEntry)
 
         val titleChanged = false
 
@@ -2182,21 +2171,15 @@ object TachiyomiResolverManager {
         )
     }
 
-    private fun generateResolutionReport(
-        context: Context,
+    internal fun buildResolutionReportText(
         profileName: String,
         profileId: Long,
         totalProcessed: Int,
         resolvedItems: List<ResolvedItemReport>,
         skippedItems: List<SkippedItemReport>,
-        failedItems: List<FailedItemReport>
+        failedItems: List<FailedItemReport>,
+        timeStr: String
     ): String {
-        val timestampFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-        val fileTimeFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
-        val now = Date()
-        val timeStr = timestampFormat.format(now)
-        val fileTimeStr = fileTimeFormat.format(now)
-
         val sb = StringBuilder()
         sb.appendLine("================================================================================")
         sb.appendLine("                 LX TRACK LIST - ID RESOLUTION REPORT")
@@ -2205,7 +2188,7 @@ object TachiyomiResolverManager {
         sb.appendLine("Profile:   $profileName (ID: $profileId)")
         sb.appendLine("Processed: $totalProcessed")
         sb.appendLine("• Successfully Resolved & Linked: ${resolvedItems.size}")
-        sb.appendLine("• Skipped (No Exact Match):       ${skippedItems.size}")
+        sb.appendLine("• Skipped (Unmatched / Unsupported): ${skippedItems.size}")
         sb.appendLine("• Failures / Errors:             ${failedItems.size}")
         sb.appendLine("================================================================================")
         sb.appendLine()
@@ -2280,8 +2263,33 @@ object TachiyomiResolverManager {
         sb.appendLine("================================================================================")
         sb.appendLine("End of Report")
         sb.appendLine("================================================================================")
+        return sb.toString()
+    }
 
-        val reportText = sb.toString()
+    private fun generateResolutionReport(
+        context: Context,
+        profileName: String,
+        profileId: Long,
+        totalProcessed: Int,
+        resolvedItems: List<ResolvedItemReport>,
+        skippedItems: List<SkippedItemReport>,
+        failedItems: List<FailedItemReport>
+    ): String {
+        val timestampFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+        val fileTimeFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+        val now = Date()
+        val timeStr = timestampFormat.format(now)
+        val fileTimeStr = fileTimeFormat.format(now)
+
+        val reportText = buildResolutionReportText(
+            profileName = profileName,
+            profileId = profileId,
+            totalProcessed = totalProcessed,
+            resolvedItems = resolvedItems,
+            skippedItems = skippedItems,
+            failedItems = failedItems,
+            timeStr = timeStr
+        )
         val textFileName = "ID_Resolution_Report_$fileTimeStr.txt"
         val jsonFileName = "ID_Resolution_Report_$fileTimeStr.json"
         val legacyTextFileName = "Tachiyomi_Resolution_Report_$fileTimeStr.txt"

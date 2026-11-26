@@ -8,6 +8,9 @@ import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.text.AnnotatedString
 import com.google.gson.JsonParser
+import com.lx.tracklist.data.model.ExternalSources
+import com.lx.tracklist.data.model.MediaEntry
+import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.remote.ITunesApiClient
 import com.lx.tracklist.data.remote.KitsuApiClient
 import com.lx.tracklist.data.remote.MusicBrainzApiClient
@@ -37,6 +40,14 @@ object ExternalLinkHelper {
     private val kitsuCache = ConcurrentHashMap<String, String>()
     private val spotifyHintCache = ConcurrentHashMap<String, SpotifyLookupHint>()
     private val spotifyTrackCache = ConcurrentHashMap<String, String>()
+
+    private fun encodeUrlParam(value: String): String {
+        return try {
+            android.net.Uri.encode(value)
+        } catch (_: Throwable) {
+            URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+        }
+    }
 
     fun openUrlSafely(
         url: String?,
@@ -168,7 +179,7 @@ object ExternalLinkHelper {
                 val cleanTitle = title
                     .replace(Regex("\\((TV|ONA|OVA|Movie|Special|Dub|Sub)\\)", RegexOption.IGNORE_CASE), "")
                     .trim()
-                "https://www.google.com/search?q=site:kitsu.app/$mediaType+${Uri.encode(cleanTitle)}"
+                "https://www.google.com/search?q=site:kitsu.app/$mediaType+${encodeUrlParam(cleanTitle)}"
             }
 
             kitsuCache[cacheKey] = finalUrl
@@ -209,13 +220,13 @@ object ExternalLinkHelper {
                 "https://www.imdb.com/title/tt$cleanId/"
             }
         } else {
-            val encodedTitle = Uri.encode(title.trim())
+            val encodedTitle = encodeUrlParam(title.trim())
             "https://www.imdb.com/find/?q=$encodedTitle"
         }
     }
 
     fun buildRottenTomatoesUrl(title: String): String {
-        val encodedTitle = Uri.encode(title.trim())
+        val encodedTitle = encodeUrlParam(title.trim())
         return "https://www.rottentomatoes.com/search?search=$encodedTitle"
     }
 
@@ -290,12 +301,12 @@ object ExternalLinkHelper {
         webUrl: String? = null
     ): List<ExternalOpenOption> {
         val list = mutableListOf<ExternalOpenOption>()
-        val encodedTitle = Uri.encode(title.trim())
+        val encodedTitle = encodeUrlParam(title.trim())
 
         // 1. MyAnimeList
         val malUrl = when {
             directMalId != null && directMalId > 0 -> "https://myanimelist.net/anime/$directMalId"
-            externalSource.equals("MAL", ignoreCase = true) && !externalId.isNullOrBlank() && externalId != "0" && externalId.toLongOrNull() != null ->
+            ExternalSources.canonical(externalSource, externalId) == ExternalSources.MAL && !externalId.isNullOrBlank() && externalId != "0" && externalId.toLongOrNull() != null ->
                 "https://myanimelist.net/anime/$externalId"
             webUrl != null && webUrl.contains("myanimelist.net", ignoreCase = true) -> webUrl
             else -> "https://myanimelist.net/anime.php?q=$encodedTitle"
@@ -313,7 +324,7 @@ object ExternalLinkHelper {
         val aniUrl = when {
             directAniListId != null && directAniListId > 0 -> "https://anilist.co/anime/$directAniListId"
             !directSiteUrl.isNullOrBlank() && directSiteUrl.contains("anilist.co", ignoreCase = true) -> directSiteUrl
-            externalSource?.startsWith("AniList", ignoreCase = true) == true && !externalId.isNullOrBlank() && externalId.toLongOrNull() != null ->
+            ExternalSources.canonical(externalSource, externalId) == ExternalSources.ANILIST && !externalId.isNullOrBlank() && externalId.toLongOrNull() != null ->
                 "https://anilist.co/anime/$externalId"
             webUrl != null && webUrl.contains("anilist.co", ignoreCase = true) -> webUrl
             else -> "https://anilist.co/search/anime?search=$encodedTitle"
@@ -333,11 +344,11 @@ object ExternalLinkHelper {
                 (directSiteUrl.contains("kitsu.io/anime/") || directSiteUrl.contains("kitsu.app/anime/")) &&
                 !directSiteUrl.substringAfterLast('/').all { it.isDigit() } ->
                     directSiteUrl.replace("kitsu.io", "kitsu.app")
-            externalSource.equals("Kitsu", ignoreCase = true) && !externalId.isNullOrBlank() && !externalId.all { it.isDigit() } ->
+            ExternalSources.canonical(externalSource, externalId) == ExternalSources.KITSU && !externalId.isNullOrBlank() && !externalId.all { it.isDigit() } ->
                 "https://kitsu.app/anime/$externalId"
             else -> {
-                val malIdParam = directMalId ?: if (externalSource.equals("MAL", ignoreCase = true)) externalId?.toLongOrNull() else null
-                val kitsuIdParam = if (externalSource.equals("Kitsu", ignoreCase = true)) externalId?.toLongOrNull() else null
+                val malIdParam = directMalId ?: if (ExternalSources.canonical(externalSource, externalId) == ExternalSources.MAL) externalId?.toLongOrNull() else null
+                val kitsuIdParam = if (ExternalSources.canonical(externalSource, externalId) == ExternalSources.KITSU) externalId?.toLongOrNull() else null
                 "kitsu-resolve://anime?title=$encodedTitle&malId=${malIdParam ?: 0}&kitsuId=${kitsuIdParam ?: 0}"
             }
         }
@@ -363,12 +374,12 @@ object ExternalLinkHelper {
         webUrl: String? = null
     ): List<ExternalOpenOption> {
         val list = mutableListOf<ExternalOpenOption>()
-        val encodedTitle = Uri.encode(title.trim())
+        val encodedTitle = encodeUrlParam(title.trim())
 
         // 1. MangaDex
         val mdUrl = when {
             !directSiteUrl.isNullOrBlank() && directSiteUrl.contains("mangadex.org", ignoreCase = true) -> directSiteUrl
-            externalSource.equals("MangaDex", ignoreCase = true) && !externalId.isNullOrBlank() && externalId != "0" ->
+            ExternalSources.canonical(externalSource, externalId) == ExternalSources.MANGADEX && !externalId.isNullOrBlank() && externalId != "0" ->
                 "https://mangadex.org/title/$externalId"
             webUrl != null && webUrl.contains("mangadex.org", ignoreCase = true) -> webUrl
             else -> "https://mangadex.org/titles?q=$encodedTitle"
@@ -385,7 +396,7 @@ object ExternalLinkHelper {
         // 2. MyAnimeList
         val malUrl = when {
             directMalId != null && directMalId > 0 -> "https://myanimelist.net/manga/$directMalId"
-            externalSource.equals("MAL", ignoreCase = true) && !externalId.isNullOrBlank() && externalId != "0" && externalId.toLongOrNull() != null ->
+            ExternalSources.canonical(externalSource, externalId) == ExternalSources.MAL && !externalId.isNullOrBlank() && externalId != "0" && externalId.toLongOrNull() != null ->
                 "https://myanimelist.net/manga/$externalId"
             webUrl != null && webUrl.contains("myanimelist.net", ignoreCase = true) -> webUrl
             else -> "https://myanimelist.net/manga.php?q=$encodedTitle"
@@ -403,7 +414,7 @@ object ExternalLinkHelper {
         val aniUrl = when {
             directAniListId != null && directAniListId > 0 -> "https://anilist.co/manga/$directAniListId"
             !directSiteUrl.isNullOrBlank() && directSiteUrl.contains("anilist.co", ignoreCase = true) -> directSiteUrl
-            externalSource?.startsWith("AniList", ignoreCase = true) == true && !externalId.isNullOrBlank() && externalId.toLongOrNull() != null ->
+            ExternalSources.canonical(externalSource, externalId) == ExternalSources.ANILIST && !externalId.isNullOrBlank() && externalId.toLongOrNull() != null ->
                 "https://anilist.co/manga/$externalId"
             webUrl != null && webUrl.contains("anilist.co", ignoreCase = true) -> webUrl
             else -> "https://anilist.co/search/manga?search=$encodedTitle"
@@ -423,11 +434,11 @@ object ExternalLinkHelper {
                 (directSiteUrl.contains("kitsu.io/manga/") || directSiteUrl.contains("kitsu.app/manga/")) &&
                 !directSiteUrl.substringAfterLast('/').all { it.isDigit() } ->
                     directSiteUrl.replace("kitsu.io", "kitsu.app")
-            externalSource.equals("Kitsu", ignoreCase = true) && !externalId.isNullOrBlank() && !externalId.all { it.isDigit() } ->
+            ExternalSources.canonical(externalSource, externalId) == ExternalSources.KITSU && !externalId.isNullOrBlank() && !externalId.all { it.isDigit() } ->
                 "https://kitsu.app/manga/$externalId"
             else -> {
-                val malIdParam = directMalId ?: if (externalSource.equals("MAL", ignoreCase = true)) externalId?.toLongOrNull() else null
-                val kitsuIdParam = if (externalSource.equals("Kitsu", ignoreCase = true)) externalId?.toLongOrNull() else null
+                val malIdParam = directMalId ?: if (ExternalSources.canonical(externalSource, externalId) == ExternalSources.MAL) externalId?.toLongOrNull() else null
+                val kitsuIdParam = if (ExternalSources.canonical(externalSource, externalId) == ExternalSources.KITSU) externalId?.toLongOrNull() else null
                 "kitsu-resolve://manga?title=$encodedTitle&malId=${malIdParam ?: 0}&kitsuId=${kitsuIdParam ?: 0}"
             }
         }
@@ -450,7 +461,7 @@ object ExternalLinkHelper {
         webUrl: String? = null
     ): List<ExternalOpenOption> {
         val list = mutableListOf<ExternalOpenOption>()
-        val encodedTitle = Uri.encode(title.trim())
+        val encodedTitle = encodeUrlParam(title.trim())
 
         // 1. Google Books
         val gbUrl = when {
@@ -509,13 +520,13 @@ object ExternalLinkHelper {
         webUrl: String? = null
     ): List<ExternalOpenOption> {
         val list = mutableListOf<ExternalOpenOption>()
-        val encodedTitle = Uri.encode(title.trim())
+        val encodedTitle = encodeUrlParam(title.trim())
 
         // 1. AniList
         val aniUrl = when {
             directAniListId != null && directAniListId > 0 -> "https://anilist.co/manga/$directAniListId"
             !directSiteUrl.isNullOrBlank() && directSiteUrl.contains("anilist.co", ignoreCase = true) -> directSiteUrl
-            externalSource?.startsWith("AniList", ignoreCase = true) == true && !externalId.isNullOrBlank() && externalId.toLongOrNull() != null ->
+            ExternalSources.canonical(externalSource, externalId) == ExternalSources.ANILIST && !externalId.isNullOrBlank() && externalId.toLongOrNull() != null ->
                 "https://anilist.co/manga/$externalId"
             webUrl != null && webUrl.contains("anilist.co", ignoreCase = true) -> webUrl
             else -> "https://anilist.co/search/manga?search=$encodedTitle"
@@ -532,7 +543,7 @@ object ExternalLinkHelper {
         // 2. MyAnimeList
         val malUrl = when {
             directMalId != null && directMalId > 0 -> "https://myanimelist.net/manga/$directMalId"
-            externalSource.equals("MAL", ignoreCase = true) && !externalId.isNullOrBlank() && externalId != "0" && externalId.toLongOrNull() != null ->
+            ExternalSources.canonical(externalSource, externalId) == ExternalSources.MAL && !externalId.isNullOrBlank() && externalId != "0" && externalId.toLongOrNull() != null ->
                 "https://myanimelist.net/manga/$externalId"
             webUrl != null && webUrl.contains("myanimelist.net", ignoreCase = true) -> webUrl
             else -> "https://myanimelist.net/manga.php?q=$encodedTitle"
@@ -559,7 +570,7 @@ object ExternalLinkHelper {
         // 4. MangaDex
         val mdUrl = when {
             !directSiteUrl.isNullOrBlank() && directSiteUrl.contains("mangadex.org", ignoreCase = true) -> directSiteUrl
-            externalSource.equals("MangaDex", ignoreCase = true) && !externalId.isNullOrBlank() ->
+            ExternalSources.canonical(externalSource, externalId) == ExternalSources.MANGADEX && !externalId.isNullOrBlank() ->
                 "https://mangadex.org/title/$externalId"
             else -> "https://mangadex.org/titles?q=$encodedTitle"
         }
@@ -577,7 +588,7 @@ object ExternalLinkHelper {
 
     private fun safeUrlEncode(text: String): String {
         return try {
-            Uri.encode(text)
+            encodeUrlParam(text)
         } catch (_: Throwable) {
             java.net.URLEncoder.encode(text, "UTF-8")
         }
@@ -952,7 +963,7 @@ object ExternalLinkHelper {
 
     private fun encodePercentQuery(query: String): String {
         return try {
-            Uri.encode(query)
+            encodeUrlParam(query)
         } catch (_: Exception) {
             URLEncoder.encode(query, "UTF-8").replace("+", "%20")
         }
@@ -1043,5 +1054,68 @@ object ExternalLinkHelper {
         )
 
         return list
+    }
+
+    /**
+     * Builds the category- and source-appropriate external "Open" menu options for any
+     * library [MediaEntry], matching Search's provider set plus [MediaEntry.isLightNovel]
+     * routing for Light Novels.
+     */
+    fun buildOpenOptionsForEntry(entry: MediaEntry): List<ExternalOpenOption> {
+        val canon = ExternalSources.canonical(entry.externalSource, entry.externalId)
+        val numericId = entry.externalId?.trim()?.toLongOrNull()
+        return when {
+            entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.SHOW || canon == ExternalSources.TMDB ->
+                buildTmdbOpenOptions(
+                    title = entry.title,
+                    tmdbId = entry.externalId,
+                    isMovie = entry.mediaType == MediaType.MOVIE
+                )
+            entry.mediaType == MediaType.ANIME ->
+                buildAnimeOpenOptions(
+                    title = entry.title,
+                    externalId = entry.externalId,
+                    externalSource = entry.externalSource,
+                    directMalId = if (canon == ExternalSources.MAL) numericId else null,
+                    directAniListId = if (canon == ExternalSources.ANILIST) numericId else null
+                )
+            entry.isLightNovel() ->
+                buildLightNovelOpenOptions(
+                    title = entry.title,
+                    externalId = entry.externalId,
+                    externalSource = entry.externalSource,
+                    directMalId = if (canon == ExternalSources.MAL) numericId else null,
+                    directAniListId = if (canon == ExternalSources.ANILIST) numericId else null
+                )
+            entry.mediaType == MediaType.BOOK ->
+                buildBookOpenOptions(
+                    title = entry.title,
+                    externalId = entry.externalId,
+                    externalSource = entry.externalSource
+                )
+            entry.mediaType == MediaType.MANGA || entry.mediaType == MediaType.MANHWA ->
+                buildMangaOpenOptions(
+                    title = entry.title,
+                    externalId = entry.externalId,
+                    externalSource = entry.externalSource,
+                    directMalId = if (canon == ExternalSources.MAL) numericId else null,
+                    directAniListId = if (canon == ExternalSources.ANILIST) numericId else null
+                )
+            entry.mediaType == MediaType.GAME ->
+                buildGameOpenOptions(
+                    title = entry.title,
+                    externalId = entry.externalId,
+                    externalSource = entry.externalSource
+                )
+            entry.mediaType == MediaType.MUSIC ->
+                buildMusicOpenOptions(
+                    title = entry.title,
+                    artist = entry.creator,
+                    album = entry.movieSeriesName,
+                    externalId = entry.externalId,
+                    externalSource = entry.externalSource
+                )
+            else -> emptyList()
+        }
     }
 }

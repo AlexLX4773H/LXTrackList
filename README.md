@@ -73,7 +73,7 @@ Discover what's airing, trending, and premiering directly inside the **Search & 
   - Multi-select platform filtering powered by `GamePlatformRegistry` with inclusion (`✓` - `OR` condition) and exclusion (`✕`) support across IGDB and RAWG.
   - Platform inclusion/exclusion constraints are embedded directly into upstream server-side queries across IGDB (Apicalypse) and RAWG for accurate, comprehensive combined text and platform search results.
   - Clean, uncompressed instructional header (`[✓] 1 tap = Include (OR)` and `[✕] 2 taps = Exclude`) with live active counts.
-  - Comprehensive platform taxonomy: **PC**, **PlayStation** (PS5, PS4, PS3, PS2, PS1, Vita, PSP), **Xbox** (All, Series X/S, One, 360, Original), **Nintendo** (Switch, Wii U, Wii, GameCube, N64, 3DS, DS, GBA, SNES, NES), **Mobile** (Android & iOS), **Other** (Linux, macOS, Stadia), and **Retro / Classics**.
+  - Search platform taxonomy: **PC** (Windows, macOS, Linux, DOS), **PlayStation** (PS5, PS4, PS3, PS2, PS1, Vita, PSP), **Xbox** (All, Series X/S, One, 360, Original), **Nintendo** (Switch, Wii U, Wii, GameCube, N64, 3DS, DS, GBA, SNES, NES), **Mobile** (Android & iOS), **Linux / SteamOS**, and **Retro / Classics** (with Windows/macOS/Linux/DOS stored canonically as **PC** and Wii/Wii U/GameCube/3DS/DS/N64/GBA/SNES/NES/classic consoles stored canonically as **Retro** in your Library).
   - Active platform filter chips appear directly beneath search bars with one-tap dismissal.
 - **Subtle 3-State 18+ Content Cycle**:
   - Compact, unobtrusive checkbox with a 3-state click cycle:
@@ -139,7 +139,7 @@ Clear, accurate status tracking for upcoming and unreleased media across all ent
 ### 🎮 Video Games & Interactive Media Tracking
 Comprehensive video game tracking with dedicated progress modes, platform icons, rich metadata, and advanced discovery:
 - **Advanced Game Discovery & Platform Filtering (Search & Discover)**:
-  - **Multi-Select Platform Filter & Exclusion**: Comprehensive sub-menu with inclusion (`✓` - `OR` condition) and exclusion (`✕`) across PC, PlayStation, Xbox, Nintendo, Mobile, Linux/macOS, and Retro platforms.
+  - **Multi-Select Platform Filter & Exclusion**: Search discovery filters across granular PC, PlayStation, Xbox, Nintendo, Mobile, Linux/SteamOS, and Retro platforms with inclusion (`✓` - `OR` condition) and exclusion (`✕`), while Library filters match entries by their six canonical umbrella platforms (**PC**, **PlayStation**, **Xbox**, **Switch**, **Mobile**, **Retro**).
   - **Next Year & Range Selection**: Quick preset chips for next year (e.g. `2027`), current year (`2026`), and previous year (`2025`), alongside custom `From ▾` and `To ▾` year range pickers, matching Movies discovery.
   - **Game Genre Filtering**: Integrated **Select & Exclude Tags** sub-menu powered by `GameTagRegistry` supporting inclusion (✓) and exclusion (✕) across standard IGDB genres (Action, RPG, Strategy, Visual Novel, etc.).
   - **Original Language & 3-State 18+ Cycle**: Filter discoveries by language, and cycle through Off, Include 18+, and 18+ Only modes with compact, vertically optimized UI sizing.
@@ -308,7 +308,7 @@ Gain full visibility into your media consumption habits with precision calculati
 
 > **Key Analytics Rules**:
 > - **Days Spent Conversion**: All time calculations internally aggregate exact minutes and divide by **`1440.0`** ($24\text{ hours} \times 60\text{ minutes}$) to yield pure 24-hour days of non-stop consumption.
-> - **"To Complete" Remaining Time**: Computed strictly across active uncompleted entries (`Watching`, `Plan to Watch`, `On-Hold`). Entries marked `Completed` contribute 0 to remaining time.
+> - **"To Complete" Remaining Time**: Computed strictly across active uncompleted entries (`Watching`, `Plan to Watch`, `On-Hold`). Entries marked `Completed` or `Dropped` contribute 0 to remaining time.
 > - **Rewatch / Reread Accounting**: Rewatching or rereading an entry does not overwrite your original progress. Instead, every completed cycle increment (`rewatchCount`) multiplies the total episode/chapter/page/runtime count and accumulates into your total time spent, ensuring lifetime stats are never lost.
 > - **Fair Mean Score**: $\text{Mean Score} = \frac{\sum \text{Scores}}{\text{Count of Scored Entries}}$. Entries without a score or scored 0 are strictly excluded from the denominator so unrated backlog items never artificially depress your average.
 

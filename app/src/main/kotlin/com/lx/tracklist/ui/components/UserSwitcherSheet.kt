@@ -74,13 +74,22 @@ import com.lx.tracklist.ui.theme.LXSurfaceBlack
 import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import com.lx.tracklist.ui.theme.parseHexColor
+
+private sealed interface PendingPasskeyAction {
+    val user: UserProfile
+    data class Select(override val user: UserProfile) : PendingPasskeyAction
+    data class Edit(override val user: UserProfile) : PendingPasskeyAction
+    data class Delete(override val user: UserProfile) : PendingPasskeyAction
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserSwitcherSheet(
     activeUser: UserProfile,
     allUsers: List<UserProfile>,
-    onSelectUser: (UserProfile) -> Unit,
+    requirePinForActive: Boolean = false,
+    onSelectUser: (UserProfile, Boolean) -> Unit,
     onCreateUser: (String, String, String?, String?) -> Unit,
     onUpdateUser: (UserProfile) -> Unit = {},
     onDeleteUser: (UserProfile) -> Unit,
@@ -99,7 +108,7 @@ fun UserSwitcherSheet(
     var isProtectWithPasskey by remember { mutableStateOf(false) }
     var newPasskey by remember { mutableStateOf("") }
 
-    var userPendingVerification by remember { mutableStateOf<UserProfile?>(null) }
+    var pendingPasskeyAction by remember { mutableStateOf<PendingPasskeyAction?>(null) }
 
     var userToDelete by remember { mutableStateOf<UserProfile?>(null) }
     var userToEdit by remember { mutableStateOf<UserProfile?>(null) }
@@ -108,6 +117,14 @@ fun UserSwitcherSheet(
     var editCustomAvatarColor by remember { mutableStateOf<String?>(null) }
     var showEditCustomColorPicker by remember { mutableStateOf(false) }
     var editAvatarUri by remember { mutableStateOf<String?>(null) }
+
+    fun openEditDialog(user: UserProfile) {
+        userToEdit = user
+        editUserName = user.name
+        editAvatarColor = user.avatarColorHex
+        editCustomAvatarColor = if (!avatarColors.any { it.equals(user.avatarColorHex, ignoreCase = true) }) user.avatarColorHex else null
+        editAvatarUri = user.avatarImageUri
+    }
 
     var isPickingForEdit by remember { mutableStateOf(false) }
     val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -420,6 +437,7 @@ fun UserSwitcherSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
             Row(
@@ -751,10 +769,10 @@ fun UserSwitcherSheet(
                                 shape = RoundedCornerShape(10.dp)
                             )
                             .clickable {
-                                if (user.passKey != null && !isActive) {
-                                    userPendingVerification = user
+                                if (shouldRequirePinForProfileSelection(user.passKey, isActive, requirePinForActive)) {
+                                    pendingPasskeyAction = PendingPasskeyAction.Select(user)
                                 } else {
-                                    onSelectUser(user)
+                                    onSelectUser(user, false)
                                     onDismiss()
                                 }
                             }
@@ -804,7 +822,7 @@ fun UserSwitcherSheet(
                                         fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
                                         color = if (isActive) LXPrimaryGreen else LXTextPrimary
                                     )
-                                    if (user.passKey != null) {
+                                    if (!user.passKey.isNullOrBlank()) {
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Icon(
                                             imageVector = Icons.Default.Lock,
@@ -816,7 +834,7 @@ fun UserSwitcherSheet(
                                 }
                                 if (isActive) {
                                     Text("Active Profile", fontSize = 11.sp, color = LXPrimaryGreen)
-                                } else if (user.passKey != null) {
+                                } else if (!user.passKey.isNullOrBlank()) {
                                     Text("Passkey Protected", fontSize = 11.sp, color = LXTextSecondary)
                                 }
                             }
@@ -824,11 +842,11 @@ fun UserSwitcherSheet(
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = {
-                                userToEdit = user
-                                editUserName = user.name
-                                editAvatarColor = user.avatarColorHex
-                                editCustomAvatarColor = if (!avatarColors.any { it.equals(user.avatarColorHex, ignoreCase = true) }) user.avatarColorHex else null
-                                editAvatarUri = user.avatarImageUri
+                                if (!user.passKey.isNullOrBlank()) {
+                                    pendingPasskeyAction = PendingPasskeyAction.Edit(user)
+                                } else {
+                                    openEditDialog(user)
+                                }
                             }) {
                                 Icon(
                                     imageVector = Icons.Default.Edit,
@@ -841,7 +859,13 @@ fun UserSwitcherSheet(
                             if (isActive) {
                                 Icon(Icons.Default.Check, contentDescription = "Active", tint = LXPrimaryGreen, modifier = Modifier.size(20.dp))
                             } else if (allUsers.size > 1) {
-                                IconButton(onClick = { userToDelete = user }) {
+                                IconButton(onClick = {
+                                    if (!user.passKey.isNullOrBlank()) {
+                                        pendingPasskeyAction = PendingPasskeyAction.Delete(user)
+                                    } else {
+                                        userToDelete = user
+                                    }
+                                }) {
                                     Icon(Icons.Default.Delete, contentDescription = "Delete", tint = LXTextSecondary, modifier = Modifier.size(18.dp))
                                 }
                             }
@@ -854,39 +878,35 @@ fun UserSwitcherSheet(
         }
     }
 
-    if (userPendingVerification != null) {
-        userPendingVerification?.let { pendingUser ->
-            val pass = pendingUser.passKey ?: ""
-            PasskeyVerificationDialog(
-                profileName = pendingUser.name,
-                expectedPasskey = pass,
-                title = "Unlock Profile",
-                subtitle = "Enter 4-digit passkey to switch to \"${pendingUser.name}\"",
-                onSuccess = {
-                    val target = pendingUser
-                    userPendingVerification = null
-                    onSelectUser(target)
-                    onDismiss()
-                },
-                onDismiss = {
-                    userPendingVerification = null
+    pendingPasskeyAction?.let { action ->
+        val targetUser = action.user
+        val pass = targetUser.passKey ?: ""
+        val (dialogTitle, dialogSubtitle) = when (action) {
+            is PendingPasskeyAction.Select -> "Unlock Profile" to "Enter 4-digit passkey to switch to \"${targetUser.name}\""
+            is PendingPasskeyAction.Edit -> "Verify Passkey" to "Enter 4-digit passkey to edit \"${targetUser.name}\""
+            is PendingPasskeyAction.Delete -> "Verify Passkey" to "Enter 4-digit passkey to delete \"${targetUser.name}\""
+        }
+        PasskeyVerificationDialog(
+            profileName = targetUser.name,
+            expectedPasskey = pass,
+            profileId = targetUser.id,
+            title = dialogTitle,
+            subtitle = dialogSubtitle,
+            onSuccess = {
+                pendingPasskeyAction = null
+                when (action) {
+                    is PendingPasskeyAction.Select -> {
+                        onSelectUser(targetUser, true)
+                        onDismiss()
+                    }
+                    is PendingPasskeyAction.Edit -> openEditDialog(targetUser)
+                    is PendingPasskeyAction.Delete -> userToDelete = targetUser
                 }
-            )
-        }
-    }
-}
-
-private fun parseHexColor(hex: String): Color {
-    return try {
-        val clean = hex.removePrefix("#")
-        val colorInt = clean.toLong(16)
-        if (clean.length == 6) {
-            Color(colorInt or 0xFF000000)
-        } else {
-            Color(colorInt)
-        }
-    } catch (_: Exception) {
-        LXPrimaryGreen
+            },
+            onDismiss = {
+                pendingPasskeyAction = null
+            }
+        )
     }
 }
 

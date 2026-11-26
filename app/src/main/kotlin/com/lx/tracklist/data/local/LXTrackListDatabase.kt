@@ -14,8 +14,8 @@ import com.lx.tracklist.data.model.UserProfile
 
 @Database(
     entities = [MediaEntry::class, UserProfile::class, CustomCategory::class, SubCategory::class],
-    version = 21,
-    exportSchema = false
+    version = 22,
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class LXTrackListDatabase : RoomDatabase() {
@@ -322,6 +322,33 @@ abstract class LXTrackListDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_entries ADD COLUMN lastMetadataSyncAt INTEGER DEFAULT NULL")
+
+                // Normalize externalSource and externalScoreSource to canonical names (FND-06 / Decision D10)
+                val sourceColumns = listOf("externalSource", "externalScoreSource")
+                for (col in sourceColumns) {
+                    db.execSQL("UPDATE media_entries SET $col = 'MAL'          WHERE UPPER(TRIM($col)) IN ('MAL','MYANIMELIST','JIKAN','MAL (ANILIST)') AND $col <> 'MAL'")
+                    db.execSQL("UPDATE media_entries SET $col = 'AniList'      WHERE UPPER(TRIM($col)) = 'ANILIST' AND $col <> 'AniList'")
+                    db.execSQL("UPDATE media_entries SET $col = 'Kitsu'        WHERE UPPER(TRIM($col)) = 'KITSU' AND $col <> 'Kitsu'")
+                    db.execSQL("UPDATE media_entries SET $col = 'MangaDex'     WHERE UPPER(TRIM($col)) = 'MANGADEX' AND $col <> 'MangaDex'")
+                    db.execSQL("UPDATE media_entries SET $col = 'TMDB'         WHERE UPPER(TRIM($col)) IN ('TMDB','THEMOVIEDB','THE MOVIE DATABASE') AND $col <> 'TMDB'")
+                    db.execSQL("UPDATE media_entries SET $col = 'Google Books' WHERE UPPER(TRIM($col)) IN ('GOOGLE BOOKS','GOOGLEBOOKS','GOOGLE_BOOKS') AND $col <> 'Google Books'")
+                    db.execSQL("UPDATE media_entries SET $col = 'Open Library' WHERE UPPER(TRIM($col)) IN ('OPEN LIBRARY','OPENLIBRARY','OPEN_LIBRARY') AND $col <> 'Open Library'")
+                    db.execSQL("UPDATE media_entries SET $col = 'IGDB'         WHERE UPPER(TRIM($col)) = 'IGDB' AND $col <> 'IGDB'")
+                    db.execSQL("UPDATE media_entries SET $col = 'RAWG'         WHERE UPPER(TRIM($col)) = 'RAWG' AND $col <> 'RAWG'")
+                    db.execSQL("UPDATE media_entries SET $col = 'Apple Music'  WHERE UPPER(TRIM($col)) IN ('ITUNES','APPLE MUSIC','APPLE_MUSIC') AND $col <> 'Apple Music'")
+                    db.execSQL("UPDATE media_entries SET $col = 'MusicBrainz'  WHERE UPPER(TRIM($col)) = 'MUSICBRAINZ' AND $col <> 'MusicBrainz'")
+                    db.execSQL("UPDATE media_entries SET $col = 'Tachiyomi'    WHERE UPPER(TRIM($col)) IN ('TACHIYOMI','MIHON') AND $col <> 'Tachiyomi'")
+                    db.execSQL("UPDATE media_entries SET $col = NULL           WHERE $col IS NOT NULL AND TRIM($col) = ''")
+                }
+
+                db.execSQL("UPDATE media_entries SET externalSource = NULL WHERE UPPER(TRIM(externalSource)) = 'CSV' AND (externalId IS NULL OR TRIM(externalId) = '')")
+                db.execSQL("UPDATE media_entries SET gamePlatforms = REPLACE(gamePlatforms, 'XBox', 'Xbox') WHERE gamePlatforms LIKE '%XBox%'")
+            }
+        }
+
         fun getDatabase(context: Context): LXTrackListDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -334,9 +361,8 @@ abstract class LXTrackListDatabase : RoomDatabase() {
                         MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
                         MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14,
                         MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18,
-                        MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21
+                        MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22
                     )
-                    .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance

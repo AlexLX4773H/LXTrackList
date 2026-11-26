@@ -37,10 +37,12 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -110,8 +112,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScaffoldDefaults
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -128,7 +135,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -156,28 +162,42 @@ import com.lx.tracklist.R
 import com.lx.tracklist.data.local.StorageFileInfo
 import com.lx.tracklist.data.local.StorageHelper
 import com.lx.tracklist.data.model.CustomCategory
+import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.model.effectiveMediaType
+import com.lx.tracklist.data.model.effectiveMediaTypeFor
+import com.lx.tracklist.data.model.summarySubtitle
+import com.lx.tracklist.data.model.validateCustomCategoryName
 import com.lx.tracklist.data.remote.BookSyncProgress
 import com.lx.tracklist.data.remote.GameApiConfig
 import com.lx.tracklist.data.remote.GameSyncProgress
 import com.lx.tracklist.data.remote.JikanSyncProgress
 import com.lx.tracklist.data.remote.MusicSyncProgress
+import com.lx.tracklist.data.remote.SyncJobBadgeState
+import com.lx.tracklist.data.remote.SyncJobReadiness
 import com.lx.tracklist.data.remote.TachiyomiResolveProgress
 import com.lx.tracklist.data.remote.TmdbConfig
 import com.lx.tracklist.data.remote.TmdbSyncProgress
+import com.lx.tracklist.data.remote.mal.MalSyncProgress
 import com.lx.tracklist.data.repository.ConflictStrategy
+import com.lx.tracklist.ui.components.LXBadge
 import com.lx.tracklist.ui.components.PasskeyVerificationDialog
 import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.components.getCategoryIcon
 import com.lx.tracklist.ui.settings.ExportDestination
+import com.lx.tracklist.ui.theme.LXAccent
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXErrorRed
+import com.lx.tracklist.ui.theme.LXInfoBlue
+import com.lx.tracklist.ui.theme.LXOnAccent
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
+import com.lx.tracklist.ui.theme.LXWarningAmber
+import com.lx.tracklist.util.plural
 import com.lx.tracklist.ui.theme.LXProgressTrack
 import com.lx.tracklist.ui.theme.LXScoreGold
 import com.lx.tracklist.ui.theme.LXSurfaceBlack
@@ -185,6 +205,7 @@ import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXSurfaceVariant
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import com.lx.tracklist.ui.theme.parseHexColor
 
 enum class SettingsSubMenu(val title: String) {
     THEMES("Themes & Styling"),
@@ -222,6 +243,7 @@ fun SettingsScreen(
     var activeSubMenu by rememberSaveable { mutableStateOf<SettingsSubMenu?>(null) }
 
     var showAddCategoryDialog by remember { mutableStateOf(false) }
+    var categoryToEdit by remember { mutableStateOf<CustomCategory?>(null) }
     var categoryToDelete by remember { mutableStateOf<CustomCategory?>(null) }
     var newCategoryName by remember { mutableStateOf("") }
     var newCategoryMediaType by remember { mutableStateOf<MediaType?>(MediaType.MANGA) }
@@ -248,10 +270,16 @@ fun SettingsScreen(
         viewModel.refreshMalStatus(context)
     }
 
-    // Auto-dismiss status notification after 6 seconds
-    LaunchedEffect(state.statusMessage) {
-        if (state.statusMessage != null) {
-            delay(6000L)
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Surface every status message at the Scaffold level (visible across phone sub-pages & tablets)
+    LaunchedEffect(state.statusMessage, state.isErrorMessage) {
+        val msg = state.statusMessage
+        if (!msg.isNullOrBlank()) {
+            snackbarHostState.showSnackbar(
+                message = msg,
+                duration = SnackbarDuration.Long
+            )
             viewModel.clearStatusMessage()
         }
     }
@@ -289,10 +317,21 @@ fun SettingsScreen(
 
     // Add Custom Category Dialog
     if (showAddCategoryDialog) {
+        var categoryNameError by remember(showAddCategoryDialog) { mutableStateOf<String?>(null) }
+        val selectedType = newCategoryMediaType ?: MediaType.MANGA
+        val resetNewCategoryForm = {
+            newCategoryName = ""
+            newCategoryMediaType = MediaType.MANGA
+            newCategoryIsWatch = false
+            newCategoryTrackingUnit = TrackingUnit.CHAPTERS
+            selectedColor = colorOptions.first()
+            categoryNameError = null
+        }
+
         AlertDialog(
             onDismissRequest = {
                 showAddCategoryDialog = false
-                newCategoryName = ""
+                resetNewCategoryForm()
             },
             title = {
                 Text("New Custom Category", color = LXTextPrimary, fontWeight = FontWeight.Bold)
@@ -307,184 +346,64 @@ fun SettingsScreen(
                     Text("Category Name", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
                     OutlinedTextField(
                         value = newCategoryName,
-                        onValueChange = { newCategoryName = it },
-                        placeholder = { Text("e.g. Donghua, Web Novels, Audiobooks...", color = LXTextSecondary) },
+                        onValueChange = {
+                            newCategoryName = it
+                            categoryNameError = null
+                        },
+                        placeholder = { Text("e.g. Donghua, Web Novels, Documentaries...", color = LXTextSecondary) },
+                        isError = categoryNameError != null,
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = LXPrimaryGreen,
                             unfocusedBorderColor = LXBorder,
+                            errorBorderColor = LXErrorRed,
                             focusedTextColor = LXTextPrimary,
                             unfocusedTextColor = LXTextPrimary,
                             cursorColor = LXPrimaryGreen
                         )
                     )
-
-                    Text("Tracking Mode", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Surface(
-                            onClick = { newCategoryIsWatch = false },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (!newCategoryIsWatch) LXPrimaryGreen else LXSurfaceElevated,
-                            border = BorderStroke(1.dp, if (!newCategoryIsWatch) LXPrimaryGreen else LXBorder)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Text(
-                                    text = "Reading",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = if (!newCategoryIsWatch) LXBackgroundBlack else LXTextPrimary
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Chapters / Vol",
-                                    fontSize = 11.sp,
-                                    color = if (!newCategoryIsWatch) LXBackgroundBlack.copy(alpha = 0.8f) else LXTextSecondary
-                                )
-                            }
-                        }
-
-                        Surface(
-                            onClick = { newCategoryIsWatch = true },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (newCategoryIsWatch) LXPrimaryGreen else LXSurfaceElevated,
-                            border = BorderStroke(1.dp, if (newCategoryIsWatch) LXPrimaryGreen else LXBorder)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Text(
-                                    text = "Watching",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = if (newCategoryIsWatch) LXBackgroundBlack else LXTextPrimary
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Episodes",
-                                    fontSize = 11.sp,
-                                    color = if (newCategoryIsWatch) LXBackgroundBlack.copy(alpha = 0.8f) else LXTextSecondary
-                                )
-                            }
-                        }
+                    if (categoryNameError != null) {
+                        Text(
+                            text = categoryNameError ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = LXErrorRed
+                        )
                     }
 
-                    if (!newCategoryIsWatch) {
-                        Text("Reading Tracking Unit", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
-                        val units = TrackingUnit.entries
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                units.take(2).forEach { unit ->
-                                    val isSelected = newCategoryTrackingUnit == unit
-                                    Surface(
-                                        onClick = { newCategoryTrackingUnit = unit },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = if (isSelected) LXPrimaryGreen else LXSurfaceElevated,
-                                        border = BorderStroke(1.dp, if (isSelected) LXPrimaryGreen else LXBorder)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = unit.displayName,
-                                                fontSize = 12.sp,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                color = if (isSelected) LXBackgroundBlack else LXTextPrimary
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                units.drop(2).forEach { unit ->
-                                    val isSelected = newCategoryTrackingUnit == unit
-                                    Surface(
-                                        onClick = { newCategoryTrackingUnit = unit },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = if (isSelected) LXPrimaryGreen else LXSurfaceElevated,
-                                        border = BorderStroke(1.dp, if (isSelected) LXPrimaryGreen else LXBorder)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = unit.displayName,
-                                                fontSize = 12.sp,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                color = if (isSelected) LXBackgroundBlack else LXTextPrimary
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Text("Badge Color", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        colorOptions.forEach { hex ->
-                            val color = parseHexColor(hex)
-                            val isChosen = selectedColor == hex
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(color)
-                                    .border(
-                                        width = if (isChosen) 3.dp else 1.dp,
-                                        color = if (isChosen) Color.White else Color.Transparent,
-                                        shape = CircleShape
-                                    )
-                                    .clickable { selectedColor = hex },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (isChosen) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
-                                }
-                            }
-                        }
-                    }
+                    CustomCategoryConfigFields(
+                        selectedMediaType = selectedType,
+                        onMediaTypeSelected = { type ->
+                            newCategoryMediaType = type
+                            newCategoryIsWatch = type.isWatchType
+                            newCategoryTrackingUnit = defaultTrackingUnitForBaseType(type, newCategoryTrackingUnit)
+                        },
+                        selectedTrackingUnit = newCategoryTrackingUnit,
+                        onTrackingUnitSelected = { newCategoryTrackingUnit = it },
+                        selectedColorHex = selectedColor,
+                        onColorHexSelected = { selectedColor = it },
+                        colorOptions = colorOptions
+                    )
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        if (newCategoryName.isNotBlank()) {
+                        val error = validateCustomCategoryName(
+                            newCategoryName,
+                            state.customCategories.map { it.name }
+                        )
+                        if (error != null) {
+                            categoryNameError = error
+                        } else {
                             viewModel.addCustomCategory(
                                 name = newCategoryName,
-                                isWatchType = newCategoryIsWatch,
+                                isWatchType = selectedType.isWatchType,
                                 trackingUnit = newCategoryTrackingUnit,
-                                colorHex = selectedColor
+                                colorHex = selectedColor,
+                                mediaType = selectedType
                             )
-                            newCategoryName = ""
+                            resetNewCategoryForm()
                             showAddCategoryDialog = false
                         }
                     },
@@ -497,7 +416,7 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = {
                     showAddCategoryDialog = false
-                    newCategoryName = ""
+                    resetNewCategoryForm()
                 }) {
                     Text("Cancel", color = LXTextSecondary)
                 }
@@ -506,26 +425,153 @@ fun SettingsScreen(
         )
     }
 
-    // Delete Custom Category Confirmation Dialog
-    if (categoryToDelete != null) {
+    // Edit Custom Category Dialog
+    categoryToEdit?.let { cat ->
+        var editMediaType by remember(cat.id, cat.name) { mutableStateOf(cat.effectiveMediaType()) }
+        var editTrackingUnit by remember(cat.id, cat.name) {
+            mutableStateOf(defaultTrackingUnitForBaseType(cat.effectiveMediaType(), cat.trackingUnit))
+        }
+        var editColorHex by remember(cat.id, cat.name) { mutableStateOf(cat.colorHex) }
+
         AlertDialog(
-            onDismissRequest = { categoryToDelete = null },
-            title = { Text("Delete Category?", color = LXTextPrimary, fontWeight = FontWeight.Bold) },
+            onDismissRequest = { categoryToEdit = null },
+            title = {
+                Text("Edit \"${cat.name}\"", color = LXTextPrimary, fontWeight = FontWeight.Bold)
+            },
             text = {
-                Text(
-                    "Are you sure you want to delete custom category \"${categoryToDelete?.name}\"?",
-                    color = LXTextSecondary
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Note: Changing the base type updates how this category behaves and appears; existing entries keep their own media type.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LXScoreGold
+                    )
+
+                    CustomCategoryConfigFields(
+                        selectedMediaType = editMediaType,
+                        onMediaTypeSelected = { type ->
+                            editMediaType = type
+                            editTrackingUnit = defaultTrackingUnitForBaseType(type, editTrackingUnit)
+                        },
+                        selectedTrackingUnit = editTrackingUnit,
+                        onTrackingUnitSelected = { editTrackingUnit = it },
+                        selectedColorHex = editColorHex,
+                        onColorHexSelected = { editColorHex = it },
+                        colorOptions = colorOptions
+                    )
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        categoryToDelete?.let { viewModel.deleteCustomCategory(it) }
+                        viewModel.updateCustomCategory(
+                            category = cat,
+                            mediaType = editMediaType,
+                            trackingUnit = editTrackingUnit,
+                            colorHex = editColorHex
+                        )
+                        categoryToEdit = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = LXPrimaryGreen, contentColor = LXBackgroundBlack),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Save Changes", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { categoryToEdit = null }) {
+                    Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
+    }
+
+    // Delete Custom Category Confirmation Dialog
+    categoryToDelete?.let { cat ->
+        var entryCount by remember(cat.id, cat.name) { mutableStateOf(0) }
+        var deleteEntriesToo by remember(cat.id, cat.name) { mutableStateOf(false) }
+
+        LaunchedEffect(cat.id, cat.name) {
+            entryCount = viewModel.countEntriesInCustomCategory(cat)
+        }
+
+        val baseTypeLabel = cat.effectiveMediaType().displayName
+        val countLabel = if (entryCount == 1) "1 entry uses this category." else "$entryCount entries use this category."
+
+        AlertDialog(
+            onDismissRequest = { categoryToDelete = null },
+            shape = RoundedCornerShape(16.dp),
+            title = { Text("Delete \"${cat.name}\"?", color = LXTextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = countLabel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = LXTextSecondary
+                    )
+                    if (entryCount > 0) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { deleteEntriesToo = false }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = !deleteEntriesToo,
+                                onClick = { deleteEntriesToo = false },
+                                colors = RadioButtonDefaults.colors(selectedColor = LXPrimaryGreen)
+                            )
+                            Text(
+                                text = "Move entries to $baseTypeLabel",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = LXTextPrimary
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { deleteEntriesToo = true }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = deleteEntriesToo,
+                                onClick = { deleteEntriesToo = true },
+                                colors = RadioButtonDefaults.colors(selectedColor = LXErrorRed)
+                            )
+                            Text(
+                                text = "Delete entries too",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (deleteEntriesToo) LXErrorRed else LXTextPrimary
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteCustomCategory(cat, deleteEntries = deleteEntriesToo && entryCount > 0)
                         categoryToDelete = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = LXErrorRed)
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = LXErrorRed, contentColor = Color.White)
                 ) {
-                    Text("Delete", color = Color.White)
+                    Text(
+                        text = if (deleteEntriesToo && entryCount > 0) "Delete All" else "Delete",
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             },
             dismissButton = {
@@ -839,6 +885,106 @@ fun SettingsScreen(
         )
     }
 
+    // Duplicate Merge Preview and Confirmation Dialog
+    val duplicatePreview = state.duplicateMergePreview
+    if (duplicatePreview != null) {
+        val pairCount = duplicatePreview.size
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissDuplicatePreview() },
+            title = {
+                Text(
+                    text = "Confirm Duplicate Merge",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = LXTextPrimary
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "${plural(pairCount, "pair")} will be merged. Duplicate entries will be combined into the primary entry and removed.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = LXTextSecondary
+                    )
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 260.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(duplicatePreview) { pair ->
+                            val primaryYear = pair.primary.airedStartDate?.let { MediaEntry.extractYearFromMillis(it) }
+                            val primaryMeta = buildList {
+                                add(pair.primary.mediaType.singularName)
+                                primaryYear?.let { add(it) }
+                                pair.primary.externalSource?.takeIf { it.isNotBlank() }?.let { add(it) }
+                            }.joinToString(" · ")
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(LXSurfaceBlack)
+                                    .border(1.dp, LXBorder, RoundedCornerShape(8.dp))
+                                    .padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = "Keep: ${pair.primary.title}",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = LXTextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "Merge: ${pair.duplicate.title}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = LXTextSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (primaryMeta.isNotBlank()) {
+                                    Text(
+                                        text = primaryMeta,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = LXTextSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.mergeDuplicates() },
+                    enabled = !state.isMergingDuplicates,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = LXAccent,
+                        contentColor = LXOnAccent
+                    )
+                ) {
+                    Text(
+                        text = if (state.isMergingDuplicates) "Merging..." else "Merge $pairCount",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.dismissDuplicatePreview() },
+                    enabled = !state.isMergingDuplicates
+                ) {
+                    Text("Cancel", color = LXTextSecondary)
+                }
+            },
+            containerColor = LXSurfaceElevated
+        )
+    }
+
     // Export Preview and Confirmation Dialog
     val exportPreview = state.exportPreview
     if (exportPreview != null) {
@@ -1043,6 +1189,19 @@ fun SettingsScreen(
         modifier = modifier.fillMaxSize(),
         containerColor = LXBackgroundBlack,
         contentWindowInsets = if (isTablet) ScaffoldDefaults.contentWindowInsets else WindowInsets(0, 0, 0, 0),
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState) { snackbarData ->
+                StatusMessageBanner(
+                    message = snackbarData.visuals.message,
+                    isError = state.isErrorMessage,
+                    onDismiss = {
+                        snackbarData.dismiss()
+                        viewModel.clearStatusMessage()
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -1125,9 +1284,10 @@ fun SettingsScreen(
                         bookSyncState = bookSyncState,
                         gameSyncState = gameSyncState,
                         musicSyncState = musicSyncState,
+                        tachiyomiResolveState = tachiyomiResolveState,
+                        malSyncState = malSyncState,
                         selectedSubMenu = currentSelection,
-                        onSelectSubMenu = { activeSubMenu = it },
-                        onDismissStatusMessage = { viewModel.clearStatusMessage() }
+                        onSelectSubMenu = { activeSubMenu = it }
                     )
                 }
 
@@ -1142,6 +1302,7 @@ fun SettingsScreen(
                         SettingsSubMenu.CATEGORIES -> CustomCategoriesContent(
                             customCategories = state.customCategories,
                             onAddCategoryClick = { showAddCategoryDialog = true },
+                            onEditCategoryClick = { categoryToEdit = it },
                             onDeleteCategoryClick = { categoryToDelete = it }
                         )
                         SettingsSubMenu.EXTERNAL_TRACKING -> ExternalTrackingContent(
@@ -1227,7 +1388,8 @@ fun SettingsScreen(
                         SettingsSubMenu.CONFLICTS -> ConflictResolutionContent(
                             selectedStrategy = state.selectedConflictStrategy,
                             onSelectStrategy = { viewModel.setConflictStrategy(it) },
-                            onMergeDuplicates = { viewModel.mergeDuplicates() }
+                            onMergeDuplicates = { viewModel.scanDuplicates() },
+                            isScanningDuplicates = state.isScanningDuplicates || state.isMergingDuplicates
                         )
                         SettingsSubMenu.EXPORT_GUIDES -> ExportGuidesContent(
                             onNavigateToStorage = { activeSubMenu = SettingsSubMenu.STORAGE }
@@ -1276,9 +1438,10 @@ fun SettingsScreen(
                             bookSyncState = bookSyncState,
                             gameSyncState = gameSyncState,
                             musicSyncState = musicSyncState,
+                            tachiyomiResolveState = tachiyomiResolveState,
+                            malSyncState = malSyncState,
                             selectedSubMenu = null,
                             onSelectSubMenu = { activeSubMenu = it },
-                            onDismissStatusMessage = { viewModel.clearStatusMessage() },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -1292,6 +1455,7 @@ fun SettingsScreen(
                         CustomCategoriesContent(
                             customCategories = state.customCategories,
                             onAddCategoryClick = { showAddCategoryDialog = true },
+                            onEditCategoryClick = { categoryToEdit = it },
                             onDeleteCategoryClick = { categoryToDelete = it },
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
@@ -1389,7 +1553,8 @@ fun SettingsScreen(
                         ConflictResolutionContent(
                             selectedStrategy = state.selectedConflictStrategy,
                             onSelectStrategy = { viewModel.setConflictStrategy(it) },
-                            onMergeDuplicates = { viewModel.mergeDuplicates() },
+                            onMergeDuplicates = { viewModel.scanDuplicates() },
+                            isScanningDuplicates = state.isScanningDuplicates || state.isMergingDuplicates,
                             modifier = Modifier.widthIn(max = 840.dp)
                         )
                     }
@@ -1592,9 +1757,10 @@ private fun SettingsMainMenu(
     bookSyncState: BookSyncProgress,
     gameSyncState: GameSyncProgress,
     musicSyncState: MusicSyncProgress,
+    tachiyomiResolveState: TachiyomiResolveProgress,
+    malSyncState: MalSyncProgress,
     selectedSubMenu: SettingsSubMenu?,
     onSelectSubMenu: (SettingsSubMenu) -> Unit,
-    onDismissStatusMessage: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -1603,21 +1769,16 @@ private fun SettingsMainMenu(
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Status Notification Banner (if any)
-        if (state.statusMessage != null) {
-            StatusMessageBanner(
-                message = state.statusMessage,
-                isError = state.isErrorMessage,
-                onDismiss = onDismissStatusMessage
-            )
-        }
-
         // Section: Sync & External Services
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SettingsSectionHeader("Sync & External Services")
 
             // 1. External Tracking (MyAnimeList live sync)
-            val malBadge = if (state.isMalConnected) "CONNECTED" else "NOT LINKED"
+            val malBadge = when {
+                malSyncState.isRunning -> "SYNCING"
+                state.isMalConnected -> "CONNECTED"
+                else -> "NOT LINKED"
+            }
             val malSub = if (state.isMalConnected) "MyAnimeList connected (@${state.malUsername ?: "user"}) • Auto-push active" else "Connect MyAnimeList to push watched episodes & read chapters"
             SettingsMenuItem(
                 icon = Icons.AutoMirrored.Filled.OpenInNew,
@@ -1626,21 +1787,29 @@ private fun SettingsMainMenu(
                 title = "External Tracking",
                 subtitle = malSub,
                 badgeText = malBadge,
-                badgeColor = if (state.isMalConnected) LXPrimaryGreen else LXTextSecondary,
+                badgeColor = if (malSyncState.isRunning || state.isMalConnected) LXPrimaryGreen else LXTextSecondary,
                 isSelected = selectedSubMenu == SettingsSubMenu.EXTERNAL_TRACKING,
                 onClick = { onSelectSubMenu(SettingsSubMenu.EXTERNAL_TRACKING) }
             )
 
-            // 2. External Sync Jobs (Jikan, TMDB, Books, Games & Music metadata)
-            val isSyncing = jikanSyncState.isRunning || tmdbSyncState.isRunning || bookSyncState.isRunning || gameSyncState.isRunning || musicSyncState.isRunning
+            // 2. External Sync Jobs (Jikan, TMDB, Books, Games, Music, Resolve IDs & MAL pull)
+            val syncSummary = SyncJobReadiness.mainMenuSummary(
+                isJikanRunning = jikanSyncState.isRunning,
+                isTmdbRunning = tmdbSyncState.isRunning,
+                isBookRunning = bookSyncState.isRunning,
+                isGameRunning = gameSyncState.isRunning,
+                isMusicRunning = musicSyncState.isRunning,
+                isResolveIdsRunning = tachiyomiResolveState.isRunning,
+                isMalPullRunning = malSyncState.isRunning
+            )
             SettingsMenuItem(
                 icon = Icons.Default.Sync,
-                iconBackgroundColor = Color(0xFF4DA8DA).copy(alpha = 0.15f),
-                iconTintColor = Color(0xFF4DA8DA),
+                iconBackgroundColor = LXInfoBlue.copy(alpha = 0.15f),
+                iconTintColor = LXInfoBlue,
                 title = "External Sync Jobs",
                 subtitle = "Automated metadata, poster & episode sync with online databases",
-                badgeText = if (isSyncing) "SYNCING" else "ONLINE",
-                badgeColor = if (isSyncing) LXPrimaryGreen else Color(0xFF4DA8DA),
+                badgeText = syncSummary.badgeText,
+                badgeColor = if (syncSummary.isActive) LXPrimaryGreen else LXInfoBlue,
                 isSelected = selectedSubMenu == SettingsSubMenu.SYNC_JOBS,
                 onClick = { onSelectSubMenu(SettingsSubMenu.SYNC_JOBS) }
             )
@@ -1937,49 +2106,182 @@ private fun StatusMessageBanner(
     onDismiss: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    Card(
+    Surface(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isError) LXErrorRed.copy(alpha = 0.15f) else LXPrimaryGreen.copy(alpha = 0.15f)
-        ),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (isError) LXErrorRed else LXPrimaryGreen
-        ),
-        shape = RoundedCornerShape(10.dp)
+        color = LXSurfaceElevated,
+        shape = RoundedCornerShape(10.dp),
+        shadowElevation = 6.dp
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isError) LXErrorRed.copy(alpha = 0.15f) else LXPrimaryGreen.copy(alpha = 0.15f)
+            ),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                if (isError) LXErrorRed else LXPrimaryGreen
+            ),
+            shape = RoundedCornerShape(10.dp)
         ) {
             Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = null,
-                    tint = if (isError) LXErrorRed else LXPrimaryGreen
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = message,
-                    color = LXTextPrimary,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = if (isError) LXErrorRed else LXPrimaryGreen
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = message,
+                        color = LXTextPrimary,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
 
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier.size(28.dp)
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Dismiss",
+                        tint = LXTextSecondary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun defaultTrackingUnitForBaseType(
+    mediaType: MediaType,
+    currentUnit: TrackingUnit
+): TrackingUnit {
+    return when {
+        mediaType.isReadType -> TrackingUnit.sanitizeForMediaType(currentUnit, mediaType)
+        mediaType == MediaType.GAME || mediaType == MediaType.MUSIC -> TrackingUnit.PERCENTAGE
+        else -> TrackingUnit.CHAPTERS
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CustomCategoryConfigFields(
+    selectedMediaType: MediaType,
+    onMediaTypeSelected: (MediaType) -> Unit,
+    selectedTrackingUnit: TrackingUnit,
+    onTrackingUnitSelected: (TrackingUnit) -> Unit,
+    selectedColorHex: String,
+    onColorHexSelected: (String) -> Unit,
+    colorOptions: List<String>
+) {
+    Text("Base Category Type", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        MediaType.entries.forEach { type ->
+            val isSelected = selectedMediaType == type
+            Surface(
+                onClick = { onMediaTypeSelected(type) },
+                shape = RoundedCornerShape(8.dp),
+                color = if (isSelected) LXPrimaryGreen else LXSurfaceElevated,
+                border = BorderStroke(1.dp, if (isSelected) LXPrimaryGreen else LXBorder)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Dismiss",
-                    tint = LXTextSecondary,
-                    modifier = Modifier.size(16.dp)
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = getCategoryIcon(type),
+                        contentDescription = null,
+                        tint = if (isSelected) LXBackgroundBlack else LXTextSecondary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = type.displayName,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) LXBackgroundBlack else LXTextPrimary
+                    )
+                }
+            }
+        }
+    }
+
+    if (selectedMediaType.isReadType) {
+        Text("Reading Tracking Unit", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            TrackingUnit.READING_UNITS.chunked(2).forEach { rowUnits ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    rowUnits.forEach { unit ->
+                        val isSelected = selectedTrackingUnit == unit
+                        Surface(
+                            onClick = { onTrackingUnitSelected(unit) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) LXPrimaryGreen else LXSurfaceElevated,
+                            border = BorderStroke(1.dp, if (isSelected) LXPrimaryGreen else LXBorder)
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = unit.displayName,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) LXBackgroundBlack else LXTextPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Text("Badge Color", style = MaterialTheme.typography.labelMedium, color = LXTextSecondary)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        colorOptions.forEach { hex ->
+            val color = parseHexColor(hex)
+            val isChosen = selectedColorHex.equals(hex, ignoreCase = true)
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(color)
+                    .border(
+                        width = if (isChosen) 3.dp else 1.dp,
+                        color = if (isChosen) Color.White else Color.Transparent,
+                        shape = CircleShape
+                    )
+                    .clickable { onColorHexSelected(hex) },
+                contentAlignment = Alignment.Center
+            ) {
+                if (isChosen) {
+                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                }
             }
         }
     }
@@ -1989,6 +2291,7 @@ private fun StatusMessageBanner(
 private fun CustomCategoriesContent(
     customCategories: List<CustomCategory>,
     onAddCategoryClick: () -> Unit,
+    onEditCategoryClick: (CustomCategory) -> Unit = {},
     onDeleteCategoryClick: (CustomCategory) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -2048,7 +2351,7 @@ private fun CustomCategoriesContent(
                 }
 
                 Text(
-                    text = "Add personalized categories outside default ones (e.g. Donghua, Web Novels, Audiobooks, Visual Novels, Games) and track them with custom units.",
+                    text = "Add personalized categories outside default ones (e.g. Donghua, Web Novels, Documentaries, Soundtracks) and track them with their own base type and units.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
@@ -2126,7 +2429,7 @@ private fun CustomCategoriesContent(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            imageVector = if (cat.isWatchType) Icons.Default.LiveTv else Icons.Default.Bookmark,
+                                            imageVector = getCategoryIcon(cat.effectiveMediaType()),
                                             contentDescription = null,
                                             tint = catColor,
                                             modifier = Modifier.size(18.dp)
@@ -2142,20 +2445,30 @@ private fun CustomCategoriesContent(
                                             color = LXTextPrimary
                                         )
                                         Text(
-                                            text = if (cat.isWatchType) "Watch • Episodes" else "Read • ${cat.trackingUnit.displayName}",
+                                            text = cat.summarySubtitle(),
                                             style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                             color = LXTextSecondary
                                         )
                                     }
                                 }
 
-                                IconButton(onClick = { onDeleteCategoryClick(cat) }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Delete Category",
-                                        tint = LXTextSecondary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { onEditCategoryClick(cat) }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "Edit Category",
+                                            tint = LXTextSecondary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    IconButton(onClick = { onDeleteCategoryClick(cat) }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Delete Category",
+                                            tint = LXTextSecondary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -3441,6 +3754,17 @@ private fun ExternalTrackingContent(
 }
 
 @Composable
+private fun SyncJobStatusBadge(badgeState: SyncJobBadgeState) {
+    val color = when (badgeState) {
+        SyncJobBadgeState.SYNCING -> LXPrimaryGreen
+        SyncJobBadgeState.RESOLVING -> LXScoreGold
+        SyncJobBadgeState.READY -> LXTextSecondary
+        SyncJobBadgeState.KEY_NEEDED -> LXWarningAmber
+    }
+    LXBadge(text = badgeState.label, color = color)
+}
+
+@Composable
 private fun SyncJobsContent(
     jikanSyncState: JikanSyncProgress,
     tmdbSyncState: TmdbSyncProgress,
@@ -3503,6 +3827,7 @@ private fun SyncJobsContent(
 
         // Background Execution & Battery Optimization Card
         val context = LocalContext.current
+        var apiKeysRevision by androidx.compose.runtime.remember { androidx.compose.runtime.mutableIntStateOf(0) }
         val lifecycleOwner = LocalLifecycleOwner.current
         val powerManager = remember(context) { context.getSystemService(Context.POWER_SERVICE) as? PowerManager }
 
@@ -3715,26 +4040,11 @@ private fun SyncJobsContent(
                         )
                     }
 
-                    if (jikanSyncState.isRunning) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "SYNCING",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
+                    SyncJobStatusBadge(SyncJobReadiness.jikanBadge(jikanSyncState.isRunning))
                 }
 
                 Text(
-                    text = "Fetches official posters, runtimes, broadcast dates, total episodes/chapters, alternate titles, tags, and synopses from MyAnimeList (Jikan) with automatic MangaDex, AniList, and Kitsu fallbacks for Manga and Manhwa.",
+                    text = "Fetches official posters, runtimes, broadcast dates, total episodes/chapters, alternate titles, tags, and synopses from MyAnimeList, AniList, MangaDex, and Kitsu.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
@@ -3918,42 +4228,17 @@ private fun SyncJobsContent(
                         )
                     }
 
-                    val isConfigured = TmdbConfig.isConfigured(LocalContext.current)
-                    if (tmdbSyncState.isRunning) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "SYNCING",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    } else if (isConfigured) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "CONNECTED",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
+                    val isTmdbReady = remember(apiKeysRevision) { TmdbConfig.isConfigured(context) }
+                    SyncJobStatusBadge(
+                        SyncJobReadiness.tmdbBadge(
+                            isRunning = tmdbSyncState.isRunning,
+                            isTmdbConfigured = isTmdbReady
+                        )
+                    )
                 }
 
                 Text(
-                    text = "Fetches official posters, runtimes, broadcast dates, season & episode counts, tags, and ratings for Movies and TV Shows from The Movie Database (TMDB).",
+                    text = "Fetches official posters, runtimes, broadcast dates, season & episode counts, tags, and ratings from The Movie Database (TMDB) for Movies, TV Shows, and TMDB-linked Anime.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
@@ -4077,15 +4362,26 @@ private fun SyncJobsContent(
                         }
                     }
                 } else {
+                    val isTmdbReady = remember(apiKeysRevision) { TmdbConfig.isConfigured(context) }
+                    if (!isTmdbReady) {
+                        Text(
+                            text = SyncJobReadiness.MISSING_KEY_HINT,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = LXWarningAmber
+                        )
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
                             onClick = { onStartTmdbSync(false) },
+                            enabled = isTmdbReady,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = LXPrimaryGreen,
-                                contentColor = LXBackgroundBlack
+                                contentColor = LXBackgroundBlack,
+                                disabledContainerColor = LXSurfaceElevated,
+                                disabledContentColor = LXTextSecondary
                             ),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
@@ -4103,8 +4399,15 @@ private fun SyncJobsContent(
 
                         OutlinedButton(
                             onClick = { onStartTmdbSync(true) },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                            enabled = isTmdbReady,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = LXPrimaryGreen,
+                                disabledContentColor = LXTextSecondary
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isTmdbReady) LXPrimaryGreen.copy(alpha = 0.5f) else LXBorder
+                            ),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
                         ) {
@@ -4159,41 +4462,11 @@ private fun SyncJobsContent(
                         )
                     }
 
-                    if (bookSyncState.isRunning) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "SYNCING",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "ONLINE",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
+                    SyncJobStatusBadge(SyncJobReadiness.bookBadge(bookSyncState.isRunning))
                 }
 
                 Text(
-                    text = "Fetches official covers, author & publisher details, page & volume counts, publication dates, categories/tags, and descriptions for Books and Novels from Google Books and Open Library (with AniList for Light Novels).",
+                    text = "Fetches official covers, author & publisher details, page & volume counts, publication dates, categories/tags, and descriptions from Google Books and Open Library (plus Light Novels via AniList/MAL).",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
@@ -4377,53 +4650,16 @@ private fun SyncJobsContent(
                         )
                     }
 
-                    val isConfigured = GameApiConfig.isIgdbConfigured(LocalContext.current) || GameApiConfig.isRawgConfigured(LocalContext.current)
-                    if (gameSyncState.isRunning) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "SYNCING",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    } else if (isConfigured) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "CONNECTED",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "ONLINE",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
+                    val gamesReady = remember(apiKeysRevision) {
+                        GameApiConfig.isIgdbConfigured(context) || GameApiConfig.isRawgConfigured(context)
                     }
+                    SyncJobStatusBadge(
+                        SyncJobReadiness.gameBadge(
+                            isRunning = gameSyncState.isRunning,
+                            isIgdbConfigured = gamesReady && GameApiConfig.isIgdbConfigured(context),
+                            isRawgConfigured = gamesReady && GameApiConfig.isRawgConfigured(context)
+                        )
+                    )
                 }
 
                 Text(
@@ -4529,15 +4765,28 @@ private fun SyncJobsContent(
                         }
                     }
                 } else {
+                    val isGamesReady = remember(apiKeysRevision) {
+                        GameApiConfig.isIgdbConfigured(context) || GameApiConfig.isRawgConfigured(context)
+                    }
+                    if (!isGamesReady) {
+                        Text(
+                            text = SyncJobReadiness.MISSING_KEY_HINT,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = LXWarningAmber
+                        )
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
                             onClick = { onStartGameSync(false) },
+                            enabled = isGamesReady,
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = LXPrimaryGreen,
-                                contentColor = LXBackgroundBlack
+                                contentColor = LXBackgroundBlack,
+                                disabledContainerColor = LXSurfaceElevated,
+                                disabledContentColor = LXTextSecondary
                             ),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
@@ -4555,8 +4804,15 @@ private fun SyncJobsContent(
 
                         OutlinedButton(
                             onClick = { onStartGameSync(true) },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
+                            enabled = isGamesReady,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = LXPrimaryGreen,
+                                disabledContentColor = LXTextSecondary
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isGamesReady) LXPrimaryGreen.copy(alpha = 0.5f) else LXBorder
+                            ),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
                         ) {
@@ -4611,37 +4867,7 @@ private fun SyncJobsContent(
                         )
                     }
 
-                    if (musicSyncState.isRunning) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "SYNCING",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "ONLINE",
-                                color = LXPrimaryGreen,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
+                    SyncJobStatusBadge(SyncJobReadiness.musicBadge(musicSyncState.isRunning))
                 }
 
                 Text(
@@ -4829,26 +5055,11 @@ private fun SyncJobsContent(
                         )
                     }
 
-                    if (tachiyomiResolveState.isRunning) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(LXScoreGold.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "RESOLVING",
-                                color = LXScoreGold,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
+                    SyncJobStatusBadge(SyncJobReadiness.resolveIdsBadge(tachiyomiResolveState.isRunning))
                 }
 
                 Text(
-                    text = "Find and link official external IDs (MyAnimeList, MangaDex, AniList, Kitsu, TMDB, Google Books, Open Library, IGDB, RAWG) for Manga, Manhwa, Books, Novels, Movie, TV Show, and Game entries. Only links when title match is exact and confident. Generates a full audit report in /LXTrackList/data.",
+                    text = "Find and link official external IDs (MyAnimeList, MangaDex, AniList, Kitsu, TMDB, Google Books, Open Library, IGDB, RAWG) for Anime, Manga, Manhwa, Books, Novels, Movies, TV Shows, and Games (Music tracks are skipped). Only links when title match is exact and confident and saves an audit report in /LXTrackList/data.",
                     style = MaterialTheme.typography.bodySmall,
                     color = LXTextSecondary
                 )
@@ -4955,6 +5166,10 @@ private fun SyncJobsContent(
             }
         }
 
+        SyncJobsApiKeysSection(
+            onApiKeysChanged = { apiKeysRevision++ }
+        )
+
         Spacer(modifier = Modifier.height(24.dp))
     }
 }
@@ -4964,6 +5179,7 @@ private fun ConflictResolutionContent(
     selectedStrategy: ConflictStrategy,
     onSelectStrategy: (ConflictStrategy) -> Unit,
     onMergeDuplicates: (() -> Unit)? = null,
+    isScanningDuplicates: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -5094,6 +5310,7 @@ private fun ConflictResolutionContent(
 
                 Button(
                     onClick = { onMergeDuplicates?.invoke() },
+                    enabled = !isScanningDuplicates,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = LXScoreGold,
                         contentColor = LXBackgroundBlack
@@ -5104,9 +5321,8 @@ private fun ConflictResolutionContent(
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Scan & Merge Duplicates",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
+                        text = if (isScanningDuplicates) "Scanning Library..." else "Scan & Merge Duplicates",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
                     )
                 }
             }
@@ -5252,8 +5468,10 @@ private fun StartupViewContent(
 ) {
     val targetProfile = state.activeUser
 
-    val currentMediaType = targetProfile.defaultMediaType ?: MediaType.ANIME
     val currentCustomCat = targetProfile.defaultCustomCategory
+    val currentMediaType = currentCustomCat?.let { state.customCategories.effectiveMediaTypeFor(it) }
+        ?: targetProfile.defaultMediaType
+        ?: MediaType.ANIME
     val currentSubCat = targetProfile.defaultSubCategory
     val currentStatus = targetProfile.defaultStatus
 
@@ -5446,7 +5664,7 @@ private fun StartupViewContent(
                                             }) currentSubCat else null
                                         onUpdateStartupDefaults(
                                             targetProfile.id,
-                                            customCat.mediaType ?: MediaType.MANGA,
+                                            customCat.effectiveMediaType(),
                                             customCat.name,
                                             newSubCat,
                                             currentStatus
@@ -6702,21 +6920,6 @@ private fun InfoRow(label: String, value: String) {
     }
 }
 
-
-private fun parseHexColor(hex: String): Color {
-    return try {
-        val clean = hex.removePrefix("#")
-        val colorInt = clean.toLong(16)
-        if (clean.length == 6) {
-            Color(colorInt or 0xFF000000)
-        } else {
-            Color(colorInt)
-        }
-    } catch (_: Exception) {
-        LXPrimaryGreen
-    }
-}
-
 @Composable
 private fun ExportGuidesContent(
     onNavigateToStorage: () -> Unit,
@@ -7486,6 +7689,7 @@ private fun SecurityContent(
             PasskeyVerificationDialog(
                 profileName = activeUser.name,
                 expectedPasskey = activeUser.passKey ?: "",
+                profileId = activeUser.id,
                 title = "Verify Current Passkey",
                 subtitle = "Enter current 4-digit passkey to continue",
                 onSuccess = {
@@ -7501,6 +7705,7 @@ private fun SecurityContent(
             PasskeyVerificationDialog(
                 profileName = activeUser.name,
                 expectedPasskey = activeUser.passKey ?: "",
+                profileId = activeUser.id,
                 title = "Remove Passkey",
                 subtitle = "Enter current 4-digit passkey to remove protection",
                 onSuccess = {

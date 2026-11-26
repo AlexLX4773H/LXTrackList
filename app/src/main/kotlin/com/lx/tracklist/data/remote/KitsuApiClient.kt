@@ -16,7 +16,7 @@ object KitsuApiClient {
     const val BASE_URL = "https://kitsu.app/api/edge"
     private const val USER_AGENT = "LXTrackList/1.0 (Android; https://github.com/RyanYuuki/AnymeX)"
 
-    private var okHttpClient = OkHttpClient.Builder()
+    internal var okHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
@@ -84,10 +84,14 @@ object KitsuApiClient {
                 }
             }
 
-            Log.d(TAG, "Kitsu search for '$cleanQuery' returned ${results.size} results")
+            try {
+                Log.d(TAG, "Kitsu search for '$cleanQuery' returned ${results.size} results")
+            } catch (_: RuntimeException) {}
             Result.success(results)
         } catch (e: Exception) {
-            Log.e(TAG, "Exception during Kitsu search for '$cleanQuery'", e)
+            try {
+                Log.e(TAG, "Exception during Kitsu search for '$cleanQuery'", e)
+            } catch (_: RuntimeException) {}
             Result.failure(e)
         }
     }
@@ -141,52 +145,46 @@ object KitsuApiClient {
                 }
             }
 
-            Log.d(TAG, "Kitsu anime search for '$cleanQuery' returned ${results.size} results")
+            try {
+                Log.d(TAG, "Kitsu anime search for '$cleanQuery' returned ${results.size} results")
+            } catch (_: RuntimeException) {}
             Result.success(results)
         } catch (e: Exception) {
-            Log.e(TAG, "Exception during Kitsu anime search for '$cleanQuery'", e)
+            try {
+                Log.e(TAG, "Exception during Kitsu anime search for '$cleanQuery'", e)
+            } catch (_: RuntimeException) {}
             Result.failure(e)
         }
     }
 
-    fun searchAnimeDetailsByTitle(title: String): Result<JikanMediaDetails> {
+    fun searchAnimeDetailsByTitle(title: String): Result<JikanMediaDetails> =
+        searchDetailsByTitle(title, kindLabel = "Kitsu anime") { query, limit -> searchAnimeMultiple(query, limit) }
+
+    fun searchMangaDetailsByTitle(title: String): Result<JikanMediaDetails> =
+        searchDetailsByTitle(title, kindLabel = "Kitsu") { query, limit -> searchMangaMultiple(query, limit) }
+
+    private fun searchDetailsByTitle(
+        title: String,
+        kindLabel: String,
+        search: (String, Int) -> Result<List<JikanMediaDetails>>
+    ): Result<JikanMediaDetails> {
         val cleanTitle = title.trim()
         if (cleanTitle.isBlank()) return Result.failure(IllegalArgumentException("Title cannot be blank"))
 
-        val searchResult = searchAnimeMultiple(cleanTitle, limit = 5)
-        if (searchResult.isFailure) return Result.failure(searchResult.exceptionOrNull() ?: Exception("Kitsu anime search failed"))
+        val searchResult = search(cleanTitle, 5)
+        if (searchResult.isFailure) return Result.failure(searchResult.exceptionOrNull() ?: Exception("$kindLabel search failed"))
 
         val list = searchResult.getOrDefault(emptyList())
         if (list.isEmpty()) {
-            return Result.failure(NotFoundException("No Kitsu anime results found for '$cleanTitle'"))
+            return Result.failure(NotFoundException("No $kindLabel results found for '$cleanTitle'"))
         }
 
+        // JOB-13: Require a confident exact match; never fall back to blind list.first().
         val exactMatch = list.firstOrNull {
-            it.title.equals(cleanTitle, ignoreCase = true) ||
-                    it.alternateTitle?.split("\n")?.any { alt -> alt.equals(cleanTitle, ignoreCase = true) } == true
-        }
+            TachiyomiResolverManager.isConfidentExactMatch(cleanTitle, it)
+        } ?: return Result.failure(NotFoundException("No confident $kindLabel match found for '$cleanTitle'"))
 
-        return Result.success(exactMatch ?: list.first())
-    }
-
-    fun searchMangaDetailsByTitle(title: String): Result<JikanMediaDetails> {
-        val cleanTitle = title.trim()
-        if (cleanTitle.isBlank()) return Result.failure(IllegalArgumentException("Title cannot be blank"))
-
-        val searchResult = searchMangaMultiple(cleanTitle, limit = 5)
-        if (searchResult.isFailure) return Result.failure(searchResult.exceptionOrNull() ?: Exception("Kitsu search failed"))
-
-        val list = searchResult.getOrDefault(emptyList())
-        if (list.isEmpty()) {
-            return Result.failure(NotFoundException("No Kitsu results found for '$cleanTitle'"))
-        }
-
-        val exactMatch = list.firstOrNull {
-            it.title.equals(cleanTitle, ignoreCase = true) ||
-                    it.alternateTitle?.split("\n")?.any { alt -> alt.equals(cleanTitle, ignoreCase = true) } == true
-        }
-
-        return Result.success(exactMatch ?: list.first())
+        return Result.success(exactMatch)
     }
 
     fun parseKitsuItem(itemObj: JsonObject, isAnime: Boolean = false): JikanMediaDetails? {
@@ -260,9 +258,10 @@ object KitsuApiClient {
             synopsis = synopsis,
             isAiring = isAiring,
             externalScore = score,
-            externalScoreSource = if (score != null) "Kitsu" else null,
+            externalScoreSource = if (score != null) com.lx.tracklist.data.model.ExternalSources.KITSU else null,
             type = subtype,
-            sourceProvider = "Kitsu",
+            sourceProvider = com.lx.tracklist.data.model.ExternalSources.KITSU,
+            kitsuId = id,
             url = if (slug?.isNotBlank() == true) {
                 if (isAnime) "https://kitsu.app/anime/$slug" else "https://kitsu.app/manga/$slug"
             } else {
@@ -271,6 +270,57 @@ object KitsuApiClient {
                 "kitsu-resolve://$type?title=$encTitle&kitsuId=$id"
             }
         )
+    }
+
+    /**
+     * Fetches anime or manga details directly by numeric Kitsu ID or slug.
+     */
+    fun fetchDetailsById(idOrSlug: String, isAnime: Boolean): Result<JikanMediaDetails> {
+        val cleanId = idOrSlug.trim()
+        if (cleanId.isBlank()) {
+            return Result.failure(IllegalArgumentException("Blank Kitsu ID"))
+        }
+        val mediaSegment = if (isAnime) "anime" else "manga"
+        val isNumeric = cleanId.all { it.isDigit() }
+        val endpoint = if (isNumeric) {
+            "$BASE_URL/$mediaSegment/$cleanId"
+        } else {
+            val encodedSlug = URLEncoder.encode(cleanId, "UTF-8")
+            "$BASE_URL/$mediaSegment?filter[slug]=$encodedSlug"
+        }
+
+        return try {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/vnd.api+json")
+                .get()
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            val code = response.code
+            val bodyString = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                return Result.failure(Exception("Kitsu HTTP $code: ${bodyString.take(150)}"))
+            }
+
+            val rootObj = gson.fromJson(bodyString, JsonObject::class.java)
+                ?: return Result.failure(Exception("Empty Kitsu response"))
+            val dataElem = rootObj.get("data")
+            val itemObj = when {
+                dataElem != null && dataElem.isJsonObject -> dataElem.asJsonObject
+                dataElem != null && dataElem.isJsonArray && dataElem.asJsonArray.size() > 0 ->
+                    dataElem.asJsonArray.get(0)?.takeIf { it.isJsonObject }?.asJsonObject
+                else -> null
+            } ?: return Result.failure(NotFoundException("Kitsu item not found for '$cleanId'"))
+
+            val parsed = parseKitsuItem(itemObj, isAnime = isAnime)
+                ?: return Result.failure(Exception("Failed to parse Kitsu item '$cleanId'"))
+            Result.success(parsed)
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception fetching Kitsu details for '$cleanId'", e)
+            Result.failure(e)
+        }
     }
 
     /**

@@ -6,12 +6,17 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.lx.tracklist.data.local.FailedCoverTracker
 import com.lx.tracklist.data.model.CustomCategory
+import com.lx.tracklist.data.model.effectiveMediaTypeFor
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.remote.BookSyncManager
+import com.lx.tracklist.data.remote.GameSyncManager
 import com.lx.tracklist.data.remote.JikanSyncManager
+import com.lx.tracklist.data.remote.MusicSyncManager
+import com.lx.tracklist.data.remote.SyncJob
+import com.lx.tracklist.data.remote.SyncRouter
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbSyncManager
 import com.lx.tracklist.data.repository.MediaRepository
@@ -47,26 +52,26 @@ enum class LibrarySortOption(val displayName: String) {
         customCategories: List<com.lx.tracklist.data.model.CustomCategory> = emptyList()
     ): String {
         val resolvedMediaType = if (customCategoryTitle != null) {
-            val custom = customCategories.firstOrNull { it.name.equals(customCategoryTitle, ignoreCase = true) }
-            if (custom != null) {
-                if (custom.isWatchType) com.lx.tracklist.data.model.MediaType.ANIME else com.lx.tracklist.data.model.MediaType.MANGA
-            } else mediaType
+            customCategories.effectiveMediaTypeFor(customCategoryTitle) ?: mediaType
         } else mediaType
 
         return when (this) {
             REWATCH_DESC -> when {
+                resolvedMediaType?.isListenType == true -> "Most Relistened"
                 resolvedMediaType?.isPlayType == true -> "Most Replayed"
                 resolvedMediaType?.isReadType == true -> "Most Re-read"
                 resolvedMediaType?.isWatchType == true -> "Most Re-watched"
                 else -> "Most Re-watched/Replayed"
             }
             TIME_SPENT_DESC -> when {
+                resolvedMediaType?.isListenType == true -> "Most Time Listened"
                 resolvedMediaType?.isPlayType == true -> "Most Time Played"
                 resolvedMediaType?.isReadType == true -> "Most Time Read"
                 resolvedMediaType?.isWatchType == true -> "Most Time Watched"
                 else -> "Most Time Watched / Played / Read"
             }
             TIME_REMAINING_DESC -> when {
+                resolvedMediaType?.isListenType == true -> "Most Time To Listen"
                 resolvedMediaType?.isPlayType == true -> "Most Time To Play"
                 resolvedMediaType?.isReadType == true -> "Most Time To Read"
                 resolvedMediaType?.isWatchType == true -> "Most Time To Watch"
@@ -184,7 +189,7 @@ data class LibraryUiState(
     }
 }
 
-private data class LibraryFilterState(
+internal data class LibraryFilterState(
     val query: String = "",
     val categoryFilter: MediaType? = null,
     val customCategoryFilter: String? = null,
@@ -229,6 +234,158 @@ private data class LibraryFilterState(
         }
 }
 
+internal fun filterLibraryEntries(
+    entries: List<MediaEntry>,
+    filter: LibraryFilterState,
+    failedCoverIds: Set<Long> = emptySet()
+): List<MediaEntry> {
+    var list = entries
+
+    if (filter.categoryFilter != null) {
+        list = list.filter { it.mediaType == filter.categoryFilter }
+    }
+    if (filter.customCategoryFilter != null) {
+        list = list.filter { it.customCategory.equals(filter.customCategoryFilter, ignoreCase = true) }
+    }
+    if (filter.subCategoryFilter != null) {
+        list = list.filter { it.subCategory.equals(filter.subCategoryFilter, ignoreCase = true) }
+    }
+    if (filter.statusFilter != null) {
+        list = list.filter { it.status == filter.statusFilter }
+    }
+
+    when (filter.favoritesFilter) {
+        InclusionFilterOption.ALL -> { /* no-op */ }
+        InclusionFilterOption.INCLUDE_ONLY -> list = list.filter { it.isFavorite }
+        InclusionFilterOption.EXCLUDE -> list = list.filter { !it.isFavorite }
+    }
+
+    when (filter.rewatchingFilter) {
+        InclusionFilterOption.ALL -> { /* no-op */ }
+        InclusionFilterOption.INCLUDE_ONLY -> list = list.filter { it.isRewatching }
+        InclusionFilterOption.EXCLUDE -> list = list.filter { !it.isRewatching }
+    }
+
+    when (filter.airingFilter) {
+        AiringFilterOption.ALL -> { /* no-op */ }
+        AiringFilterOption.AIRING_ONLY -> list = list.filter { it.isAiring && !it.isNotYetAiredOrPublished }
+        AiringFilterOption.NYA_ONLY -> list = list.filter { it.isNotYetAiredOrPublished }
+        AiringFilterOption.EXCLUDE -> list = list.filter { !it.isAiring && !it.isNotYetAiredOrPublished }
+    }
+
+    when (filter.externalTrackingFilter) {
+        InclusionFilterOption.ALL -> { /* no-op */ }
+        InclusionFilterOption.INCLUDE_ONLY -> list = list.filter { it.isExternallyTracked }
+        InclusionFilterOption.EXCLUDE -> list = list.filter { !it.isExternallyTracked }
+    }
+
+    when (filter.validExternalIdFilter) {
+        InclusionFilterOption.ALL -> { /* no-op */ }
+        InclusionFilterOption.INCLUDE_ONLY -> list = list.filter { JikanSyncManager.hasValidExternalId(it) }
+        InclusionFilterOption.EXCLUDE -> list = list.filter { !JikanSyncManager.hasValidExternalId(it) }
+    }
+
+    when (filter.coverImageFilter) {
+        CoverImageFilterOption.ALL -> { /* no-op */ }
+        CoverImageFilterOption.HAS_COVER -> list = list.filter { !it.coverImageUri.isNullOrBlank() }
+        CoverImageFilterOption.BROKEN_COVER -> list = list.filter { entry ->
+            val url = entry.coverImageUri?.trim()
+            !url.isNullOrBlank() && (
+                failedCoverIds.contains(entry.id) ||
+                FailedCoverTracker.isUrlBroken(url)
+            )
+        }
+        CoverImageFilterOption.NO_COVER -> list = list.filter { it.coverImageUri.isNullOrBlank() }
+    }
+
+    if (filter.includedTags.isNotEmpty()) {
+        list = list.filter { entry ->
+            val entryTags = entry.getTagList()
+            filter.includedTags.all { inc ->
+                entryTags.any { it.equals(inc, ignoreCase = true) }
+            }
+        }
+    }
+    if (filter.excludedTags.isNotEmpty()) {
+        list = list.filter { entry ->
+            val entryTags = entry.getTagList()
+            filter.excludedTags.none { exc ->
+                entryTags.any { it.equals(exc, ignoreCase = true) }
+            }
+        }
+    }
+
+    // Platform filters apply only to GAME entries; non-GAME entries pass through.
+    if (filter.includedPlatforms.isNotEmpty()) {
+        list = list.filter { entry ->
+            if (entry.mediaType == MediaType.GAME) {
+                GamePlatformRegistry.matchesAnyLibraryPlatform(filter.includedPlatforms, entry.getGamePlatformList())
+            } else {
+                true
+            }
+        }
+    }
+    if (filter.excludedPlatforms.isNotEmpty()) {
+        list = list.filter { entry ->
+            if (entry.mediaType == MediaType.GAME) {
+                !GamePlatformRegistry.isLibraryExcluded(filter.excludedPlatforms, entry.getGamePlatformList())
+            } else {
+                true
+            }
+        }
+    }
+
+    // Language filter applies across all categories, including GAME entries.
+    if (filter.includedLanguages.isNotEmpty()) {
+        list = list.filter { entry ->
+            OriginalLanguageRegistry.matchesAny(filter.includedLanguages, entry.getEffectiveLanguage())
+        }
+    }
+
+    if (filter.onlyUnrated) {
+        list = list.filter { it.score == null || it.score == 0 }
+    } else if (filter.minScore != null) {
+        list = list.filter { (it.score ?: 0) >= filter.minScore }
+    }
+
+    if (filter.query.isNotBlank()) {
+        list = list.filter {
+            it.title.contains(filter.query, ignoreCase = true) ||
+                it.getAlternateTitles().any { alt -> alt.contains(filter.query, ignoreCase = true) } ||
+                (it.tags?.contains(filter.query, ignoreCase = true) == true)
+        }
+    }
+
+    return list
+}
+
+internal fun formatPlatformsBadgeLabel(includedCount: Int, excludedCount: Int): String {
+    val parts = listOfNotNull(
+        "+$includedCount".takeIf { includedCount > 0 },
+        "−$excludedCount".takeIf { excludedCount > 0 }
+    )
+    return "Platforms ${parts.joinToString(" / ")}"
+}
+
+internal fun formatLanguagesBadgeLabel(languages: Set<String>): String {
+    return "Language: ${languages.joinToString(", ")}"
+}
+
+/**
+ * Resolves the category-aware display label for [status] in Library filters/badges, falling back
+ * to [MediaStatus.getNeutralLabel] when viewing "All" categories.
+ */
+internal fun resolveLibraryStatusLabel(
+    status: MediaStatus,
+    selectedCategory: MediaType?,
+    selectedCustomCategory: String?,
+    customCategories: List<CustomCategory>
+): String {
+    val activeType = selectedCategory
+        ?: selectedCustomCategory?.let { customCategories.effectiveMediaTypeFor(it) }
+    return activeType?.let { status.getDisplayLabel(it) } ?: status.getNeutralLabel()
+}
+
 class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
 
     private val _filterState = MutableStateFlow(LibraryFilterState())
@@ -254,166 +411,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             }
         }
 
-        var list = allEntries
-
-        // 1. Category / Custom Category / Sub Category Filter
-        if (filter.categoryFilter != null) {
-            list = list.filter { it.mediaType == filter.categoryFilter }
-        }
-        if (filter.customCategoryFilter != null) {
-            list = list.filter { it.customCategory.equals(filter.customCategoryFilter, ignoreCase = true) }
-        }
-        if (filter.subCategoryFilter != null) {
-            list = list.filter { it.subCategory.equals(filter.subCategoryFilter, ignoreCase = true) }
-        }
-
-        // 2. Status Filter
-        if (filter.statusFilter != null) {
-            list = list.filter { it.status == filter.statusFilter }
-        }
-
-        // 3. Favorites Filter (Tri-State: All / Include Only / Exclude)
-        when (filter.favoritesFilter) {
-            InclusionFilterOption.ALL -> { /* no-op */ }
-            InclusionFilterOption.INCLUDE_ONLY -> {
-                list = list.filter { it.isFavorite }
-            }
-            InclusionFilterOption.EXCLUDE -> {
-                list = list.filter { !it.isFavorite }
-            }
-        }
-
-        // 3b. Rewatching Filter (Tri-State: All / Include Only / Exclude)
-        when (filter.rewatchingFilter) {
-            InclusionFilterOption.ALL -> { /* no-op */ }
-            InclusionFilterOption.INCLUDE_ONLY -> {
-                list = list.filter { it.isRewatching }
-            }
-            InclusionFilterOption.EXCLUDE -> {
-                list = list.filter { !it.isRewatching }
-            }
-        }
-
-        // 4. Airing / Publishing / NYA / NYP Filter
-        when (filter.airingFilter) {
-            AiringFilterOption.ALL -> { /* no-op */ }
-            AiringFilterOption.AIRING_ONLY -> {
-                list = list.filter { it.isAiring && !it.isNotYetAiredOrPublished }
-            }
-            AiringFilterOption.NYA_ONLY -> {
-                list = list.filter { it.isNotYetAiredOrPublished }
-            }
-            AiringFilterOption.EXCLUDE -> {
-                list = list.filter { !it.isAiring && !it.isNotYetAiredOrPublished }
-            }
-        }
-
-        // 5. External Tracking Filter (Tri-State: All / Include Only Tracked / Exclude Tracked)
-        when (filter.externalTrackingFilter) {
-            InclusionFilterOption.ALL -> { /* no-op */ }
-            InclusionFilterOption.INCLUDE_ONLY -> {
-                list = list.filter { it.isExternallyTracked }
-            }
-            InclusionFilterOption.EXCLUDE -> {
-                list = list.filter { !it.isExternallyTracked }
-            }
-        }
-
-        // 6. Valid External ID Filter (Tri-State: All / Include Only Valid ID / Exclude Valid ID)
-        when (filter.validExternalIdFilter) {
-            InclusionFilterOption.ALL -> { /* no-op */ }
-            InclusionFilterOption.INCLUDE_ONLY -> {
-                list = list.filter { JikanSyncManager.hasValidExternalId(it) }
-            }
-            InclusionFilterOption.EXCLUDE -> {
-                list = list.filter { !JikanSyncManager.hasValidExternalId(it) }
-            }
-        }
-
-        // 7. Cover Image Filter (All / Has Cover / Broken Cover / No Cover)
-        when (filter.coverImageFilter) {
-            CoverImageFilterOption.ALL -> { /* no-op */ }
-            CoverImageFilterOption.HAS_COVER -> {
-                list = list.filter { !it.coverImageUri.isNullOrBlank() }
-            }
-            CoverImageFilterOption.BROKEN_COVER -> {
-                list = list.filter { entry ->
-                    val url = entry.coverImageUri?.trim()
-                    !url.isNullOrBlank() && (
-                        failedCoverIds.contains(entry.id) ||
-                        FailedCoverTracker.isUrlBroken(url)
-                    )
-                }
-            }
-            CoverImageFilterOption.NO_COVER -> {
-                list = list.filter { it.coverImageUri.isNullOrBlank() }
-            }
-        }
-
-        // 6. Tags Filter (Multi-select Include & Inverse Exclude)
-        if (filter.includedTags.isNotEmpty()) {
-            list = list.filter { entry ->
-                val entryTags = entry.getTagList()
-                filter.includedTags.all { inc ->
-                    entryTags.any { it.equals(inc, ignoreCase = true) }
-                }
-            }
-        }
-        if (filter.excludedTags.isNotEmpty()) {
-            list = list.filter { entry ->
-                val entryTags = entry.getTagList()
-                filter.excludedTags.none { exc ->
-                    entryTags.any { it.equals(exc, ignoreCase = true) }
-                }
-            }
-        }
-
-        // 6b. Platforms Filter (specifically for games)
-        if (filter.includedPlatforms.isNotEmpty()) {
-            list = list.filter { entry ->
-                if (entry.mediaType == MediaType.GAME) {
-                    GamePlatformRegistry.matchesAnyPlatform(filter.includedPlatforms, entry.getGamePlatformList())
-                } else {
-                    false
-                }
-            }
-        }
-        if (filter.excludedPlatforms.isNotEmpty()) {
-            list = list.filter { entry ->
-                if (entry.mediaType == MediaType.GAME) {
-                    !GamePlatformRegistry.isExcluded(filter.excludedPlatforms, entry.getGamePlatformList())
-                } else {
-                    true
-                }
-            }
-        }
-
-        // 6c. Original Language Filter (for all entities except games)
-        if (filter.includedLanguages.isNotEmpty()) {
-            list = list.filter { entry ->
-                if (entry.mediaType != MediaType.GAME) {
-                    OriginalLanguageRegistry.matchesAny(filter.includedLanguages, entry.getEffectiveLanguage())
-                } else {
-                    false
-                }
-            }
-        }
-
-        // 6. Score Filter
-        if (filter.onlyUnrated) {
-            list = list.filter { it.score == null || it.score == 0 }
-        } else if (filter.minScore != null) {
-            list = list.filter { (it.score ?: 0) >= filter.minScore }
-        }
-
-        // 7. Search Query Filter
-        if (filter.query.isNotBlank()) {
-            list = list.filter {
-                it.title.contains(filter.query, ignoreCase = true) ||
-                        it.getAlternateTitles().any { alt -> alt.contains(filter.query, ignoreCase = true) } ||
-                        (it.tags?.contains(filter.query, ignoreCase = true) == true)
-            }
-        }
+        var list = filterLibraryEntries(allEntries, filter, failedCoverIds)
 
         // 8. Sorting
         val sortedList = when (filter.sortOption) {
@@ -850,39 +848,25 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
             val allEntries = repository.getAllEntriesSync()
             val selectedEntries = allEntries.filter { selected.contains(it.id) }
 
-            val jikanIds = mutableSetOf<Long>()
-            val tmdbIds = mutableSetOf<Long>()
-            val bookIds = mutableSetOf<Long>()
-            val gameIds = mutableSetOf<Long>()
-            val musicIds = mutableSetOf<Long>()
-
-            for (entry in selectedEntries) {
-                val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim() ?: ""
-                if (src.equals("IGDB", ignoreCase = true) || src.equals("RAWG", ignoreCase = true) || entry.mediaType == MediaType.GAME) {
-                    gameIds.add(entry.id)
-                } else if (src.equals("iTunes", ignoreCase = true) || src.equals("Apple Music", ignoreCase = true) || src.equals("MusicBrainz", ignoreCase = true) || entry.mediaType == MediaType.MUSIC) {
-                    musicIds.add(entry.id)
-                } else if (src.equals("TMDB", ignoreCase = true)) {
-                    tmdbIds.add(entry.id)
-                } else if (src.equals("Google Books", ignoreCase = true) || src.equals("Open Library", ignoreCase = true)) {
-                    bookIds.add(entry.id)
-                } else if (src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)) {
-                    jikanIds.add(entry.id)
-                } else if (entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.SHOW) {
-                    tmdbIds.add(entry.id)
-                } else if (entry.mediaType == MediaType.BOOK) {
-                    if (src.equals("AniList", ignoreCase = true) || src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)) {
-                        jikanIds.add(entry.id)
-                    } else {
-                        bookIds.add(entry.id)
-                    }
-                } else {
-                    jikanIds.add(entry.id)
-                }
-            }
+            val grouped = selectedEntries.groupBy { SyncRouter.jobFor(it) }
+            val jikanIds = grouped[SyncJob.JIKAN].orEmpty().map { it.id }.toSet()
+            val tmdbIds = grouped[SyncJob.TMDB].orEmpty().map { it.id }.toSet()
+            val bookIds = grouped[SyncJob.BOOKS].orEmpty().map { it.id }.toSet()
+            val gameIds = grouped[SyncJob.GAMES].orEmpty().map { it.id }.toSet()
+            val musicIds = grouped[SyncJob.MUSIC].orEmpty().map { it.id }.toSet()
+            val tachiyomiIds = grouped[SyncJob.RESOLVE_IDS].orEmpty().map { it.id }.toSet()
 
             val user = repository.activeUser.value
             withContext(Dispatchers.Main) {
+                if (tachiyomiIds.isNotEmpty()) {
+                    TachiyomiResolverManager.startResolution(
+                        context = context,
+                        repository = repository,
+                        targetEntryIds = tachiyomiIds,
+                        targetProfileId = user.id,
+                        targetProfileName = user.name
+                    )
+                }
                 if (jikanIds.isNotEmpty()) {
                     JikanSyncManager.startSync(
                         context = context,
@@ -914,7 +898,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                     )
                 }
                 if (gameIds.isNotEmpty()) {
-                    com.lx.tracklist.data.remote.GameSyncManager.syncLibrary(
+                    GameSyncManager.syncLibrary(
                         context = context,
                         repository = repository,
                         profileId = user.id,
@@ -924,7 +908,7 @@ class LibraryViewModel(private val repository: MediaRepository) : ViewModel() {
                     )
                 }
                 if (musicIds.isNotEmpty()) {
-                    com.lx.tracklist.data.remote.MusicSyncManager.syncLibrary(
+                    MusicSyncManager.syncLibrary(
                         context = context,
                         repository = repository,
                         profileId = user.id,

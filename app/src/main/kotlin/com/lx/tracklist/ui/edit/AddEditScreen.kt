@@ -2,6 +2,7 @@ package com.lx.tracklist.ui.edit
 
 import android.app.DatePickerDialog
 import android.widget.Toast
+import com.lx.tracklist.data.model.ExternalSources
 import kotlin.math.roundToInt
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
@@ -100,11 +101,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -114,6 +117,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalUriHandler
@@ -138,12 +142,14 @@ import java.util.Locale
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.effectiveMediaType
 import com.lx.tracklist.data.model.Priority
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.GameSearchResult
 import com.lx.tracklist.data.remote.MusicSearchResult
 import com.lx.tracklist.ui.components.CoverImageSearchDialog
+import com.lx.tracklist.ui.components.LXOpenMenu
 import com.lx.tracklist.ui.components.SteamGridDbPickerSheet
 import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.search.OriginalLanguageRegistry
@@ -196,6 +202,15 @@ fun AddEditScreen(
     var showLanguagePickerDialog by remember { mutableStateOf(false) }
     var databaseSourceExpanded by remember { mutableStateOf(false) }
     var externalScoreSourceExpanded by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val pendingFieldCommits = remember { LinkedHashMap<String, () -> Boolean>() }
+    val handleSave: () -> Unit = {
+        val results = pendingFieldCommits.values.toList().map { it() }
+        if (results.all { it }) {
+            focusManager.clearFocus()
+            viewModel.saveEntry()
+        }
+    }
 
     BackHandler(onBack = onNavigateBack)
 
@@ -255,7 +270,7 @@ fun AddEditScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.saveEntry() }) {
+                    IconButton(onClick = handleSave) {
                         Icon(
                             imageVector = Icons.Default.Check,
                             contentDescription = "Save",
@@ -981,7 +996,8 @@ fun AddEditScreen(
                             CurrentPlaybackTimeSection(
                                 currentTimeMinutes = state.currentTimeMinutes,
                                 runtimeMinutes = state.episodeLengthMinutes,
-                                onUpdateTime = { viewModel.updateCurrentTimeMinutes(it) }
+                                onUpdateTime = { viewModel.updateCurrentTimeMinutes(it) },
+                                pendingCommits = pendingFieldCommits
                             )
 
                             Row(
@@ -1004,6 +1020,7 @@ fun AddEditScreen(
                         }
 
                         MediaType.MANGA, MediaType.MANHWA, MediaType.BOOK -> {
+                            val readingUnit = TrackingUnit.sanitizeForMediaType(state.trackingUnit, state.mediaType)
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text("Tracking Unit", style = MaterialTheme.typography.bodyMedium, color = LXTextSecondary)
                                 CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
@@ -1011,9 +1028,9 @@ fun AddEditScreen(
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                         verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        TrackingUnit.entries.forEach { unit ->
+                                        TrackingUnit.READING_UNITS.forEach { unit ->
                                             FilterChip(
-                                                selected = state.trackingUnit == unit,
+                                                selected = readingUnit == unit,
                                                 onClick = { viewModel.updateTrackingUnit(unit) },
                                                 label = { Text(unit.displayName, fontSize = 12.sp) },
                                                 modifier = Modifier.height(28.dp),
@@ -1029,7 +1046,7 @@ fun AddEditScreen(
                                 }
                             }
 
-                            if (state.trackingUnit == TrackingUnit.CHAPTERS || state.trackingUnit == TrackingUnit.COMBINED) {
+                            if (readingUnit == TrackingUnit.CHAPTERS || readingUnit == TrackingUnit.COMBINED) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1077,7 +1094,7 @@ fun AddEditScreen(
                                 }
                             }
 
-                            if (state.trackingUnit == TrackingUnit.VOLUMES || state.trackingUnit == TrackingUnit.COMBINED) {
+                            if (readingUnit == TrackingUnit.VOLUMES || readingUnit == TrackingUnit.COMBINED) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1111,7 +1128,7 @@ fun AddEditScreen(
                                 }
                             }
 
-                            if (state.trackingUnit == TrackingUnit.PAGES || state.trackingUnit == TrackingUnit.COMBINED) {
+                            if (readingUnit == TrackingUnit.PAGES || readingUnit == TrackingUnit.COMBINED) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1212,7 +1229,8 @@ fun AddEditScreen(
                             CurrentPlaybackTimeSection(
                                 currentTimeMinutes = state.currentTimeMinutes,
                                 runtimeMinutes = state.durationMinutes,
-                                onUpdateTime = { viewModel.updateCurrentTimeMinutes(it) }
+                                onUpdateTime = { viewModel.updateCurrentTimeMinutes(it) },
+                                pendingCommits = pendingFieldCommits
                             )
                         }
                         MediaType.GAME -> {
@@ -1593,24 +1611,38 @@ fun AddEditScreen(
                             }
 
                             // Average Completion Time (Editable & Auto-Populated)
+                            val gameHoursField = rememberEditableParsedField(
+                                fieldKey = "game_hours",
+                                externalValue = state.durationMinutes,
+                                formatExternal = AddEditInputParsers::formatMinutesAsHours,
+                                parse = AddEditInputParsers::parseGameHoursToMinutes,
+                                onCommit = { viewModel.updateDurationMinutes(it) },
+                                pendingCommits = pendingFieldCommits
+                            )
+                            val gameHoursErr = gameHoursField.error()
                             OutlinedTextField(
-                                value = if (state.durationMinutes != null && state.durationMinutes!! > 0) {
-                                    val totalMins = state.durationMinutes!!
-                                    val h = totalMins / 60
-                                    val m = totalMins % 60
-                                    if (m == 0) "$h" else String.format(Locale.US, "%.1f", totalMins.toDouble() / 60.0)
-                                } else "",
-                                onValueChange = { input ->
-                                    val num = input.toDoubleOrNull()
-                                    val mins = num?.let { (it * 60).toInt().coerceAtLeast(0) }
-                                    viewModel.updateDurationMinutes(mins)
-                                },
+                                value = gameHoursField.text(),
+                                onValueChange = gameHoursField.onValueChange,
                                 label = { Text("Avg 100% Completion (Hours)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 placeholder = { Text("e.g. 50 (auto-synced from IGDB/RAWG)") },
                                 singleLine = true,
                                 maxLines = 1,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                modifier = Modifier.fillMaxWidth(),
+                                isError = gameHoursErr != null,
+                                supportingText = gameHoursErr?.let { err -> { Text(err, color = LXErrorRed) } },
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Decimal,
+                                    imeAction = ImeAction.Done
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onDone = {
+                                        if (gameHoursField.commit()) {
+                                            focusManager.clearFocus()
+                                        }
+                                    }
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(gameHoursField.modifier),
                                 colors = outlinedColors()
                             )
                         }
@@ -1648,26 +1680,35 @@ fun AddEditScreen(
                                 )
                             }
 
+                            val musicDurationField = rememberEditableParsedField(
+                                fieldKey = "music_duration",
+                                externalValue = state.durationMinutes,
+                                formatExternal = AddEditInputParsers::formatMusicDurationSeconds,
+                                parse = AddEditInputParsers::parseMusicDurationSeconds,
+                                onCommit = { viewModel.updateDurationMinutes(it) },
+                                pendingCommits = pendingFieldCommits
+                            )
+                            val musicDurationErr = musicDurationField.error()
                             OutlinedTextField(
-                                value = if (state.durationMinutes != null && state.durationMinutes!! > 0) MediaEntry.formatMusicDuration(state.durationMinutes) else "",
-                                onValueChange = { input ->
-                                    val parts = input.trim().split(":")
-                                    val secs = when {
-                                        parts.size == 2 -> {
-                                            val m = parts[0].toIntOrNull() ?: 0
-                                            val s = parts[1].toIntOrNull() ?: 0
-                                            (m * 60 + s).takeIf { it > 0 }
-                                        }
-                                        parts.size == 1 -> parts[0].toIntOrNull()?.takeIf { it > 0 }
-                                        else -> null
-                                    }
-                                    viewModel.updateDurationMinutes(secs)
-                                },
+                                value = musicDurationField.text(),
+                                onValueChange = musicDurationField.onValueChange,
                                 label = { Text("Duration (m:ss or seconds)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                 placeholder = { Text("e.g. 3:45 or 225") },
                                 singleLine = true,
                                 maxLines = 1,
-                                modifier = Modifier.fillMaxWidth(),
+                                isError = musicDurationErr != null,
+                                supportingText = musicDurationErr?.let { err -> { Text(err, color = LXErrorRed) } },
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(
+                                    onDone = {
+                                        if (musicDurationField.commit()) {
+                                            focusManager.clearFocus()
+                                        }
+                                    }
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(musicDurationField.modifier),
                                 colors = outlinedColors()
                             )
                         }
@@ -1946,6 +1987,16 @@ fun AddEditScreen(
                         )
                     }
 
+                    val externalScoreField = rememberEditableParsedField(
+                        fieldKey = "external_score",
+                        externalValue = state.externalScore,
+                        formatExternal = AddEditInputParsers::formatEditableScore,
+                        parse = { input -> AddEditInputParsers.parseExternalScore(input, state.externalScoreSource) },
+                        onCommit = { viewModel.updateExternalScore(it) },
+                        pendingCommits = pendingFieldCommits,
+                        readOnly = !isForeignDbUnlocked,
+                        validationKey = state.externalScoreSource
+                    )
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2032,24 +2083,44 @@ fun AddEditScreen(
                         }
 
                         OutlinedTextField(
-                            value = state.externalScore?.let { formatScore(it) } ?: "",
+                            value = externalScoreField.text(),
                             onValueChange = { input ->
                                 if (isForeignDbUnlocked) {
-                                    viewModel.updateExternalScore(input.toFloatOrNull())
+                                    externalScoreField.onValueChange(input)
                                 } else {
                                     showForeignDbWarningDialog = true
                                 }
                             },
                             readOnly = !isForeignDbUnlocked,
+                            isError = externalScoreField.error() != null,
                             label = { Text("External Score", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                             placeholder = { Text("e.g. 8.5") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Decimal,
+                                imeAction = ImeAction.Done
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    if (externalScoreField.commit()) {
+                                        focusManager.clearFocus()
+                                    }
+                                }
+                            ),
                             singleLine = true,
                             maxLines = 1,
                             modifier = Modifier
                                 .weight(1.5f)
-                                .fillMaxHeight(),
+                                .fillMaxHeight()
+                                .then(externalScoreField.modifier),
                             colors = outlinedColors()
+                        )
+                    }
+                    externalScoreField.error()?.let { scoreErr ->
+                        Text(
+                            text = scoreErr,
+                            color = LXErrorRed,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(start = 12.dp)
                         )
                     }
 
@@ -2080,30 +2151,14 @@ fun AddEditScreen(
                                 Text("Open in External DB (IGDB / RAWG / Steam) ▾", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             }
 
-                            DropdownMenu(
+                            LXOpenMenu(
+                                options = gameOpenOptions,
                                 expanded = showGameOpenMenu,
-                                onDismissRequest = { showGameOpenMenu = false },
-                                modifier = Modifier.background(LXSurfaceElevated)
-                            ) {
-                                gameOpenOptions.forEachIndexed { index, option ->
-                                    if (index > 0) HorizontalDivider(color = LXBorder)
-                                    DropdownMenuItem(
-                                        text = {
-                                            Column {
-                                                Text(option.title, fontWeight = FontWeight.Bold, color = Color(option.color), fontSize = 12.sp)
-                                                Text(option.subtitle, fontSize = 10.sp, color = LXTextSecondary)
-                                            }
-                                        },
-                                        leadingIcon = {
-                                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = Color(option.color), modifier = Modifier.size(14.dp))
-                                        },
-                                        onClick = {
-                                            showGameOpenMenu = false
-                                            ExternalLinkHelper.openUrlSafely(option.url, uriHandler, context)
-                                        }
-                                    )
+                                onDismiss = { showGameOpenMenu = false },
+                                onOpen = { option ->
+                                    ExternalLinkHelper.openUrlSafely(option.url, uriHandler, context)
                                 }
-                            }
+                            )
                         }
                     }
                 }
@@ -2572,7 +2627,7 @@ fun AddEditScreen(
                     list.add(
                         MainCategoryItem(
                             displayName = customCat.name,
-                            mediaType = customCat.mediaType ?: state.mediaType,
+                            mediaType = customCat.effectiveMediaType(),
                             customCategory = customCat.name
                         )
                     )
@@ -2827,7 +2882,7 @@ fun AddEditScreen(
 
             // Save Button
             Button(
-                onClick = { viewModel.saveEntry() },
+                onClick = handleSave,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
@@ -3160,8 +3215,13 @@ private fun ExternalDbSyncDialog(
             }
         },
         text = {
+            val maxResultsHeight = (LocalConfiguration.current.screenHeightDp * 0.42f)
+                .dp
+                .coerceIn(140.dp, 380.dp)
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Search input
@@ -3335,7 +3395,7 @@ private fun ExternalDbSyncDialog(
                                         }
                                     },
                                     label = {
-                                        val labelText = if (mediaType == MediaType.BOOK) "✨ AniList (LN)" else "✨ AniList"
+                                        val labelText = if (mediaType == MediaType.BOOK) "✨ AniList (Light Novel)" else "✨ AniList"
                                         Text(labelText, fontSize = 12.sp, maxLines = 1, softWrap = false)
                                     },
                                     colors = FilterChipDefaults.filterChipColors(
@@ -3390,7 +3450,7 @@ private fun ExternalDbSyncDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(380.dp)
+                        .heightIn(min = 140.dp, max = maxResultsHeight)
                 ) {
                     if (syncState.isSearching) {
                         Column(
@@ -3590,46 +3650,12 @@ private fun ExternalDbSyncDialog(
                                                                 }
 
                                                                 if (openOptions.size > 1) {
-                                                                    DropdownMenu(
+                                                                    LXOpenMenu(
+                                                                        options = openOptions,
                                                                         expanded = showCardGameMenu,
-                                                                        onDismissRequest = { showCardGameMenu = false },
-                                                                        modifier = Modifier.background(LXSurfaceElevated)
-                                                                    ) {
-                                                                        openOptions.forEachIndexed { index, option ->
-                                                                            if (index > 0) {
-                                                                                HorizontalDivider(color = LXBorder)
-                                                                            }
-                                                                            DropdownMenuItem(
-                                                                                text = {
-                                                                                    Column {
-                                                                                        Text(
-                                                                                            text = option.title,
-                                                                                            fontWeight = FontWeight.Bold,
-                                                                                            color = Color(option.color),
-                                                                                            fontSize = 12.sp
-                                                                                        )
-                                                                                        Text(
-                                                                                            text = option.subtitle,
-                                                                                            fontSize = 10.sp,
-                                                                                            color = LXTextSecondary
-                                                                                        )
-                                                                                    }
-                                                                                },
-                                                                                leadingIcon = {
-                                                                                    Icon(
-                                                                                        Icons.AutoMirrored.Filled.OpenInNew,
-                                                                                        contentDescription = null,
-                                                                                        tint = Color(option.color),
-                                                                                        modifier = Modifier.size(14.dp)
-                                                                                    )
-                                                                                },
-                                                                                onClick = {
-                                                                                    showCardGameMenu = false
-                                                                                    openExternalUrl(option.url)
-                                                                                }
-                                                                            )
-                                                                        }
-                                                                    }
+                                                                        onDismiss = { showCardGameMenu = false },
+                                                                        onOpen = { option -> openExternalUrl(option.url) }
+                                                                    )
                                                                 }
                                                             }
                                                         }
@@ -3731,46 +3757,12 @@ private fun ExternalDbSyncDialog(
                                                                 }
 
                                                                 if (openOptions.size > 1) {
-                                                                    DropdownMenu(
+                                                                    LXOpenMenu(
+                                                                        options = openOptions,
                                                                         expanded = showExpandedGameMenu,
-                                                                        onDismissRequest = { showExpandedGameMenu = false },
-                                                                        modifier = Modifier.background(LXSurfaceElevated)
-                                                                    ) {
-                                                                        openOptions.forEachIndexed { index, option ->
-                                                                            if (index > 0) {
-                                                                                HorizontalDivider(color = LXBorder)
-                                                                            }
-                                                                            DropdownMenuItem(
-                                                                                text = {
-                                                                                    Column {
-                                                                                        Text(
-                                                                                            text = option.title,
-                                                                                            fontWeight = FontWeight.Bold,
-                                                                                            color = Color(option.color),
-                                                                                            fontSize = 12.sp
-                                                                                        )
-                                                                                        Text(
-                                                                                            text = option.subtitle,
-                                                                                            fontSize = 10.sp,
-                                                                                            color = LXTextSecondary
-                                                                                        )
-                                                                                    }
-                                                                                },
-                                                                                leadingIcon = {
-                                                                                    Icon(
-                                                                                        Icons.AutoMirrored.Filled.OpenInNew,
-                                                                                        contentDescription = null,
-                                                                                        tint = Color(option.color),
-                                                                                        modifier = Modifier.size(14.dp)
-                                                                                    )
-                                                                                },
-                                                                                onClick = {
-                                                                                    showExpandedGameMenu = false
-                                                                                    openExternalUrl(option.url)
-                                                                                }
-                                                                            )
-                                                                        }
-                                                                    }
+                                                                        onDismiss = { showExpandedGameMenu = false },
+                                                                        onOpen = { option -> openExternalUrl(option.url) }
+                                                                    )
                                                                 }
                                                             }
                                                         }
@@ -3929,20 +3921,12 @@ private fun ExternalDbSyncDialog(
                                                         }
 
                                                         if (openOptions.size > 1) {
-                                                            DropdownMenu(
+                                                            LXOpenMenu(
+                                                                options = openOptions,
                                                                 expanded = showMusicMenu,
-                                                                onDismissRequest = { showMusicMenu = false }
-                                                            ) {
-                                                                openOptions.forEach { opt ->
-                                                                    DropdownMenuItem(
-                                                                        text = { Text(opt.title, fontSize = 12.sp) },
-                                                                        onClick = {
-                                                                            showMusicMenu = false
-                                                                            openExternalUrl(opt.url)
-                                                                        }
-                                                                    )
-                                                                }
-                                                            }
+                                                                onDismiss = { showMusicMenu = false },
+                                                                onOpen = { opt -> openExternalUrl(opt.url) }
+                                                            )
                                                         }
                                                     }
                                                 }
@@ -3968,12 +3952,14 @@ private fun ExternalDbSyncDialog(
                                     val webUrl = item.webUrl
                                     val openOptions = remember(item, mediaType) {
                                         val displayTitle = item.title ?: ""
-                                        val extId = item.malId?.toString() ?: item.url?.substringAfterLast('/')
+                                        val prefRef = item.preferredExternalRef()
+                                        val extId = prefRef?.second ?: item.malId?.toString() ?: item.url?.substringAfterLast('/')
+                                        val extSrc = prefRef?.first ?: ExternalSources.canonical(item.sourceProvider) ?: item.sourceProvider
                                         when {
                                             mediaType == MediaType.ANIME -> ExternalLinkHelper.buildAnimeOpenOptions(
                                                 title = displayTitle,
                                                 externalId = extId,
-                                                externalSource = item.sourceProvider,
+                                                externalSource = extSrc,
                                                 directMalId = item.malId,
                                                 directAniListId = item.aniListId,
                                                 directSiteUrl = item.url,
@@ -3982,7 +3968,7 @@ private fun ExternalDbSyncDialog(
                                             mediaType == MediaType.MANGA || mediaType == MediaType.MANHWA -> ExternalLinkHelper.buildMangaOpenOptions(
                                                 title = displayTitle,
                                                 externalId = extId,
-                                                externalSource = item.sourceProvider,
+                                                externalSource = extSrc,
                                                 directMalId = item.malId,
                                                 directAniListId = item.aniListId,
                                                 directSiteUrl = item.url,
@@ -3991,7 +3977,7 @@ private fun ExternalDbSyncDialog(
                                             mediaType == MediaType.BOOK -> ExternalLinkHelper.buildBookOpenOptions(
                                                 title = displayTitle,
                                                 externalId = extId,
-                                                externalSource = item.sourceProvider,
+                                                externalSource = extSrc,
                                                 webUrl = item.webUrl
                                             )
                                             else -> item.webUrl?.let {
@@ -4182,46 +4168,12 @@ private fun ExternalDbSyncDialog(
                                                                 }
 
                                                                 if (openOptions.size > 1) {
-                                                                    DropdownMenu(
+                                                                    LXOpenMenu(
+                                                                        options = openOptions,
                                                                         expanded = showCardMalMenu,
-                                                                        onDismissRequest = { showCardMalMenu = false },
-                                                                        modifier = Modifier.background(LXSurfaceElevated)
-                                                                    ) {
-                                                                        openOptions.forEachIndexed { index, option ->
-                                                                            if (index > 0) {
-                                                                                HorizontalDivider(color = LXBorder)
-                                                                            }
-                                                                            DropdownMenuItem(
-                                                                                text = {
-                                                                                    Column {
-                                                                                        Text(
-                                                                                            text = option.title,
-                                                                                            fontWeight = FontWeight.Bold,
-                                                                                            color = Color(option.color),
-                                                                                            fontSize = 12.sp
-                                                                                        )
-                                                                                        Text(
-                                                                                            text = option.subtitle,
-                                                                                            fontSize = 10.sp,
-                                                                                            color = LXTextSecondary
-                                                                                        )
-                                                                                    }
-                                                                                },
-                                                                                leadingIcon = {
-                                                                                    Icon(
-                                                                                        Icons.AutoMirrored.Filled.OpenInNew,
-                                                                                        contentDescription = null,
-                                                                                        tint = Color(option.color),
-                                                                                        modifier = Modifier.size(14.dp)
-                                                                                    )
-                                                                                },
-                                                                                onClick = {
-                                                                                    showCardMalMenu = false
-                                                                                    openExternalUrl(option.url)
-                                                                                }
-                                                                            )
-                                                                        }
-                                                                    }
+                                                                        onDismiss = { showCardMalMenu = false },
+                                                                        onOpen = { option -> openExternalUrl(option.url) }
+                                                                    )
                                                                 }
                                                             }
                                                         }
@@ -4368,46 +4320,12 @@ private fun ExternalDbSyncDialog(
                                                                 }
 
                                                                 if (openOptions.size > 1) {
-                                                                    DropdownMenu(
+                                                                    LXOpenMenu(
+                                                                        options = openOptions,
                                                                         expanded = showExpandedMalMenu,
-                                                                        onDismissRequest = { showExpandedMalMenu = false },
-                                                                        modifier = Modifier.background(LXSurfaceElevated)
-                                                                    ) {
-                                                                        openOptions.forEachIndexed { index, option ->
-                                                                            if (index > 0) {
-                                                                                HorizontalDivider(color = LXBorder)
-                                                                            }
-                                                                            DropdownMenuItem(
-                                                                                text = {
-                                                                                    Column {
-                                                                                        Text(
-                                                                                            text = option.title,
-                                                                                            fontWeight = FontWeight.Bold,
-                                                                                            color = Color(option.color),
-                                                                                            fontSize = 12.sp
-                                                                                        )
-                                                                                        Text(
-                                                                                            text = option.subtitle,
-                                                                                            fontSize = 10.sp,
-                                                                                            color = LXTextSecondary
-                                                                                        )
-                                                                                    }
-                                                                                },
-                                                                                leadingIcon = {
-                                                                                    Icon(
-                                                                                        Icons.AutoMirrored.Filled.OpenInNew,
-                                                                                        contentDescription = null,
-                                                                                        tint = Color(option.color),
-                                                                                        modifier = Modifier.size(14.dp)
-                                                                                    )
-                                                                                },
-                                                                                onClick = {
-                                                                                    showExpandedMalMenu = false
-                                                                                    openExternalUrl(option.url)
-                                                                                }
-                                                                            )
-                                                                        }
-                                                                    }
+                                                                        onDismiss = { showExpandedMalMenu = false },
+                                                                        onOpen = { option -> openExternalUrl(option.url) }
+                                                                    )
                                                                 }
                                                             }
                                                         }
@@ -4608,46 +4526,12 @@ private fun ExternalDbSyncDialog(
                                                                 }
 
                                                                 if (openOptions.size > 1) {
-                                                                    DropdownMenu(
+                                                                    LXOpenMenu(
+                                                                        options = openOptions,
                                                                         expanded = showCardTmdbMenu,
-                                                                        onDismissRequest = { showCardTmdbMenu = false },
-                                                                        modifier = Modifier.background(LXSurfaceElevated)
-                                                                    ) {
-                                                                        openOptions.forEachIndexed { index, option ->
-                                                                            if (index > 0) {
-                                                                                HorizontalDivider(color = LXBorder)
-                                                                            }
-                                                                            DropdownMenuItem(
-                                                                                text = {
-                                                                                    Column {
-                                                                                        Text(
-                                                                                            text = option.title,
-                                                                                            fontWeight = FontWeight.Bold,
-                                                                                            color = Color(option.color),
-                                                                                            fontSize = 12.sp
-                                                                                        )
-                                                                                        Text(
-                                                                                            text = option.subtitle,
-                                                                                            fontSize = 10.sp,
-                                                                                            color = LXTextSecondary
-                                                                                        )
-                                                                                    }
-                                                                                },
-                                                                                leadingIcon = {
-                                                                                    Icon(
-                                                                                        Icons.AutoMirrored.Filled.OpenInNew,
-                                                                                        contentDescription = null,
-                                                                                        tint = Color(option.color),
-                                                                                        modifier = Modifier.size(14.dp)
-                                                                                    )
-                                                                                },
-                                                                                onClick = {
-                                                                                    showCardTmdbMenu = false
-                                                                                    openExternalUrl(option.url)
-                                                                                }
-                                                                            )
-                                                                        }
-                                                                    }
+                                                                        onDismiss = { showCardTmdbMenu = false },
+                                                                        onOpen = { option -> openExternalUrl(option.url) }
+                                                                    )
                                                                 }
                                                             }
                                                         }
@@ -4755,46 +4639,12 @@ private fun ExternalDbSyncDialog(
                                                                 }
 
                                                                 if (openOptions.size > 1) {
-                                                                    DropdownMenu(
+                                                                    LXOpenMenu(
+                                                                        options = openOptions,
                                                                         expanded = showExpandedTmdbMenu,
-                                                                        onDismissRequest = { showExpandedTmdbMenu = false },
-                                                                        modifier = Modifier.background(LXSurfaceElevated)
-                                                                    ) {
-                                                                        openOptions.forEachIndexed { index, option ->
-                                                                            if (index > 0) {
-                                                                                HorizontalDivider(color = LXBorder)
-                                                                            }
-                                                                            DropdownMenuItem(
-                                                                                text = {
-                                                                                    Column {
-                                                                                        Text(
-                                                                                            text = option.title,
-                                                                                            fontWeight = FontWeight.Bold,
-                                                                                            color = Color(option.color),
-                                                                                            fontSize = 12.sp
-                                                                                        )
-                                                                                        Text(
-                                                                                            text = option.subtitle,
-                                                                                            fontSize = 10.sp,
-                                                                                            color = LXTextSecondary
-                                                                                        )
-                                                                                    }
-                                                                                },
-                                                                                leadingIcon = {
-                                                                                    Icon(
-                                                                                        Icons.AutoMirrored.Filled.OpenInNew,
-                                                                                        contentDescription = null,
-                                                                                        tint = Color(option.color),
-                                                                                        modifier = Modifier.size(14.dp)
-                                                                                    )
-                                                                                },
-                                                                                onClick = {
-                                                                                    showExpandedTmdbMenu = false
-                                                                                    openExternalUrl(option.url)
-                                                                                }
-                                                                            )
-                                                                        }
-                                                                    }
+                                                                        onDismiss = { showExpandedTmdbMenu = false },
+                                                                        onOpen = { option -> openExternalUrl(option.url) }
+                                                                    )
                                                                 }
                                                             }
                                                         }
@@ -4858,15 +4708,123 @@ private fun formatScore(score: Float?): String? {
     }
 }
 
+private class EditableFieldController(
+    val text: () -> String,
+    val error: () -> String?,
+    val onValueChange: (String) -> Unit,
+    val commit: () -> Boolean,
+    val setTextAndClearError: (String) -> Unit,
+    val modifier: Modifier
+)
+
+@Composable
+private fun <T> rememberEditableParsedField(
+    fieldKey: String,
+    externalValue: T,
+    formatExternal: (T) -> String,
+    parse: (String) -> FieldParseResult<T>,
+    onCommit: (T) -> Unit,
+    pendingCommits: MutableMap<String, () -> Boolean>,
+    readOnly: Boolean = false,
+    validationKey: Any? = Unit
+): EditableFieldController {
+    val latestFormat by rememberUpdatedState(formatExternal)
+    val latestParse by rememberUpdatedState(parse)
+    val latestOnCommit by rememberUpdatedState(onCommit)
+
+    var rawText by remember { mutableStateOf(formatExternal(externalValue)) }
+    var isFocused by remember { mutableStateOf(false) }
+    var wasFocused by remember { mutableStateOf(false) }
+    var errorText by remember { mutableStateOf<String?>(null) }
+
+    val commitInput: () -> Boolean = {
+        if (readOnly) {
+            errorText = null
+            true
+        } else {
+            val res = latestParse(rawText)
+            errorText = res.error
+            if (res.isValid) {
+                @Suppress("UNCHECKED_CAST")
+                val parsedValue = res.value as T
+                latestOnCommit(parsedValue)
+                rawText = latestFormat(parsedValue)
+            }
+            res.isValid
+        }
+    }
+    val latestCommit by rememberUpdatedState(commitInput)
+
+    LaunchedEffect(externalValue) {
+        if (!isFocused) {
+            rawText = latestFormat(externalValue)
+            errorText = null
+        }
+    }
+
+    LaunchedEffect(validationKey) {
+        if (!readOnly && rawText.isNotBlank() && errorText != null) {
+            latestCommit()
+        }
+    }
+
+    DisposableEffect(fieldKey, pendingCommits, readOnly) {
+        pendingCommits[fieldKey] = { latestCommit() }
+        onDispose { pendingCommits.remove(fieldKey) }
+    }
+
+    val modifier = Modifier.onFocusChanged { focusState ->
+        if (focusState.isFocused) {
+            wasFocused = true
+            isFocused = true
+        } else {
+            isFocused = false
+            if (wasFocused) {
+                wasFocused = false
+                latestCommit()
+            }
+        }
+    }
+
+    return EditableFieldController(
+        text = { rawText },
+        error = { errorText },
+        onValueChange = { input ->
+            rawText = input
+            if (errorText != null) {
+                errorText = latestParse(input).error
+            }
+        },
+        commit = {
+            wasFocused = false
+            latestCommit()
+        },
+        setTextAndClearError = { newValue ->
+            wasFocused = false
+            rawText = newValue
+            errorText = null
+        },
+        modifier = modifier
+    )
+}
+
 @Composable
 private fun CurrentPlaybackTimeSection(
     currentTimeMinutes: Int?,
     runtimeMinutes: Int?,
-    onUpdateTime: (Int?) -> Unit
+    onUpdateTime: (Int?) -> Unit,
+    pendingCommits: MutableMap<String, () -> Boolean> = remember { LinkedHashMap() }
 ) {
-    var rawInput by remember(currentTimeMinutes) {
-        mutableStateOf(if (currentTimeMinutes != null && currentTimeMinutes > 0) currentTimeMinutes.toString() else "")
-    }
+    val focusManager = LocalFocusManager.current
+    val playbackField = rememberEditableParsedField(
+        fieldKey = "playback_time",
+        externalValue = currentTimeMinutes,
+        formatExternal = AddEditInputParsers::formatPlaybackMinutes,
+        parse = AddEditInputParsers::parsePlaybackTimeMinutes,
+        onCommit = onUpdateTime,
+        pendingCommits = pendingCommits
+    )
+    val playbackError = playbackField.error()
 
     Column(
         modifier = Modifier
@@ -4903,15 +4861,23 @@ private fun CurrentPlaybackTimeSection(
         }
 
         OutlinedTextField(
-            value = rawInput,
-            onValueChange = { input ->
-                rawInput = input
-                val parsedMinutes = parseTimeToMinutes(input)
-                onUpdateTime(parsedMinutes)
-            },
+            value = playbackField.text(),
+            onValueChange = playbackField.onValueChange,
             label = { Text("Watch Progress (minutes or mm:ss)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
             placeholder = { Text("e.g. 15 or 12:30 or 1h 15m") },
-            modifier = Modifier.fillMaxWidth(),
+            isError = playbackError != null,
+            supportingText = playbackError?.let { err -> { Text(err, color = LXErrorRed) } },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    if (playbackField.commit()) {
+                        focusManager.clearFocus()
+                    }
+                }
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(playbackField.modifier),
             colors = outlinedColors(),
             singleLine = true,
             maxLines = 1
@@ -4939,12 +4905,13 @@ private fun CurrentPlaybackTimeSection(
                             selected = isSelected,
                             onClick = {
                                 if (isSelected) {
-                                    rawInput = ""
+                                    playbackField.setTextAndClearError("")
                                     onUpdateTime(null)
                                 } else {
-                                    rawInput = minVal.toString()
+                                    playbackField.setTextAndClearError(minVal.toString())
                                     onUpdateTime(minVal)
                                 }
+                                focusManager.clearFocus()
                             },
                             label = { Text(label, fontSize = 11.sp) },
                             modifier = Modifier.height(26.dp),
@@ -4960,8 +4927,9 @@ private fun CurrentPlaybackTimeSection(
                     if (currentTimeMinutes != null && currentTimeMinutes > 0) {
                         TextButton(
                             onClick = {
-                                rawInput = ""
+                                playbackField.setTextAndClearError("")
                                 onUpdateTime(null)
+                                focusManager.clearFocus()
                             },
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
                             modifier = Modifier.height(26.dp)
@@ -4973,37 +4941,4 @@ private fun CurrentPlaybackTimeSection(
             }
         }
     }
-}
-
-private fun parseTimeToMinutes(input: String): Int? {
-    val clean = input.trim().lowercase()
-    if (clean.isBlank()) return null
-
-    val hrMatch = Regex("(\\d+)\\s*(?:h|hr|hour)").find(clean)
-    val minMatch = Regex("(\\d+)\\s*(?:m|min|minute)").find(clean)
-    if (hrMatch != null || minMatch != null) {
-        val hrs = hrMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
-        val mins = minMatch?.groupValues?.get(1)?.toIntOrNull() ?: 0
-        val total = hrs * 60 + mins
-        return if (total > 0) total else null
-    }
-
-    if (clean.contains(":")) {
-        val parts = clean.split(":")
-        if (parts.size == 2) {
-            val m = parts[0].trim().toIntOrNull() ?: 0
-            val s = parts[1].trim().toIntOrNull() ?: 0
-            val total = m + if (s >= 30) 1 else 0
-            return if (total > 0) total else null
-        } else if (parts.size == 3) {
-            val h = parts[0].trim().toIntOrNull() ?: 0
-            val m = parts[1].trim().toIntOrNull() ?: 0
-            val s = parts[2].trim().toIntOrNull() ?: 0
-            val total = h * 60 + m + if (s >= 30) 1 else 0
-            return if (total > 0) total else null
-        }
-    }
-
-    val direct = clean.filter { it.isDigit() }.toIntOrNull()
-    return if (direct != null && direct > 0) direct else null
 }

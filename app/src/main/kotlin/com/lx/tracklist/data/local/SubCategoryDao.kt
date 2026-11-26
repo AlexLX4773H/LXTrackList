@@ -28,5 +28,8 @@ interface SubCategoryDao {
 
     @Query("DELETE FROM sub_categories WHERE userId = :userId AND categoryKey = :categoryKey AND LOWER(name) = LOWER(:name)")
     suspend fun deleteByName(userId: Long, categoryKey: String, name: String)
+
+    @Query("DELETE FROM sub_categories WHERE userId = :userId AND categoryKey = :categoryKey COLLATE NOCASE")
+    suspend fun deleteByCategoryKey(userId: Long, categoryKey: String)
 }
 

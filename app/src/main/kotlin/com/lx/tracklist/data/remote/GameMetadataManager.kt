@@ -2,6 +2,8 @@ package com.lx.tracklist.data.remote
 
 import android.content.Context
 import android.util.Log
+import com.lx.tracklist.data.model.ExternalSources
+import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.ui.search.AdultMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -31,7 +33,7 @@ object GameMetadataManager {
         val src = source?.trim()?.uppercase()
         if (src == "IGDB") {
             if (!GameApiConfig.isIgdbConfigured(context)) {
-                return Result.failure(IllegalStateException("IGDB credentials are not configured. Please add your Twitch Client ID and Secret in Settings."))
+                return Result.failure(IllegalStateException("IGDB credentials are not configured. Add an API key in Settings → External Sync Jobs → API Keys."))
             }
             return IgdbApiClient.searchGames(
                 context = context,
@@ -50,7 +52,7 @@ object GameMetadataManager {
         }
         if (src == "RAWG") {
             if (!GameApiConfig.isRawgConfigured(context)) {
-                return Result.failure(IllegalStateException("RAWG API key is not configured. Please add your RAWG API key in Settings."))
+                return Result.failure(IllegalStateException("RAWG API key is not configured. Add an API key in Settings → External Sync Jobs → API Keys."))
             }
             return RawgApiClient.searchGames(
                 context = context,
@@ -120,7 +122,7 @@ object GameMetadataManager {
         return Result.failure(
             IllegalStateException(
                 if (!GameApiConfig.isIgdbConfigured(context) && !GameApiConfig.isRawgConfigured(context)) {
-                    "Neither IGDB nor RAWG credentials are configured. Set your free API keys in Settings."
+                    "Neither IGDB nor RAWG credentials are configured. Add an API key in Settings → External Sync Jobs → API Keys."
                 } else {
                     "No game search results found."
                 }
@@ -186,7 +188,7 @@ object GameMetadataManager {
         return Result.failure(
             IllegalStateException(
                 if (!GameApiConfig.isIgdbConfigured(context) && !GameApiConfig.isRawgConfigured(context)) {
-                    "Neither IGDB nor RAWG credentials are configured. Set your free API keys in Settings."
+                    "Neither IGDB nor RAWG credentials are configured. Add an API key in Settings → External Sync Jobs → API Keys."
                 } else {
                     "No discovery results found."
                 }
@@ -195,44 +197,129 @@ object GameMetadataManager {
     }
 
     /**
-     * Fetches details for a specific game, routing to the source that provided the externalId.
+     * Fetches details for a specific game, routing strictly to the source that owns [externalId].
+     * Never sends an IGDB (or non-RAWG) ID to [RawgApiClient.getGameDetails]; falls back to
+     * [RawgApiClient.searchGames] + confident title/year match when [title] is provided.
      */
-    suspend fun getGameDetails(context: Context, externalId: String, externalSource: String?): Result<GameDetails> {
-        val src = externalSource?.trim().orEmpty()
-        return if (src.equals("RAWG", ignoreCase = true)) {
-            RawgApiClient.getGameDetails(context, externalId)
-        } else {
-            // Default to IGDB
-            if (GameApiConfig.isIgdbConfigured(context)) {
-                val igdbRes = IgdbApiClient.getGameDetails(context, externalId)
-                if (igdbRes.isSuccess) {
-                    val details = igdbRes.getOrThrow()
-                    if (details.completionTimeMinutes == null && GameApiConfig.isRawgConfigured(context)) {
-                        val rawgMatch = RawgApiClient.searchGames(context, details.title, limit = 1).getOrNull()?.firstOrNull()
-                        if (rawgMatch != null) {
-                            val rawgDetails = RawgApiClient.getGameDetails(context, rawgMatch.externalId).getOrNull()
-                            if (rawgDetails?.completionTimeMinutes != null) {
-                                return Result.success(
-                                    details.copy(
-                                        completionTimeMinutes = rawgDetails.completionTimeMinutes,
-                                        normalTimeMinutes = rawgDetails.normalTimeMinutes
-                                    )
+    suspend fun getGameDetails(
+        context: Context,
+        externalId: String,
+        externalSource: String?,
+        title: String? = null,
+        alternateTitle: String? = null,
+        releaseYear: String? = null
+    ): Result<GameDetails> = getGameDetailsInternal(
+        externalId = externalId,
+        externalSource = externalSource,
+        title = title,
+        alternateTitle = alternateTitle,
+        releaseYear = releaseYear,
+        igdbConfigured = GameApiConfig.isIgdbConfigured(context),
+        rawgConfigured = GameApiConfig.isRawgConfigured(context),
+        fetchIgdbDetails = { id -> IgdbApiClient.getGameDetails(context, id) },
+        fetchRawgDetails = { id -> RawgApiClient.getGameDetails(context, id) },
+        searchRawgGames = { query, limit -> RawgApiClient.searchGames(context, query, limit = limit) }
+    )
+
+    internal fun isConfidentGameMatch(
+        queryTitle: String,
+        candidate: GameSearchResult,
+        alternateTitle: String? = null,
+        releaseYear: String? = null
+    ): Boolean {
+        val titleMatched = TachiyomiResolverManager.isConfidentExactMatch(
+            queryTitle = queryTitle,
+            candidateTitle = candidate.title,
+            candidateAltTitles = candidate.alternateTitle,
+            entryAltTitles = alternateTitle
+        )
+        if (!titleMatched) return false
+
+        val expectedYear = releaseYear?.trim()?.take(4)?.takeIf { it.length == 4 && it.all(Char::isDigit) }
+        val candYear = candidate.releaseYear?.trim()?.take(4)?.takeIf { it.length == 4 && it.all(Char::isDigit) }
+            ?: candidate.releaseDateMillis?.let { MediaEntry.extractYearFromMillis(it) }
+        if (expectedYear != null && candYear != null && expectedYear != candYear) {
+            return false
+        }
+        return true
+    }
+
+    internal suspend fun getGameDetailsInternal(
+        externalId: String,
+        externalSource: String?,
+        title: String? = null,
+        alternateTitle: String? = null,
+        releaseYear: String? = null,
+        igdbConfigured: Boolean,
+        rawgConfigured: Boolean,
+        fetchIgdbDetails: suspend (String) -> Result<GameDetails>,
+        fetchRawgDetails: suspend (String) -> Result<GameDetails>,
+        searchRawgGames: suspend (String, Int) -> Result<List<GameSearchResult>>
+    ): Result<GameDetails> {
+        val canonicalSrc = ExternalSources.canonical(externalSource, externalId)
+        if (canonicalSrc == ExternalSources.RAWG) {
+            return fetchRawgDetails(externalId)
+        }
+
+        var igdbFailure: Result<GameDetails>? = null
+        if (igdbConfigured) {
+            val igdbRes = fetchIgdbDetails(externalId)
+            if (igdbRes.isSuccess) {
+                val details = igdbRes.getOrThrow()
+                if (details.completionTimeMinutes == null && rawgConfigured) {
+                    val rawgMatch = searchRawgGames(details.title, 5).getOrNull().orEmpty().firstOrNull {
+                        isConfidentGameMatch(
+                            queryTitle = details.title,
+                            candidate = it,
+                            alternateTitle = details.alternateTitles.joinToString("\n").takeIf { alts -> alts.isNotBlank() },
+                            releaseYear = details.releaseYear
+                        )
+                    }
+                    if (rawgMatch != null) {
+                        val rawgDetails = fetchRawgDetails(rawgMatch.externalId).getOrNull()
+                        if (rawgDetails?.completionTimeMinutes != null) {
+                            return Result.success(
+                                details.copy(
+                                    completionTimeMinutes = rawgDetails.completionTimeMinutes,
+                                    normalTimeMinutes = rawgDetails.normalTimeMinutes
                                 )
-                            }
+                            )
                         }
                     }
-                    Result.success(details)
-                } else if (GameApiConfig.isRawgConfigured(context)) {
-                    RawgApiClient.getGameDetails(context, externalId)
-                } else {
-                    igdbRes
                 }
-            } else if (GameApiConfig.isRawgConfigured(context)) {
-                RawgApiClient.getGameDetails(context, externalId)
-            } else {
-                Result.failure(IllegalStateException("No game API configured. Please configure IGDB or RAWG in Settings."))
+                return Result.success(details)
             }
+            igdbFailure = igdbRes
         }
+
+        // Non-RAWG IDs must NEVER be queried against RawgApiClient.getGameDetails.
+        // Fall back only via confident RAWG title (+ release year) search when a title is known.
+        val cleanTitle = title?.trim()?.takeIf { it.isNotBlank() }
+        if (rawgConfigured && cleanTitle != null) {
+            val rawgList = searchRawgGames(cleanTitle, 5).getOrNull().orEmpty()
+            val confidentMatch = rawgList.firstOrNull {
+                isConfidentGameMatch(
+                    queryTitle = cleanTitle,
+                    candidate = it,
+                    alternateTitle = alternateTitle,
+                    releaseYear = releaseYear
+                )
+            }
+            if (confidentMatch != null) {
+                return fetchRawgDetails(confidentMatch.externalId)
+            }
+            return Result.failure(NoSuchElementException("No confident RAWG match found for '$cleanTitle'"))
+        }
+
+        return igdbFailure ?: Result.failure(
+            IllegalStateException(
+                if (!igdbConfigured && !rawgConfigured) {
+                    "No game API configured. Please configure IGDB or RAWG in Settings."
+                } else {
+                    "No IGDB credentials configured and no title match available for '$externalId'."
+                }
+            )
+        )
     }
 
     /**

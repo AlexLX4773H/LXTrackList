@@ -236,7 +236,7 @@ object MalApiClient {
         limit: Int = 100
     ): Result<MalMangaListResponse> = withContext(Dispatchers.IO) {
         val fields = "list_status{num_volumes_read,num_chapters_read,score,status,is_rereading,num_times_reread,updated_at}," +
-                     "num_volumes,num_chapters,start_date,end_date,alternative_titles,genres,synopsis,mean"
+                     "num_volumes,num_chapters,start_date,end_date,alternative_titles,genres,synopsis,mean,media_type"
 
         var url = "$BASE_URL/users/@me/mangalist?fields=$fields&limit=$limit&offset=$offset&nsfw=true"
         if (!status.isNullOrBlank()) {

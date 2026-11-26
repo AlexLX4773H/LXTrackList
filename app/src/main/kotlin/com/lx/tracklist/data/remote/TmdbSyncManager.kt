@@ -8,6 +8,7 @@ import coil.request.ImageRequest
 import com.google.gson.Gson
 import com.lx.tracklist.LXApplication
 import com.lx.tracklist.data.local.FailedCoverTracker
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.repository.MediaRepository
@@ -70,14 +71,7 @@ object TmdbSyncManager {
     }
 
     fun isTmdbSource(entry: MediaEntry): Boolean {
-        if (!isEligibleMediaForTmdb(entry.mediaType)) return false
-        val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim()
-        if (src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)) {
-            return false
-        }
-        val hasTmdbSource = src.isNullOrBlank() || src.equals("TMDB", ignoreCase = true)
-        val hasTmdbId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull() != null
-        return hasTmdbSource || hasTmdbId
+        return SyncRouter.jobFor(entry) == SyncJob.TMDB
     }
 
     private fun needsSync(entry: MediaEntry, forceRefresh: Boolean): Boolean {
@@ -148,7 +142,7 @@ object TmdbSyncManager {
                     isRunning = false,
                     profileId = profileId,
                     profileName = profileName,
-                    lastErrorMessage = "TMDB API credentials are missing. Please configure your Read Access Token.",
+                    lastErrorMessage = "TMDB API credentials are missing. Add an API key in Settings → External Sync Jobs → API Keys.",
                     statusMessage = "TMDB API token missing",
                     isCompleted = true
                 )
@@ -159,7 +153,7 @@ object TmdbSyncManager {
                 total = 0,
                 updated = 0,
                 failed = 0,
-                lastError = "TMDB Read Access Token is not configured.",
+                lastError = "TMDB Read Access Token is not configured. Add an API key in Settings → External Sync Jobs → API Keys.",
                 isCancelled = false,
                 profileName = profileName
             )
@@ -205,7 +199,7 @@ object TmdbSyncManager {
                         statusMessage = "Checking cover images..."
                     )
                 }
-                FailedCoverTracker.probeBrokenCovers(tmdbEntries)
+                FailedCoverTracker.probeBrokenCovers(tmdbEntries, context)
             }
 
             val eligible = if (targetEntryIds != null) tmdbEntries else tmdbEntries.filter { needsSync(it, forceRefresh) }
@@ -216,13 +210,13 @@ object TmdbSyncManager {
                     if (entriesPool.isEmpty()) {
                         "Selected entries not found."
                     } else if (tmdbEntries.isEmpty()) {
-                        "Selected entries are not eligible for TMDB sync (Movies/Shows only)."
+                        "Selected entries are not eligible for TMDB sync (Movies, TV Shows, or TMDB-linked Anime)."
                     } else {
                         "Selected entries already have posters & details from TMDB."
                     }
                 } else {
                     if (tmdbEntries.isEmpty()) {
-                        "No eligible movie or TV show entries found to sync."
+                        "No eligible movie, TV show, or TMDB-linked anime entries found to sync."
                     } else {
                         "All ${tmdbEntries.size} movie & TV entries already have TMDB posters and details."
                     }
@@ -428,12 +422,28 @@ object TmdbSyncManager {
             (entry.title.equals("Black Widow", ignoreCase = true) && entry.externalId == "19345")
         )
         val tmdbId = if (isTvContaminatedMovie) null else (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.toLongOrNull()
-        val isTv = entry.mediaType == MediaType.SHOW
+        val inferredTvForAnime = entry.totalSeasons > 1 ||
+            entry.totalEpisodes > 1 ||
+            entry.episodeLengthMinutes != null ||
+            (entry.durationMinutes ?: 0) == 0
+        var isTv = when (entry.mediaType) {
+            MediaType.SHOW -> true
+            MediaType.MOVIE -> false
+            MediaType.ANIME -> inferredTvForAnime
+            else -> false
+        }
 
         var detailsResult = if (tmdbId != null) {
             TmdbApiClient.fetchMediaDetails(tmdbId = tmdbId, isTv = isTv, context = context)
         } else {
             TmdbApiClient.searchMediaDetailsByTitle(title = entry.title, isTv = isTv, context = context)
+        }
+
+        if (entry.mediaType == MediaType.ANIME && tmdbId != null &&
+            detailsResult.isFailure && detailsResult.exceptionOrNull() is TmdbNotFoundException
+        ) {
+            isTv = !isTv
+            detailsResult = TmdbApiClient.fetchMediaDetails(tmdbId = tmdbId, isTv = isTv, context = context)
         }
 
         if (detailsResult.isFailure && detailsResult.exceptionOrNull() is TmdbRateLimitException) {
@@ -449,298 +459,60 @@ object TmdbSyncManager {
             val details = detailsResult.getOrNull()
             Log.d(TAG, "Successfully resolved entry '${entry.title}' (tmdbId=${details?.tmdbId}): poster=${details?.posterUrl}, duration=${details?.durationMinutes}")
             if (details != null) {
-                var hasChanges = false
-                var finalCoverUri: String? = entry.coverImageUri
-                var finalExternalId: String? = entry.externalId
-                var finalExternalSource: String? = entry.externalSource
-
-                if ((tmdbId == null || isTvContaminatedMovie) && details.tmdbId > 0) {
-                    finalExternalId = details.tmdbId.toString()
-                    finalExternalSource = "TMDB"
-                    hasChanges = true
-                }
-
-                val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(entry)
-                val needsPoster = entry.coverImageUri.isNullOrBlank() ||
-                                  entry.coverImageUri.startsWith("file:") ||
-                                  isCoverBroken ||
-                                  isTvContaminatedMovie ||
-                                  forceRefresh
-                if (!details.posterUrl.isNullOrBlank() && needsPoster) {
-                    finalCoverUri = details.posterUrl
-                    hasChanges = true
-
-                    FailedCoverTracker.markSuccess(entry.id, details.posterUrl)
-
-                    // Pre-warm Coil cache directly
-                    try {
-                        val imageLoader = Coil.imageLoader(context)
-                        val request = ImageRequest.Builder(context)
-                            .data(details.posterUrl)
-                            .memoryCachePolicy(CachePolicy.ENABLED)
-                            .diskCachePolicy(CachePolicy.ENABLED)
-                            .build()
-                        imageLoader.enqueue(request)
-                    } catch (_: Exception) {}
-                }
-
-                // Determine runtime for movie vs show
-                val newDurationMinutes = if (entry.mediaType == MediaType.MOVIE) {
-                    if (details.durationMinutes != null && details.durationMinutes > 0 &&
-                        (entry.durationMinutes == null || entry.durationMinutes == 0 || forceRefresh) &&
-                        details.durationMinutes != entry.durationMinutes
-                    ) {
-                        hasChanges = true
-                        details.durationMinutes
-                    } else {
-                        entry.durationMinutes
-                    }
+                val candidateExternalId = if ((tmdbId == null || isTvContaminatedMovie) && details.tmdbId > 0) {
+                    details.tmdbId.toString()
                 } else {
-                    entry.durationMinutes
+                    entry.externalId
                 }
 
-                val newEpisodeLength = if (entry.mediaType == MediaType.SHOW) {
-                    if (details.durationMinutes != null && details.durationMinutes > 0 &&
-                        (entry.episodeLengthMinutes == null || entry.episodeLengthMinutes == 0 || forceRefresh) &&
-                        details.durationMinutes != entry.episodeLengthMinutes
-                    ) {
-                        hasChanges = true
-                        details.durationMinutes
-                    } else {
-                        entry.episodeLengthMinutes
-                    }
-                } else {
-                    entry.episodeLengthMinutes
-                }
-
-                // Total episodes for show
-                val newTotalEpisodes = if (entry.mediaType == MediaType.SHOW) {
-                    if (details.totalEpisodes != null && details.totalEpisodes > 0 &&
-                        (entry.totalEpisodes == 0 || (entry.totalSeasons > 1 && entry.totalEpisodes <= 1) || forceRefresh) &&
-                        details.totalEpisodes != entry.totalEpisodes
-                    ) {
-                        hasChanges = true
-                        details.totalEpisodes
-                    } else {
-                        entry.totalEpisodes
-                    }
-                } else {
-                    entry.totalEpisodes
-                }
-
-                // Total seasons for show
-                val newTotalSeasons = if (entry.mediaType == MediaType.SHOW) {
-                    if (details.totalSeasons != null && details.totalSeasons > 0 &&
-                        (entry.totalSeasons <= 1 || forceRefresh) &&
-                        details.totalSeasons != entry.totalSeasons
-                    ) {
-                        hasChanges = true
-                        details.totalSeasons
-                    } else {
-                        entry.totalSeasons
-                    }
-                } else {
-                    entry.totalSeasons
-                }
-
-                // Season-by-season episodes for show
-                val newSeasonEpisodesJson = if (entry.mediaType == MediaType.SHOW && details.seasonEpisodes != null) {
-                    val formatted = MediaEntry.formatSeasonEpisodes(details.seasonEpisodes)
-                    if (formatted != null && (!entry.hasSeasonEpisodeTracking() || forceRefresh) && formatted != entry.seasonEpisodesJson) {
-                        hasChanges = true
-                        formatted
-                    } else {
-                        entry.seasonEpisodesJson
-                    }
-                } else {
-                    entry.seasonEpisodesJson
-                }
-
-                // Release / Broadcast dates
-                val newAiredStartDate = if (details.airedStartDate != null &&
-                    (entry.airedStartDate == null || forceRefresh) &&
-                    details.airedStartDate != entry.airedStartDate
-                ) {
-                    hasChanges = true
-                    details.airedStartDate
-                } else {
-                    entry.airedStartDate
-                }
-
-                val newAiredEndDate = if (details.airedEndDate != null &&
-                    (entry.airedEndDate == null || forceRefresh) &&
-                    details.airedEndDate != entry.airedEndDate
-                ) {
-                    hasChanges = true
-                    details.airedEndDate
-                } else {
-                    entry.airedEndDate
-                }
-
-                // Alternate titles
-                val newAlternateTitle = if (!details.alternateTitle.isNullOrBlank() &&
-                    (entry.alternateTitle.isNullOrBlank() || forceRefresh || isTvContaminatedMovie) &&
-                    details.alternateTitle != entry.alternateTitle
-                ) {
-                    hasChanges = true
-                    details.alternateTitle
-                } else if (isTvContaminatedMovie || (forceRefresh && details.alternateTitle.isNullOrBlank() && entry.alternateTitle?.contains("Dr. Hudson", ignoreCase = true) == true)) {
-                    hasChanges = true
-                    null
-                } else {
-                    entry.alternateTitle
-                }
-
-                // Tags (genres)
-                val newTags = if (!details.tags.isNullOrBlank() &&
-                    (entry.tags.isNullOrBlank() || forceRefresh) &&
-                    details.tags != entry.tags
-                ) {
-                    hasChanges = true
-                    details.tags
-                } else {
-                    entry.tags
-                }
-
-                // Description (synopsis)
-                val curDesc = entry.description ?: entry.notes
-                val formattedDesc = details.buildDescriptionWithMetadata().takeIf { it.isNotBlank() } ?: details.synopsis
-                val newDescription = if (!formattedDesc.isNullOrBlank() &&
-                    (curDesc.isNullOrBlank() || forceRefresh) &&
-                    formattedDesc != curDesc
-                ) {
-                    hasChanges = true
-                    formattedDesc
-                } else {
-                    curDesc
-                }
-
-                // Airing status
-                val newIsAiring = if (details.isAiring != null && details.isAiring != entry.isAiring) {
-                    hasChanges = true
-                    details.isAiring
-                } else {
-                    entry.isAiring
-                }
-
-                // Aired episodes for show
-                val newAiredEpisodes = if (entry.mediaType == MediaType.SHOW) {
-                    if (details.airedEpisodes != null && details.airedEpisodes > 0 &&
-                        details.airedEpisodes != entry.airedEpisodes
-                    ) {
-                        hasChanges = true
-                        details.airedEpisodes
-                    } else if (newIsAiring) {
-                        val effective = entry.copy(
-                            airedStartDate = newAiredStartDate,
-                            totalEpisodes = newTotalEpisodes,
-                            isAiring = newIsAiring
-                        ).getEffectiveAiredEpisodes()
-                        if (effective > 0 && effective != entry.airedEpisodes) {
-                            hasChanges = true
-                            effective
-                        } else {
-                            entry.airedEpisodes
-                        }
-                    } else {
-                        entry.airedEpisodes
-                    }
-                } else {
-                    entry.airedEpisodes
-                }
-
-                // External Score
-                val newExternalScore = if (details.externalScore != null &&
-                    (entry.externalScore == null || forceRefresh) &&
-                    details.externalScore != entry.externalScore
-                ) {
-                    hasChanges = true
-                    details.externalScore
-                } else {
-                    entry.externalScore
-                }
-
-                val newExternalScoreSource = if (details.externalScore != null &&
-                    (entry.externalScore == null || forceRefresh) &&
-                    (details.externalScoreSource) != entry.externalScoreSource
-                ) {
-                    hasChanges = true
-                    details.externalScoreSource
-                } else {
-                    entry.externalScoreSource
-                }
-
-                // Extract related entries (collection parts, sequels, prequels, recommendations)
-                val newRelatedJson = if ((entry.relatedEntriesJson.isNullOrBlank() || forceRefresh) && finalExternalId != null) {
+                val fetchedRelatedJson = if (entry.relatedEntriesJson.isNullOrBlank() || forceRefresh) {
                     if (!details.relatedItems.isNullOrEmpty()) {
-                        val json = gson.toJson(details.relatedItems)
-                        if (json != entry.relatedEntriesJson) {
-                            hasChanges = true
-                            json
-                        } else {
-                            entry.relatedEntriesJson
-                        }
+                        gson.toJson(details.relatedItems)
                     } else {
-                        val targetTmdbId = finalExternalId.toLongOrNull()
+                        val targetTmdbId = candidateExternalId?.toLongOrNull()
                         if (targetTmdbId != null) {
                             val relRes = TmdbApiClient.fetchRelatedEntries(targetTmdbId, isTv = isTv, context = context)
                             val relList = relRes.getOrNull()
-                            if (!relList.isNullOrEmpty()) {
-                                val json = gson.toJson(relList)
-                                if (json != entry.relatedEntriesJson) {
-                                    hasChanges = true
-                                    json
-                                } else {
-                                    entry.relatedEntriesJson
-                                }
-                            } else {
-                                entry.relatedEntriesJson
-                            }
-                        } else {
-                            entry.relatedEntriesJson
-                        }
+                            if (!relList.isNullOrEmpty()) gson.toJson(relList) else null
+                        } else null
                     }
                 } else {
-                    entry.relatedEntriesJson
+                    null
                 }
 
-                val newOriginalLanguage = if (!details.originalLanguage.isNullOrBlank()) {
-                    if (details.originalLanguage != entry.originalLanguage) hasChanges = true
-                    details.originalLanguage
-                } else entry.originalLanguage
-
-                val resolvedCreator = details.resolveCreatorFor(isTv)
-                val newCreator = if (!resolvedCreator.isNullOrBlank() && (entry.creator.isNullOrBlank() || forceRefresh) && resolvedCreator != entry.creator) {
-                    hasChanges = true
-                    resolvedCreator
-                } else entry.creator
+                // BUG-17: Re-read latest row right before merging so concurrent user edits survive sync.
+                val latest = repository.getEntryByIdSync(entry.id) ?: entry
+                val isLatestTvContaminatedMovie = latest.mediaType == MediaType.MOVIE && (
+                    latest.alternateTitle?.contains("Dr. Hudson", ignoreCase = true) == true ||
+                    (latest.title.equals("Black Widow", ignoreCase = true) && latest.externalId == "19345")
+                )
+                val latestTmdbIdMissing = (if (isLatestTvContaminatedMovie) null else (latest.externalId ?: latest.foreignDatabaseId)?.trim()?.toLongOrNull()) == null
+                val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(latest)
+                val (updatedEntry, hasChanges) = applyTmdbMetadataToFresh(
+                    latest = latest,
+                    details = details,
+                    isTvContaminatedMovie = isLatestTvContaminatedMovie,
+                    tmdbIdWasMissing = latestTmdbIdMissing,
+                    isCoverBroken = isCoverBroken,
+                    fetchedRelatedJson = fetchedRelatedJson,
+                    forceRefresh = forceRefresh
+                )
 
                 if (hasChanges) {
-                    val updatedEntry = entry.copy(
-                        coverImageUri = finalCoverUri ?: entry.coverImageUri,
-                        creator = newCreator,
-                        durationMinutes = newDurationMinutes,
-                        episodeLengthMinutes = newEpisodeLength,
-                        totalEpisodes = newTotalEpisodes,
-                        airedEpisodes = newAiredEpisodes,
-                        totalSeasons = newTotalSeasons,
-                        seasonEpisodesJson = newSeasonEpisodesJson,
-                        airedStartDate = newAiredStartDate,
-                        airedEndDate = newAiredEndDate,
-                        alternateTitle = newAlternateTitle,
-                        tags = newTags,
-                        description = newDescription,
-                        isAiring = newIsAiring,
-                        externalScore = newExternalScore,
-                        externalScoreSource = newExternalScoreSource,
-                        externalId = finalExternalId,
-                        externalSource = finalExternalSource ?: entry.externalSource,
-                        relatedEntriesJson = newRelatedJson,
-                        movieSeriesName = if (entry.mediaType == MediaType.MOVIE && !details.movieSeriesName.isNullOrBlank()) details.movieSeriesName else entry.movieSeriesName,
-                        originalLanguage = newOriginalLanguage,
-                        updatedAt = System.currentTimeMillis()
-                    )
-                    repository.update(updatedEntry.copy(userId = profileId))
+                    if (updatedEntry.coverImageUri != latest.coverImageUri && !updatedEntry.coverImageUri.isNullOrBlank()) {
+                        FailedCoverTracker.markSuccess(latest.id, updatedEntry.coverImageUri)
+                        try {
+                            val imageLoader = Coil.imageLoader(context)
+                            val request = ImageRequest.Builder(context)
+                                .data(updatedEntry.coverImageUri)
+                                .memoryCachePolicy(CachePolicy.ENABLED)
+                                .diskCachePolicy(CachePolicy.ENABLED)
+                                .build()
+                            imageLoader.enqueue(request)
+                        } catch (_: Exception) {}
+                    }
+                    val effectiveUserId = if (updatedEntry.userId == 0L) profileId else updatedEntry.userId
+                    repository.updateMetadataOnly(updatedEntry.copy(userId = effectiveUserId))
                 }
                 return TmdbSyncItemResult(hasChanges = hasChanges, isSuccess = true)
             }
@@ -750,6 +522,295 @@ object TmdbSyncManager {
         Log.e(TAG, "Failed to sync entry ${entry.title} (tmdbId=$tmdbId): $err", detailsResult.exceptionOrNull())
         val isRateLimit = detailsResult.exceptionOrNull() is TmdbRateLimitException || err.contains("429", ignoreCase = true)
         return TmdbSyncItemResult(hasChanges = false, isSuccess = false, errorMessage = err, isRateLimit = isRateLimit)
+    }
+
+    internal fun applyTmdbMetadataToFresh(
+        latest: MediaEntry,
+        details: TmdbMediaDetails,
+        isTvContaminatedMovie: Boolean = false,
+        tmdbIdWasMissing: Boolean = (latest.externalId ?: latest.foreignDatabaseId).isNullOrBlank(),
+        isCoverBroken: Boolean = false,
+        fetchedRelatedJson: String? = null,
+        forceRefresh: Boolean = false,
+        now: Long = System.currentTimeMillis()
+    ): Pair<MediaEntry, Boolean> {
+        var hasChanges = false
+        var finalCoverUri: String? = latest.coverImageUri
+        var finalExternalId: String? = latest.externalId
+        var finalExternalSource: String? = latest.externalSource
+        val isTv = when (latest.mediaType) {
+            MediaType.SHOW -> true
+            MediaType.MOVIE -> false
+            MediaType.ANIME -> details.type.equals("TV", ignoreCase = true) ||
+                (!details.type.equals("Movie", ignoreCase = true) && (
+                    latest.totalSeasons > 1 ||
+                    latest.totalEpisodes > 1 ||
+                    latest.episodeLengthMinutes != null ||
+                    (latest.durationMinutes ?: 0) == 0
+                ))
+            else -> false
+        }
+        val isMovieLike = !isTv && (latest.mediaType == MediaType.MOVIE || latest.mediaType == MediaType.ANIME)
+        val isShowLike = isTv && (latest.mediaType == MediaType.SHOW || latest.mediaType == MediaType.ANIME)
+
+        if ((tmdbIdWasMissing || isTvContaminatedMovie) && details.tmdbId > 0) {
+            finalExternalId = details.tmdbId.toString()
+            finalExternalSource = ExternalSources.TMDB
+            hasChanges = true
+        }
+
+        val needsPoster = latest.coverImageUri.isNullOrBlank() ||
+            latest.coverImageUri.startsWith("file:") ||
+            isCoverBroken ||
+            isTvContaminatedMovie ||
+            forceRefresh
+        if (!details.posterUrl.isNullOrBlank() && needsPoster && details.posterUrl != latest.coverImageUri) {
+            finalCoverUri = details.posterUrl
+            hasChanges = true
+        }
+
+        val newDurationMinutes = if (isMovieLike) {
+            if (details.durationMinutes != null && details.durationMinutes > 0 &&
+                (latest.durationMinutes == null || latest.durationMinutes == 0 || forceRefresh) &&
+                details.durationMinutes != latest.durationMinutes
+            ) {
+                hasChanges = true
+                details.durationMinutes
+            } else {
+                latest.durationMinutes
+            }
+        } else {
+            latest.durationMinutes
+        }
+
+        val newEpisodeLength = if (isShowLike) {
+            if (details.durationMinutes != null && details.durationMinutes > 0 &&
+                (latest.episodeLengthMinutes == null || latest.episodeLengthMinutes == 0 || forceRefresh) &&
+                details.durationMinutes != latest.episodeLengthMinutes
+            ) {
+                hasChanges = true
+                details.durationMinutes
+            } else {
+                latest.episodeLengthMinutes
+            }
+        } else {
+            latest.episodeLengthMinutes
+        }
+
+        val newTotalEpisodes = if (isShowLike) {
+            if (details.totalEpisodes != null && details.totalEpisodes > 0 &&
+                (latest.totalEpisodes == 0 || (latest.totalSeasons > 1 && latest.totalEpisodes <= 1) || forceRefresh) &&
+                details.totalEpisodes != latest.totalEpisodes
+            ) {
+                hasChanges = true
+                details.totalEpisodes
+            } else {
+                latest.totalEpisodes
+            }
+        } else {
+            latest.totalEpisodes
+        }
+
+        val newTotalSeasons = if (isShowLike) {
+            if (details.totalSeasons != null && details.totalSeasons > 0 &&
+                (latest.totalSeasons <= 1 || forceRefresh) &&
+                details.totalSeasons != latest.totalSeasons
+            ) {
+                hasChanges = true
+                details.totalSeasons
+            } else {
+                latest.totalSeasons
+            }
+        } else {
+            latest.totalSeasons
+        }
+
+        val newSeasonEpisodesJson = if (isShowLike && details.seasonEpisodes != null) {
+            val formatted = MediaEntry.formatSeasonEpisodes(details.seasonEpisodes)
+            if (formatted != null && (!latest.hasSeasonEpisodeTracking() || forceRefresh) && formatted != latest.seasonEpisodesJson) {
+                hasChanges = true
+                formatted
+            } else {
+                latest.seasonEpisodesJson
+            }
+        } else {
+            latest.seasonEpisodesJson
+        }
+
+        val newAiredStartDate = if (details.airedStartDate != null &&
+            (latest.airedStartDate == null || forceRefresh) &&
+            details.airedStartDate != latest.airedStartDate
+        ) {
+            hasChanges = true
+            details.airedStartDate
+        } else {
+            latest.airedStartDate
+        }
+
+        val newAiredEndDate = if (details.airedEndDate != null &&
+            (latest.airedEndDate == null || forceRefresh) &&
+            details.airedEndDate != latest.airedEndDate
+        ) {
+            hasChanges = true
+            details.airedEndDate
+        } else {
+            latest.airedEndDate
+        }
+
+        val newAlternateTitle = if (!details.alternateTitle.isNullOrBlank() &&
+            (latest.alternateTitle.isNullOrBlank() || forceRefresh || isTvContaminatedMovie) &&
+            details.alternateTitle != latest.alternateTitle
+        ) {
+            hasChanges = true
+            details.alternateTitle
+        } else if (isTvContaminatedMovie || (forceRefresh && details.alternateTitle.isNullOrBlank() && latest.alternateTitle?.contains("Dr. Hudson", ignoreCase = true) == true)) {
+            hasChanges = true
+            null
+        } else {
+            latest.alternateTitle
+        }
+
+        val newTags = if (!details.tags.isNullOrBlank() &&
+            (latest.tags.isNullOrBlank() || forceRefresh) &&
+            details.tags != latest.tags
+        ) {
+            hasChanges = true
+            details.tags
+        } else {
+            latest.tags
+        }
+
+        val curDesc = latest.description ?: latest.notes
+        val formattedDesc = details.buildDescriptionWithMetadata().takeIf { it.isNotBlank() } ?: details.synopsis
+        val newDescription = if (!formattedDesc.isNullOrBlank() &&
+            (curDesc.isNullOrBlank() || forceRefresh) &&
+            formattedDesc != curDesc
+        ) {
+            hasChanges = true
+            formattedDesc
+        } else {
+            curDesc
+        }
+
+        val newIsAiring = if (details.isAiring != null && details.isAiring != latest.isAiring) {
+            hasChanges = true
+            details.isAiring
+        } else {
+            latest.isAiring
+        }
+
+        val newAiredEpisodes = if (isShowLike) {
+            if (details.airedEpisodes != null && details.airedEpisodes > 0 &&
+                details.airedEpisodes != latest.airedEpisodes
+            ) {
+                hasChanges = true
+                details.airedEpisodes
+            } else if (newIsAiring) {
+                val effective = latest.copy(
+                    airedStartDate = newAiredStartDate,
+                    totalEpisodes = newTotalEpisodes,
+                    isAiring = newIsAiring
+                ).getEffectiveAiredEpisodes()
+                if (effective > 0 && effective != latest.airedEpisodes) {
+                    hasChanges = true
+                    effective
+                } else {
+                    latest.airedEpisodes
+                }
+            } else {
+                latest.airedEpisodes
+            }
+        } else {
+            latest.airedEpisodes
+        }
+
+        val newExternalScore = if (details.externalScore != null &&
+            (latest.externalScore == null || forceRefresh) &&
+            details.externalScore != latest.externalScore
+        ) {
+            hasChanges = true
+            details.externalScore
+        } else {
+            latest.externalScore
+        }
+
+        val newExternalScoreSource = if (details.externalScore != null &&
+            (latest.externalScore == null || forceRefresh) &&
+            details.externalScoreSource != latest.externalScoreSource
+        ) {
+            hasChanges = true
+            details.externalScoreSource
+        } else {
+            latest.externalScoreSource
+        }
+
+        val candidateRelatedJson = when {
+            !details.relatedItems.isNullOrEmpty() -> gson.toJson(details.relatedItems)
+            !fetchedRelatedJson.isNullOrBlank() -> fetchedRelatedJson
+            else -> null
+        }
+        val newRelatedJson = if ((latest.relatedEntriesJson.isNullOrBlank() || forceRefresh) &&
+            !candidateRelatedJson.isNullOrBlank() &&
+            candidateRelatedJson != latest.relatedEntriesJson
+        ) {
+            hasChanges = true
+            candidateRelatedJson
+        } else {
+            latest.relatedEntriesJson
+        }
+
+        val newOriginalLanguage = if (latest.originalLanguage.isNullOrBlank() && !details.originalLanguage.isNullOrBlank()) {
+            hasChanges = true
+            details.originalLanguage
+        } else {
+            latest.originalLanguage
+        }
+
+        val resolvedCreator = details.resolveCreatorFor(isTv)
+        val newCreator = if (!resolvedCreator.isNullOrBlank() && (latest.creator.isNullOrBlank() || forceRefresh) && resolvedCreator != latest.creator) {
+            hasChanges = true
+            resolvedCreator
+        } else {
+            latest.creator
+        }
+
+        val newMovieSeriesName = if (isMovieLike &&
+            !details.movieSeriesName.isNullOrBlank() &&
+            (latest.movieSeriesName.isNullOrBlank() || forceRefresh) &&
+            details.movieSeriesName != latest.movieSeriesName
+        ) {
+            hasChanges = true
+            details.movieSeriesName
+        } else {
+            latest.movieSeriesName
+        }
+
+        val updatedEntry = latest.copy(
+            coverImageUri = finalCoverUri ?: latest.coverImageUri,
+            creator = newCreator,
+            durationMinutes = newDurationMinutes,
+            episodeLengthMinutes = newEpisodeLength,
+            totalEpisodes = newTotalEpisodes,
+            airedEpisodes = newAiredEpisodes,
+            totalSeasons = newTotalSeasons,
+            seasonEpisodesJson = newSeasonEpisodesJson,
+            airedStartDate = newAiredStartDate,
+            airedEndDate = newAiredEndDate,
+            alternateTitle = newAlternateTitle,
+            tags = newTags,
+            description = newDescription,
+            isAiring = newIsAiring,
+            externalScore = newExternalScore,
+            externalScoreSource = newExternalScoreSource,
+            externalId = finalExternalId,
+            externalSource = finalExternalSource ?: latest.externalSource,
+            relatedEntriesJson = newRelatedJson,
+            movieSeriesName = newMovieSeriesName,
+            originalLanguage = newOriginalLanguage,
+            lastMetadataSyncAt = now,
+            updatedAt = now
+        )
+        return updatedEntry to hasChanges
     }
 
     fun cancelSync(context: Context? = null) {

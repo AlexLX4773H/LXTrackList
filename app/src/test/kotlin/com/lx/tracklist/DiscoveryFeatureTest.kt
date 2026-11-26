@@ -801,6 +801,26 @@ class DiscoveryFeatureTest {
     }
 
     @Test
+    fun testExactPlatformMatchingPreventsWiiAndDsSubstringCollisions() {
+        // Excluding Wii or Nintendo Wii must keep Nintendo Wii U games in Search
+        assertFalse(GamePlatformRegistry.matchesPlatform("Wii", "Nintendo Wii U"))
+        assertFalse(GamePlatformRegistry.matchesPlatform("Nintendo Wii", "Nintendo Wii U"))
+        assertFalse(GamePlatformRegistry.isExcluded(setOf("Wii"), listOf("Nintendo Wii U", "PC (Microsoft Windows)")))
+        assertFalse(GamePlatformRegistry.isExcluded(setOf("Nintendo Wii"), listOf("Nintendo Wii U")))
+        assertTrue(GamePlatformRegistry.isExcluded(setOf("Wii"), listOf("Nintendo Wii")))
+
+        // Excluding Nintendo DS / DS must keep Nintendo 3DS games in Search
+        assertFalse(GamePlatformRegistry.matchesPlatform("Nintendo DS", "Nintendo 3DS"))
+        assertFalse(GamePlatformRegistry.matchesPlatform("DS", "Nintendo 3DS"))
+        assertFalse(GamePlatformRegistry.isExcluded(setOf("Nintendo DS"), listOf("Nintendo 3DS")))
+        assertTrue(GamePlatformRegistry.matchesPlatform("Nintendo Wii U", "Wii U"))
+        assertTrue(GamePlatformRegistry.matchesPlatform("Nintendo 3DS", "3DS"))
+
+        // findOption requires exact ID, displayName, or alias (no partial displayName substring fallback)
+        assertEquals(null, GamePlatformRegistry.findOption("Classic"))
+    }
+
+    @Test
     fun testGameDiscoveryFilterWithPlatformsAndLabels() {
         val gameFilter = DiscoveryFilter.Game(
             mode = ContentDiscoveryMode.MOST_POPULAR,
@@ -880,26 +900,27 @@ class DiscoveryFeatureTest {
 
     @Test
     fun testDurationFormatterPlaytimeAndAverageTime() {
-        // Less than 24h
-        assertEquals("0.0 hrs", DurationFormatter.formatHours(0.0))
+        // Updated for FND-11: < 1h renders in minutes; trailing ".0" dropped; singular unit for "1"
+        assertEquals("0 min", DurationFormatter.formatHours(0.0))
+        assertEquals("30 min", DurationFormatter.formatHours(0.5))
         assertEquals("12.5 hrs", DurationFormatter.formatHours(12.5))
-        assertEquals("23.0 hrs", DurationFormatter.formatHours(23.0))
+        assertEquals("23 hrs", DurationFormatter.formatHours(23.0))
 
         // Days (24h to 7d)
-        assertEquals("1.0 days", DurationFormatter.formatHours(24.0))
+        assertEquals("1 day", DurationFormatter.formatHours(24.0))
         assertEquals("2.5 days", DurationFormatter.formatHours(60.0))
         assertEquals("6.9 days", DurationFormatter.formatHours(165.6))
 
-        // Weeks (7d to ~30.4d)
-        assertEquals("1.0 wks", DurationFormatter.formatHours(168.0)) // 7 * 24
+        // Weeks (7d to ~30.44d)
+        assertEquals("1 wk", DurationFormatter.formatHours(168.0)) // 7 * 24
         assertEquals("2.5 wks", DurationFormatter.formatHours(420.0))
 
-        // Months (~30.4d to 365.25d)
-        assertEquals("1.0 mos", DurationFormatter.formatHours(30.4375 * 24.0))
+        // Months (~30.44d to 365.25d)
+        assertEquals("1 mo", DurationFormatter.formatHours(30.4375 * 24.0))
         assertEquals("3.5 mos", DurationFormatter.formatHours(3.5 * 30.4375 * 24.0))
 
         // Years (>= 365.25d)
-        assertEquals("1.0 yrs", DurationFormatter.formatHours(365.25 * 24.0))
+        assertEquals("1 yr", DurationFormatter.formatHours(365.25 * 24.0))
         assertEquals("2.5 yrs", DurationFormatter.formatHours(2.5 * 365.25 * 24.0))
 
         // Minutes formatter (as used in game detail page for Baldur's Gate 3 ~5649h 38m)

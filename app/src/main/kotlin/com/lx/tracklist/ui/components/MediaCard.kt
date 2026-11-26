@@ -61,6 +61,7 @@ import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
 import com.lx.tracklist.R
+import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.RelatedMediaItem
@@ -76,6 +77,7 @@ import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
 import com.lx.tracklist.ui.theme.ThemeManager
+import com.lx.tracklist.ui.theme.parseHexColor
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -95,10 +97,12 @@ fun MediaCard(
     onToggleSelect: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     allLibraryEntries: List<MediaEntry> = emptyList(),
+    customCategories: List<CustomCategory> = emptyList(),
     onRelatedEntryClick: ((Long) -> Unit)? = null,
     onAddRelatedItem: ((RelatedMediaItem) -> Unit)? = null
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
     val progressAnimated by animateFloatAsState(targetValue = entry.progressFraction, label = "progress")
     val colors = ThemeManager.currentColors
     val insets = ThemeManager.currentCardInsets
@@ -380,8 +384,21 @@ fun MediaCard(
                                                 text = { Text("Delete", color = colors.error) },
                                                 onClick = {
                                                     showMenu = false
-                                                    onDelete()
+                                                    showDeleteConfirm = true
                                                 }
+                                            )
+                                        }
+                                        if (showDeleteConfirm) {
+                                            LXConfirmDialog(
+                                                title = "Delete \"${entry.title}\"?",
+                                                message = "This removes the entry from your library.",
+                                                confirmText = "Delete",
+                                                onConfirm = {
+                                                    showDeleteConfirm = false
+                                                    onDelete()
+                                                },
+                                                onDismiss = { showDeleteConfirm = false },
+                                                destructive = true
                                             )
                                         }
                                     }
@@ -462,12 +479,19 @@ fun MediaCard(
                                     }
 
                                     if (!entry.customCategory.isNullOrBlank()) {
+                                        val customAccent = remember(entry.customCategory, customCategories, colors.primary) {
+                                            customCategories
+                                                .firstOrNull { it.name.equals(entry.customCategory, ignoreCase = true) }
+                                                ?.colorHex
+                                                ?.let { parseHexColor(it, fallback = colors.primary) }
+                                                ?: colors.primary
+                                        }
                                         Text(
                                             text = entry.customCategory,
                                             style = MaterialTheme.typography.labelMedium.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
-                                            color = colors.primary,
+                                            color = customAccent,
                                             modifier = Modifier
-                                                .background(colors.primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                .background(customAccent.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
                                                 .padding(horizontal = 5.dp, vertical = 2.dp)
                                         )
                                     }

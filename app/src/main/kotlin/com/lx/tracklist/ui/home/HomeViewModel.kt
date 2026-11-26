@@ -10,11 +10,14 @@ import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.model.effectiveMediaTypeFor
 import com.lx.tracklist.data.remote.BookSyncManager
 import com.lx.tracklist.data.remote.GameSyncManager
 import com.lx.tracklist.data.remote.JikanSyncManager
 import com.lx.tracklist.data.remote.MusicSyncManager
 import com.lx.tracklist.data.remote.SyncForegroundService
+import com.lx.tracklist.data.remote.SyncJob
+import com.lx.tracklist.data.remote.SyncRouter
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbSyncManager
 import com.lx.tracklist.data.repository.MediaRepository
@@ -26,6 +29,20 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/**
+ * Resolves the effective [MediaType] for the currently active Home selection, giving
+ * priority to [customCategoryName] via [effectiveMediaTypeFor] so cold start, profile
+ * switch, and category switch always use the custom category's configured base type.
+ */
+internal fun resolveHomeActiveCategory(
+    customCategories: List<CustomCategory>,
+    customCategoryName: String?,
+    fallbackCategory: MediaType
+): MediaType {
+    if (customCategoryName.isNullOrBlank()) return fallbackCategory
+    return customCategories.effectiveMediaTypeFor(customCategoryName) ?: fallbackCategory
+}
 
 enum class HomeRefreshScope {
     CURRENT_VIEW,
@@ -185,7 +202,8 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
         repository.allSubCategories,
         userAndSettingsContextFlow
     ) { filter, allEntries, customCats, allSubCats, ctx ->
-        val activeKey = filter.customCategory ?: filter.category.name
+        val resolvedCategory = resolveHomeActiveCategory(customCats, filter.customCategory, filter.category)
+        val activeKey = filter.customCategory ?: resolvedCategory.name
 
         // 1. Drawer category counts
         val catCounts = MediaType.entries.associateWith { cat ->
@@ -199,7 +217,7 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
         val categoryEntries = if (!filter.customCategory.isNullOrBlank()) {
             allEntries.filter { it.customCategory.equals(filter.customCategory, ignoreCase = true) }
         } else {
-            allEntries.filter { it.mediaType == filter.category && it.customCategory == null }
+            allEntries.filter { it.mediaType == resolvedCategory && it.customCategory == null }
         }
 
         // 3. Subcategories for the active category (NOT shared)
@@ -265,7 +283,7 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
         }
 
         HomeUiState(
-            selectedCategory = filter.category,
+            selectedCategory = resolvedCategory,
             selectedCustomCategory = filter.customCategory,
             selectedSubCategory = filter.subCategory,
             selectedStatus = filter.status,
@@ -389,9 +407,16 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
         }
     }
 
-    fun createUser(name: String, colorHex: String, avatarImageUri: String? = null, passKey: String? = null) {
+    fun createUser(
+        name: String,
+        colorHex: String,
+        avatarImageUri: String? = null,
+        passKey: String? = null,
+        onCreated: (() -> Unit)? = null
+    ) {
         viewModelScope.launch {
             repository.createUser(name, colorHex, avatarImageUri, passKey)
+            onCreated?.invoke()
         }
     }
 
@@ -450,39 +475,13 @@ class HomeViewModel(private val repository: MediaRepository) : ViewModel() {
 
         if (targetEntries.isEmpty()) return
 
-        val jikanIds = mutableSetOf<Long>()
-        val tmdbIds = mutableSetOf<Long>()
-        val bookIds = mutableSetOf<Long>()
-        val gameIds = mutableSetOf<Long>()
-        val musicIds = mutableSetOf<Long>()
-        val tachiyomiIds = mutableSetOf<Long>()
-
-        for (entry in targetEntries) {
-            val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim() ?: ""
-            if (JikanSyncManager.isTachiyomiSource(entry) && !JikanSyncManager.hasValidExternalId(entry)) {
-                tachiyomiIds.add(entry.id)
-            } else if (src.equals("IGDB", ignoreCase = true) || src.equals("RAWG", ignoreCase = true) || entry.mediaType == MediaType.GAME) {
-                gameIds.add(entry.id)
-            } else if (src.equals("iTunes", ignoreCase = true) || src.equals("Apple Music", ignoreCase = true) || src.equals("MusicBrainz", ignoreCase = true) || entry.mediaType == MediaType.MUSIC) {
-                musicIds.add(entry.id)
-            } else if (src.equals("TMDB", ignoreCase = true)) {
-                tmdbIds.add(entry.id)
-            } else if (src.equals("Google Books", ignoreCase = true) || src.equals("Open Library", ignoreCase = true)) {
-                bookIds.add(entry.id)
-            } else if (src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)) {
-                jikanIds.add(entry.id)
-            } else if (entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.SHOW) {
-                tmdbIds.add(entry.id)
-            } else if (entry.mediaType == MediaType.BOOK) {
-                if (src.equals("AniList", ignoreCase = true) || src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true)) {
-                    jikanIds.add(entry.id)
-                } else {
-                    bookIds.add(entry.id)
-                }
-            } else {
-                jikanIds.add(entry.id)
-            }
-        }
+        val grouped = targetEntries.groupBy { SyncRouter.jobFor(it) }
+        val jikanIds = grouped[SyncJob.JIKAN].orEmpty().map { it.id }.toSet()
+        val tmdbIds = grouped[SyncJob.TMDB].orEmpty().map { it.id }.toSet()
+        val bookIds = grouped[SyncJob.BOOKS].orEmpty().map { it.id }.toSet()
+        val gameIds = grouped[SyncJob.GAMES].orEmpty().map { it.id }.toSet()
+        val musicIds = grouped[SyncJob.MUSIC].orEmpty().map { it.id }.toSet()
+        val tachiyomiIds = grouped[SyncJob.RESOLVE_IDS].orEmpty().map { it.id }.toSet()
 
         val user = repository.activeUser.value
         if (tachiyomiIds.isNotEmpty()) {

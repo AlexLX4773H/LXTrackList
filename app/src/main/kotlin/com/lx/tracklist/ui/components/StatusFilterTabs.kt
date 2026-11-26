@@ -42,6 +42,7 @@ import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
 import com.lx.tracklist.ui.theme.LXTextSecondary
 import com.lx.tracklist.ui.theme.ThemeManager
+import com.lx.tracklist.ui.theme.parseHexColor
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -290,19 +291,5 @@ private fun StatusTabItem(
                     .background(if (isSelected) activeColor else Color.Transparent)
             )
         }
-    }
-}
-
-private fun parseHexColor(hex: String): Color {
-    return try {
-        val clean = hex.removePrefix("#")
-        val colorInt = clean.toLong(16)
-        if (clean.length == 6) {
-            Color(colorInt or 0xFF000000)
-        } else {
-            Color(colorInt)
-        }
-    } catch (_: Exception) {
-        LXPrimaryGreen
     }
 }

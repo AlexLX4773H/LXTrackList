@@ -9,6 +9,7 @@ import com.lx.tracklist.LXApplication
 import com.lx.tracklist.util.NotificationHelper
 import com.lx.tracklist.data.exporter.JsonExporter
 import com.lx.tracklist.data.importer.CsvImporter
+import com.lx.tracklist.data.importer.JsonImportResult
 import com.lx.tracklist.data.importer.JsonImporter
 import com.lx.tracklist.data.importer.MalXmlImporter
 import com.lx.tracklist.data.importer.TachiyomiImporter
@@ -24,12 +25,15 @@ import com.lx.tracklist.data.remote.MusicSyncManager
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbSyncManager
 import com.lx.tracklist.data.model.CustomCategory
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.model.effectiveMediaType
+import com.lx.tracklist.data.model.validateCustomCategoryName
 import com.lx.tracklist.data.repository.ConflictStrategy
 import com.lx.tracklist.data.repository.MediaRepository
 import kotlinx.coroutines.Dispatchers
@@ -60,7 +64,8 @@ data class ImportPreviewState(
     val selectedCategoryKeys: Set<String> = emptySet(),
     val isImporting: Boolean = false,
     val isTachiyomiSource: Boolean = false,
-    val importFavorites: Boolean = false
+    val importFavorites: Boolean = false,
+    val importParseErrors: List<String> = emptyList()
 ) {
     val totalCount: Int get() = allEntries.size
     val selectedCount: Int get() = allEntries.count { entry ->
@@ -229,6 +234,16 @@ data class ExportPreviewState(
     }
 }
 
+internal fun formatImportStatusMessage(
+    inserted: Int,
+    updated: Int,
+    skipped: Int,
+    parseErrorNote: String? = null
+): String {
+    val summary = "Imported $inserted new • updated $updated • skipped $skipped"
+    return if (!parseErrorNote.isNullOrBlank()) "$summary ($parseErrorNote)" else summary
+}
+
 data class SettingsUiState(
     val selectedConflictStrategy: ConflictStrategy = ConflictStrategy.MERGE,
     val isImporting: Boolean = false,
@@ -261,7 +276,10 @@ data class SettingsUiState(
     val malPictureUrl: String? = null,
     val isMalAutoSyncEnabled: Boolean = true,
     val malLastSyncFormatted: String? = null,
-    val isMalConfigured: Boolean = false
+    val isMalConfigured: Boolean = false,
+    val duplicateMergePreview: List<com.lx.tracklist.data.repository.DuplicateMergePair>? = null,
+    val isScanningDuplicates: Boolean = false,
+    val isMergingDuplicates: Boolean = false
 )
 
 class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
@@ -608,14 +626,27 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         mediaType: MediaType? = null
     ) {
         val trimmed = name.trim()
-        if (trimmed.isBlank()) return
+        val validationError = validateCustomCategoryName(
+            trimmed,
+            _uiState.value.customCategories.map { it.name }
+        )
+        if (validationError != null) {
+            _uiState.update {
+                it.copy(
+                    statusMessage = validationError,
+                    isErrorMessage = true
+                )
+            }
+            return
+        }
+        val resolvedType = mediaType ?: if (isWatchType) MediaType.ANIME else MediaType.MANGA
         viewModelScope.launch {
             repository.addCustomCategory(
                 name = trimmed,
-                isWatchType = isWatchType,
+                isWatchType = resolvedType.isWatchType,
                 trackingUnit = trackingUnit,
                 colorHex = colorHex,
-                mediaType = mediaType
+                mediaType = resolvedType
             )
             _uiState.update {
                 it.copy(
@@ -626,12 +657,42 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         }
     }
 
-    fun deleteCustomCategory(category: CustomCategory) {
+    fun updateCustomCategory(
+        category: CustomCategory,
+        mediaType: MediaType,
+        trackingUnit: TrackingUnit,
+        colorHex: String
+    ) {
         viewModelScope.launch {
-            repository.deleteCustomCategory(category)
+            repository.updateCustomCategory(
+                category.copy(
+                    mediaType = mediaType,
+                    isWatchType = mediaType.isWatchType,
+                    trackingUnit = trackingUnit,
+                    colorHex = colorHex
+                )
+            )
+            _uiState.update {
+                it.copy(
+                    statusMessage = "Updated custom category \"${category.name}\"",
+                    isErrorMessage = false
+                )
+            }
+        }
+    }
+
+    suspend fun countEntriesInCustomCategory(category: CustomCategory): Int {
+        val targetUserId = if (category.userId > 0L) category.userId else _uiState.value.activeUser.id
+        return repository.countEntriesInCustomCategory(category.name, targetUserId)
+    }
+
+    fun deleteCustomCategory(category: CustomCategory, deleteEntries: Boolean = false) {
+        viewModelScope.launch {
+            repository.deleteCustomCategory(category, deleteEntries = deleteEntries)
             val affected = _uiState.value.allUsers.filter { it.defaultCustomCategory.equals(category.name, ignoreCase = true) }
+            val fallbackType = category.effectiveMediaType()
             for (p in affected) {
-                repository.updateUser(p.copy(defaultCustomCategory = null, defaultMediaType = MediaType.ANIME, defaultSubCategory = null))
+                repository.updateUser(p.copy(defaultCustomCategory = null, defaultMediaType = fallbackType, defaultSubCategory = null))
             }
             _uiState.update {
                 it.copy(
@@ -958,16 +1019,18 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(isPreparingImport = true, statusMessage = null) }
             try {
-                val entries = withContext(Dispatchers.IO) {
+                val parsed = withContext(Dispatchers.IO) {
                     val stream = StorageHelper.openFileInputStream(fileInfo.file)
-                    parseFromStream(stream, fileInfo.name)
+                    parseFromStreamWithErrors(stream, fileInfo.name)
                 }
+                val entries = parsed.entries
 
                 if (entries.isEmpty()) {
+                    val reasonSuffix = parsed.errors.firstOrNull()?.let { " ($it)" } ?: ""
                     _uiState.update {
                         it.copy(
                             isPreparingImport = false,
-                            statusMessage = "No valid media entries found in ${fileInfo.name}",
+                            statusMessage = "No valid media entries found in ${fileInfo.name}$reasonSuffix",
                             isErrorMessage = true
                         )
                     }
@@ -979,7 +1042,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 val isTachiyomi = fileInfo.name.endsWith(".tachibk", ignoreCase = true) ||
                         fileInfo.name.endsWith(".proto.gz", ignoreCase = true) ||
                         fileInfo.fileType.contains("Tachiyomi", ignoreCase = true) ||
-                        entries.any { it.externalSource == "TACHIYOMI" }
+                        entries.any { ExternalSources.canonical(it.externalSource) == ExternalSources.TACHIYOMI }
 
                 _uiState.update {
                     it.copy(
@@ -990,7 +1053,8 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                             categoryGroups = groups,
                             selectedCategoryKeys = allKeys,
                             isTachiyomiSource = isTachiyomi,
-                            importFavorites = _uiState.value.isTachiyomiImportAsFavorites
+                            importFavorites = _uiState.value.isTachiyomiImportAsFavorites,
+                            importParseErrors = parsed.errors
                         )
                     )
                 }
@@ -1013,22 +1077,27 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(isPreparingImport = true, statusMessage = null) }
             val allParsedEntries = mutableListOf<MediaEntry>()
+            val allErrors = mutableListOf<String>()
 
             withContext(Dispatchers.IO) {
                 for (fileInfo in files) {
                     try {
                         val stream = StorageHelper.openFileInputStream(fileInfo.file)
-                        val entries = parseFromStream(stream, fileInfo.name)
-                        allParsedEntries.addAll(entries)
-                    } catch (_: Exception) {}
+                        val parsed = parseFromStreamWithErrors(stream, fileInfo.name)
+                        allParsedEntries.addAll(parsed.entries)
+                        allErrors.addAll(parsed.errors.map { "${fileInfo.name}: $it" })
+                    } catch (e: Exception) {
+                        allErrors.add("${fileInfo.name}: ${e.localizedMessage ?: "failed to read"}")
+                    }
                 }
             }
 
             if (allParsedEntries.isEmpty()) {
+                val reasonSuffix = allErrors.firstOrNull()?.let { " ($it)" } ?: ""
                 _uiState.update {
                     it.copy(
                         isPreparingImport = false,
-                        statusMessage = "No valid entries found across ${files.size} input files",
+                        statusMessage = "No valid entries found across ${files.size} input files$reasonSuffix",
                         isErrorMessage = true
                     )
                 }
@@ -1041,7 +1110,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 it.name.endsWith(".tachibk", ignoreCase = true) ||
                 it.name.endsWith(".proto.gz", ignoreCase = true) ||
                 it.fileType.contains("Tachiyomi", ignoreCase = true)
-            } || allParsedEntries.any { it.externalSource == "TACHIYOMI" }
+            } || allParsedEntries.any { ExternalSources.canonical(it.externalSource) == ExternalSources.TACHIYOMI }
 
             _uiState.update {
                 it.copy(
@@ -1052,7 +1121,8 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                         categoryGroups = groups,
                         selectedCategoryKeys = allKeys,
                         isTachiyomiSource = isTachiyomi,
-                        importFavorites = _uiState.value.isTachiyomiImportAsFavorites
+                        importFavorites = _uiState.value.isTachiyomiImportAsFavorites,
+                        importParseErrors = allErrors
                     )
                 )
             }
@@ -1147,11 +1217,21 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                     profileName = activeProfileName
                 )
 
+                val mergeSkipped = (filteredEntries.size - inserted - updated).coerceAtLeast(0)
+                val parseErrorCount = preview.importParseErrors.size
+                val totalSkipped = mergeSkipped + parseErrorCount
+                val parseNote = preview.importParseErrors.firstOrNull()
+                    ?.takeIf { parseErrorCount > 0 }
                 _uiState.update {
                     it.copy(
                         isImporting = false,
                         importPreview = null,
-                        statusMessage = null,
+                        statusMessage = formatImportStatusMessage(
+                            inserted = inserted,
+                            updated = updated,
+                            skipped = totalSkipped,
+                            parseErrorNote = parseNote
+                        ),
                         isErrorMessage = false
                     )
                 }
@@ -1167,7 +1247,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                     it.copy(
                         isImporting = false,
                         importPreview = null,
-                        statusMessage = null,
+                        statusMessage = "Import failed: ${e.localizedMessage ?: "Unknown error"}",
                         isErrorMessage = true
                     )
                 }
@@ -1402,17 +1482,19 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
             _uiState.update { it.copy(isPreparingImport = true, statusMessage = null) }
             try {
                 val fileName = uri.lastPathSegment ?: "Selected File"
-                val entries = withContext(Dispatchers.IO) {
+                val parsed = withContext(Dispatchers.IO) {
                     val stream = context.contentResolver.openInputStream(uri)
                         ?: throw IllegalStateException("Cannot open selected file")
-                    parseFromStream(stream, fileName)
+                    parseFromStreamWithErrors(stream, fileName)
                 }
+                val entries = parsed.entries
 
                 if (entries.isEmpty()) {
+                    val reasonSuffix = parsed.errors.firstOrNull()?.let { " ($it)" } ?: ""
                     _uiState.update {
                         it.copy(
                             isPreparingImport = false,
-                            statusMessage = "No valid media entries found in $fileName",
+                            statusMessage = "No valid media entries found in $fileName$reasonSuffix",
                             isErrorMessage = true
                         )
                     }
@@ -1423,7 +1505,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 val allKeys = groups.map { it.key }.toSet()
                 val isTachiyomi = fileName.endsWith(".tachibk", ignoreCase = true) ||
                         fileName.endsWith(".proto.gz", ignoreCase = true) ||
-                        entries.any { it.externalSource == "TACHIYOMI" }
+                        entries.any { ExternalSources.canonical(it.externalSource) == ExternalSources.TACHIYOMI }
 
                 _uiState.update {
                     it.copy(
@@ -1434,7 +1516,8 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                             categoryGroups = groups,
                             selectedCategoryKeys = allKeys,
                             isTachiyomiSource = isTachiyomi,
-                            importFavorites = _uiState.value.isTachiyomiImportAsFavorites
+                            importFavorites = _uiState.value.isTachiyomiImportAsFavorites,
+                            importParseErrors = parsed.errors
                         )
                     )
                 }
@@ -1485,15 +1568,73 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         }
     }
 
-    fun mergeDuplicates(onComplete: ((Int) -> Unit)? = null) {
+    fun scanDuplicates() {
+        val current = _uiState.value
+        if (current.isScanningDuplicates || current.isMergingDuplicates) return
         viewModelScope.launch {
-            _uiState.update { it.copy(statusMessage = "Scanning and merging duplicates in your library...", isErrorMessage = false) }
+            _uiState.update {
+                it.copy(
+                    isScanningDuplicates = true,
+                    statusMessage = "Scanning your library for duplicate entries...",
+                    isErrorMessage = false
+                )
+            }
+            try {
+                val pairs = withContext(Dispatchers.IO) {
+                    repository.findDuplicatePairs(_uiState.value.activeUser.id)
+                }
+                _uiState.update {
+                    if (pairs.isEmpty()) {
+                        it.copy(
+                            isScanningDuplicates = false,
+                            duplicateMergePreview = null,
+                            statusMessage = "No duplicate entries found in your library.",
+                            isErrorMessage = false
+                        )
+                    } else {
+                        it.copy(
+                            isScanningDuplicates = false,
+                            duplicateMergePreview = pairs,
+                            statusMessage = null
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isScanningDuplicates = false,
+                        statusMessage = "Scan failed: ${e.localizedMessage ?: "Unknown error"}",
+                        isErrorMessage = true
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissDuplicatePreview() {
+        if (_uiState.value.isMergingDuplicates) return
+        _uiState.update { it.copy(duplicateMergePreview = null) }
+    }
+
+    fun mergeDuplicates(onComplete: ((Int) -> Unit)? = null) {
+        val current = _uiState.value
+        if (current.isMergingDuplicates || current.isScanningDuplicates) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isMergingDuplicates = true,
+                    statusMessage = "Merging duplicate entries in your library...",
+                    isErrorMessage = false
+                )
+            }
             try {
                 val mergedCount = withContext(Dispatchers.IO) {
                     repository.deduplicateLibrary(_uiState.value.activeUser.id)
                 }
                 _uiState.update {
                     it.copy(
+                        isMergingDuplicates = false,
+                        duplicateMergePreview = null,
                         statusMessage = if (mergedCount > 0) "Successfully merged $mergedCount duplicate entries!" else "No duplicate entries found in your library.",
                         isErrorMessage = false
                     )
@@ -1502,6 +1643,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
+                        isMergingDuplicates = false,
                         statusMessage = "Merge failed: ${e.localizedMessage ?: "Unknown error"}",
                         isErrorMessage = true
                     )
@@ -1510,21 +1652,21 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
         }
     }
 
-    private fun parseFromStream(stream: InputStream, name: String): List<MediaEntry> {
+    private fun parseFromStreamWithErrors(stream: InputStream, name: String): JsonImportResult {
         val fileName = name.lowercase()
         return stream.use { s ->
             when {
                 fileName.endsWith(".tachibk") || fileName.endsWith(".proto.gz") -> {
-                    TachiyomiImporter.parse(s, importAsFavorites = _uiState.value.isTachiyomiImportAsFavorites)
+                    JsonImportResult(entries = TachiyomiImporter.parse(s, importAsFavorites = _uiState.value.isTachiyomiImportAsFavorites))
                 }
                 fileName.endsWith(".xml") || fileName.endsWith(".xml.gz") -> {
-                    MalXmlImporter.parse(s)
+                    JsonImportResult(entries = MalXmlImporter.parse(s))
                 }
                 fileName.endsWith(".csv") -> {
-                    CsvImporter.parse(s)
+                    JsonImportResult(entries = CsvImporter.parse(s))
                 }
                 fileName.endsWith(".json") -> {
-                    JsonImporter.parse(s)
+                    JsonImporter.parseWithReport(s)
                 }
                 fileName.endsWith(".gz") -> {
                     val bytes = s.readBytes()
@@ -1533,26 +1675,27 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                     } catch (_: Exception) {
                         emptyList()
                     }
-                    if (malResult.isNotEmpty()) malResult else TachiyomiImporter.parse(java.io.ByteArrayInputStream(bytes), importAsFavorites = _uiState.value.isTachiyomiImportAsFavorites)
+                    val entries = if (malResult.isNotEmpty()) malResult else TachiyomiImporter.parse(java.io.ByteArrayInputStream(bytes), importAsFavorites = _uiState.value.isTachiyomiImportAsFavorites)
+                    JsonImportResult(entries = entries)
                 }
                 else -> {
                     val bytes = s.readBytes()
                     try {
                         val tachibkResult = TachiyomiImporter.parse(java.io.ByteArrayInputStream(bytes), importAsFavorites = _uiState.value.isTachiyomiImportAsFavorites)
-                        if (tachibkResult.isNotEmpty()) return@use tachibkResult
+                        if (tachibkResult.isNotEmpty()) return@use JsonImportResult(entries = tachibkResult)
                     } catch (_: Exception) {}
 
                     try {
                         val malResult = MalXmlImporter.parse(java.io.ByteArrayInputStream(bytes))
-                        if (malResult.isNotEmpty()) return@use malResult
+                        if (malResult.isNotEmpty()) return@use JsonImportResult(entries = malResult)
                     } catch (_: Exception) {}
 
                     try {
-                        val jsonResult = JsonImporter.parse(java.io.ByteArrayInputStream(bytes))
-                        if (jsonResult.isNotEmpty()) return@use jsonResult
+                        val jsonResult = JsonImporter.parseWithReport(java.io.ByteArrayInputStream(bytes))
+                        if (jsonResult.entries.isNotEmpty()) return@use jsonResult
                     } catch (_: Exception) {}
 
-                    CsvImporter.parse(java.io.ByteArrayInputStream(bytes))
+                    JsonImportResult(entries = CsvImporter.parse(java.io.ByteArrayInputStream(bytes)))
                 }
             }
         }
@@ -1568,7 +1711,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
             _uiState.update {
                 it.copy(
                     isImporting = false,
-                    statusMessage = null,
+                    statusMessage = "No valid media entries found to import",
                     isErrorMessage = true
                 )
             }
@@ -1594,10 +1737,15 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
                 profileName = activeProfileName
             )
 
+            val skipped = (preparedEntries.size - inserted - updated).coerceAtLeast(0)
             _uiState.update {
                 it.copy(
                     isImporting = false,
-                    statusMessage = null,
+                    statusMessage = formatImportStatusMessage(
+                        inserted = inserted,
+                        updated = updated,
+                        skipped = skipped
+                    ),
                     isErrorMessage = false
                 )
             }
@@ -1611,7 +1759,7 @@ class SettingsViewModel(private val repository: MediaRepository) : ViewModel() {
             _uiState.update {
                 it.copy(
                     isImporting = false,
-                    statusMessage = null,
+                    statusMessage = "Import failed: ${e.localizedMessage ?: "Unknown error"}",
                     isErrorMessage = true
                 )
             }

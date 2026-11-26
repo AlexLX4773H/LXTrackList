@@ -31,8 +31,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -82,6 +84,7 @@ import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.data.model.SubCategory
+import com.lx.tracklist.data.model.effectiveMediaTypeFor
 import com.lx.tracklist.ui.components.AddRelatedToLibraryDialog
 import com.lx.tracklist.ui.components.CategorySelectorSheet
 import com.lx.tracklist.ui.components.MediaCard
@@ -96,6 +99,7 @@ import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
 import com.lx.tracklist.ui.theme.ThemeManager
+import com.lx.tracklist.ui.theme.parseHexColor
 import kotlinx.coroutines.launch
 
 private sealed interface HomeTab {
@@ -345,6 +349,7 @@ fun HomeScreen(
                                 onDelete = { viewModel.deleteEntry(entry) },
                                 onEdit = { onEditEntry(entry.id) },
                                 allLibraryEntries = state.allUserEntries,
+                                customCategories = state.customCategories,
                                 onRelatedEntryClick = { onEntryClick(it) },
                                 onAddRelatedItem = { item -> relatedItemToAdd = item }
                             )
@@ -411,6 +416,7 @@ fun HomeScreen(
                     syncCompletedCount = state.syncCompletedCount,
                     syncTotalCount = state.syncTotalCount,
                     categoryName = state.selectedCustomCategory ?: state.selectedCategory.displayName,
+                    selectedMediaType = state.selectedCustomCategory?.let { state.customCategories.effectiveMediaTypeFor(it) } ?: state.selectedCategory,
                     selectedSubCategory = state.selectedSubCategory,
                     selectedStatus = state.selectedStatus,
                     currentTabCount = state.entries.size,
@@ -552,20 +558,6 @@ fun AddSubCategoryDialog(
     )
 }
 
-private fun parseHexColor(hex: String): Color {
-    return try {
-        val clean = hex.removePrefix("#")
-        val colorInt = clean.toLong(16)
-        if (clean.length == 6) {
-            Color(colorInt or 0xFF000000)
-        } else {
-            Color(colorInt)
-        }
-    } catch (_: Exception) {
-        LXPrimaryGreen
-    }
-}
-
 @Composable
 private fun EmptyState(
     categoryName: String,
@@ -607,6 +599,7 @@ fun HomeRefreshDialog(
     syncCompletedCount: Int,
     syncTotalCount: Int,
     categoryName: String,
+    selectedMediaType: MediaType? = null,
     selectedSubCategory: String?,
     selectedStatus: MediaStatus?,
     currentTabCount: Int,
@@ -728,7 +721,7 @@ fun HomeRefreshDialog(
 
     val tabTitle = when {
         selectedSubCategory != null -> "Subcategory: $selectedSubCategory"
-        selectedStatus != null -> "Tab: ${selectedStatus.defaultLabel}"
+        selectedStatus != null -> "Tab: ${selectedMediaType?.let { selectedStatus.getDisplayLabel(it) } ?: selectedStatus.getNeutralLabel()}"
         else -> "Current Tab"
     }
 
@@ -754,7 +747,9 @@ fun HomeRefreshDialog(
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(

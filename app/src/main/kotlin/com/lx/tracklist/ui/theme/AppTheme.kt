@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.lx.tracklist.R
+import com.lx.tracklist.data.model.MediaStatus
 
 enum class ThemePreset(
     val id: String,
@@ -101,6 +102,11 @@ data class LXThemeColors(
     val scoreGold: Color,
     val airingBlue: Color,
     val accentSecondary: Color,
+    val success: Color = Color(0xFF22C55E),
+    val warning: Color = Color(0xFFF59E0B),
+    val info: Color = Color(0xFF4DA8DA),
+    val onAccent: Color = Color.Black,
+    val accent: Color = accentSecondary,
     val isLight: Boolean = false,
     val cardCornerRadius: Dp = 12.dp,
     val cardBorderWidth: Dp = 1.dp,
@@ -192,6 +198,11 @@ fun CustomThemeData.toLXThemeColors(): LXThemeColors {
         scoreGold = score,
         airingBlue = Color(0xFF4EA8DE),
         accentSecondary = accent,
+        success = Color(0xFF22C55E),
+        warning = if (isLight) Color(0xFFD97706) else Color(0xFFF59E0B),
+        info = if (isLight) Color(0xFF0284C7) else Color(0xFF4DA8DA),
+        onAccent = contrastTextOn(prim),
+        accent = accent,
         isLight = isLight,
         cardCornerRadius = 12.dp,
         cardBorderWidth = 1.dp,
@@ -228,6 +239,11 @@ val DefaultDarkColors = LXThemeColors(
     scoreGold = Color(0xFFFFD166),
     airingBlue = Color(0xFF4EA8DE),
     accentSecondary = Color(0xFFC4FF8E),
+    success = Color(0xFFA7EF60),
+    warning = Color(0xFFF59E0B),
+    info = Color(0xFF4DA8DA),
+    onAccent = Color(0xFF000000),
+    accent = Color(0xFFC4FF8E),
     isLight = false,
     fabBadgeShape = "circle"
 )
@@ -249,6 +265,11 @@ val CleanLightColors = LXThemeColors(
     scoreGold = Color(0xFFD97706),
     airingBlue = Color(0xFF0284C7),
     accentSecondary = Color(0xFF3B82F6),
+    success = Color(0xFF059669),
+    warning = Color(0xFFD97706),
+    info = Color(0xFF0284C7),
+    onAccent = Color.White,
+    accent = Color(0xFF3B82F6),
     isLight = true,
     cardCornerRadius = 12.dp,
     cardBorderWidth = 1.dp,
@@ -272,6 +293,11 @@ val CrimsonDarkColors = LXThemeColors(
     scoreGold = Color(0xFFFBBF24),
     airingBlue = Color(0xFF60A5FA),
     accentSecondary = Color(0xFFF87171),
+    success = Color(0xFF22C55E),
+    warning = Color(0xFFF59E0B),
+    info = Color(0xFF60A5FA),
+    onAccent = Color.White,
+    accent = Color(0xFFF87171),
     isLight = false,
     cardCornerRadius = 12.dp,
     cardBorderWidth = 1.dp,
@@ -295,6 +321,11 @@ val SlateBlueGreyColors = LXThemeColors(
     scoreGold = Color(0xFFFBBF24),
     airingBlue = Color(0xFF38BDF8),
     accentSecondary = Color(0xFF818CF8),
+    success = Color(0xFF22C55E),
+    warning = Color(0xFFF59E0B),
+    info = Color(0xFF38BDF8),
+    onAccent = Color(0xFF0B111E),
+    accent = Color(0xFF818CF8),
     isLight = false,
     cardCornerRadius = 12.dp,
     cardBorderWidth = 1.dp,
@@ -318,6 +349,11 @@ val BeyondThemeColors = LXThemeColors(
     scoreGold = Color(0xFFF6E05E),
     airingBlue = Color(0xFF63B3ED),
     accentSecondary = Color(0xFFF6AD55),
+    success = Color(0xFF4ADE80),
+    warning = Color(0xFFF59E0B),
+    info = Color(0xFF63B3ED),
+    onAccent = Color.White,
+    accent = Color(0xFFFC8181),
     isLight = false,
     cardCornerRadius = 10.dp,
     cardBorderWidth = 1.5.dp,
@@ -347,6 +383,11 @@ val SlimeThemeColors = LXThemeColors(
     scoreGold = Color(0xFFFACC15),
     airingBlue = Color(0xFF38BDF8),
     accentSecondary = Color(0xFFFDE047),
+    success = Color(0xFF4ADE80),
+    warning = Color(0xFFFACC15),
+    info = Color(0xFF38BDF8),
+    onAccent = Color(0xFF073B5E),
+    accent = Color(0xFF38BDF8),
     isLight = false,
     cardCornerRadius = 16.dp,
     cardBorderWidth = 2.dp,
@@ -376,6 +417,11 @@ val GateThemeColors = LXThemeColors(
     scoreGold = Color(0xFFF59E0B),
     airingBlue = Color(0xFF60A5FA),
     accentSecondary = Color(0xFFEF4444),
+    success = Color(0xFF22C55E),
+    warning = Color(0xFFF59E0B),
+    info = Color(0xFF60A5FA),
+    onAccent = Color(0xFF141416),
+    accent = Color(0xFFFBBF24),
     isLight = false,
     cardCornerRadius = 8.dp,
     cardBorderWidth = 1.5.dp,
@@ -405,6 +451,11 @@ val SkyThemeColors = LXThemeColors(
     scoreGold = Color(0xFFFB923C),
     airingBlue = Color(0xFF06B6D4),
     accentSecondary = Color(0xFFFB923C),
+    success = Color(0xFF22C55E),
+    warning = Color(0xFFF59E0B),
+    info = Color(0xFF06B6D4),
+    onAccent = Color(0xFF0B132B),
+    accent = Color(0xFF38BDF8),
     isLight = false,
     cardCornerRadius = 12.dp,
     cardBorderWidth = 1.5.dp,
@@ -418,6 +469,26 @@ val SkyThemeColors = LXThemeColors(
 )
 
 val LocalLXColors = staticCompositionLocalOf { DefaultDarkColors }
+
+/** Returns a legible foreground color (dark or white) for drawing text/icons on [backgroundColor]. */
+fun contrastTextOn(backgroundColor: Color): Color {
+    val luminance = (0.2126f * backgroundColor.red) +
+        (0.7152f * backgroundColor.green) +
+        (0.0722f * backgroundColor.blue)
+    return if (luminance > 0.45f) Color(0xFF111827) else Color.White
+}
+
+/** Resolves the semantic color for a [MediaStatus] against this theme palette. */
+fun LXThemeColors.statusColor(status: MediaStatus): Color = when (status) {
+    MediaStatus.WATCHING -> primary
+    MediaStatus.COMPLETED -> success
+    MediaStatus.ON_HOLD -> warning
+    MediaStatus.DROPPED -> error
+    MediaStatus.PLAN_TO_WATCH -> textSecondary
+}
+
+/** Resolves the semantic color for a [MediaStatus] using the active theme colors. */
+fun statusColor(status: MediaStatus): Color = ThemeManager.currentColors.statusColor(status)
 
 data class ThemeCardInsets(
     val outerToInnerStart: Dp,

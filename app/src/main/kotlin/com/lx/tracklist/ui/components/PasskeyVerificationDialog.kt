@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Lock
@@ -35,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -52,6 +55,7 @@ import kotlinx.coroutines.delay
 fun PasskeyVerificationDialog(
     profileName: String,
     expectedPasskey: String,
+    profileId: Long = 0L,
     title: String = "Enter Passkey",
     subtitle: String = "Enter 4-digit passkey for \"$profileName\"",
     dismissButtonText: String = "Cancel",
@@ -60,19 +64,41 @@ fun PasskeyVerificationDialog(
     onSuccess: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var enteredDigits by remember { mutableStateOf("") }
-    var failedAttempts by remember { mutableIntStateOf(0) }
-    var cooldownSecondsRemaining by remember { mutableIntStateOf(0) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val lockoutKey = remember(profileId, profileName) {
+        PasskeyLockoutStore.keyFor(profileId, profileName)
+    }
+    var enteredDigits by remember(lockoutKey) { mutableStateOf("") }
+    var failedAttempts by remember(lockoutKey) {
+        mutableIntStateOf(PasskeyLockoutStore.tracker.stateFor(lockoutKey).failedAttempts)
+    }
+    var cooldownSecondsRemaining by remember(lockoutKey) {
+        mutableIntStateOf(PasskeyLockoutStore.tracker.remainingCooldownSeconds(lockoutKey))
+    }
+    var errorMessage by remember(lockoutKey) {
+        val state = PasskeyLockoutStore.tracker.stateFor(lockoutKey)
+        val remaining = PasskeyLockoutStore.tracker.remainingCooldownSeconds(lockoutKey)
+        mutableStateOf(
+            when {
+                remaining > 0 -> "Incorrect 3 times. Locked for 10s."
+                state.failedAttempts > 0 -> {
+                    val left = 3 - (state.failedAttempts % 3)
+                    "Incorrect passkey (${com.lx.tracklist.util.plural(left, "try", "tries")} left before 10s cooldown)"
+                }
+                else -> null
+            }
+        )
+    }
 
     val isCooldownActive = cooldownSecondsRemaining > 0
 
-    // 10s cooldown countdown timer
-    LaunchedEffect(isCooldownActive) {
+    // 10s cooldown countdown timer synchronized with persisted end timestamp
+    LaunchedEffect(lockoutKey, isCooldownActive) {
         if (isCooldownActive) {
-            while (cooldownSecondsRemaining > 0) {
-                delay(1000L)
-                cooldownSecondsRemaining--
+            while (true) {
+                val remaining = PasskeyLockoutStore.tracker.remainingCooldownSeconds(lockoutKey)
+                cooldownSecondsRemaining = remaining
+                if (remaining <= 0) break
+                delay(250L)
             }
             errorMessage = null
         }
@@ -86,19 +112,14 @@ fun PasskeyVerificationDialog(
 
         if (next.length == 4) {
             if (next == expectedPasskey) {
+                PasskeyLockoutStore.tracker.recordSuccess(lockoutKey)
                 onSuccess()
             } else {
-                val newFailed = failedAttempts + 1
-                failedAttempts = newFailed
+                val failure = PasskeyLockoutStore.tracker.recordFailure(lockoutKey)
+                failedAttempts = failure.failedAttempts
+                cooldownSecondsRemaining = failure.cooldownSecondsRemaining
                 enteredDigits = ""
-
-                if (newFailed % 3 == 0) {
-                    cooldownSecondsRemaining = 10
-                    errorMessage = "Incorrect 3 times. Locked for 10s."
-                } else {
-                    val remainingTries = 3 - (newFailed % 3)
-                    errorMessage = "Incorrect passkey ($remainingTries tries left before 10s cooldown)"
-                }
+                errorMessage = failure.errorMessage
             }
         }
     }
@@ -129,8 +150,18 @@ fun PasskeyVerificationDialog(
             }
         },
         text = {
+            val isCompactHeight = LocalConfiguration.current.screenHeightDp <= 520
+            val keySize = if (isCompactHeight) 44.dp else 54.dp
+            val keypadRowSpacing = if (isCompactHeight) 6.dp else 10.dp
+            val keypadColSpacing = if (isCompactHeight) 12.dp else 16.dp
+            val topGap = if (isCompactHeight) 10.dp else 18.dp
+            val midGap = if (isCompactHeight) 8.dp else 14.dp
+            val digitTextSize = if (isCompactHeight) 18.sp else 20.sp
+
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -140,7 +171,7 @@ fun PasskeyVerificationDialog(
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(topGap))
 
                 // 4 PIN Dots indicator
                 Row(
@@ -151,7 +182,7 @@ fun PasskeyVerificationDialog(
                         val isFilled = i < enteredDigits.length
                         Box(
                             modifier = Modifier
-                                .size(18.dp)
+                                .size(if (isCompactHeight) 14.dp else 18.dp)
                                 .clip(CircleShape)
                                 .background(
                                     when {
@@ -173,7 +204,7 @@ fun PasskeyVerificationDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(midGap))
 
                 // Error or Cooldown Message
                 if (isCooldownActive) {
@@ -196,11 +227,11 @@ fun PasskeyVerificationDialog(
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center
                     )
-                } else {
+                } else if (!isCompactHeight) {
                     Spacer(modifier = Modifier.height(16.dp))
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(midGap))
 
                 // Custom 3x4 Number Keypad
                 val keypadRows = listOf(
@@ -211,17 +242,17 @@ fun PasskeyVerificationDialog(
                 )
 
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(keypadRowSpacing),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     keypadRows.forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(keypadColSpacing)) {
                             row.forEach { key ->
                                 when (key) {
                                     'C' -> {
                                         Box(
                                             modifier = Modifier
-                                                .size(54.dp)
+                                                .size(keySize)
                                                 .clip(CircleShape)
                                                 .clickable(enabled = !isCooldownActive && enteredDigits.isNotEmpty()) {
                                                     enteredDigits = ""
@@ -240,7 +271,7 @@ fun PasskeyVerificationDialog(
                                     'B' -> {
                                         Box(
                                             modifier = Modifier
-                                                .size(54.dp)
+                                                .size(keySize)
                                                 .clip(CircleShape)
                                                 .clickable(enabled = !isCooldownActive && enteredDigits.isNotEmpty()) {
                                                     handleBackspace()
@@ -258,7 +289,7 @@ fun PasskeyVerificationDialog(
                                     else -> {
                                         Box(
                                             modifier = Modifier
-                                                .size(54.dp)
+                                                .size(keySize)
                                                 .clip(CircleShape)
                                                 .background(if (isCooldownActive) LXBackgroundBlack.copy(alpha = 0.4f) else LXSurfaceElevated)
                                                 .border(1.dp, if (isCooldownActive) LXBorder.copy(alpha = 0.3f) else LXBorder, CircleShape)
@@ -269,7 +300,7 @@ fun PasskeyVerificationDialog(
                                         ) {
                                             Text(
                                                 text = key.toString(),
-                                                fontSize = 20.sp,
+                                                fontSize = digitTextSize,
                                                 fontWeight = FontWeight.Bold,
                                                 color = if (isCooldownActive) LXTextSecondary.copy(alpha = 0.4f) else LXTextPrimary
                                             )

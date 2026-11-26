@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.lx.tracklist.data.model.CustomCategory
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
@@ -67,6 +68,7 @@ data class SearchResultItem(
     val totalSeasons: Int? = null,
     val durationMinutes: Int? = null,
     val score: Float? = null,
+    val scoreSource: String? = null,
     val statusText: String? = null,
     val synopsis: String? = null,
     val isAlreadyInLibrary: Boolean = false,
@@ -92,8 +94,21 @@ data class SearchResultItem(
     val imdbId: String? = null,
     val directMalId: Long? = null,
     val directAniListId: Long? = null,
-    val directSiteUrl: String? = null
+    val directSiteUrl: String? = null,
+    val isLightNovel: Boolean = false
 ) {
+    /**
+     * Canonical Light Novel detection rule for search and discovery results, matching
+     * [MediaEntry.isLightNovel] for search items before they are inserted into the library.
+     */
+    fun isLightNovelResult(): Boolean {
+        if (mediaType != MediaType.BOOK) return false
+        if (isLightNovel) return true
+        if (MediaEntry.isLightNovelTypeToken(statusText)) return true
+        val canon = ExternalSources.canonical(externalSource, externalId)
+        return canon == ExternalSources.MAL || canon == ExternalSources.ANILIST
+    }
+
     val originalLanguageDisplayName: String?
         get() = OriginalLanguageRegistry.getDisplayName(originalLanguage)
 
@@ -111,11 +126,10 @@ data class SearchResultItem(
             if (externalId.isBlank() || externalId == "0") return null
 
             val isMangaType = mediaType == MediaType.MANGA || mediaType == MediaType.MANHWA || mediaType == MediaType.BOOK
-            return when {
-                externalSource.equals("MusicBrainz", ignoreCase = true) -> {
-                    "https://musicbrainz.org/recording/$externalId"
-                }
-                externalSource.contains("Apple", ignoreCase = true) || externalSource.contains("iTunes", ignoreCase = true) -> {
+            val canonSource = ExternalSources.canonical(externalSource, externalId)
+            return when (canonSource) {
+                ExternalSources.MUSICBRAINZ -> "https://musicbrainz.org/recording/$externalId"
+                ExternalSources.APPLE_MUSIC -> {
                     val q = listOfNotNull(creator ?: musicArtist, title).joinToString(" ")
                     val encoded = try {
                         android.net.Uri.encode(q)
@@ -124,24 +138,18 @@ data class SearchResultItem(
                     }
                     "https://music.apple.com/us/search?term=$encoded"
                 }
-                externalSource.equals("RAWG", ignoreCase = true) -> {
-                    "https://rawg.io/games/$externalId"
-                }
-                externalSource.equals("IGDB", ignoreCase = true) -> {
-                    "https://www.igdb.com/games/$externalId"
-                }
-                externalSource.equals("TMDB", ignoreCase = true) -> {
+                ExternalSources.RAWG -> "https://rawg.io/games/$externalId"
+                ExternalSources.IGDB -> "https://www.igdb.com/games/$externalId"
+                ExternalSources.TMDB -> {
                     val type = if (mediaType == MediaType.MOVIE) "movie" else "tv"
                     "https://www.themoviedb.org/$type/$externalId"
                 }
-                externalSource.equals("MangaDex", ignoreCase = true) -> {
-                    "https://mangadex.org/title/$externalId"
-                }
-                externalSource.startsWith("AniList", ignoreCase = true) -> {
+                ExternalSources.MANGADEX -> "https://mangadex.org/title/$externalId"
+                ExternalSources.ANILIST -> {
                     val type = if (isMangaType) "manga" else "anime"
                     "https://anilist.co/$type/$externalId"
                 }
-                externalSource.equals("Kitsu", ignoreCase = true) -> {
+                ExternalSources.KITSU -> {
                     val type = if (isMangaType) "manga" else "anime"
                     if (!externalId.all { it.isDigit() } && externalId.isNotBlank()) {
                         "https://kitsu.app/$type/$externalId"
@@ -151,10 +159,8 @@ data class SearchResultItem(
                         "kitsu-resolve://$type?title=$encoded&kitsuId=$kitsuId"
                     }
                 }
-                externalSource.equals("Google Books", ignoreCase = true) -> {
-                    "https://books.google.com/books?id=$externalId"
-                }
-                externalSource.equals("Open Library", ignoreCase = true) -> {
+                ExternalSources.GOOGLE_BOOKS -> "https://books.google.com/books?id=$externalId"
+                ExternalSources.OPEN_LIBRARY -> {
                     val cleanKey = externalId.removePrefix("/works/").removePrefix("/").trim()
                     "https://openlibrary.org/works/$cleanKey"
                 }
@@ -166,17 +172,17 @@ data class SearchResultItem(
         }
 
     val openWebLabel: String
-        get() = when {
-            externalSource.equals("IGDB", ignoreCase = true) -> "Open IGDB"
-            externalSource.equals("RAWG", ignoreCase = true) -> "Open RAWG"
-            externalSource.equals("TMDB", ignoreCase = true) -> "Open TMDB"
-            externalSource.equals("MangaDex", ignoreCase = true) -> "Open MangaDex"
-            externalSource.startsWith("AniList", ignoreCase = true) -> "Open AniList"
-            externalSource.equals("Kitsu", ignoreCase = true) -> "Open Kitsu"
-            externalSource.equals("Google Books", ignoreCase = true) -> "Open Books"
-            externalSource.equals("Open Library", ignoreCase = true) -> "Open Library"
-            externalSource.equals("MusicBrainz", ignoreCase = true) -> "Open MusicBrainz"
-            externalSource.contains("Apple", ignoreCase = true) || externalSource.contains("iTunes", ignoreCase = true) -> "Open Apple Music"
+        get() = when (ExternalSources.canonical(externalSource, externalId)) {
+            ExternalSources.IGDB -> "Open IGDB"
+            ExternalSources.RAWG -> "Open RAWG"
+            ExternalSources.TMDB -> "Open TMDB"
+            ExternalSources.MANGADEX -> "Open MangaDex"
+            ExternalSources.ANILIST -> "Open AniList"
+            ExternalSources.KITSU -> "Open Kitsu"
+            ExternalSources.GOOGLE_BOOKS -> "Open Books"
+            ExternalSources.OPEN_LIBRARY -> "Open Library"
+            ExternalSources.MUSICBRAINZ -> "Open MusicBrainz"
+            ExternalSources.APPLE_MUSIC -> "Open Apple Music"
             else -> "Open MAL"
         }
 }
@@ -195,6 +201,105 @@ data class SearchUiState(
     val userAddedMessage: String? = null,
     val activeDiscoveryFilter: DiscoveryFilter? = null
 )
+
+/**
+ * Resolves the canonical `(externalSource, externalId)` pair for a [JikanMediaDetails] search or
+ * discovery item, falling back by canonical provider without mislabeling Kitsu or AniList-only items.
+ */
+internal fun buildJikanOrBookLibraryEntry(
+    item: SearchResultItem,
+    targetUserId: Long,
+    status: MediaStatus,
+    customCategory: String? = null,
+    subCategory: String? = null
+): MediaEntry {
+    val details = item.rawJikanDetails
+    val isVideo = item.mediaType == MediaType.ANIME
+    val isBook = item.mediaType == MediaType.BOOK
+    val isLightNovel = item.isLightNovelResult()
+    val resolvedSubCategory = subCategory?.trim()?.takeIf { it.isNotBlank() }
+        ?: if (isLightNovel) "Light Novel" else null
+    val unit = when {
+        isLightNovel -> TrackingUnit.CHAPTERS
+        (details?.totalPages ?: 0) > 0 -> TrackingUnit.PAGES
+        (details?.totalVolumes ?: 0) > 0 -> TrackingUnit.VOLUMES
+        (details?.totalChapters ?: 0) > 0 -> TrackingUnit.CHAPTERS
+        isBook -> TrackingUnit.PAGES
+        else -> TrackingUnit.CHAPTERS
+    }
+    val startEpoch = details?.airedStartDate
+    val endEpoch = details?.airedEndDate ?: if (isBook && !isLightNovel) startEpoch else null
+    val itemExtSrc = ExternalSources.canonical(item.externalSource, item.externalId) ?: item.externalSource
+    val itemScoreSrc = details?.externalScoreSource?.let { ExternalSources.canonical(it) ?: it }
+        ?: item.scoreSource?.let { ExternalSources.canonical(it) ?: it }
+        ?: itemExtSrc
+    return MediaEntry(
+        userId = targetUserId,
+        title = details?.title ?: item.title,
+        alternateTitle = details?.alternateTitle ?: item.alternateTitle,
+        mediaType = item.mediaType,
+        status = status,
+        creator = item.author ?: details?.authors ?: item.creator,
+        customCategory = customCategory,
+        subCategory = resolvedSubCategory,
+        externalId = item.externalId,
+        externalSource = itemExtSrc,
+        externalScore = details?.externalScore ?: item.score,
+        externalScoreSource = itemScoreSrc,
+        coverImageUri = details?.posterUrl ?: item.posterUrl,
+        totalEpisodes = if (isVideo) (details?.totalEpisodes ?: item.totalUnits ?: 0) else 0,
+        airedEpisodes = if (isVideo) (details?.airedEpisodes ?: 0) else 0,
+        broadcastTime = if (isVideo) details?.broadcastTime else null,
+        nextAiringEpoch = if (isVideo) details?.nextAiringEpoch else null,
+        totalChapters = when {
+            isLightNovel -> details?.totalChapters ?: item.totalUnits ?: 0
+            !isVideo && !isBook -> details?.totalChapters ?: item.totalUnits ?: 0
+            else -> details?.totalChapters ?: 0
+        },
+        totalVolumes = if (!isVideo) (details?.totalVolumes ?: item.totalVolumes ?: 0) else 0,
+        totalPages = when {
+            isLightNovel -> 0
+            isBook -> details?.totalPages ?: item.totalUnits ?: 0
+            else -> 0
+        },
+        trackingUnit = unit,
+        durationMinutes = details?.durationMinutes,
+        episodeLengthMinutes = details?.durationMinutes,
+        tags = details?.tags,
+        description = details?.synopsis ?: item.synopsis,
+        airedStartDate = startEpoch,
+        airedEndDate = endEpoch,
+        isAiring = if (isBook && !isLightNovel) false else (details?.isAiring ?: false),
+        originalLanguage = details?.originalLanguage ?: item.originalLanguage
+    )
+}
+
+internal fun resolveJikanSearchExternalRef(
+    details: JikanMediaDetails,
+    fallbackPrefix: String,
+    fallbackIndex: Int,
+    defaultSource: String = ExternalSources.MAL
+): Pair<String, String> {
+    val ref = details.preferredExternalRef()
+    if (ref != null) return ref
+    val canonicalProvider = ExternalSources.canonical(details.sourceProvider) ?: defaultSource
+    val fallbackId = when (canonicalProvider) {
+        ExternalSources.KITSU -> details.kitsuId?.takeIf { it.isNotBlank() }
+        ExternalSources.MANGADEX -> details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+        ExternalSources.ANILIST -> details.aniListId?.takeIf { it > 0 }?.toString()
+        ExternalSources.MAL -> details.malId?.takeIf { it > 0 }?.toString()
+        else -> null
+    } ?: "${fallbackPrefix}_${details.title?.hashCode() ?: fallbackIndex}_$fallbackIndex"
+    return canonicalProvider to fallbackId
+}
+
+/**
+ * Returns the canonical score attribution label for a [JikanMediaDetails] search item, preserving
+ * [JikanMediaDetails.externalScoreSource] separately from the stored primary ID source.
+ */
+internal fun resolveJikanScoreSource(details: JikanMediaDetails, externalSource: String): String {
+    return details.externalScoreSource?.let { ExternalSources.canonical(it) ?: it } ?: externalSource
+}
 
 class SearchViewModel(
     private val repository: MediaRepository
@@ -1275,32 +1380,7 @@ class SearchViewModel(
                         currentState.selectedCategory == SearchCategory.LIGHT_NOVELS && query.length >= 2 -> {
                             val list = BookMetadataManager.searchLightNovels(query, limit = 20, page = nextPage).getOrThrow()
                             list.mapIndexed { idx, details ->
-                                val extSource = details.sourceProvider
-                                val extId = details.malId?.takeIf { it > 0 }?.toString()
-                                    ?: details.aniListId?.takeIf { it > 0 }?.toString()
-                                    ?: "ln_${details.title?.hashCode() ?: idx}_${currentState.results.size + idx}"
-                                val isNyp = (details.airedStartDate != null && details.airedStartDate > System.currentTimeMillis()) ||
-                                        (details.nextAiringEpoch != null && details.nextAiringEpoch > System.currentTimeMillis() && (details.airedEpisodes ?: 0) == 0)
-                                SearchResultItem(
-                                    externalId = extId,
-                                    externalSource = extSource,
-                                    mediaType = MediaType.BOOK,
-                                    title = details.title ?: "Unknown",
-                                    alternateTitle = details.alternateTitle,
-                                    posterUrl = details.posterUrl,
-                                    releaseYear = details.airedStartDate?.let { extractYear(it) },
-                                    originalLanguage = details.originalLanguage ?: "ja",
-                                    totalUnits = details.totalChapters,
-                                    totalVolumes = details.totalVolumes,
-                                    score = details.externalScore,
-                                    statusText = if (isNyp) "NYP" else "Light Novel",
-                                    synopsis = details.synopsis,
-                                    author = details.authors,
-                                    rawJikanDetails = details,
-                                    directMalId = details.malId?.takeIf { it > 0 },
-                                    directAniListId = details.aniListId?.takeIf { it > 0 },
-                                    directSiteUrl = details.url ?: details.webUrl
-                                )
+                                mapLightNovelToSearchResult(details, idx, currentState.results.size + idx)
                             }
                         }
                         currentState.selectedCategory == SearchCategory.BOOKS && query.length >= 2 -> {
@@ -1350,15 +1430,17 @@ class SearchViewModel(
     }
 
     private fun mapGameToSearchResult(game: GameSearchResult): SearchResultItem {
+        val extSource = ExternalSources.canonical(game.externalSource, game.externalId) ?: game.externalSource
         return SearchResultItem(
             externalId = game.externalId,
-            externalSource = game.externalSource,
+            externalSource = extSource,
             mediaType = MediaType.GAME,
             title = game.title,
             alternateTitle = game.alternateTitle,
             posterUrl = game.coverUrl,
             releaseYear = game.releaseYear,
             score = game.score,
+            scoreSource = extSource,
             statusText = if (game.releaseDateMillis != null && game.releaseDateMillis > System.currentTimeMillis()) "NYR" else "Game",
             synopsis = game.summary,
             rawGameResult = game,
@@ -1370,9 +1452,10 @@ class SearchViewModel(
     }
 
     private fun mapMusicToSearchResult(music: MusicSearchResult): SearchResultItem {
+        val extSource = ExternalSources.canonical(music.externalSource, music.externalId) ?: music.externalSource
         return SearchResultItem(
             externalId = music.externalId,
-            externalSource = music.externalSource,
+            externalSource = extSource,
             mediaType = MediaType.MUSIC,
             title = music.title,
             alternateTitle = music.alternateTitle,
@@ -1381,6 +1464,7 @@ class SearchViewModel(
             originalLanguage = music.originalLanguage,
             durationMinutes = music.durationSeconds,
             score = music.score,
+            scoreSource = extSource,
             statusText = "Track",
             synopsis = if (!music.albumName.isNullOrBlank()) "Album: ${music.albumName}" else null,
             creator = music.artist,
@@ -1398,23 +1482,19 @@ class SearchViewModel(
         idx: Int,
         mediaType: MediaType = MediaType.ANIME
     ): SearchResultItem {
-        val extSource = when (details.sourceProvider) {
-            "MangaDex" -> "MangaDex"
-            "Kitsu" -> "Kitsu"
-            "AniList" -> if (details.malId != null && details.malId > 0) "MAL" else "AniList"
-            else -> if (details.sourceProvider.startsWith("AniList")) (if (details.malId != null && details.malId > 0) "MAL" else "AniList") else "MAL"
-        }
-        val extId = if (details.sourceProvider == "MangaDex") {
-            details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-                ?: "md_${details.title?.hashCode() ?: idx}_$idx"
-        } else if (extSource == "AniList" && details.aniListId != null && details.aniListId > 0) {
-            details.aniListId.toString()
-        } else {
-            details.malId?.takeIf { it > 0 }?.toString() ?: details.aniListId?.takeIf { it > 0 }?.toString() ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
-        }
+        val (extSource, extId) = resolveJikanSearchExternalRef(
+            details = details,
+            fallbackPrefix = when {
+                ExternalSources.canonical(details.sourceProvider) == ExternalSources.MANGADEX -> "md"
+                mediaType == MediaType.ANIME -> "anime"
+                else -> "ani"
+            },
+            fallbackIndex = idx
+        )
+        val isNypOrNya = (details.airedStartDate != null && details.airedStartDate > System.currentTimeMillis()) ||
+                (details.nextAiringEpoch != null && details.nextAiringEpoch > System.currentTimeMillis() && (details.airedEpisodes ?: 0) == 0)
         val status = when {
-            details.airedStartDate != null && details.airedStartDate > System.currentTimeMillis() ->
-                if (mediaType.isWatchType) "NYA" else "NYP"
+            isNypOrNya -> if (mediaType.isWatchType) "NYA" else "NYP"
             mediaType == MediaType.ANIME -> if (details.isAiring == true) "Airing" else "Finished"
             mediaType == MediaType.MANGA || mediaType == MediaType.MANHWA -> if (details.isAiring == true) "Publishing" else "Finished"
             mediaType == MediaType.BOOK -> "Light Novel"
@@ -1439,22 +1519,60 @@ class SearchViewModel(
             totalVolumes = details.totalVolumes,
             durationMinutes = details.durationMinutes,
             score = details.externalScore,
+            scoreSource = resolveJikanScoreSource(details, extSource),
             statusText = status,
             synopsis = details.synopsis,
             author = details.authors,
             rawJikanDetails = details,
-            directMalId = details.malId,
-            directAniListId = details.aniListId
+            directMalId = details.malId?.takeIf { it > 0 },
+            directAniListId = details.aniListId?.takeIf { it > 0 },
+            directSiteUrl = details.url ?: details.webUrl,
+            isLightNovel = (mediaType == MediaType.BOOK)
+        )
+    }
+
+    private fun mapLightNovelToSearchResult(details: JikanMediaDetails, idx: Int, offsetIdx: Int = idx): SearchResultItem {
+        val (extSource, extId) = resolveJikanSearchExternalRef(
+            details = details,
+            fallbackPrefix = "ln",
+            fallbackIndex = offsetIdx,
+            defaultSource = ExternalSources.ANILIST
+        )
+        val isNyp = (details.airedStartDate != null && details.airedStartDate > System.currentTimeMillis()) ||
+                (details.nextAiringEpoch != null && details.nextAiringEpoch > System.currentTimeMillis() && (details.airedEpisodes ?: 0) == 0)
+        return SearchResultItem(
+            externalId = extId,
+            externalSource = extSource,
+            mediaType = MediaType.BOOK,
+            title = details.title ?: "Unknown",
+            alternateTitle = details.alternateTitle,
+            posterUrl = details.posterUrl,
+            releaseYear = details.airedStartDate?.let { extractYear(it) },
+            originalLanguage = details.originalLanguage ?: "ja",
+            totalUnits = details.totalChapters,
+            totalVolumes = details.totalVolumes,
+            score = details.externalScore,
+            scoreSource = resolveJikanScoreSource(details, extSource),
+            statusText = if (isNyp) "NYP" else "Light Novel",
+            synopsis = details.synopsis,
+            author = details.authors,
+            rawJikanDetails = details,
+            directMalId = details.malId?.takeIf { it > 0 },
+            directAniListId = details.aniListId?.takeIf { it > 0 },
+            directSiteUrl = details.url ?: details.webUrl,
+            isLightNovel = true
         )
     }
 
     private fun mapBookToSearchResult(book: BookDetails, idx: Int): SearchResultItem {
         val jikanDetails = book.toJikanMediaDetails()
         val extId = if (book.id.isNotBlank()) book.id else "book_${book.title.hashCode()}_$idx"
+        val extSource = ExternalSources.canonical(book.sourceProvider) ?: book.sourceProvider
+        val scoreSrc = (book.scoreSource ?: extSource).let { ExternalSources.canonical(it) ?: it }
         val synopsisText = book.description?.takeIf { it.isNotBlank() } ?: book.buildDescriptionWithMetadata()
         return SearchResultItem(
             externalId = extId,
-            externalSource = book.sourceProvider,
+            externalSource = extSource,
             mediaType = MediaType.BOOK,
             title = book.title,
             alternateTitle = book.subtitle,
@@ -1463,6 +1581,7 @@ class SearchViewModel(
             originalLanguage = book.language,
             totalUnits = book.pageCount,
             score = book.averageScore,
+            scoreSource = scoreSrc,
             statusText = "Book",
             synopsis = synopsisText,
             author = book.authorString.takeIf { it.isNotBlank() },
@@ -1476,7 +1595,7 @@ class SearchViewModel(
     private fun mapTmdbToSearchResult(tmdb: TmdbSearchResult, isMovie: Boolean): SearchResultItem {
         return SearchResultItem(
             externalId = tmdb.tmdbId.toString(),
-            externalSource = "TMDB",
+            externalSource = ExternalSources.TMDB,
             mediaType = if (isMovie) MediaType.MOVIE else MediaType.SHOW,
             title = tmdb.title,
             alternateTitle = tmdb.originalTitle,
@@ -1484,6 +1603,7 @@ class SearchViewModel(
             releaseYear = tmdb.releaseYear,
             originalLanguage = tmdb.originalLanguage,
             score = tmdb.voteAverage,
+            scoreSource = ExternalSources.TMDB,
             statusText = if (isMovie) "Movie" else "TV Show",
             synopsis = tmdb.overview,
             rawTmdbResult = tmdb
@@ -1780,31 +1900,7 @@ class SearchViewModel(
                             }
 
                             combined.mapIndexed { idx, details ->
-                                val extId = details.malId?.takeIf { it > 0 }?.toString()
-                                    ?: details.aniListId?.takeIf { it > 0 }?.toString()
-                                    ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
-                                val extSource = if (details.sourceProvider == "AniList" && (details.malId == null || details.malId == 0L)) "AniList" else "MAL"
-                                val isNya = (details.airedStartDate != null && details.airedStartDate > System.currentTimeMillis()) ||
-                                        (details.nextAiringEpoch != null && details.nextAiringEpoch > System.currentTimeMillis() && (details.airedEpisodes ?: 0) == 0)
-                                SearchResultItem(
-                                    externalId = extId,
-                                    externalSource = extSource,
-                                    mediaType = MediaType.ANIME,
-                                    title = details.title ?: "Unknown",
-                                    alternateTitle = details.alternateTitle,
-                                    posterUrl = details.posterUrl,
-                                    releaseYear = details.airedStartDate?.let { extractYear(it) },
-                                    originalLanguage = details.originalLanguage ?: "ja",
-                                    totalUnits = details.totalEpisodes,
-                                    durationMinutes = details.durationMinutes,
-                                    score = details.externalScore,
-                                    statusText = if (isNya) "NYA" else if (details.isAiring == true) "Airing" else "Finished",
-                                    synopsis = details.synopsis,
-                                    rawJikanDetails = details,
-                                    directMalId = details.malId?.takeIf { it > 0 },
-                                    directAniListId = details.aniListId?.takeIf { it > 0 },
-                                    directSiteUrl = details.url ?: details.webUrl
-                                )
+                                mapJikanToSearchResult(details, idx, MediaType.ANIME)
                             }
                         }
                     }
@@ -1901,42 +1997,7 @@ class SearchViewModel(
                             }
 
                             combined.mapIndexed { idx, details ->
-                                val extSource = when (details.sourceProvider) {
-                                    "MangaDex" -> "MangaDex"
-                                    "Kitsu" -> "Kitsu"
-                                    "AniList" -> "AniList"
-                                    else -> if (details.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
-                                }
-                                val extId = if (details.sourceProvider == "MangaDex") {
-                                    details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-                                        ?: "md_${details.title?.hashCode() ?: idx}_$idx"
-                                } else {
-                                    details.malId?.takeIf { it > 0 }?.toString()
-                                        ?: details.aniListId?.takeIf { it > 0 }?.toString()
-                                        ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
-                                }
-                                val isNyp = (details.airedStartDate != null && details.airedStartDate > System.currentTimeMillis()) ||
-                                        (details.nextAiringEpoch != null && details.nextAiringEpoch > System.currentTimeMillis() && (details.airedEpisodes ?: 0) == 0)
-                                SearchResultItem(
-                                    externalId = extId,
-                                    externalSource = extSource,
-                                    mediaType = MediaType.MANGA,
-                                    title = details.title ?: "Unknown",
-                                    alternateTitle = details.alternateTitle,
-                                    posterUrl = details.posterUrl,
-                                    releaseYear = details.airedStartDate?.let { extractYear(it) },
-                                    originalLanguage = details.originalLanguage ?: "ja",
-                                    totalUnits = details.totalChapters,
-                                    totalVolumes = details.totalVolumes,
-                                    score = details.externalScore,
-                                    statusText = if (isNyp) "NYP" else if (details.isAiring == true) "Publishing" else "Finished",
-                                    synopsis = details.synopsis,
-                                    author = details.authors,
-                                    rawJikanDetails = details,
-                                    directMalId = details.malId?.takeIf { it > 0 },
-                                    directAniListId = details.aniListId?.takeIf { it > 0 },
-                                    directSiteUrl = details.url ?: details.webUrl
-                                )
+                                mapJikanToSearchResult(details, idx, MediaType.MANGA)
                             }
                         }
                     }
@@ -2010,143 +2071,30 @@ class SearchViewModel(
                             }
 
                             combined.mapIndexed { idx, details ->
-                                val extSource = when (details.sourceProvider) {
-                                    "MangaDex" -> "MangaDex"
-                                    "Kitsu" -> "Kitsu"
-                                    "AniList" -> "AniList"
-                                    else -> if (details.sourceProvider.startsWith("AniList")) "AniList" else "MAL"
-                                }
-                                val extId = if (details.sourceProvider == "MangaDex") {
-                                    details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-                                        ?: "md_${details.title?.hashCode() ?: idx}_$idx"
-                                } else {
-                                    details.malId?.takeIf { it > 0 }?.toString()
-                                        ?: details.aniListId?.takeIf { it > 0 }?.toString()
-                                        ?: "ani_${details.title?.hashCode() ?: idx}_$idx"
-                                }
-                                val isNyp = (details.airedStartDate != null && details.airedStartDate > System.currentTimeMillis()) ||
-                                        (details.nextAiringEpoch != null && details.nextAiringEpoch > System.currentTimeMillis() && (details.airedEpisodes ?: 0) == 0)
-                                SearchResultItem(
-                                    externalId = extId,
-                                    externalSource = extSource,
-                                    mediaType = MediaType.MANHWA,
-                                    title = details.title ?: "Unknown",
-                                    alternateTitle = details.alternateTitle,
-                                    posterUrl = details.posterUrl,
-                                    releaseYear = details.airedStartDate?.let { extractYear(it) },
-                                    originalLanguage = details.originalLanguage ?: "ko",
-                                    totalUnits = details.totalChapters,
-                                    totalVolumes = details.totalVolumes,
-                                    score = details.externalScore,
-                                    statusText = if (isNyp) "NYP" else if (details.isAiring == true) "Publishing" else "Finished",
-                                    synopsis = details.synopsis,
-                                    author = details.authors,
-                                    rawJikanDetails = details,
-                                    directMalId = details.malId?.takeIf { it > 0 },
-                                    directAniListId = details.aniListId?.takeIf { it > 0 },
-                                    directSiteUrl = details.url ?: details.webUrl
-                                )
+                                mapJikanToSearchResult(details, idx, MediaType.MANHWA)
                             }
                         }
                     }
                     SearchCategory.MOVIES -> {
                         val res = TmdbApiClient.searchMoviesMultiple(query, context)
                         if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to search TMDB movies")
-                        res.getOrDefault(emptyList()).map { tmdb ->
-                            SearchResultItem(
-                                externalId = tmdb.tmdbId.toString(),
-                                externalSource = "TMDB",
-                                mediaType = MediaType.MOVIE,
-                                title = tmdb.title,
-                                alternateTitle = tmdb.originalTitle,
-                                posterUrl = tmdb.posterUrl,
-                                releaseYear = tmdb.releaseYear,
-                                originalLanguage = tmdb.originalLanguage,
-                                score = tmdb.voteAverage,
-                                statusText = "Movie",
-                                synopsis = tmdb.overview,
-                                rawTmdbResult = tmdb
-                            )
-                        }
+                        res.getOrDefault(emptyList()).map { mapTmdbToSearchResult(it, isMovie = true) }
                     }
                     SearchCategory.TV_SHOWS -> {
                         val res = TmdbApiClient.searchTvMultiple(query, context)
                         if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to search TMDB TV")
-                        res.getOrDefault(emptyList()).map { tmdb ->
-                            SearchResultItem(
-                                externalId = tmdb.tmdbId.toString(),
-                                externalSource = "TMDB",
-                                mediaType = MediaType.SHOW,
-                                title = tmdb.title,
-                                alternateTitle = tmdb.originalTitle,
-                                posterUrl = tmdb.posterUrl,
-                                releaseYear = tmdb.releaseYear,
-                                originalLanguage = tmdb.originalLanguage,
-                                score = tmdb.voteAverage,
-                                statusText = "TV Show",
-                                synopsis = tmdb.overview,
-                                rawTmdbResult = tmdb
-                            )
-                        }
+                        res.getOrDefault(emptyList()).map { mapTmdbToSearchResult(it, isMovie = false) }
                     }
                     SearchCategory.BOOKS -> {
                         val res = BookMetadataManager.searchBooks(query, context, limit = 20)
                         if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch books")
-                        res.getOrDefault(emptyList()).mapIndexed { idx, book ->
-                            val jikanDetails = book.toJikanMediaDetails()
-                            val extId = if (book.id.isNotBlank()) book.id else "book_${book.title.hashCode()}_$idx"
-                            val synopsisText = book.description?.takeIf { it.isNotBlank() } ?: book.buildDescriptionWithMetadata()
-                            SearchResultItem(
-                                externalId = extId,
-                                externalSource = book.sourceProvider,
-                                mediaType = MediaType.BOOK,
-                                title = book.title,
-                                alternateTitle = book.subtitle,
-                                posterUrl = book.coverUrl,
-                                releaseYear = book.publishedDate?.take(4),
-                                originalLanguage = book.language,
-                                totalUnits = book.pageCount,
-                                score = book.averageScore,
-                                statusText = "Book",
-                                synopsis = synopsisText,
-                                author = book.authorString.takeIf { it.isNotBlank() },
-                                publisher = book.publisher,
-                                isbn = book.primaryIsbn,
-                                rawBookDetails = book,
-                                rawJikanDetails = jikanDetails
-                            )
-                        }
+                        res.getOrDefault(emptyList()).mapIndexed { idx, book -> mapBookToSearchResult(book, idx) }
                     }
                     SearchCategory.LIGHT_NOVELS -> {
                         val res = BookMetadataManager.searchLightNovels(query, limit = 20)
                         if (res.isFailure) throw res.exceptionOrNull() ?: Exception("Failed to fetch light novels")
                         res.getOrDefault(emptyList()).mapIndexed { idx, details ->
-                            val extSource = details.sourceProvider
-                            val extId = details.malId?.takeIf { it > 0 }?.toString()
-                                ?: details.aniListId?.takeIf { it > 0 }?.toString()
-                                ?: "ln_${details.title?.hashCode() ?: idx}_$idx"
-                            val isNyp = (details.airedStartDate != null && details.airedStartDate > System.currentTimeMillis()) ||
-                                    (details.nextAiringEpoch != null && details.nextAiringEpoch > System.currentTimeMillis() && (details.airedEpisodes ?: 0) == 0)
-                            SearchResultItem(
-                                externalId = extId,
-                                externalSource = extSource,
-                                mediaType = MediaType.BOOK,
-                                title = details.title ?: "Unknown",
-                                alternateTitle = details.alternateTitle,
-                                posterUrl = details.posterUrl,
-                                releaseYear = details.airedStartDate?.let { extractYear(it) },
-                                originalLanguage = details.originalLanguage ?: "ja",
-                                totalUnits = details.totalChapters,
-                                totalVolumes = details.totalVolumes,
-                                score = details.externalScore,
-                                statusText = if (isNyp) "NYP" else "Light Novel",
-                                synopsis = details.synopsis,
-                                author = details.authors,
-                                rawJikanDetails = details,
-                                directMalId = details.malId?.takeIf { it > 0 },
-                                directAniListId = details.aniListId?.takeIf { it > 0 },
-                                directSiteUrl = details.url ?: details.webUrl
-                            )
+                            mapLightNovelToSearchResult(details, idx)
                         }
                     }
                     SearchCategory.GAMES -> {
@@ -2211,7 +2159,14 @@ class SearchViewModel(
                 val targetUserId = repository.activeUser.value.id
                 val entry: MediaEntry = if (item.mediaType == MediaType.GAME) {
                     val fullDetails = if (context != null) {
-                        GameMetadataManager.getGameDetails(context, item.externalId, item.externalSource).getOrNull()
+                        GameMetadataManager.getGameDetails(
+                            context = context,
+                            externalId = item.externalId,
+                            externalSource = item.externalSource,
+                            title = item.title,
+                            alternateTitle = item.alternateTitle,
+                            releaseYear = item.releaseYear
+                        ).getOrNull()
                     } else null
                     val platforms = fullDetails?.platforms?.takeIf { it.isNotEmpty() } ?: item.gamePlatforms
                     val gameGenres = fullDetails?.genres?.takeIf { it.isNotEmpty() } ?: item.gameGenres.takeIf { it.isNotEmpty() } ?: item.rawGameResult?.genres.orEmpty()
@@ -2219,6 +2174,10 @@ class SearchViewModel(
                     val gamePubs = fullDetails?.publishers?.takeIf { it.isNotEmpty() } ?: item.gamePublishers.takeIf { it.isNotEmpty() } ?: item.rawGameResult?.publishers.orEmpty()
                     val gameSummary = fullDetails?.summary ?: item.synopsis
 
+                    val gameExtSrc = (fullDetails?.externalSource ?: item.externalSource)
+                        .let { ExternalSources.canonical(it, fullDetails?.externalId ?: item.externalId) ?: it }
+                    val gameScoreSrc = (fullDetails?.ratingSource ?: item.scoreSource ?: gameExtSrc)
+                        .let { ExternalSources.canonical(it) ?: it }
                     MediaEntry(
                         userId = targetUserId,
                         title = fullDetails?.title ?: item.title,
@@ -2229,9 +2188,9 @@ class SearchViewModel(
                         customCategory = customCategory,
                         subCategory = subCategory,
                         externalId = fullDetails?.externalId ?: item.externalId,
-                        externalSource = fullDetails?.externalSource ?: item.externalSource,
+                        externalSource = gameExtSrc,
                         externalScore = fullDetails?.rating ?: item.score,
-                        externalScoreSource = fullDetails?.ratingSource ?: item.externalSource,
+                        externalScoreSource = gameScoreSrc,
                         coverImageUri = fullDetails?.coverUrl ?: item.posterUrl,
                         tags = gameGenres.joinToString(", ").takeIf { it.isNotBlank() },
                         description = fullDetails?.buildDescriptionWithMetadata()
@@ -2244,7 +2203,7 @@ class SearchViewModel(
                         gameSeriesEntriesJson = null,
                         relatedEntriesJson = if (fullDetails != null && fullDetails.relatedItems.isNotEmpty()) com.google.gson.Gson().toJson(fullDetails.relatedItems) else null
                     )
-                } else if (item.externalSource == "TMDB") {
+                } else if (ExternalSources.canonical(item.externalSource, item.externalId) == ExternalSources.TMDB) {
                     val tmdbId = item.externalId.toLongOrNull() ?: 0L
                     if (item.mediaType == MediaType.MOVIE) {
                         val fullDetails = TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()
@@ -2318,6 +2277,8 @@ class SearchViewModel(
                     val releaseMillis = item.rawMusicResult?.releaseDateMillis
                     val genresStr = item.rawMusicResult?.genres?.joinToString(", ")?.takeIf { it.isNotBlank() }
 
+                    val musicExtSrc = ExternalSources.canonical(item.externalSource, item.externalId) ?: item.externalSource
+                    val musicScoreSrc = item.scoreSource?.let { ExternalSources.canonical(it) ?: it } ?: musicExtSrc
                     MediaEntry(
                         userId = targetUserId,
                         title = item.title,
@@ -2331,9 +2292,9 @@ class SearchViewModel(
                         customCategory = customCategory,
                         subCategory = subCategory,
                         externalId = item.externalId,
-                        externalSource = item.externalSource,
+                        externalSource = musicExtSrc,
                         externalScore = item.score,
-                        externalScoreSource = item.externalSource,
+                        externalScoreSource = musicScoreSrc,
                         coverImageUri = item.posterUrl,
                         durationMinutes = item.durationMinutes,
                         tags = genresStr,
@@ -2346,51 +2307,18 @@ class SearchViewModel(
                     )
                 } else {
                     // MAL / Jikan / Book / Light Novel item
-                    val details = item.rawJikanDetails
-                    val isVideo = item.mediaType == MediaType.ANIME
-                    val isBook = item.mediaType == MediaType.BOOK
-                    val unit = when {
-                        (details?.totalPages ?: 0) > 0 -> TrackingUnit.PAGES
-                        (details?.totalVolumes ?: 0) > 0 -> TrackingUnit.VOLUMES
-                        (details?.totalChapters ?: 0) > 0 -> TrackingUnit.CHAPTERS
-                        isBook -> TrackingUnit.PAGES
-                        else -> TrackingUnit.CHAPTERS
-                    }
-                    val startEpoch = details?.airedStartDate
-                    val endEpoch = details?.airedEndDate ?: if (isBook) startEpoch else null
-                    MediaEntry(
-                        userId = targetUserId,
-                        title = details?.title ?: item.title,
-                        alternateTitle = details?.alternateTitle ?: item.alternateTitle,
-                        mediaType = item.mediaType,
+                    buildJikanOrBookLibraryEntry(
+                        item = item,
+                        targetUserId = targetUserId,
                         status = status,
-                        creator = item.author ?: details?.authors ?: item.creator,
                         customCategory = customCategory,
-                        subCategory = subCategory,
-                        externalId = item.externalId,
-                        externalSource = item.externalSource,
-                        externalScore = details?.externalScore ?: item.score,
-                        externalScoreSource = details?.externalScoreSource ?: item.externalSource,
-                        coverImageUri = details?.posterUrl ?: item.posterUrl,
-                        totalEpisodes = if (isVideo) (details?.totalEpisodes ?: item.totalUnits ?: 0) else 0,
-                        airedEpisodes = if (isVideo) (details?.airedEpisodes ?: 0) else 0,
-                        broadcastTime = if (isVideo) details?.broadcastTime else null,
-                        nextAiringEpoch = if (isVideo) details?.nextAiringEpoch else null,
-                        totalChapters = if (!isVideo && !isBook) (details?.totalChapters ?: item.totalUnits ?: 0) else (details?.totalChapters ?: 0),
-                        totalVolumes = if (!isVideo) (details?.totalVolumes ?: item.totalVolumes ?: 0) else 0,
-                        totalPages = if (isBook) (details?.totalPages ?: item.totalUnits ?: 0) else 0,
-                        trackingUnit = unit,
-                        durationMinutes = details?.durationMinutes,
-                        episodeLengthMinutes = details?.durationMinutes,
-                        tags = details?.tags,
-                        description = details?.synopsis ?: item.synopsis,
-                        airedStartDate = startEpoch,
-                        airedEndDate = endEpoch,
-                        isAiring = if (isBook) false else (details?.isAiring ?: false),
-                        originalLanguage = details?.originalLanguage ?: item.originalLanguage
+                        subCategory = subCategory
                     )
                 }
 
+                if (entry.isLightNovel() && entry.subCategory.equals("Light Novel", ignoreCase = true)) {
+                    repository.ensureSubCategory(MediaType.BOOK.name, "Light Novel", targetUserId)
+                }
                 repository.insert(entry)
                 withContext(Dispatchers.Main) {
                     _uiState.update { it.copy(userAddedMessage = "Added '${entry.title}' to library!") }

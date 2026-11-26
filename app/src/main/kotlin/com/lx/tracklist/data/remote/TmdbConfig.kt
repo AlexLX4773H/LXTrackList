@@ -13,20 +13,33 @@ object TmdbConfig {
 
     const val ATTRIBUTION_TEXT = "This product uses the TMDB API but is not endorsed or certified by TMDB."
 
-    fun getAccessToken(context: Context? = null): String {
-        if (context != null) {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val custom = prefs.getString(KEY_CUSTOM_TOKEN, null)?.trim()
-            if (!custom.isNullOrBlank()) {
-                return custom
-            }
-        }
+    fun getCustomAccessToken(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_CUSTOM_TOKEN, null)?.trim().orEmpty()
+    }
+
+    fun getBuiltInAccessToken(): String {
         val buildConfigToken = try {
             BuildConfig.TMDB_READ_ACCESS_TOKEN.trim()
         } catch (_: Throwable) {
             ""
         }
         return if (buildConfigToken.isNotBlank()) buildConfigToken else FALLBACK_READ_ACCESS_TOKEN
+    }
+
+    fun getAccessToken(context: Context? = null): String {
+        if (context != null) {
+            val custom = getCustomAccessToken(context)
+            if (custom.isNotBlank()) {
+                return custom
+            }
+        }
+        return getBuiltInAccessToken()
+    }
+
+    fun getAccessTokenState(context: Context? = null): ApiKeyState {
+        val custom = context?.let { getCustomAccessToken(it) }
+        return resolveApiKeyState(custom, getBuiltInAccessToken())
     }
 
     fun isConfigured(context: Context? = null): Boolean {

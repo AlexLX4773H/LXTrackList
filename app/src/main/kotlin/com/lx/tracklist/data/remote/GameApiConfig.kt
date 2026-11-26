@@ -18,57 +18,75 @@ object GameApiConfig {
     const val RAWG_ATTRIBUTION_TEXT = "Game data powered by RAWG"
     const val IGDB_ATTRIBUTION_TEXT = "Game metadata and cover art provided by IGDB"
 
-    fun getIgdbClientId(context: Context? = null): String {
-        if (context != null) {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val custom = prefs.getString(KEY_CUSTOM_IGDB_CLIENT_ID, null)?.trim()
-            if (!custom.isNullOrBlank()) return custom
-        }
+    private fun readPrefString(context: Context, key: String): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(key, null)?.trim().orEmpty()
+    }
+
+    private inline fun readBuiltInString(provider: () -> String): String {
         return try {
-            BuildConfig.IGDB_CLIENT_ID.trim()
+            provider().trim()
         } catch (_: Throwable) {
             ""
         }
     }
 
-    fun getIgdbClientSecret(context: Context? = null): String {
+    private inline fun resolveEffectiveKey(
+        context: Context?,
+        prefKey: String,
+        builtInProvider: () -> String
+    ): String {
         if (context != null) {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val custom = prefs.getString(KEY_CUSTOM_IGDB_CLIENT_SECRET, null)?.trim()
-            if (!custom.isNullOrBlank()) return custom
+            val custom = readPrefString(context, prefKey)
+            if (custom.isNotBlank()) return custom
         }
-        return try {
-            BuildConfig.IGDB_CLIENT_SECRET.trim()
-        } catch (_: Throwable) {
-            ""
-        }
+        return readBuiltInString(builtInProvider)
     }
 
-    fun getRawgApiKey(context: Context? = null): String {
-        if (context != null) {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val custom = prefs.getString(KEY_CUSTOM_RAWG_API_KEY, null)?.trim()
-            if (!custom.isNullOrBlank()) return custom
-        }
-        return try {
-            BuildConfig.RAWG_API_KEY.trim()
-        } catch (_: Throwable) {
-            ""
-        }
+    private inline fun resolveSlotState(
+        context: Context?,
+        prefKey: String,
+        builtInProvider: () -> String
+    ): ApiKeyState {
+        val custom = context?.let { readPrefString(it, prefKey) }
+        return resolveApiKeyState(custom, readBuiltInString(builtInProvider))
     }
 
-    fun getSteamGridDbApiKey(context: Context? = null): String {
-        if (context != null) {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val custom = prefs.getString(KEY_CUSTOM_STEAMGRIDDB_API_KEY, null)?.trim()
-            if (!custom.isNullOrBlank()) return custom
-        }
-        return try {
-            BuildConfig.STEAMGRIDDB_API_KEY.trim()
-        } catch (_: Throwable) {
-            ""
-        }
-    }
+    fun getCustomIgdbClientId(context: Context): String =
+        readPrefString(context, KEY_CUSTOM_IGDB_CLIENT_ID)
+
+    fun getCustomIgdbClientSecret(context: Context): String =
+        readPrefString(context, KEY_CUSTOM_IGDB_CLIENT_SECRET)
+
+    fun getCustomRawgApiKey(context: Context): String =
+        readPrefString(context, KEY_CUSTOM_RAWG_API_KEY)
+
+    fun getCustomSteamGridDbApiKey(context: Context): String =
+        readPrefString(context, KEY_CUSTOM_STEAMGRIDDB_API_KEY)
+
+    fun getIgdbClientId(context: Context? = null): String =
+        resolveEffectiveKey(context, KEY_CUSTOM_IGDB_CLIENT_ID) { BuildConfig.IGDB_CLIENT_ID }
+
+    fun getIgdbClientSecret(context: Context? = null): String =
+        resolveEffectiveKey(context, KEY_CUSTOM_IGDB_CLIENT_SECRET) { BuildConfig.IGDB_CLIENT_SECRET }
+
+    fun getRawgApiKey(context: Context? = null): String =
+        resolveEffectiveKey(context, KEY_CUSTOM_RAWG_API_KEY) { BuildConfig.RAWG_API_KEY }
+
+    fun getSteamGridDbApiKey(context: Context? = null): String =
+        resolveEffectiveKey(context, KEY_CUSTOM_STEAMGRIDDB_API_KEY) { BuildConfig.STEAMGRIDDB_API_KEY }
+
+    fun getIgdbClientIdState(context: Context? = null): ApiKeyState =
+        resolveSlotState(context, KEY_CUSTOM_IGDB_CLIENT_ID) { BuildConfig.IGDB_CLIENT_ID }
+
+    fun getIgdbClientSecretState(context: Context? = null): ApiKeyState =
+        resolveSlotState(context, KEY_CUSTOM_IGDB_CLIENT_SECRET) { BuildConfig.IGDB_CLIENT_SECRET }
+
+    fun getRawgApiKeyState(context: Context? = null): ApiKeyState =
+        resolveSlotState(context, KEY_CUSTOM_RAWG_API_KEY) { BuildConfig.RAWG_API_KEY }
+
+    fun getSteamGridDbApiKeyState(context: Context? = null): ApiKeyState =
+        resolveSlotState(context, KEY_CUSTOM_STEAMGRIDDB_API_KEY) { BuildConfig.STEAMGRIDDB_API_KEY }
 
     fun isIgdbConfigured(context: Context? = null): Boolean {
         return getIgdbClientId(context).isNotBlank() && getIgdbClientSecret(context).isNotBlank()

@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.lx.tracklist.data.model.ExternalSources
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -238,7 +239,7 @@ object ITunesApiClient {
                 list.add(
                     MusicSearchResult(
                         externalId = trackId,
-                        externalSource = "iTunes",
+                        externalSource = ExternalSources.APPLE_MUSIC,
                         title = title,
                         artist = artist,
                         albumName = album,
@@ -354,7 +355,7 @@ object ITunesApiClient {
                 list.add(
                     MusicSearchResult(
                         externalId = externalId,
-                        externalSource = "Apple Music",
+                        externalSource = ExternalSources.APPLE_MUSIC,
                         title = title,
                         artist = artist,
                         albumName = album,
@@ -431,7 +432,7 @@ object ITunesApiClient {
                 return@withContext Result.success(
                     MusicSearchResult(
                         externalId = id,
-                        externalSource = "Apple Music",
+                        externalSource = ExternalSources.APPLE_MUSIC,
                         title = title,
                         artist = artist,
                         albumName = album,
@@ -502,7 +503,7 @@ object ITunesApiClient {
                         releaseDateMillis = releaseDateMillis,
                         totalTracks = trackCount,
                         genres = listOfNotNull(genre),
-                        externalSource = "Apple Music",
+                        externalSource = ExternalSources.APPLE_MUSIC,
                         webUrl = webUrl
                     )
                 )
@@ -579,7 +580,7 @@ object ITunesApiClient {
                     tracks.add(
                         MusicSearchResult(
                             externalId = trackId,
-                            externalSource = "Apple Music",
+                            externalSource = ExternalSources.APPLE_MUSIC,
                             title = trackTitle,
                             artist = trackArtist,
                             albumName = albumTitle,
@@ -615,7 +616,7 @@ object ITunesApiClient {
                     totalTracks = sortedTracks.size,
                     genres = listOfNotNull(albumGenre),
                     tracks = sortedTracks,
-                    externalSource = "Apple Music",
+                    externalSource = ExternalSources.APPLE_MUSIC,
                     webUrl = albumViewUrl ?: "https://music.apple.com"
                 )
             )

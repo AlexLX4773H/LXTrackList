@@ -24,7 +24,7 @@ object MangaDexApiClient {
     const val COVERS_CDN_URL = "https://uploads.mangadex.org/covers"
     private const val USER_AGENT = "LXTrackList/1.0 (Android; https://github.com/RyanYuuki/AnymeX)"
 
-    private var okHttpClient = OkHttpClient.Builder()
+    internal var okHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
@@ -128,10 +128,14 @@ object MangaDexApiClient {
                 }
             }
 
-            Log.d(TAG, "MangaDex search for '$cleanQuery' returned ${results.size} results (isManhwa=$isManhwa)")
+            try {
+                Log.d(TAG, "MangaDex search for '$cleanQuery' returned ${results.size} results (isManhwa=$isManhwa)")
+            } catch (_: RuntimeException) {}
             Result.success(results)
         } catch (e: Exception) {
-            Log.e(TAG, "Exception during MangaDex search for '$cleanQuery'", e)
+            try {
+                Log.e(TAG, "Exception during MangaDex search for '$cleanQuery'", e)
+            } catch (_: RuntimeException) {}
             Result.failure(e)
         }
     }
@@ -190,13 +194,12 @@ object MangaDexApiClient {
             return Result.failure(NotFoundException("No MangaDex results found for '$cleanTitle'"))
         }
 
-        // Find exact or closest title match, otherwise take the first
+        // JOB-13: Require a confident exact match; never fall back to blind list.first().
         val exactMatch = list.firstOrNull {
-            it.title.equals(cleanTitle, ignoreCase = true) ||
-                    it.alternateTitle?.split("\n")?.any { alt -> alt.equals(cleanTitle, ignoreCase = true) } == true
-        }
+            TachiyomiResolverManager.isConfidentExactMatch(cleanTitle, it)
+        } ?: return Result.failure(NotFoundException("No confident MangaDex match found for '$cleanTitle'"))
 
-        return Result.success(exactMatch ?: list.first())
+        return Result.success(exactMatch)
     }
 
     fun parseMangaDexItem(mangaObj: JsonObject): JikanMediaDetails? {

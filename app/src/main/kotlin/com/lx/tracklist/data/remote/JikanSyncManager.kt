@@ -8,6 +8,7 @@ import coil.request.ImageRequest
 import com.google.gson.Gson
 import com.lx.tracklist.LXApplication
 import com.lx.tracklist.data.local.FailedCoverTracker
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.repository.MediaRepository
@@ -70,8 +71,7 @@ object JikanSyncManager {
     fun isEligibleMediaForMal(mediaType: MediaType): Boolean {
         return mediaType == MediaType.ANIME ||
                mediaType == MediaType.MANGA ||
-               mediaType == MediaType.MANHWA ||
-               mediaType == MediaType.BOOK
+               mediaType == MediaType.MANHWA
     }
 
     fun isTachiyomiSource(entry: MediaEntry): Boolean {
@@ -96,18 +96,18 @@ object JikanSyncManager {
             rawId
         }
         if (id.isBlank() || id.startsWith("/")) return false
-        if (src.equals("MAL", ignoreCase = true) || src.equals("MyAnimeList", ignoreCase = true) || src.equals("AniList", ignoreCase = true)) {
+        val canonSrc = ExternalSources.canonical(src, id)
+        if (canonSrc == ExternalSources.MAL || canonSrc == ExternalSources.ANILIST) {
             return id.toLongOrNull() != null
         }
-        if (src.equals("MangaDex", ignoreCase = true)) {
+        if (canonSrc == ExternalSources.MANGADEX) {
             return id.length >= 32
         }
-        if (src.equals("Kitsu", ignoreCase = true)) {
+        if (canonSrc == ExternalSources.KITSU) {
             return id.isNotBlank()
         }
-        if (src.equals("MusicBrainz", ignoreCase = true) ||
-            src.equals("Apple Music", ignoreCase = true) ||
-            src.equals("iTunes", ignoreCase = true) ||
+        if (canonSrc == ExternalSources.MUSICBRAINZ ||
+            canonSrc == ExternalSources.APPLE_MUSIC ||
             entry.mediaType == MediaType.MUSIC
         ) {
             return id.isNotBlank()
@@ -131,16 +131,24 @@ object JikanSyncManager {
     }
 
     fun isMalSource(entry: MediaEntry): Boolean {
-        if (isTachiyomiSource(entry)) return false
-        val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim()
-        val isSupportedSource = src.isNullOrBlank() ||
-                src.equals("MAL", ignoreCase = true) ||
-                src.equals("MyAnimeList", ignoreCase = true) ||
-                src.equals("MangaDex", ignoreCase = true) ||
-                src.equals("AniList", ignoreCase = true) ||
-                src.equals("Kitsu", ignoreCase = true)
-        val hasValidId = hasValidExternalId(entry)
-        return isSupportedSource && (hasValidId || isEligibleMediaForMal(entry.mediaType))
+        if (SyncRouter.jobFor(entry) != SyncJob.JIKAN) return false
+        if (!isEligibleMediaForMal(entry.mediaType) && entry.mediaType != MediaType.MOVIE && entry.mediaType != MediaType.SHOW) {
+            return false
+        }
+
+        val rawSrc = entry.externalSource ?: entry.foreignDatabaseSource
+        val rawId = entry.externalId ?: entry.foreignDatabaseId
+        val canonicalSrc = ExternalSources.canonical(rawSrc, rawId)
+
+        if (entry.mediaType == MediaType.MOVIE || entry.mediaType == MediaType.SHOW) {
+            return canonicalSrc == ExternalSources.MAL || canonicalSrc == ExternalSources.ANILIST
+        }
+
+        return canonicalSrc == null ||
+            canonicalSrc == ExternalSources.MAL ||
+            canonicalSrc == ExternalSources.MANGADEX ||
+            canonicalSrc == ExternalSources.ANILIST ||
+            canonicalSrc == ExternalSources.KITSU
     }
 
     fun isMangaType(mediaType: MediaType): Boolean {
@@ -257,7 +265,7 @@ object JikanSyncManager {
                         statusMessage = "Checking cover images..."
                     )
                 }
-                FailedCoverTracker.probeBrokenCovers(malEntries)
+                FailedCoverTracker.probeBrokenCovers(malEntries, context)
             }
 
             val eligible = if (targetEntryIds != null) malEntries else malEntries.filter { needsSync(it, forceRefresh) }
@@ -475,6 +483,50 @@ object JikanSyncManager {
         }
     }
 
+    internal enum class JikanLookupKind {
+        MANGADEX_ID,
+        ANILIST_ID,
+        KITSU_ID,
+        MAL_ID,
+        TITLE_SEARCH
+    }
+
+    internal data class JikanLookupPlan(
+        val kind: JikanLookupKind,
+        val idOrTitle: String
+    )
+
+    /**
+     * Resolves the authoritative primary lookup strategy from the entry's stored external ID/source
+     * so linked Anime/Manga/Manhwa always query by their stored ID before any title fallback.
+     */
+    internal fun resolveStoredLookupPlan(entry: MediaEntry): JikanLookupPlan {
+        val extIdStr = (entry.externalId ?: entry.foreignDatabaseId)?.trim().orEmpty()
+        val extSrcRaw = entry.externalSource ?: entry.foreignDatabaseSource
+        val canonicalSrc = ExternalSources.canonical(extSrcRaw, extIdStr)
+        val detectedMdUuid = extIdStr.takeIf { it.isNotBlank() }?.let { extractMangaDexUuid(it) }
+
+        if ((canonicalSrc == ExternalSources.MANGADEX && extIdStr.isNotBlank()) || detectedMdUuid != null) {
+            return JikanLookupPlan(JikanLookupKind.MANGADEX_ID, detectedMdUuid ?: extIdStr)
+        }
+        if (canonicalSrc == ExternalSources.ANILIST) {
+            val aniId = extIdStr.toLongOrNull()?.takeIf { it > 0L }
+            if (aniId != null) {
+                return JikanLookupPlan(JikanLookupKind.ANILIST_ID, aniId.toString())
+            }
+        }
+        if (canonicalSrc == ExternalSources.KITSU && extIdStr.isNotBlank()) {
+            return JikanLookupPlan(JikanLookupKind.KITSU_ID, extIdStr)
+        }
+        if (canonicalSrc == null || canonicalSrc == ExternalSources.MAL) {
+            val malId = extIdStr.toLongOrNull()?.takeIf { it > 0L }
+            if (malId != null) {
+                return JikanLookupPlan(JikanLookupKind.MAL_ID, malId.toString())
+            }
+        }
+        return JikanLookupPlan(JikanLookupKind.TITLE_SEARCH, entry.title)
+    }
+
     private suspend fun syncSingleEntry(
         context: Context,
         repository: MediaRepository,
@@ -482,33 +534,29 @@ object JikanSyncManager {
         profileId: Long,
         forceRefresh: Boolean
     ): JikanSyncItemResult {
-        val extIdStr = (entry.externalId ?: entry.foreignDatabaseId)?.trim()
         val isManga = isMangaType(entry.mediaType)
         val isManhwa = entry.mediaType == MediaType.MANHWA
+        val plan = resolveStoredLookupPlan(entry)
+        val aniListId = if (plan.kind == JikanLookupKind.ANILIST_ID) plan.idOrTitle.toLongOrNull() else null
+        val malId = if (plan.kind == JikanLookupKind.MAL_ID) plan.idOrTitle.toLongOrNull() else null
 
-        val isMangaDexSource = entry.externalSource?.equals("MangaDex", ignoreCase = true) == true
-        val isAniListSource = entry.externalSource?.equals("AniList", ignoreCase = true) == true
-        val detectedMdUuid = extIdStr?.let { extractMangaDexUuid(it) }
-        val mangaDexIdToUse = if (isMangaDexSource) extIdStr else detectedMdUuid
-        val aniListId = if (isAniListSource) extIdStr?.toLongOrNull()?.takeIf { it > 0 } else null
-        val malId = if (!isMangaDexSource && !isAniListSource && detectedMdUuid == null) extIdStr?.toLongOrNull() else null
-
-        suspend fun fetchPrimary(): Result<JikanMediaDetails> = when {
-            !mangaDexIdToUse.isNullOrBlank() ->
-                MangaDexApiClient.fetchMangaDetails(mangaDexIdToUse)
-            isManhwa && !entry.title.isNullOrBlank() ->
-                MangaDexApiClient.searchMangaDetailsByTitle(entry.title, isManhwa = true)
-            aniListId != null ->
-                JikanApiClient.queryAniListById(aniListId = aniListId, isManga = isManga)
-            malId != null && malId > 0 -> {
+        suspend fun fetchPrimary(): Result<JikanMediaDetails> = when (plan.kind) {
+            JikanLookupKind.MANGADEX_ID ->
+                MangaDexApiClient.fetchMangaDetails(plan.idOrTitle)
+            JikanLookupKind.ANILIST_ID ->
+                JikanApiClient.queryAniListById(aniListId = plan.idOrTitle.toLong(), isManga = isManga)
+            JikanLookupKind.KITSU_ID ->
+                KitsuApiClient.fetchDetailsById(plan.idOrTitle, isAnime = !isManga)
+            JikanLookupKind.MAL_ID -> {
+                val id = plan.idOrTitle.toLong()
                 if (entry.isAiring && !isManga) {
-                    val aniRes = JikanApiClient.queryAniList(malId = malId, isManga = false)
-                    if (aniRes.isSuccess) aniRes else JikanApiClient.fetchMediaDetails(malId = malId, isManga = false, title = entry.title, isManhwa = false)
+                    val aniRes = JikanApiClient.queryAniList(malId = id, isManga = false)
+                    if (aniRes.isSuccess) aniRes else JikanApiClient.fetchMediaDetails(malId = id, isManga = false, title = entry.title, isManhwa = false)
                 } else {
-                    JikanApiClient.fetchMediaDetails(malId = malId, isManga = isManga, title = entry.title, isManhwa = isManhwa)
+                    JikanApiClient.fetchMediaDetails(malId = id, isManga = isManga, title = entry.title, isManhwa = isManhwa)
                 }
             }
-            else ->
+            JikanLookupKind.TITLE_SEARCH ->
                 JikanApiClient.searchMediaDetailsByTitle(title = entry.title, isManga = isManga, isManhwa = isManhwa)
         }
 
@@ -520,390 +568,423 @@ object JikanSyncManager {
             detailsResult = fetchPrimary()
         }
 
+        if (detailsResult.isFailure && plan.kind != JikanLookupKind.TITLE_SEARCH) {
+            val titleRes = JikanApiClient.searchMediaDetailsByTitle(
+                title = entry.title,
+                isManga = isManga,
+                isManhwa = isManhwa
+            )
+            if (titleRes.isSuccess) {
+                detailsResult = titleRes
+                usedFallbackResolution = true
+            }
+        }
+
         if (detailsResult.isFailure) {
-            if (malId != null || aniListId != null || !mangaDexIdToUse.isNullOrBlank()) {
-                val titleRes = JikanApiClient.searchMediaDetailsByTitle(
-                    title = entry.title,
+            val descAniIds = TachiyomiResolverManager.extractAniListIdsFromDescription(entry.description ?: entry.notes, preferManga = isManga)
+                .filter { it != aniListId }
+            for (descId in descAniIds) {
+                val res = JikanApiClient.queryAniListById(aniListId = descId, isManga = isManga)
+                if (res.isSuccess) {
+                    detailsResult = res
+                    usedFallbackResolution = true
+                    break
+                }
+            }
+        }
+
+        if (detailsResult.isFailure) {
+            val altTitles = TachiyomiResolverManager.getCombinedAlternateTitles(entry)
+            for (alt in altTitles.take(3)) {
+                val res = JikanApiClient.searchMediaDetailsByTitle(
+                    title = alt,
                     isManga = isManga,
                     isManhwa = isManhwa
                 )
-                if (titleRes.isSuccess) {
-                    detailsResult = titleRes
+                if (res.isSuccess) {
+                    detailsResult = res
                     usedFallbackResolution = true
-                }
-            }
-
-            if (detailsResult.isFailure) {
-                val descAniIds = TachiyomiResolverManager.extractAniListIdsFromDescription(entry.description ?: entry.notes, preferManga = isManga)
-                    .filter { it != aniListId }
-                for (descId in descAniIds) {
-                    val res = JikanApiClient.queryAniListById(aniListId = descId, isManga = isManga)
-                    if (res.isSuccess) {
-                        detailsResult = res
-                        usedFallbackResolution = true
-                        break
-                    }
-                }
-            }
-
-            if (detailsResult.isFailure) {
-                val altTitles = TachiyomiResolverManager.getCombinedAlternateTitles(entry)
-                for (alt in altTitles.take(3)) {
-                    val res = JikanApiClient.searchMediaDetailsByTitle(
-                        title = alt,
-                        isManga = isManga,
-                        isManhwa = isManhwa
-                    )
-                    if (res.isSuccess) {
-                        detailsResult = res
-                        usedFallbackResolution = true
-                        break
-                    }
+                    break
                 }
             }
         }
 
         if (detailsResult.isSuccess) {
             val details = detailsResult.getOrNull()
-            Log.d(TAG, "Successfully resolved entry '${entry.title}' (malId=${details?.malId}): poster=${details?.posterUrl}, duration=${details?.durationMinutes}, provider=${details?.sourceProvider}")
+            try {
+                Log.d(TAG, "Successfully resolved entry '${entry.title}' (malId=${details?.malId}): poster=${details?.posterUrl}, duration=${details?.durationMinutes}, provider=${details?.sourceProvider}")
+            } catch (_: RuntimeException) {}
             if (details != null) {
-                var hasChanges = false
-                var finalCoverUri: String? = entry.coverImageUri
-                var finalExternalId: String? = entry.externalId
-                var finalExternalSource: String? = entry.externalSource
-
-                // Populate external ID if missing/invalid, or if fallback resolution replaced a dead ID
-                val needsNewExternalId = finalExternalId.isNullOrBlank() || !hasValidExternalId(entry) || usedFallbackResolution
-                if (needsNewExternalId) {
-                    if (details.sourceProvider == "MangaDex") {
+                var candidateExtId: String? = entry.externalId
+                var candidateExtSource: String? = entry.externalSource
+                val needsInitialExternalId = candidateExtId.isNullOrBlank() || !hasValidExternalId(entry)
+                if (needsInitialExternalId) {
+                    val ref = details.preferredExternalRef()
+                    if (ref != null) {
+                        candidateExtSource = ref.first
+                        candidateExtId = ref.second
+                    } else if (ExternalSources.canonical(details.sourceProvider) == ExternalSources.MANGADEX) {
                         val mdId = details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
                         if (!mdId.isNullOrBlank()) {
-                            finalExternalId = mdId
-                            finalExternalSource = "MangaDex"
-                            hasChanges = true
+                            candidateExtId = mdId
+                            candidateExtSource = ExternalSources.MANGADEX
                         }
-                    } else if (details.sourceProvider.contains("AniList")) {
-                        val resolvedId = details.malId?.toString() ?: details.url?.substringAfterLast('/')
-                        if (!resolvedId.isNullOrBlank()) {
-                            finalExternalId = resolvedId
-                            finalExternalSource = if (details.malId != null && details.malId > 0) "MAL" else "AniList"
-                            hasChanges = true
-                        }
-                    } else if (details.sourceProvider.equals("Kitsu", ignoreCase = true)) {
-                        val kitsuId = details.malId?.toString() ?: details.url?.substringAfterLast('/')
-                        if (!kitsuId.isNullOrBlank()) {
-                            finalExternalId = kitsuId
-                            finalExternalSource = "Kitsu"
-                            hasChanges = true
-                        }
-                    } else if (details.malId != null && details.malId > 0) {
-                        finalExternalId = details.malId.toString()
-                        finalExternalSource = "MAL"
-                        hasChanges = true
                     }
                 }
 
-                // Set poster URL if missing, leftover file: URI, broken image URL, or force refreshed
-                val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(entry)
-                val needsPoster = entry.coverImageUri.isNullOrBlank() ||
-                                  entry.coverImageUri.startsWith("file:") ||
-                                  isCoverBroken ||
-                                  forceRefresh
-                if (!details.posterUrl.isNullOrBlank() && needsPoster) {
-                    finalCoverUri = details.posterUrl
-                    hasChanges = true
-
-                    FailedCoverTracker.markSuccess(entry.id, details.posterUrl)
-
-                    try {
-                        val imageLoader = Coil.imageLoader(context)
-                        val request = ImageRequest.Builder(context)
-                            .data(details.posterUrl)
-                            .memoryCachePolicy(CachePolicy.ENABLED)
-                            .diskCachePolicy(CachePolicy.ENABLED)
-                            .build()
-                        imageLoader.enqueue(request)
-                    } catch (_: Exception) {}
-                }
-
-                // Determine runtime for anime/movies/shows
-                val newEpisodeLength = if (entry.mediaType != MediaType.MOVIE && !isManga) {
-                    if (details.durationMinutes != null && details.durationMinutes > 0 &&
-                        (entry.episodeLengthMinutes == null || entry.episodeLengthMinutes == 0 || forceRefresh) &&
-                        details.durationMinutes != entry.episodeLengthMinutes
-                    ) {
-                        hasChanges = true
-                        details.durationMinutes
-                    } else {
-                        entry.episodeLengthMinutes
-                    }
-                } else {
-                    entry.episodeLengthMinutes
-                }
-
-                val newDurationMinutes = if (entry.mediaType == MediaType.MOVIE) {
-                    if (details.durationMinutes != null && details.durationMinutes > 0 &&
-                        (entry.durationMinutes == null || entry.durationMinutes == 0 || forceRefresh) &&
-                        details.durationMinutes != entry.durationMinutes
-                    ) {
-                        hasChanges = true
-                        details.durationMinutes
-                    } else {
-                        entry.durationMinutes
-                    }
-                } else {
-                    entry.durationMinutes
-                }
-
-                // Determine total episodes for anime / shows
-                val newTotalEpisodes = if (!isManga && entry.mediaType != MediaType.MOVIE) {
-                    if (details.totalEpisodes != null && details.totalEpisodes > 0 &&
-                        (entry.totalEpisodes == 0 || forceRefresh) &&
-                        details.totalEpisodes != entry.totalEpisodes
-                    ) {
-                        hasChanges = true
-                        details.totalEpisodes
-                    } else {
-                        entry.totalEpisodes
-                    }
-                } else {
-                    entry.totalEpisodes
-                }
-
-                val isEntryAiring = details.isAiring ?: entry.isAiring
-
-                // Determine chapters & volumes for manga/manhwa/book
-                val newTotalChapters = if (isManga) {
-                    if (details.totalChapters != null && details.totalChapters > 0 &&
-                        (entry.totalChapters == 0 || forceRefresh || isEntryAiring) &&
-                        details.totalChapters != entry.totalChapters
-                    ) {
-                        hasChanges = true
-                        details.totalChapters
-                    } else {
-                        entry.totalChapters
-                    }
-                } else {
-                    entry.totalChapters
-                }
-
-                val newAiredChapters = if (isManga) {
-                    val cand = details.airedChapters ?: if (isEntryAiring && details.totalChapters != null && details.totalChapters > 0) details.totalChapters else null
-                    if (cand != null && cand > 0 && cand != entry.airedChapters) {
-                        hasChanges = true
-                        cand
-                    } else {
-                        entry.airedChapters
-                    }
-                } else {
-                    entry.airedChapters
-                }
-
-                val newTotalVolumes = if (isManga) {
-                    if (details.totalVolumes != null && details.totalVolumes > 0 &&
-                        (entry.totalVolumes == 0 || forceRefresh) &&
-                        details.totalVolumes != entry.totalVolumes
-                    ) {
-                        hasChanges = true
-                        details.totalVolumes
-                    } else {
-                        entry.totalVolumes
-                    }
-                } else {
-                    entry.totalVolumes
-                }
-
-                // Broadcast / Published start and end dates
-                val newAiredStartDate = if (details.airedStartDate != null &&
-                    (entry.airedStartDate == null || forceRefresh) &&
-                    details.airedStartDate != entry.airedStartDate
-                ) {
-                    hasChanges = true
-                    details.airedStartDate
-                } else {
-                    entry.airedStartDate
-                }
-
-                val newAiredEndDate = if (details.airedEndDate != null &&
-                    (entry.airedEndDate == null || forceRefresh) &&
-                    details.airedEndDate != entry.airedEndDate
-                ) {
-                    hasChanges = true
-                    details.airedEndDate
-                } else {
-                    entry.airedEndDate
-                }
-
-                // Alternate titles (English, Japanese, Synonyms)
-                val newAlternateTitle = if (!details.alternateTitle.isNullOrBlank() &&
-                    (entry.alternateTitle.isNullOrBlank() || forceRefresh) &&
-                    details.alternateTitle != entry.alternateTitle
-                ) {
-                    hasChanges = true
-                    details.alternateTitle
-                } else {
-                    entry.alternateTitle
-                }
-
-                // Tags (genres, themes, demographics)
-                val newTags = if (!details.tags.isNullOrBlank() &&
-                    (entry.tags.isNullOrBlank() || forceRefresh) &&
-                    details.tags != entry.tags
-                ) {
-                    hasChanges = true
-                    details.tags
-                } else {
-                    entry.tags
-                }
-
-                // Description (synopsis)
-                val curDesc = entry.description ?: entry.notes
-                val newDescription = if (!details.synopsis.isNullOrBlank() &&
-                    (curDesc.isNullOrBlank() || forceRefresh) &&
-                    details.synopsis != curDesc
-                ) {
-                    hasChanges = true
-                    details.synopsis
-                } else {
-                    curDesc
-                }
-
-                // Airing status
-                val newIsAiring = if (details.isAiring != null && details.isAiring != entry.isAiring) {
-                    hasChanges = true
-                    details.isAiring
-                } else {
-                    entry.isAiring
-                }
-
-                // External Score (e.g. MAL / AniList score) - DO NOT update user personal score!
-                val newExternalScore = if (details.externalScore != null &&
-                    (entry.externalScore == null || forceRefresh) &&
-                    details.externalScore != entry.externalScore
-                ) {
-                    hasChanges = true
-                    details.externalScore
-                } else {
-                    entry.externalScore
-                }
-
-                val newExternalScoreSource = if (details.externalScore != null &&
-                    (entry.externalScore == null || forceRefresh) &&
-                    (details.externalScoreSource ?: "MAL") != entry.externalScoreSource
-                ) {
-                    hasChanges = true
-                    details.externalScoreSource ?: "MAL"
-                } else {
-                    entry.externalScoreSource
-                }
-
-                // Extract related entries (prequels, sequels, side stories, etc.)
-                val newRelatedJson = if ((entry.relatedEntriesJson.isNullOrBlank() || forceRefresh) && finalExternalId != null) {
+                val fetchedRelatedJson = if ((entry.relatedEntriesJson.isNullOrBlank() || forceRefresh) && candidateExtId != null) {
                     if (!details.relatedMedia.isNullOrEmpty()) {
-                        val json = gson.toJson(details.relatedMedia)
-                        if (json != entry.relatedEntriesJson) {
-                            hasChanges = true
-                            json
-                        } else {
-                            entry.relatedEntriesJson
-                        }
+                        gson.toJson(details.relatedMedia)
                     } else {
-                        val targetMalId = finalExternalId.toLongOrNull()
-                        if (targetMalId != null) {
-                            val relRes = JikanApiClient.fetchRelatedEntries(targetMalId, isMangaType(entry.mediaType), title = entry.title)
+                        val targetId = candidateExtId.toLongOrNull()
+                        if (targetId != null || !candidateExtSource.isNullOrBlank()) {
+                            val relRes = JikanApiClient.fetchRelatedEntries(
+                                malId = targetId,
+                                isManga = isMangaType(entry.mediaType),
+                                title = entry.title,
+                                externalSource = candidateExtSource,
+                                externalId = candidateExtId
+                            )
                             val relList = relRes.getOrNull()
-                            if (!relList.isNullOrEmpty()) {
-                                val json = gson.toJson(relList)
-                                if (json != entry.relatedEntriesJson) {
-                                    hasChanges = true
-                                    json
-                                } else {
-                                    entry.relatedEntriesJson
-                                }
-                            } else {
-                                entry.relatedEntriesJson
-                            }
-                        } else {
-                            entry.relatedEntriesJson
-                        }
+                            if (!relList.isNullOrEmpty()) gson.toJson(relList) else null
+                        } else null
                     }
                 } else {
-                    entry.relatedEntriesJson
+                    null
                 }
 
-                val newAiredEpisodes = if (details.airedEpisodes != null && details.airedEpisodes > 0) {
-                    if (details.airedEpisodes != entry.airedEpisodes) hasChanges = true
-                    details.airedEpisodes
-                } else if (entry.mediaType == MediaType.ANIME && (details.isAiring ?: entry.isAiring)) {
-                    val effective = entry.copy(
-                        airedStartDate = newAiredStartDate,
-                        totalEpisodes = newTotalEpisodes,
-                        isAiring = newIsAiring
-                    ).getEffectiveAiredEpisodes()
-                    if (effective > 0 && effective != entry.airedEpisodes) {
-                        hasChanges = true
-                        effective
-                    } else entry.airedEpisodes
-                } else entry.airedEpisodes
-
-                val newBroadcastTime = if (!details.broadcastTime.isNullOrBlank()) {
-                    if (details.broadcastTime != entry.broadcastTime) hasChanges = true
-                    details.broadcastTime
-                } else entry.broadcastTime
-
-                val newNextAiringEpoch = if (details.nextAiringEpoch != null) {
-                    if (details.nextAiringEpoch != entry.nextAiringEpoch) hasChanges = true
-                    details.nextAiringEpoch
-                } else entry.nextAiringEpoch
-
-                val newOriginalLanguage = if (!details.originalLanguage.isNullOrBlank()) {
-                    if (details.originalLanguage != entry.originalLanguage) hasChanges = true
-                    details.originalLanguage
-                } else entry.originalLanguage
-
-                val newCreator = if (!details.authors.isNullOrBlank() && (entry.creator.isNullOrBlank() || forceRefresh) && details.authors != entry.creator) {
-                    hasChanges = true
-                    details.authors
-                } else entry.creator
+                // BUG-17: Re-read latest row right before merging so concurrent user edits survive sync.
+                val latest = repository.getEntryByIdSync(entry.id) ?: entry
+                val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(latest)
+                val (updatedEntry, hasChanges) = applyJikanMetadataToFresh(
+                    latest = latest,
+                    details = details,
+                    usedFallbackResolution = usedFallbackResolution,
+                    isCoverBroken = isCoverBroken,
+                    fetchedRelatedJson = fetchedRelatedJson,
+                    forceRefresh = forceRefresh
+                )
 
                 if (hasChanges) {
-                    val updatedEntry = entry.copy(
-                        userId = profileId,
-                        creator = newCreator,
-                        coverImageUri = finalCoverUri ?: entry.coverImageUri,
-                        episodeLengthMinutes = newEpisodeLength,
-                        durationMinutes = newDurationMinutes,
-                        totalEpisodes = newTotalEpisodes,
-                        airedEpisodes = newAiredEpisodes,
-                        airedChapters = newAiredChapters,
-                        broadcastTime = newBroadcastTime,
-                        nextAiringEpoch = newNextAiringEpoch,
-                        totalChapters = newTotalChapters,
-                        totalVolumes = newTotalVolumes,
-                        airedStartDate = newAiredStartDate,
-                        airedEndDate = newAiredEndDate,
-                        alternateTitle = newAlternateTitle,
-                        tags = newTags,
-                        description = newDescription,
-                        isAiring = newIsAiring,
-                        externalScore = newExternalScore,
-                        externalScoreSource = newExternalScoreSource,
-                        externalId = finalExternalId,
-                        externalSource = finalExternalSource ?: entry.externalSource,
-                        relatedEntriesJson = newRelatedJson,
-                        originalLanguage = newOriginalLanguage,
-                        updatedAt = System.currentTimeMillis()
-                    )
-                    repository.update(updatedEntry)
+                    if (updatedEntry.coverImageUri != latest.coverImageUri && !updatedEntry.coverImageUri.isNullOrBlank()) {
+                        FailedCoverTracker.markSuccess(latest.id, updatedEntry.coverImageUri)
+                        try {
+                            val imageLoader = Coil.imageLoader(context)
+                            val request = ImageRequest.Builder(context)
+                                .data(updatedEntry.coverImageUri)
+                                .memoryCachePolicy(CachePolicy.ENABLED)
+                                .diskCachePolicy(CachePolicy.ENABLED)
+                                .build()
+                            imageLoader.enqueue(request)
+                        } catch (_: Exception) {}
+                    }
+                    val effectiveUserId = if (updatedEntry.userId == 0L) profileId else updatedEntry.userId
+                    repository.updateMetadataOnly(updatedEntry.copy(userId = effectiveUserId))
                 }
                 return JikanSyncItemResult(hasChanges = hasChanges, isSuccess = true)
             }
         }
 
         val err = detailsResult.exceptionOrNull()?.message ?: "Unknown error"
-        Log.e(TAG, "Failed to sync entry ${entry.title} (malId=$malId): $err", detailsResult.exceptionOrNull())
+        try {
+            Log.e(TAG, "Failed to sync entry ${entry.title} (malId=$malId): $err", detailsResult.exceptionOrNull())
+        } catch (_: RuntimeException) {}
         val isRateLimit = detailsResult.exceptionOrNull() is RateLimitException || err.contains("429", ignoreCase = true)
         return JikanSyncItemResult(hasChanges = false, isSuccess = false, errorMessage = err, isRateLimit = isRateLimit)
+    }
+
+    internal fun applyJikanMetadataToFresh(
+        latest: MediaEntry,
+        details: JikanMediaDetails,
+        usedFallbackResolution: Boolean = false,
+        isCoverBroken: Boolean = false,
+        fetchedRelatedJson: String? = null,
+        forceRefresh: Boolean = false,
+        now: Long = System.currentTimeMillis()
+    ): Pair<MediaEntry, Boolean> {
+        var hasChanges = false
+        var finalCoverUri: String? = latest.coverImageUri
+        var finalExternalId: String? = latest.externalId
+        var finalExternalSource: String? = latest.externalSource
+        val isManga = isMangaType(latest.mediaType)
+
+        // JOB-13: Never overwrite a valid stored external ID/source even when fallback details are used.
+        val needsNewExternalId = finalExternalId.isNullOrBlank() || !hasValidExternalId(latest)
+        if (needsNewExternalId) {
+            val ref = details.preferredExternalRef()
+            if (ref != null) {
+                if (ref.first != latest.externalSource || ref.second != latest.externalId) {
+                    finalExternalSource = ref.first
+                    finalExternalId = ref.second
+                    hasChanges = true
+                }
+            } else if (ExternalSources.canonical(details.sourceProvider) == ExternalSources.MANGADEX) {
+                val mdId = details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                if (!mdId.isNullOrBlank() && (mdId != latest.externalId || ExternalSources.MANGADEX != latest.externalSource)) {
+                    finalExternalId = mdId
+                    finalExternalSource = ExternalSources.MANGADEX
+                    hasChanges = true
+                }
+            }
+        } else {
+            val canonicalLatestSource = ExternalSources.canonical(latest.externalSource, finalExternalId)
+            if (canonicalLatestSource != null && canonicalLatestSource != latest.externalSource) {
+                finalExternalSource = canonicalLatestSource
+                hasChanges = true
+            }
+        }
+
+        val needsPoster = latest.coverImageUri.isNullOrBlank() ||
+            latest.coverImageUri.startsWith("file:") ||
+            isCoverBroken ||
+            forceRefresh
+        if (!details.posterUrl.isNullOrBlank() && needsPoster && details.posterUrl != latest.coverImageUri) {
+            finalCoverUri = details.posterUrl
+            hasChanges = true
+        }
+
+        val newEpisodeLength = if (latest.mediaType != MediaType.MOVIE && !isManga) {
+            if (details.durationMinutes != null && details.durationMinutes > 0 &&
+                (latest.episodeLengthMinutes == null || latest.episodeLengthMinutes == 0 || forceRefresh) &&
+                details.durationMinutes != latest.episodeLengthMinutes
+            ) {
+                hasChanges = true
+                details.durationMinutes
+            } else {
+                latest.episodeLengthMinutes
+            }
+        } else {
+            latest.episodeLengthMinutes
+        }
+
+        val newDurationMinutes = if (latest.mediaType == MediaType.MOVIE) {
+            if (details.durationMinutes != null && details.durationMinutes > 0 &&
+                (latest.durationMinutes == null || latest.durationMinutes == 0 || forceRefresh) &&
+                details.durationMinutes != latest.durationMinutes
+            ) {
+                hasChanges = true
+                details.durationMinutes
+            } else {
+                latest.durationMinutes
+            }
+        } else {
+            latest.durationMinutes
+        }
+
+        val newTotalEpisodes = if (!isManga && latest.mediaType != MediaType.MOVIE) {
+            if (details.totalEpisodes != null && details.totalEpisodes > 0 &&
+                (latest.totalEpisodes == 0 || forceRefresh) &&
+                details.totalEpisodes != latest.totalEpisodes
+            ) {
+                hasChanges = true
+                details.totalEpisodes
+            } else {
+                latest.totalEpisodes
+            }
+        } else {
+            latest.totalEpisodes
+        }
+
+        val isEntryAiring = details.isAiring ?: latest.isAiring
+
+        val newTotalChapters = if (isManga) {
+            if (details.totalChapters != null && details.totalChapters > 0 &&
+                (latest.totalChapters == 0 || forceRefresh || isEntryAiring) &&
+                details.totalChapters != latest.totalChapters
+            ) {
+                hasChanges = true
+                details.totalChapters
+            } else {
+                latest.totalChapters
+            }
+        } else {
+            latest.totalChapters
+        }
+
+        val newAiredChapters = if (isManga) {
+            val cand = details.airedChapters ?: if (isEntryAiring && details.totalChapters != null && details.totalChapters > 0) details.totalChapters else null
+            if (cand != null && cand > 0 && cand != latest.airedChapters) {
+                hasChanges = true
+                cand
+            } else {
+                latest.airedChapters
+            }
+        } else {
+            latest.airedChapters
+        }
+
+        val newTotalVolumes = if (isManga) {
+            if (details.totalVolumes != null && details.totalVolumes > 0 &&
+                (latest.totalVolumes == 0 || forceRefresh) &&
+                details.totalVolumes != latest.totalVolumes
+            ) {
+                hasChanges = true
+                details.totalVolumes
+            } else {
+                latest.totalVolumes
+            }
+        } else {
+            latest.totalVolumes
+        }
+
+        val newAiredStartDate = if (details.airedStartDate != null &&
+            (latest.airedStartDate == null || forceRefresh) &&
+            details.airedStartDate != latest.airedStartDate
+        ) {
+            hasChanges = true
+            details.airedStartDate
+        } else {
+            latest.airedStartDate
+        }
+
+        val newAiredEndDate = if (details.airedEndDate != null &&
+            (latest.airedEndDate == null || forceRefresh) &&
+            details.airedEndDate != latest.airedEndDate
+        ) {
+            hasChanges = true
+            details.airedEndDate
+        } else {
+            latest.airedEndDate
+        }
+
+        val newAlternateTitle = if (!details.alternateTitle.isNullOrBlank() &&
+            (latest.alternateTitle.isNullOrBlank() || forceRefresh) &&
+            details.alternateTitle != latest.alternateTitle
+        ) {
+            hasChanges = true
+            details.alternateTitle
+        } else {
+            latest.alternateTitle
+        }
+
+        val newTags = if (!details.tags.isNullOrBlank() &&
+            (latest.tags.isNullOrBlank() || forceRefresh) &&
+            details.tags != latest.tags
+        ) {
+            hasChanges = true
+            details.tags
+        } else {
+            latest.tags
+        }
+
+        val curDesc = latest.description ?: latest.notes
+        val newDescription = if (!details.synopsis.isNullOrBlank() &&
+            (curDesc.isNullOrBlank() || forceRefresh) &&
+            details.synopsis != curDesc
+        ) {
+            hasChanges = true
+            details.synopsis
+        } else {
+            curDesc
+        }
+
+        val newIsAiring = if (details.isAiring != null && details.isAiring != latest.isAiring) {
+            hasChanges = true
+            details.isAiring
+        } else {
+            latest.isAiring
+        }
+
+        val newExternalScore = if (details.externalScore != null &&
+            (latest.externalScore == null || forceRefresh) &&
+            details.externalScore != latest.externalScore
+        ) {
+            hasChanges = true
+            details.externalScore
+        } else {
+            latest.externalScore
+        }
+
+        val canonicalCandidateScoreSource = details.externalScoreSource?.let { ExternalSources.canonical(it) ?: it }
+            ?: ExternalSources.MAL
+        val newExternalScoreSource = if (details.externalScore != null &&
+            (latest.externalScore == null || forceRefresh) &&
+            canonicalCandidateScoreSource != latest.externalScoreSource
+        ) {
+            hasChanges = true
+            canonicalCandidateScoreSource
+        } else {
+            latest.externalScoreSource
+        }
+
+        val candidateRelatedJson = when {
+            !details.relatedMedia.isNullOrEmpty() -> gson.toJson(details.relatedMedia)
+            !fetchedRelatedJson.isNullOrBlank() -> fetchedRelatedJson
+            else -> null
+        }
+        val newRelatedJson = if ((latest.relatedEntriesJson.isNullOrBlank() || forceRefresh) &&
+            !candidateRelatedJson.isNullOrBlank() &&
+            candidateRelatedJson != latest.relatedEntriesJson
+        ) {
+            hasChanges = true
+            candidateRelatedJson
+        } else {
+            latest.relatedEntriesJson
+        }
+
+        val newAiredEpisodes = if (details.airedEpisodes != null && details.airedEpisodes > 0) {
+            if (details.airedEpisodes != latest.airedEpisodes) hasChanges = true
+            details.airedEpisodes
+        } else if (latest.mediaType == MediaType.ANIME && (details.isAiring ?: latest.isAiring)) {
+            val effective = latest.copy(
+                airedStartDate = newAiredStartDate,
+                totalEpisodes = newTotalEpisodes,
+                isAiring = newIsAiring
+            ).getEffectiveAiredEpisodes()
+            if (effective > 0 && effective != latest.airedEpisodes) {
+                hasChanges = true
+                effective
+            } else latest.airedEpisodes
+        } else latest.airedEpisodes
+
+        val newBroadcastTime = if (!details.broadcastTime.isNullOrBlank()) {
+            if (details.broadcastTime != latest.broadcastTime) hasChanges = true
+            details.broadcastTime
+        } else latest.broadcastTime
+
+        val newNextAiringEpoch = if (details.nextAiringEpoch != null) {
+            if (details.nextAiringEpoch != latest.nextAiringEpoch) hasChanges = true
+            details.nextAiringEpoch
+        } else latest.nextAiringEpoch
+
+        val newOriginalLanguage = if (latest.originalLanguage.isNullOrBlank() && !details.originalLanguage.isNullOrBlank()) {
+            hasChanges = true
+            details.originalLanguage
+        } else latest.originalLanguage
+
+        val newCreator = if (!details.authors.isNullOrBlank() && (latest.creator.isNullOrBlank() || forceRefresh) && details.authors != latest.creator) {
+            hasChanges = true
+            details.authors
+        } else latest.creator
+
+        val updatedEntry = latest.copy(
+            creator = newCreator,
+            coverImageUri = finalCoverUri ?: latest.coverImageUri,
+            episodeLengthMinutes = newEpisodeLength,
+            durationMinutes = newDurationMinutes,
+            totalEpisodes = newTotalEpisodes,
+            airedEpisodes = newAiredEpisodes,
+            airedChapters = newAiredChapters,
+            broadcastTime = newBroadcastTime,
+            nextAiringEpoch = newNextAiringEpoch,
+            totalChapters = newTotalChapters,
+            totalVolumes = newTotalVolumes,
+            airedStartDate = newAiredStartDate,
+            airedEndDate = newAiredEndDate,
+            alternateTitle = newAlternateTitle,
+            tags = newTags,
+            description = newDescription,
+            isAiring = newIsAiring,
+            externalScore = newExternalScore,
+            externalScoreSource = newExternalScoreSource?.let { ExternalSources.canonical(it) ?: it },
+            externalId = finalExternalId,
+            externalSource = (finalExternalSource ?: latest.externalSource)?.let { ExternalSources.canonical(it, finalExternalId) ?: it },
+            relatedEntriesJson = newRelatedJson,
+            originalLanguage = newOriginalLanguage,
+            lastMetadataSyncAt = now,
+            updatedAt = now
+        )
+        return updatedEntry to hasChanges
     }
 
     fun cancelSync(context: Context? = null) {

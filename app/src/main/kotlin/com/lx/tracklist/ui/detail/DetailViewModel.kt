@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.lx.tracklist.data.model.CustomCategory
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
@@ -11,13 +13,17 @@ import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
 import com.lx.tracklist.data.remote.BookMetadataManager
+import com.lx.tracklist.data.remote.BookSyncManager
 import com.lx.tracklist.data.remote.GameMetadataManager
 import com.lx.tracklist.data.remote.GoogleBooksApiClient
 import com.lx.tracklist.data.remote.JikanApiClient
 import com.lx.tracklist.data.remote.JikanSyncManager
+import com.lx.tracklist.data.remote.KitsuApiClient
 import com.lx.tracklist.data.remote.MangaDexApiClient
 import com.lx.tracklist.data.remote.MusicMetadataManager
 import com.lx.tracklist.data.remote.OpenLibraryApiClient
+import com.lx.tracklist.data.remote.SyncJob
+import com.lx.tracklist.data.remote.SyncRouter
 import com.lx.tracklist.data.remote.TachiyomiResolverManager
 import com.lx.tracklist.data.remote.TmdbApiClient
 import com.lx.tracklist.data.remote.mal.MalSyncManager
@@ -40,6 +46,27 @@ import java.util.Calendar
 import java.util.Locale
 import kotlin.math.max
 
+enum class DetailRefreshProvider {
+    TMDB,
+    MAL,
+    ANILIST,
+    MANGADEX,
+    KITSU,
+    BOOKS,
+    GAMES,
+    MUSIC,
+    RESOLVE_IDS
+}
+
+data class DetailRefreshPlan(
+    val provider: DetailRefreshProvider,
+    val canonicalSource: String?,
+    val externalId: String?,
+    val hasValidId: Boolean,
+    val isFindingAndLinking: Boolean,
+    val sourceDisplayName: String
+)
+
 class DetailViewModel(
     private val repository: MediaRepository,
     private val entryId: Long
@@ -53,6 +80,13 @@ class DetailViewModel(
         )
 
     val activeUser: StateFlow<UserProfile> = repository.activeUser
+
+    val customCategories: StateFlow<List<CustomCategory>> = repository.customCategories
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
     private val _rawRelatedEntries = MutableStateFlow<List<RelatedMediaItem>>(emptyList())
     private val _isLoadingRelated = MutableStateFlow(false)
@@ -214,7 +248,14 @@ class DetailViewModel(
                     GameMetadataManager.searchGames(appContext, cur.title, limit = 1).getOrNull()?.firstOrNull()?.externalId
                 }
                 if (!gameId.isNullOrBlank()) {
-                    val details = GameMetadataManager.getGameDetails(appContext, gameId, cur.externalSource).getOrNull()
+                    val details = GameMetadataManager.getGameDetails(
+                        context = appContext,
+                        externalId = gameId,
+                        externalSource = cur.externalSource,
+                        title = cur.title,
+                        alternateTitle = cur.alternateTitle,
+                        releaseYear = cur.airedStartDate?.let { MediaEntry.extractYearFromMillis(it) }
+                    ).getOrNull()
                     val compMinutes = details?.completionTimeMinutes
                     if (compMinutes != null && compMinutes > 0) {
                         val latest = repository.getEntryByIdSync(cur.id) ?: cur
@@ -222,7 +263,7 @@ class DetailViewModel(
                             durationMinutes = compMinutes,
                             updatedAt = System.currentTimeMillis()
                         )
-                        repository.update(updated)
+                        repository.updateMetadataOnly(updated)
                     }
                 }
             } catch (e: Exception) {
@@ -232,19 +273,14 @@ class DetailViewModel(
     }
 
     private fun isAnimeOrManga(cur: MediaEntry): Boolean {
-        val src = cur.externalSource ?: ""
-        val scoreSrc = cur.externalScoreSource ?: ""
-        val cat = cur.customCategory ?: ""
-        val subCat = cur.subCategory ?: ""
-
-        if (src.equals("MAL", ignoreCase = true) || src.equals("AniList", ignoreCase = true)) return true
-        if (scoreSrc.equals("MAL", ignoreCase = true) || scoreSrc.equals("AniList", ignoreCase = true)) return true
-        if (cur.mediaType == MediaType.ANIME || cur.mediaType == MediaType.MANGA ||
-            cur.mediaType == MediaType.MANHWA || cur.mediaType == MediaType.BOOK) return true
-        if (cat.contains("Anime", ignoreCase = true) || cat.contains("Manga", ignoreCase = true) || cat.contains("Donghua", ignoreCase = true)) return true
-        if (subCat.contains("Anime", ignoreCase = true) || subCat.contains("Manga", ignoreCase = true) || subCat.contains("Donghua", ignoreCase = true)) return true
-
-        return false
+        return when (resolveDetailRefreshPlan(cur).provider) {
+            DetailRefreshProvider.MAL,
+            DetailRefreshProvider.ANILIST,
+            DetailRefreshProvider.MANGADEX,
+            DetailRefreshProvider.KITSU,
+            DetailRefreshProvider.RESOLVE_IDS -> true
+            else -> false
+        }
     }
 
     fun loadRelatedEntries(cur: MediaEntry, context: Context? = null, force: Boolean = false) {
@@ -265,40 +301,46 @@ class DetailViewModel(
         loadRelatedJob?.cancel()
         loadRelatedJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                val isAnime = isAnimeOrManga(cur)
-                val isBook = cur.mediaType == MediaType.BOOK
-                val isMusic = cur.mediaType == MediaType.MUSIC
+                val plan = resolveDetailRefreshPlan(cur)
+                val isBook = plan.provider == DetailRefreshProvider.BOOKS || cur.mediaType == MediaType.BOOK
+                val isMusic = plan.provider == DetailRefreshProvider.MUSIC || cur.mediaType == MediaType.MUSIC
+                val isGame = plan.provider == DetailRefreshProvider.GAMES || cur.mediaType == MediaType.GAME
                 val isManga = (cur.mediaType == MediaType.MANGA || cur.mediaType == MediaType.MANHWA) && !isBook
                 val isVideo = cur.mediaType == MediaType.MOVIE || cur.mediaType == MediaType.SHOW
-                val src = cur.externalSource ?: ""
                 var extId = cur.externalId?.toLongOrNull()
 
-                if (!isBook && !isMusic && cur.mediaType != MediaType.GAME && extId == null && cur.title.isNotBlank()) {
-                    if (!isAnime && (src.equals("TMDB", ignoreCase = true) || isVideo)) {
+                if (!isBook && !isMusic && !isGame && !plan.hasValidId && cur.title.isNotBlank()) {
+                    if (plan.provider == DetailRefreshProvider.TMDB) {
                         val tmdbRes = if (cur.mediaType == MediaType.MOVIE) {
                             TmdbApiClient.searchMovieByTitle(cur.title, context).getOrNull()
                         } else {
                             TmdbApiClient.searchTvByTitle(cur.title, context).getOrNull()
                         }
                         extId = tmdbRes?.tmdbId
-                    } else {
+                    } else if (plan.provider == DetailRefreshProvider.MAL || plan.provider == DetailRefreshProvider.RESOLVE_IDS) {
                         val jikanRes = JikanApiClient.searchJikanMultiple(cur.title, isManga, limit = 1).getOrNull()
                         extId = jikanRes?.firstOrNull()?.malId
                     }
                 }
 
-                val fetchResult: Result<List<RelatedMediaItem>> = when {
-                    isMusic -> {
-                        MusicMetadataManager.fetchRelatedAlbumTracks(cur)
-                    }
-                    cur.mediaType == MediaType.GAME -> {
+                val fetchResult: Result<List<RelatedMediaItem>> = when (plan.provider) {
+                    DetailRefreshProvider.MUSIC -> MusicMetadataManager.fetchRelatedAlbumTracks(cur)
+                    DetailRefreshProvider.GAMES -> {
                         if (context != null) {
+                            val curYear = cur.airedStartDate?.let { MediaEntry.extractYearFromMillis(it) }
                             val gameId = cur.externalId ?: run {
                                 val sRes = GameMetadataManager.searchGames(context, cur.title, limit = 1)
                                 sRes.getOrNull()?.firstOrNull()?.externalId
                             }
                             if (gameId != null) {
-                                val dRes = GameMetadataManager.getGameDetails(context, gameId, cur.externalSource)
+                                val dRes = GameMetadataManager.getGameDetails(
+                                    context = context,
+                                    externalId = gameId,
+                                    externalSource = cur.externalSource,
+                                    title = cur.title,
+                                    alternateTitle = cur.alternateTitle,
+                                    releaseYear = curYear
+                                )
                                 Result.success(dRes.getOrNull()?.relatedItems ?: emptyList())
                             } else {
                                 Result.success(emptyList())
@@ -307,21 +349,26 @@ class DetailViewModel(
                             Result.success(emptyList())
                         }
                     }
-                    isBook -> {
-                        BookMetadataManager.fetchRelatedBooks(cur, context)
-                    }
-                    isAnime || src.equals("MAL", ignoreCase = true) || src.equals("AniList", ignoreCase = true) -> {
-                        JikanApiClient.fetchRelatedEntries(malId = extId, isManga = isManga, title = cur.title)
-                    }
-                    src.equals("TMDB", ignoreCase = true) || isVideo -> {
+                    DetailRefreshProvider.BOOKS -> BookMetadataManager.fetchRelatedBooks(cur, context)
+                    DetailRefreshProvider.TMDB -> {
                         if (extId != null) {
                             TmdbApiClient.fetchRelatedEntries(extId, isTv = cur.mediaType == MediaType.SHOW, context)
                         } else {
                             Result.success(emptyList())
                         }
                     }
-                    else -> {
-                        JikanApiClient.fetchRelatedEntries(malId = extId, isManga = isManga, title = cur.title)
+                    DetailRefreshProvider.MAL,
+                    DetailRefreshProvider.ANILIST,
+                    DetailRefreshProvider.MANGADEX,
+                    DetailRefreshProvider.KITSU,
+                    DetailRefreshProvider.RESOLVE_IDS -> {
+                        JikanApiClient.fetchRelatedEntries(
+                            malId = extId,
+                            isManga = isManga,
+                            title = cur.title,
+                            externalSource = cur.externalSource,
+                            externalId = cur.externalId
+                        )
                     }
                 }
 
@@ -343,7 +390,7 @@ class DetailViewModel(
                     val json = com.google.gson.Gson().toJson(filtered)
                     val latest = repository.getEntryByIdSync(cur.id) ?: return@launch
                     if (json != latest.relatedEntriesJson) {
-                        repository.update(latest.copy(relatedEntriesJson = json, updatedAt = System.currentTimeMillis()))
+                        repository.updateMetadataOnly(latest.copy(relatedEntriesJson = json, updatedAt = System.currentTimeMillis()))
                     }
                 } else {
                     val ex = fetchResult.exceptionOrNull()
@@ -357,7 +404,7 @@ class DetailViewModel(
                         _relatedErrorMessage.value = null
                         val latest = repository.getEntryByIdSync(cur.id) ?: return@launch
                         if (latest.relatedEntriesJson != "[]") {
-                            repository.update(latest.copy(relatedEntriesJson = "[]", updatedAt = System.currentTimeMillis()))
+                            repository.updateMetadataOnly(latest.copy(relatedEntriesJson = "[]", updatedAt = System.currentTimeMillis()))
                         }
                     } else {
                         _relatedErrorMessage.value = "Unable to load related entries. Tap to retry."
@@ -375,7 +422,7 @@ class DetailViewModel(
                     _relatedErrorMessage.value = null
                     val latest = repository.getEntryByIdSync(cur.id) ?: return@launch
                     if (latest.relatedEntriesJson != "[]") {
-                        repository.update(latest.copy(relatedEntriesJson = "[]", updatedAt = System.currentTimeMillis()))
+                        repository.updateMetadataOnly(latest.copy(relatedEntriesJson = "[]", updatedAt = System.currentTimeMillis()))
                     }
                 } else {
                     _relatedErrorMessage.value = "Failed to load related entries (${e.localizedMessage ?: "network error"}). Tap to retry."
@@ -719,10 +766,12 @@ class DetailViewModel(
         val cur = entry.value ?: return
         if (_isRefreshingMetadata.value) return
 
+        val plan = resolveDetailRefreshPlan(cur)
+
         viewModelScope.launch(Dispatchers.IO) {
             _isRefreshingMetadata.value = true
             try {
-                if (cur.mediaType == MediaType.MUSIC) {
+                if (plan.provider == DetailRefreshProvider.MUSIC) {
                     val match = MusicMetadataManager.resolveMusicMetadataForSync(cur, skipIdLookup = forceReLink).getOrNull()
 
                     if (match != null) {
@@ -735,10 +784,16 @@ class DetailViewModel(
                         } else {
                             currentAlts
                         }
+                        val (preservedId, preservedSource) = resolveRefAfterRefresh(
+                            existing = latest,
+                            candidateId = match.externalId.takeIf { it.isNotBlank() },
+                            candidateSource = match.externalSource.takeIf { it.isNotBlank() },
+                            forceReLink = forceReLink
+                        )
                         val updated = latest.copy(
                             title = latest.title,
-                            externalId = match.externalId.takeIf { it.isNotBlank() } ?: latest.externalId,
-                            externalSource = match.externalSource.takeIf { it.isNotBlank() } ?: latest.externalSource,
+                            externalId = preservedId,
+                            externalSource = ExternalSources.canonical(preservedSource, preservedId) ?: preservedSource,
                             creator = match.artist.takeIf { it.isNotBlank() } ?: latest.creator,
                             movieSeriesName = match.albumName?.takeIf { it.isNotBlank() } ?: latest.movieSeriesName,
                             movieSeriesNumber = match.trackNumber ?: latest.movieSeriesNumber,
@@ -748,12 +803,12 @@ class DetailViewModel(
                             tags = match.genres.joinToString(", ").takeIf { it.isNotBlank() } ?: latest.tags,
                             description = latest.description?.takeIf { it.isNotBlank() } ?: match.albumName?.takeIf { it.isNotBlank() }?.let { "Album: $it" },
                             airedStartDate = match.releaseDateMillis ?: latest.airedStartDate,
-                            airedEndDate = match.releaseDateMillis ?: latest.airedEndDate,
+                            airedEndDate = null,
                             originalLanguage = match.originalLanguage ?: latest.originalLanguage,
                             alternateTitle = mergedAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: latest.alternateTitle,
                             updatedAt = now
                         )
-                        repository.update(updated)
+                        repository.updateMetadataOnly(updated)
                         _metadataRefreshMessage.value = "Metadata refreshed from ${match.externalSource} (${match.title})"
                         loadRelatedEntries(updated, context, force = true)
                         return@launch
@@ -763,7 +818,7 @@ class DetailViewModel(
                     }
                 }
 
-                if (cur.mediaType == MediaType.GAME) {
+                if (plan.provider == DetailRefreshProvider.GAMES) {
                     val gameId = if (forceReLink) null else cur.externalId ?: run {
                         val sRes = GameMetadataManager.searchGames(context, cur.title, limit = 1)
                         sRes.getOrNull()?.firstOrNull()?.externalId
@@ -773,7 +828,15 @@ class DetailViewModel(
                         return@launch
                     }
 
-                    val detailsRes = GameMetadataManager.getGameDetails(context, gameId, cur.externalSource)
+                    val curYear = cur.airedStartDate?.let { MediaEntry.extractYearFromMillis(it) }
+                    val detailsRes = GameMetadataManager.getGameDetails(
+                        context = context,
+                        externalId = gameId,
+                        externalSource = cur.externalSource,
+                        title = cur.title,
+                        alternateTitle = cur.alternateTitle,
+                        releaseYear = curYear
+                    )
                     val details = detailsRes.getOrNull()
                     if (details != null) {
                         val now = System.currentTimeMillis()
@@ -795,10 +858,17 @@ class DetailViewModel(
                             MediaEntry.formatGamePlatforms(curList)
                         }
 
+                        val latestCanonical = ExternalSources.canonical(latest.externalSource, latest.externalId)
+                        val detailsCanonical = ExternalSources.canonical(details.externalSource) ?: details.externalSource
+                        val keepLatestRef = !forceReLink &&
+                            !latest.externalId.isNullOrBlank() &&
+                            latestCanonical != null &&
+                            latestCanonical != detailsCanonical
+
                         val updated = latest.copy(
                             title = latest.title,
-                            externalId = details.externalId,
-                            externalSource = details.externalSource,
+                            externalId = if (keepLatestRef) latest.externalId else details.externalId,
+                            externalSource = if (keepLatestRef) latestCanonical else detailsCanonical,
                             creator = details.developers.firstOrNull()?.takeIf { it.isNotBlank() }
                                 ?: details.publishers.firstOrNull()?.takeIf { it.isNotBlank() }
                                 ?: latest.creator,
@@ -806,7 +876,7 @@ class DetailViewModel(
                             alternateTitle = mergedAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: latest.alternateTitle,
                             airedStartDate = details.releaseDateMillis ?: latest.airedStartDate,
                             externalScore = details.rating ?: latest.externalScore,
-                            externalScoreSource = details.ratingSource,
+                            externalScoreSource = details.ratingSource?.let { ExternalSources.canonical(it) ?: it },
                             tags = if (details.genres.isNotEmpty()) details.genres.joinToString(", ") else latest.tags,
                             description = details.buildDescriptionWithMetadata().takeIf { it.isNotBlank() } ?: latest.description,
                             durationMinutes = details.completionTimeMinutes ?: latest.durationMinutes,
@@ -814,7 +884,7 @@ class DetailViewModel(
                             relatedEntriesJson = if (details.relatedItems.isNotEmpty()) com.google.gson.Gson().toJson(details.relatedItems) else latest.relatedEntriesJson,
                             updatedAt = now
                         )
-                        repository.update(updated)
+                        repository.updateMetadataOnly(updated)
                         _metadataRefreshMessage.value = "Metadata refreshed from ${details.externalSource} (${details.title})"
                         loadRelatedEntries(updated, context, force = true)
                         return@launch
@@ -825,19 +895,33 @@ class DetailViewModel(
                     }
                 }
 
-                if (cur.mediaType == MediaType.BOOK) {
-                    val isLightNovel = cur.externalSource.equals("AniList", ignoreCase = true) ||
-                            cur.customCategory.equals("Light Novels", ignoreCase = true) ||
-                            cur.subCategory.equals("Light Novel", ignoreCase = true)
-
+                if (plan.provider == DetailRefreshProvider.BOOKS) {
+                    val isLightNovel = cur.isLightNovel()
+                    val cleanExtId = cur.externalId?.removePrefix("/works/")?.removePrefix("/")?.trim()
+                    val canonSrc = ExternalSources.canonical(cur.externalSource, cleanExtId)
                     var bookDetails: com.lx.tracklist.data.remote.BookDetails? = null
 
                     if (isLightNovel) {
-                        val lnResult = BookMetadataManager.searchLightNovels(cur.title, limit = 5)
-                        val lnItem = lnResult.getOrNull()?.firstOrNull()
+                        val numericId = cleanExtId?.toLongOrNull()?.takeIf { it > 0 }
+                        val directLnItem = when {
+                            !forceReLink && canonSrc == ExternalSources.MAL && numericId != null ->
+                                JikanApiClient.fetchMediaDetails(malId = numericId, isManga = true, title = cur.title).getOrNull()
+                            !forceReLink && canonSrc == ExternalSources.ANILIST && numericId != null ->
+                                JikanApiClient.queryAniListById(aniListId = numericId, isManga = true).getOrNull()
+                            else -> null
+                        }
+                        val lnItem = directLnItem ?: if (BookSyncManager.shouldAttemptBookTitleFallback(cur, forceReLink)) {
+                            val lnResult = BookMetadataManager.searchLightNovels(cur.title, limit = 5)
+                            lnResult.getOrNull()?.firstOrNull {
+                                TachiyomiResolverManager.isConfidentExactMatch(cur.title, it.title, it.alternateTitle, cur.alternateTitle)
+                            } ?: lnResult.getOrNull()?.firstOrNull()
+                        } else {
+                            null
+                        }
                         if (lnItem != null) {
+                            val ref = lnItem.preferredExternalRef()
                             bookDetails = com.lx.tracklist.data.remote.BookDetails(
-                                id = lnItem.malId?.toString() ?: cur.externalId.orEmpty(),
+                                id = ref?.second ?: cur.externalId.orEmpty(),
                                 title = lnItem.title ?: cur.title,
                                 subtitle = lnItem.alternateTitle,
                                 authors = lnItem.authors?.split(",")?.map { it.trim() } ?: emptyList(),
@@ -851,41 +935,41 @@ class DetailViewModel(
                                 coverUrl = lnItem.posterUrl,
                                 categories = lnItem.tags?.split(",")?.map { it.trim() } ?: emptyList(),
                                 averageScore = lnItem.externalScore,
-                                sourceProvider = lnItem.sourceProvider ?: "AniList",
-                                language = lnItem.originalLanguage
+                                sourceProvider = ref?.first ?: (ExternalSources.canonical(lnItem.sourceProvider) ?: ExternalSources.ANILIST),
+                                language = lnItem.originalLanguage,
+                                scoreSource = lnItem.externalScoreSource ?: ExternalSources.ANILIST
                             )
                         }
                     }
 
-                    if (bookDetails == null) {
-                        val isbnFromDesc = (cur.description ?: cur.notes)?.let { Regex("(?i)ISBN:\\s*([0-9Xx-]+)").find(it)?.groupValues?.get(1)?.replace("-", "")?.trim() }
-                        val cleanExtId = cur.externalId?.trim()
-
-                        // 1. Direct ID lookup based on externalSource
-                        if (cur.externalSource.equals("Google Books", ignoreCase = true) && !cleanExtId.isNullOrBlank()) {
+                    if (bookDetails == null && !isLightNovel) {
+                        // 1. Direct ID lookup strictly scoped to the canonical source
+                        if (canonSrc == ExternalSources.GOOGLE_BOOKS && !cleanExtId.isNullOrBlank()) {
                             bookDetails = GoogleBooksApiClient.fetchVolumeDetails(cleanExtId, context).getOrNull()
-                        } else if (cur.externalSource.equals("Open Library", ignoreCase = true) && !cleanExtId.isNullOrBlank()) {
+                        } else if (canonSrc == ExternalSources.OPEN_LIBRARY && !cleanExtId.isNullOrBlank()) {
                             bookDetails = OpenLibraryApiClient.fetchWorkDetails(cleanExtId).getOrNull()
                         }
 
-                        // 2. Direct ID fallback if externalSource was not matched or lookup returned null
-                        if (bookDetails == null && !cleanExtId.isNullOrBlank()) {
+                        // 2. Direct ID fallback only if source was unassigned
+                        if (bookDetails == null && canonSrc == null && !cleanExtId.isNullOrBlank()) {
                             bookDetails = GoogleBooksApiClient.fetchVolumeDetails(cleanExtId, context).getOrNull()
                                 ?: OpenLibraryApiClient.fetchWorkDetails(cleanExtId).getOrNull()
                         }
 
-                        // 3. Fallback to ISBN search (concurrent race)
-                        if (bookDetails == null && !isbnFromDesc.isNullOrBlank()) {
-                            coroutineScope {
-                                val googleAsync = async { GoogleBooksApiClient.searchByIsbn(isbnFromDesc, context).getOrNull() }
-                                val openLibAsync = async { OpenLibraryApiClient.searchByIsbn(isbnFromDesc).getOrNull() }
-                                bookDetails = googleAsync.await() ?: openLibAsync.await()
+                        // 3 & 4. ISBN and title fallback ONLY when the entry has no valid ID (or forceReLink)
+                        if (bookDetails == null && BookSyncManager.shouldAttemptBookTitleFallback(cur, forceReLink)) {
+                            val isbnFromDesc = (cur.description ?: cur.notes)?.let { Regex("(?i)ISBN:\\s*([0-9Xx-]+)").find(it)?.groupValues?.get(1)?.replace("-", "")?.trim() }
+                            if (!isbnFromDesc.isNullOrBlank()) {
+                                coroutineScope {
+                                    val googleAsync = async { GoogleBooksApiClient.searchByIsbn(isbnFromDesc, context).getOrNull() }
+                                    val openLibAsync = async { OpenLibraryApiClient.searchByIsbn(isbnFromDesc).getOrNull() }
+                                    bookDetails = googleAsync.await() ?: openLibAsync.await()
+                                }
                             }
-                        }
 
-                        // 4. Fallback to title search
-                        if (bookDetails == null && cur.title.isNotBlank()) {
-                            bookDetails = BookMetadataManager.searchBooks(cur.title, context, limit = 1).getOrNull()?.firstOrNull()
+                            if (bookDetails == null && cur.title.isNotBlank()) {
+                                bookDetails = BookMetadataManager.searchBooks(cur.title, context, limit = 1).getOrNull()?.firstOrNull()
+                            }
                         }
                     }
 
@@ -907,12 +991,14 @@ class DetailViewModel(
                                 }
                             } catch (_: Exception) { null }
                         }
-                        val targetUnit = when {
-                            (bookDetails.pageCount ?: 0) > 0 -> TrackingUnit.PAGES
-                            (bookDetails.totalVolumes ?: 0) > 0 -> TrackingUnit.VOLUMES
-                            (bookDetails.totalChapters ?: 0) > 0 -> TrackingUnit.CHAPTERS
-                            else -> TrackingUnit.PAGES
-                        }
+                        val targetUnit = BookSyncManager.resolveUpdatedBookTrackingUnit(latest, bookDetails)
+                        val preferredRef = bookDetails.preferredExternalRef()
+                        val (resolvedBookId, resolvedBookSource) = resolveRefAfterRefresh(
+                            existing = latest,
+                            candidateId = preferredRef?.second ?: bookDetails.id.takeIf { it.isNotBlank() },
+                            candidateSource = preferredRef?.first ?: ExternalSources.canonical(bookDetails.sourceProvider) ?: bookDetails.sourceProvider,
+                            forceReLink = forceReLink
+                        )
                         val updated = latest.copy(
                             title = latest.title,
                             coverImageUri = if (!bookDetails.coverUrl.isNullOrBlank()) bookDetails.coverUrl else latest.coverImageUri,
@@ -925,17 +1011,17 @@ class DetailViewModel(
                             airedStartDate = publishEpoch ?: latest.airedStartDate,
                             airedEndDate = publishEpoch ?: latest.airedEndDate ?: latest.airedStartDate,
                             externalScore = bookDetails.averageScore ?: latest.externalScore,
-                            externalScoreSource = bookDetails.sourceProvider,
+                            externalScoreSource = (bookDetails.scoreSource ?: bookDetails.sourceProvider).let { ExternalSources.canonical(it) ?: it },
                             tags = bookDetails.buildTagsString().takeIf { it.isNotBlank() } ?: latest.tags,
                             description = (bookDetails.buildDescriptionWithMetadata()).takeIf { it.isNotBlank() } ?: (latest.description ?: latest.notes),
                             userComments = latest.userComments,
                             originalLanguage = bookDetails.language ?: latest.originalLanguage,
-                            externalId = bookDetails.id.takeIf { it.isNotBlank() } ?: latest.externalId,
-                            externalSource = bookDetails.sourceProvider,
+                            externalId = resolvedBookId,
+                            externalSource = resolvedBookSource,
                             relatedEntriesJson = null,
                             updatedAt = now
                         )
-                        repository.update(updated)
+                        repository.updateMetadataOnly(updated)
                         _metadataRefreshMessage.value = "Metadata refreshed from ${bookDetails.sourceProvider} (${bookDetails.title})"
                         loadRelatedEntries(updated, context, force = true)
                         return@launch
@@ -946,13 +1032,11 @@ class DetailViewModel(
                 }
 
                 val isTachiyomi = JikanSyncManager.isTachiyomiSource(cur)
-                val hasValidId = JikanSyncManager.hasValidExternalId(cur)
                 val isTvContaminatedMovie = cur.mediaType == MediaType.MOVIE && (
                     cur.alternateTitle?.contains("Dr. Hudson", ignoreCase = true) == true ||
                     (cur.title.equals("Black Widow", ignoreCase = true) && cur.externalId == "19345")
                 )
-                val needsResolution = forceReLink || isTvContaminatedMovie || isTachiyomi || !hasValidId || cur.externalId.isNullOrBlank() || TachiyomiResolverManager.isEligibleForResolution(cur)
-                if (needsResolution && (isTachiyomi || !hasValidId || cur.externalId.isNullOrBlank() || isTvContaminatedMovie || forceReLink)) {
+                if (plan.provider == DetailRefreshProvider.RESOLVE_IDS || forceReLink || isTvContaminatedMovie) {
                     val outcome = TachiyomiResolverManager.matchAndResolveEntry(
                         entry = cur,
                         repository = repository,
@@ -966,13 +1050,13 @@ class DetailViewModel(
                             return@launch
                         }
                         is TachiyomiResolverManager.ResolutionOutcome.Skipped -> {
-                            if (isTachiyomi) {
+                            if (isTachiyomi || plan.provider == DetailRefreshProvider.RESOLVE_IDS || forceReLink) {
                                 _metadataRefreshMessage.value = "No confident exact match found for \"${cur.title}\""
                                 return@launch
                             }
                         }
                         is TachiyomiResolverManager.ResolutionOutcome.Failed -> {
-                            if (isTachiyomi) {
+                            if (isTachiyomi || plan.provider == DetailRefreshProvider.RESOLVE_IDS || forceReLink) {
                                 _metadataRefreshMessage.value = "Failed to resolve: ${outcome.report.errorMessage}"
                                 return@launch
                             }
@@ -981,6 +1065,10 @@ class DetailViewModel(
                 }
 
                 suspend fun attemptFallbackResolution(failurePrefix: String) {
+                    if (!forceReLink && plan.hasValidId) {
+                        _metadataRefreshMessage.value = failurePrefix
+                        return
+                    }
                     val fallbackOutcome = TachiyomiResolverManager.matchAndResolveEntry(
                         entry = cur,
                         repository = repository,
@@ -1001,69 +1089,125 @@ class DetailViewModel(
                     }
                 }
 
-                val isMal = JikanSyncManager.isMalSource(cur) || isAnimeOrManga(cur)
                 val extIdStr = if (forceReLink || isTvContaminatedMovie) "" else cur.externalId?.trim().orEmpty()
                 val isManga = JikanSyncManager.isMangaType(cur.mediaType)
                 val extId = extIdStr.toLongOrNull()
-                val isMangaDex = cur.externalSource?.equals("MangaDex", ignoreCase = true) == true
-                val isAniList = cur.externalSource?.equals("AniList", ignoreCase = true) == true
-                val mangaDexIdToUse = if (isMangaDex) extIdStr else null
 
-                if (isMangaDex && !mangaDexIdToUse.isNullOrBlank()) {
-                    val result = MangaDexApiClient.fetchMangaDetails(mangaDexIdToUse)
+                if (plan.provider == DetailRefreshProvider.TMDB) {
+                    // TMDB for Movie / Show (and TMDB-sourced Anime)
+                    val isTv = cur.mediaType == MediaType.SHOW
+                    val result = if (extId != null && extId > 0) {
+                        TmdbApiClient.fetchMediaDetails(tmdbId = extId, isTv = isTv, context = context)
+                    } else {
+                        TmdbApiClient.searchMediaDetailsByTitle(title = cur.title, isTv = isTv, context = context)
+                    }
+
                     if (result.isSuccess) {
                         val details = result.getOrNull()
                         if (details != null) {
                             val now = System.currentTimeMillis()
-                            val mdId = details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: mangaDexIdToUse
                             val latest = repository.getEntryByIdSync(cur.id) ?: cur
                             val candidateTitle = details.title?.trim().orEmpty()
                             val candidateAlts = details.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
                             val currentAlts = (latest.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() }
                             val allCandidates = (listOf(candidateTitle) + candidateAlts).filter { it.isNotBlank() && !it.equals(latest.title, ignoreCase = true) }
-                            val mergedAlts = (currentAlts + allCandidates).distinct()
+                            val mergedAlts = if (forceReLink || isTvContaminatedMovie || latest.alternateTitle?.contains("Dr. Hudson", ignoreCase = true) == true) {
+                                allCandidates.distinct()
+                            } else {
+                                (currentAlts + allCandidates).distinct()
+                            }
+
+                            val relatedJson = if (!details.relatedItems.isNullOrEmpty()) {
+                                com.google.gson.Gson().toJson(details.relatedItems)
+                            } else {
+                                latest.relatedEntriesJson
+                            }
+                            val seriesName = if (latest.mediaType == MediaType.MOVIE && !details.movieSeriesName.isNullOrBlank()) details.movieSeriesName else latest.movieSeriesName
+                            val (finalExtId, finalExtSource) = resolveRefAfterRefresh(
+                                existing = latest,
+                                candidateId = details.tmdbId.toString(),
+                                candidateSource = ExternalSources.TMDB,
+                                forceReLink = forceReLink
+                            )
 
                             val updated = latest.copy(
                                 title = latest.title,
-                                externalId = mdId,
-                                externalSource = "MangaDex",
-                                creator = details.authors?.takeIf { it.isNotBlank() } ?: latest.creator,
+                                externalId = finalExtId,
+                                externalSource = finalExtSource,
+                                creator = details.resolveCreatorFor(isTv) ?: latest.creator,
                                 coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else latest.coverImageUri,
                                 alternateTitle = mergedAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: latest.alternateTitle,
-                                totalChapters = if (details.totalChapters != null && details.totalChapters > 0) details.totalChapters else latest.totalChapters,
-                                totalVolumes = if (details.totalVolumes != null && details.totalVolumes > 0) details.totalVolumes else latest.totalVolumes,
+                                totalEpisodes = if (isTv && details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else if (isTv) latest.totalEpisodes else 0,
+                                totalSeasons = if (isTv && details.totalSeasons != null && details.totalSeasons > 0) details.totalSeasons else if (isTv) latest.totalSeasons else 1,
+                                seasonEpisodesJson = if (latest.mediaType == MediaType.SHOW && details.seasonEpisodes != null) {
+                                    MediaEntry.formatSeasonEpisodes(details.seasonEpisodes) ?: latest.seasonEpisodesJson
+                                } else {
+                                    latest.seasonEpisodesJson
+                                },
+                                durationMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else latest.durationMinutes,
+                                episodeLengthMinutes = if (isTv && details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else if (isTv) latest.episodeLengthMinutes else null,
                                 airedStartDate = details.airedStartDate ?: latest.airedStartDate,
-                                airedEndDate = if (details.isAiring == true) null else (details.airedEndDate ?: latest.airedEndDate),
+                                airedEndDate = if (latest.mediaType == MediaType.MOVIE || details.isAiring == true) null else (details.airedEndDate ?: latest.airedEndDate),
                                 externalScore = details.externalScore ?: latest.externalScore,
-                                externalScoreSource = details.externalScoreSource ?: "MangaDex",
+                                externalScoreSource = ExternalSources.TMDB,
                                 tags = if (!details.tags.isNullOrBlank()) details.tags else latest.tags,
-                                description = if (!details.synopsis.isNullOrBlank()) details.synopsis else (latest.description ?: latest.notes),
+                                description = details.buildDescriptionWithMetadata().takeIf { it.isNotBlank() } ?: (latest.description ?: latest.notes),
                                 userComments = latest.userComments,
                                 isAiring = details.isAiring ?: latest.isAiring,
-                                originalLanguage = details.originalLanguage ?: latest.originalLanguage,
+                                relatedEntriesJson = relatedJson,
+                                movieSeriesName = seriesName,
+                                originalLanguage = details.originalLanguage?.takeIf { it.isNotBlank() } ?: latest.originalLanguage,
                                 updatedAt = now
                             )
-                            repository.update(updated)
-                            _metadataRefreshMessage.value = "Metadata refreshed from MangaDex (${details.title})"
+                            repository.updateMetadataOnly(updated)
+                            if (!details.relatedItems.isNullOrEmpty()) {
+                                _rawRelatedEntries.value = details.relatedItems
+                            }
+                            _metadataRefreshMessage.value = "Metadata refreshed from ${finalExtSource ?: "TMDB"} (TMDB #${details.tmdbId})"
                             loadRelatedEntries(updated, context, force = true)
                         } else {
-                            attemptFallbackResolution("No metadata returned from MangaDex")
+                            attemptFallbackResolution("No metadata returned from The Movie Database")
                         }
                     } else {
                         val err = result.exceptionOrNull()
-                        attemptFallbackResolution("Failed to refresh from MangaDex: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}")
+                        attemptFallbackResolution("Failed to refresh from TMDB: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}")
                     }
-                } else if (isMal) {
+                } else {
                     val isManhwa = cur.mediaType == MediaType.MANHWA
-                    val result = when {
-                        isManhwa && cur.title.isNotBlank() ->
-                            MangaDexApiClient.searchMangaDetailsByTitle(cur.title, isManhwa = true)
-                        isAniList && extId != null && extId > 0 ->
-                            JikanApiClient.queryAniListById(aniListId = extId, isManga = isManga)
-                        extId != null && extId > 0 ->
-                            JikanApiClient.fetchMediaDetails(malId = extId, isManga = isManga, title = cur.title, isManhwa = isManhwa)
-                        else ->
-                            JikanApiClient.searchMediaDetailsByTitle(title = cur.title, isManga = isManga, isManhwa = isManhwa)
+                    val result = when (plan.provider) {
+                        DetailRefreshProvider.MANGADEX -> {
+                            if (extIdStr.isNotBlank()) {
+                                MangaDexApiClient.fetchMangaDetails(extIdStr)
+                            } else {
+                                MangaDexApiClient.searchMangaDetailsByTitle(cur.title, isManhwa = isManhwa)
+                            }
+                        }
+                        DetailRefreshProvider.ANILIST -> {
+                            if (extId != null && extId > 0) {
+                                JikanApiClient.queryAniListById(aniListId = extId, isManga = isManga)
+                            } else {
+                                JikanApiClient.searchMediaDetailsByTitle(title = cur.title, isManga = isManga, isManhwa = isManhwa)
+                            }
+                        }
+                        DetailRefreshProvider.KITSU -> {
+                            if (extIdStr.isNotBlank()) {
+                                KitsuApiClient.fetchDetailsById(extIdStr, isAnime = !isManga)
+                            } else if (isManga) {
+                                KitsuApiClient.searchMangaDetailsByTitle(cur.title)
+                            } else {
+                                KitsuApiClient.searchAnimeDetailsByTitle(cur.title)
+                            }
+                        }
+                        else -> {
+                            // MAL / unlinked Jikan path: always honor existing numeric MAL ID first (even for Manhwa).
+                            if (extId != null && extId > 0) {
+                                JikanApiClient.fetchMediaDetails(malId = extId, isManga = isManga, title = cur.title, isManhwa = isManhwa)
+                            } else if (isManhwa && cur.title.isNotBlank()) {
+                                MangaDexApiClient.searchMangaDetailsByTitle(cur.title, isManhwa = true)
+                            } else {
+                                JikanApiClient.searchMediaDetailsByTitle(title = cur.title, isManga = isManga, isManhwa = isManhwa)
+                            }
+                        }
                     }
 
                     if (result.isSuccess) {
@@ -1077,29 +1221,13 @@ class DetailViewModel(
                             val allCandidates = (listOf(candidateTitle) + candidateAlts).filter { it.isNotBlank() && !it.equals(latest.title, ignoreCase = true) }
                             val mergedAlts = (currentAlts + allCandidates).distinct()
 
-                            val resolvedSource = when {
-                                details.sourceProvider == "MangaDex" -> "MangaDex"
-                                details.sourceProvider.startsWith("MAL") -> "MAL"
-                                details.sourceProvider.contains("AniList") -> "AniList"
-                                details.sourceProvider.equals("Kitsu", ignoreCase = true) -> "Kitsu"
-                                else -> "MAL"
-                            }
-                            val newExtId = when {
-                                details.sourceProvider == "MangaDex" -> {
-                                    details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: latest.externalId
-                                }
-                                details.sourceProvider.contains("AniList") -> {
-                                    (details.malId?.takeIf { it > 0 } ?: details.url?.substringAfterLast('/')?.toLongOrNull())?.toString()
-                                        ?: latest.externalId
-                                }
-                                details.sourceProvider.equals("Kitsu", ignoreCase = true) -> {
-                                    details.malId?.toString() ?: details.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-                                        ?: latest.externalId
-                                }
-                                else -> {
-                                    (details.malId ?: extId)?.toString() ?: latest.externalId
-                                }
-                            }
+                            val preferredRef = details.preferredExternalRef()
+                            val (newExtId, resolvedSource) = resolveRefAfterRefresh(
+                                existing = latest,
+                                candidateId = preferredRef?.second,
+                                candidateSource = preferredRef?.first ?: ExternalSources.canonical(details.sourceProvider),
+                                forceReLink = forceReLink
+                            )
                             val newAiredEpisodes = if (details.airedEpisodes != null && details.airedEpisodes > 0) {
                                 details.airedEpisodes
                             } else if (latest.mediaType == MediaType.ANIME && (details.isAiring ?: latest.isAiring)) {
@@ -1139,7 +1267,7 @@ class DetailViewModel(
                                 airedStartDate = details.airedStartDate ?: latest.airedStartDate,
                                 airedEndDate = if (details.isAiring == true) null else (details.airedEndDate ?: latest.airedEndDate),
                                 externalScore = details.externalScore ?: latest.externalScore,
-                                externalScoreSource = details.externalScoreSource ?: resolvedSource,
+                                externalScoreSource = details.externalScoreSource?.let { ExternalSources.canonical(it) ?: it } ?: resolvedSource,
                                 tags = if (!details.tags.isNullOrBlank()) details.tags else latest.tags,
                                 description = if (!details.synopsis.isNullOrBlank()) details.synopsis else (latest.description ?: latest.notes),
                                 userComments = latest.userComments,
@@ -1148,91 +1276,18 @@ class DetailViewModel(
                                 originalLanguage = details.originalLanguage ?: latest.originalLanguage,
                                 updatedAt = now
                             )
-                            repository.update(updated)
+                            repository.updateMetadataOnly(updated)
                             if (!details.relatedMedia.isNullOrEmpty()) {
                                 _rawRelatedEntries.value = details.relatedMedia
                             }
-                            _metadataRefreshMessage.value = "Metadata refreshed from $resolvedSource (#$newExtId)"
+                            _metadataRefreshMessage.value = "Metadata refreshed from ${resolvedSource ?: plan.sourceDisplayName} (#${newExtId ?: ""})"
                             loadRelatedEntries(updated, context, force = true)
                         } else {
-                            attemptFallbackResolution("No metadata returned from external source")
+                            attemptFallbackResolution("No metadata returned from ${plan.sourceDisplayName}")
                         }
                     } else {
                         val err = result.exceptionOrNull()
-                        attemptFallbackResolution("Failed to refresh: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}")
-                    }
-                } else {
-                    // TMDB for Movie / Show
-                    val isTv = cur.mediaType == MediaType.SHOW
-                    val result = if (extId != null) {
-                        TmdbApiClient.fetchMediaDetails(tmdbId = extId, isTv = isTv, context = context)
-                    } else {
-                        TmdbApiClient.searchMediaDetailsByTitle(title = cur.title, isTv = isTv, context = context)
-                    }
-
-                    if (result.isSuccess) {
-                        val details = result.getOrNull()
-                        if (details != null) {
-                            val now = System.currentTimeMillis()
-                            val latest = repository.getEntryByIdSync(cur.id) ?: cur
-                            val candidateTitle = details.title?.trim().orEmpty()
-                            val candidateAlts = details.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
-                            val currentAlts = (latest.alternateTitle?.split("\n") ?: emptyList()).map { it.trim() }.filter { it.isNotBlank() }
-                            val allCandidates = (listOf(candidateTitle) + candidateAlts).filter { it.isNotBlank() && !it.equals(latest.title, ignoreCase = true) }
-                            val mergedAlts = if (forceReLink || isTvContaminatedMovie || latest.alternateTitle?.contains("Dr. Hudson", ignoreCase = true) == true) {
-                                allCandidates.distinct()
-                            } else {
-                                (currentAlts + allCandidates).distinct()
-                            }
-
-                            val relatedJson = if (!details.relatedItems.isNullOrEmpty()) {
-                                com.google.gson.Gson().toJson(details.relatedItems)
-                            } else {
-                                latest.relatedEntriesJson
-                            }
-                            val seriesName = if (latest.mediaType == MediaType.MOVIE && !details.movieSeriesName.isNullOrBlank()) details.movieSeriesName else latest.movieSeriesName
-
-                            val updated = latest.copy(
-                                title = latest.title,
-                                externalId = details.tmdbId.toString(),
-                                externalSource = "TMDB",
-                                creator = details.resolveCreatorFor(isTv) ?: latest.creator,
-                                coverImageUri = if (!details.posterUrl.isNullOrBlank()) details.posterUrl else latest.coverImageUri,
-                                alternateTitle = mergedAlts.joinToString("\n").takeIf { it.isNotBlank() } ?: latest.alternateTitle,
-                                totalEpisodes = if (isTv && details.totalEpisodes != null && details.totalEpisodes > 0) details.totalEpisodes else if (isTv) latest.totalEpisodes else 0,
-                                totalSeasons = if (isTv && details.totalSeasons != null && details.totalSeasons > 0) details.totalSeasons else if (isTv) latest.totalSeasons else 1,
-                                seasonEpisodesJson = if (latest.mediaType == MediaType.SHOW && details.seasonEpisodes != null) {
-                                    MediaEntry.formatSeasonEpisodes(details.seasonEpisodes) ?: latest.seasonEpisodesJson
-                                } else {
-                                    latest.seasonEpisodesJson
-                                },
-                                durationMinutes = if (details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else latest.durationMinutes,
-                                episodeLengthMinutes = if (isTv && details.durationMinutes != null && details.durationMinutes > 0) details.durationMinutes else if (isTv) latest.episodeLengthMinutes else null,
-                                airedStartDate = details.airedStartDate ?: latest.airedStartDate,
-                                airedEndDate = if (details.isAiring == true) null else (details.airedEndDate ?: latest.airedEndDate),
-                                externalScore = details.externalScore ?: latest.externalScore,
-                                externalScoreSource = "TMDB",
-                                tags = if (!details.tags.isNullOrBlank()) details.tags else latest.tags,
-                                description = details.buildDescriptionWithMetadata().takeIf { it.isNotBlank() } ?: (latest.description ?: latest.notes),
-                                userComments = latest.userComments,
-                                isAiring = details.isAiring ?: latest.isAiring,
-                                relatedEntriesJson = relatedJson,
-                                movieSeriesName = seriesName,
-                                originalLanguage = details.originalLanguage ?: latest.originalLanguage ?: (if (latest.mediaType != MediaType.GAME) latest.getEffectiveLanguage() else null),
-                                updatedAt = now
-                            )
-                            repository.update(updated)
-                            if (!details.relatedItems.isNullOrEmpty()) {
-                                _rawRelatedEntries.value = details.relatedItems
-                            }
-                            _metadataRefreshMessage.value = "Metadata refreshed from TMDB (TMDB #${details.tmdbId})"
-                            loadRelatedEntries(updated, context, force = true)
-                        } else {
-                            attemptFallbackResolution("No metadata returned from The Movie Database")
-                        }
-                    } else {
-                        val err = result.exceptionOrNull()
-                        attemptFallbackResolution("Failed to refresh from TMDB: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}")
+                        attemptFallbackResolution("Failed to refresh from ${plan.sourceDisplayName}: ${err?.message ?: err?.localizedMessage ?: "Unknown error"}")
                     }
                 }
             } catch (e: Exception) {
@@ -1251,8 +1306,123 @@ class DetailViewModel(
                 coverImageUri = coverUrl,
                 updatedAt = System.currentTimeMillis()
             )
-            repository.update(updated)
+            repository.updateMetadataOnly(updated)
             _metadataRefreshMessage.value = "Cover image updated"
+        }
+    }
+
+    companion object {
+        /**
+         * Single deterministic routing decision for Detail screen Refresh, related-item lookup,
+         * and the Refresh confirm dialog. Canonical `externalSource` takes precedence over
+         * category/type heuristics; unlinked entries fall back to [SyncRouter.jobFor].
+         */
+        fun resolveDetailRefreshPlan(entry: MediaEntry): DetailRefreshPlan {
+            val extId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()?.takeIf { it.isNotBlank() }
+            val canonicalSrc = ExternalSources.canonical(entry.externalSource ?: entry.foreignDatabaseSource, extId)
+            val isTachiyomi = canonicalSrc == ExternalSources.TACHIYOMI || JikanSyncManager.isTachiyomiSource(entry)
+            val hasValidId = !isTachiyomi && !extId.isNullOrBlank() && JikanSyncManager.hasValidExternalId(entry)
+
+            if (isTachiyomi) {
+                return DetailRefreshPlan(
+                    provider = DetailRefreshProvider.RESOLVE_IDS,
+                    canonicalSource = canonicalSrc,
+                    externalId = extId,
+                    hasValidId = false,
+                    isFindingAndLinking = true,
+                    sourceDisplayName = "MAL / MangaDex / AniList / Kitsu"
+                )
+            }
+
+            if (hasValidId && canonicalSrc != null) {
+                val explicitProvider = when (canonicalSrc) {
+                    ExternalSources.TMDB -> DetailRefreshProvider.TMDB
+                    ExternalSources.MAL -> DetailRefreshProvider.MAL
+                    ExternalSources.ANILIST -> DetailRefreshProvider.ANILIST
+                    ExternalSources.MANGADEX -> DetailRefreshProvider.MANGADEX
+                    ExternalSources.KITSU -> DetailRefreshProvider.KITSU
+                    ExternalSources.GOOGLE_BOOKS, ExternalSources.OPEN_LIBRARY -> DetailRefreshProvider.BOOKS
+                    ExternalSources.IGDB, ExternalSources.RAWG -> DetailRefreshProvider.GAMES
+                    ExternalSources.APPLE_MUSIC, ExternalSources.MUSICBRAINZ -> DetailRefreshProvider.MUSIC
+                    else -> null
+                }
+                if (explicitProvider != null) {
+                    val label = when (explicitProvider) {
+                        DetailRefreshProvider.TMDB -> "The Movie Database (TMDB)"
+                        DetailRefreshProvider.MAL -> "MyAnimeList (MAL)"
+                        else -> canonicalSrc
+                    }
+                    return DetailRefreshPlan(
+                        provider = explicitProvider,
+                        canonicalSource = canonicalSrc,
+                        externalId = extId,
+                        hasValidId = true,
+                        isFindingAndLinking = TachiyomiResolverManager.isEligibleForResolution(entry),
+                        sourceDisplayName = label
+                    )
+                }
+            }
+
+            val job = SyncRouter.jobFor(entry)
+            val provider = when (job) {
+                SyncJob.TMDB -> DetailRefreshProvider.TMDB
+                SyncJob.JIKAN -> DetailRefreshProvider.MAL
+                SyncJob.BOOKS -> DetailRefreshProvider.BOOKS
+                SyncJob.GAMES -> DetailRefreshProvider.GAMES
+                SyncJob.MUSIC -> DetailRefreshProvider.MUSIC
+                SyncJob.RESOLVE_IDS -> DetailRefreshProvider.RESOLVE_IDS
+            }
+            val label = when (provider) {
+                DetailRefreshProvider.TMDB -> "The Movie Database (TMDB)"
+                DetailRefreshProvider.MAL -> if (entry.mediaType == MediaType.MANHWA) {
+                    "MangaDex / AniList / MAL"
+                } else {
+                    "MyAnimeList (MAL)"
+                }
+                DetailRefreshProvider.BOOKS -> if (entry.isLightNovel()) {
+                    "AniList / MAL (Light Novels)"
+                } else {
+                    "Google Books / Open Library"
+                }
+                DetailRefreshProvider.GAMES -> "IGDB / RAWG"
+                DetailRefreshProvider.MUSIC -> "Apple Music / iTunes / MusicBrainz"
+                DetailRefreshProvider.RESOLVE_IDS -> "MAL / MangaDex / AniList / Kitsu"
+                DetailRefreshProvider.ANILIST -> ExternalSources.ANILIST
+                DetailRefreshProvider.MANGADEX -> ExternalSources.MANGADEX
+                DetailRefreshProvider.KITSU -> ExternalSources.KITSU
+            }
+            val needsLink = !hasValidId || TachiyomiResolverManager.isEligibleForResolution(entry)
+            return DetailRefreshPlan(
+                provider = provider,
+                canonicalSource = canonicalSrc,
+                externalId = extId,
+                hasValidId = hasValidId,
+                isFindingAndLinking = needsLink,
+                sourceDisplayName = label
+            )
+        }
+
+        /**
+         * Preserves an entry's valid existing external reference unless [forceReLink] is explicitly
+         * requested by the user or no valid reference was stored yet.
+         */
+        internal fun resolveRefAfterRefresh(
+            existing: MediaEntry,
+            candidateId: String?,
+            candidateSource: String?,
+            forceReLink: Boolean
+        ): Pair<String?, String?> {
+            val existingId = (existing.externalId ?: existing.foreignDatabaseId)?.trim()?.takeIf { it.isNotBlank() }
+            val existingCanonical = ExternalSources.canonical(existing.externalSource ?: existing.foreignDatabaseSource, existingId)
+            val hasValidExisting = !JikanSyncManager.isTachiyomiSource(existing) &&
+                existingId != null &&
+                JikanSyncManager.hasValidExternalId(existing)
+
+            if (!forceReLink && hasValidExisting && existingCanonical != null) {
+                return existingId to existingCanonical
+            }
+            val normalizedCandidateSrc = candidateSource?.let { ExternalSources.canonical(it) ?: it }
+            return (candidateId?.takeIf { it.isNotBlank() } ?: existingId) to (normalizedCandidateSrc ?: existingCanonical)
         }
     }
 }

@@ -130,13 +130,17 @@ object MalXmlImporter {
 
         val rawSeriesStatus = map["manga_status"]?.trim() ?: ""
         val isPublishing = rawSeriesStatus == "1" || rawSeriesStatus.contains("Publishing", ignoreCase = true)
+        val rawMangaType = map["manga_type"] ?: map["series_type"]
+        val isNovel = MediaEntry.isLightNovelTypeToken(rawMangaType)
 
         val rewatchCount = map["my_times_read"]?.toIntOrNull() ?: 0
         val isRewatching = map["my_rereadingg"]?.trim() == "1"
         val comments = map["my_comments"]?.trim()?.takeIf { it.isNotBlank() }
         val tags = map["my_tags"]?.trim()?.takeIf { it.isNotBlank() }
 
-        val trackingUnit = if (totalVolumes > 0 && totalChapters > 0) {
+        val trackingUnit = if (isNovel) {
+            TrackingUnit.CHAPTERS
+        } else if (totalVolumes > 0 && totalChapters > 0) {
             TrackingUnit.COMBINED
         } else if (totalVolumes > 0) {
             TrackingUnit.VOLUMES
@@ -146,7 +150,8 @@ object MalXmlImporter {
 
         return MediaEntry(
             title = title,
-            mediaType = MediaType.MANGA,
+            mediaType = if (isNovel) MediaType.BOOK else MediaType.MANGA,
+            subCategory = if (isNovel) "Light Novel" else null,
             status = status,
             score = score,
             currentVolumes = readVolumes,

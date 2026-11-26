@@ -6,6 +6,7 @@ import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
@@ -59,7 +60,7 @@ data class JikanMediaDetails(
     val externalScore: Float? = null,
     val externalScoreSource: String? = null,
     val type: String? = null,
-    val sourceProvider: String = "Jikan",
+    val sourceProvider: String = ExternalSources.MAL,
     val url: String? = null,
     val totalPages: Int? = null,
     val isbn: String? = null,
@@ -70,7 +71,8 @@ data class JikanMediaDetails(
     val isAdult: Boolean? = null,
     val originalLanguage: String? = null,
     val popularity: Int? = null,
-    val relatedMedia: List<RelatedMediaItem>? = null
+    val relatedMedia: List<RelatedMediaItem>? = null,
+    val kitsuId: String? = null
 ) {
     val webUrl: String?
         get() {
@@ -91,6 +93,70 @@ data class JikanMediaDetails(
             }
             return null
         }
+
+    /**
+     * Resolves the canonical `(externalSource, externalId)` reference for persisting or linking.
+     * Prefers [ExternalSources.MAL] whenever a real MAL ID (`idMal > 0`) is available even when
+     * metadata came from AniList (e.g. light novels), falling back to [ExternalSources.ANILIST]
+     * with the AniList ID only when no MAL ID exists.
+     */
+    fun preferredExternalRef(): Pair<String, String>? {
+        val provider = sourceProvider.trim()
+        val canonical = ExternalSources.canonical(provider)
+        val cleanUrlId = url?.substringAfterLast('/')?.trim()?.takeIf { it.isNotBlank() }
+
+        if (canonical == ExternalSources.MANGADEX || provider.equals("MangaDex", ignoreCase = true)) {
+            val uuid = url?.let { JikanSyncManager.extractMangaDexUuid(it) } ?: cleanUrlId
+            return uuid?.let { ExternalSources.MANGADEX to it }
+        }
+
+        if (canonical == ExternalSources.KITSU || provider.equals("Kitsu", ignoreCase = true)) {
+            val explicitKitsuId = kitsuId?.trim()?.takeIf { it.isNotBlank() && it != "0" }
+            val queryKitsuId = url?.let {
+                Regex("[?&]kitsuId=([^&]+)").find(it)?.groupValues?.get(1)?.trim()?.takeIf { q -> q.isNotBlank() && q != "0" }
+            }
+            val resolvedKitsuId = explicitKitsuId
+                ?: queryKitsuId
+                ?: malId?.takeIf { it > 0 }?.toString()
+                ?: cleanUrlId
+            return resolvedKitsuId?.let { ExternalSources.KITSU to it }
+        }
+
+        if (canonical == ExternalSources.GOOGLE_BOOKS || canonical == ExternalSources.OPEN_LIBRARY) {
+            val u = url
+            val fromUrl = when {
+                u != null && u.contains("id=") -> Regex("[?&]id=([^&]+)").find(u)?.groupValues?.get(1)
+                cleanUrlId != null -> cleanUrlId.removePrefix("/works/").removePrefix("/").takeIf { it.isNotBlank() }
+                else -> null
+            }
+            val bookId = fromUrl ?: isbn?.takeIf { it.isNotBlank() }
+            return bookId?.let { canonical to it }
+        }
+
+        val validMal = malId?.takeIf { it > 0 }
+        val validAni = aniListId?.takeIf { it > 0 }
+        if (provider.contains("AniList", ignoreCase = true)) {
+            if (validMal != null && (validAni != null || !provider.equals("AniList", ignoreCase = true) || cleanUrlId != validMal.toString())) {
+                return ExternalSources.MAL to validMal.toString()
+            }
+            val aniOnlyId = (validAni ?: cleanUrlId?.toLongOrNull()?.takeIf { it > 0 })?.toString()
+                ?: validMal?.toString()
+                ?: cleanUrlId
+            return aniOnlyId?.let { ExternalSources.ANILIST to it }
+        }
+
+        if (validMal != null) {
+            val src = if (provider.isBlank() || canonical == ExternalSources.MAL) ExternalSources.MAL else (canonical ?: provider)
+            return src to validMal.toString()
+        }
+        if (validAni != null) {
+            return ExternalSources.ANILIST to validAni.toString()
+        }
+        return cleanUrlId?.let {
+            val src = canonical ?: provider.takeIf { p -> p.isNotBlank() } ?: ExternalSources.MANGADEX
+            src to it
+        }
+    }
 }
 
 object JikanApiClient {
@@ -100,14 +166,14 @@ object JikanApiClient {
     const val DEFAULT_BASE_URL = "https://api.jikan.moe/v4"
     private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
-    private var okHttpClient = OkHttpClient.Builder()
+    internal var okHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
 
-    private var searchOkHttpClient = okHttpClient.newBuilder()
+    internal var searchOkHttpClient = okHttpClient.newBuilder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.SECONDS)
         .callTimeout(6, TimeUnit.SECONDS)
@@ -116,6 +182,24 @@ object JikanApiClient {
     private val jikanLock = Any()
     private var lastJikanRequestTime = 0L
     private const val MIN_JIKAN_INTERVAL_MS = 400L
+
+    private fun elapsedRealtimeSafe(): Long = try {
+        SystemClock.elapsedRealtime()
+    } catch (_: RuntimeException) {
+        System.currentTimeMillis()
+    }
+
+    private fun safeLogDebug(message: String) {
+        try {
+            Log.d(TAG, message)
+        } catch (_: RuntimeException) {}
+    }
+
+    private fun safeLogError(message: String, tr: Throwable? = null) {
+        try {
+            Log.e(TAG, message, tr)
+        } catch (_: RuntimeException) {}
+    }
 
     fun initWithDoH(context: Context) {
         try {
@@ -134,14 +218,14 @@ object JikanApiClient {
 
     private fun throttleJikan() {
         synchronized(jikanLock) {
-            val now = SystemClock.elapsedRealtime()
+            val now = elapsedRealtimeSafe()
             val elapsed = now - lastJikanRequestTime
             if (elapsed < MIN_JIKAN_INTERVAL_MS) {
                 try {
                     Thread.sleep(MIN_JIKAN_INTERVAL_MS - elapsed)
                 } catch (_: InterruptedException) {}
             }
-            lastJikanRequestTime = SystemClock.elapsedRealtime()
+            lastJikanRequestTime = elapsedRealtimeSafe()
         }
     }
 
@@ -200,45 +284,38 @@ object JikanApiClient {
         val primaryType = if (isMangaOrManhwa) "manga" else "anime"
 
         if (isManhwa) {
-            // 1. For Manhwa, MangaDex is the primary source (>94% Korean webtoon coverage)
-            if (!title.isNullOrBlank()) {
-                val mdRes = MangaDexApiClient.searchMangaDetailsByTitle(title, isManhwa = true)
-                if (mdRes.isSuccess && !mdRes.getOrNull()?.posterUrl.isNullOrBlank()) {
-                    Log.d(TAG, "Successfully fetched Manhwa from MangaDex for '$title'")
-                    return mdRes
-                }
-            }
-            // 2. Fallback to AniList GraphQL
+            // JOB-13: Look up by stored MAL ID FIRST (AniList idMal -> Jikan REST), before any title search.
             if (malId > 0) {
-                val res = queryAniList(malId, isManga = true)
-                if (res.isSuccess && !res.getOrNull()?.posterUrl.isNullOrBlank()) {
-                    Log.d(TAG, "Successfully fetched Manhwa from AniList for MAL ID $malId")
-                    return res
+                val aniRes = queryAniList(malId, isManga = true)
+                if (aniRes.isSuccess && !aniRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    safeLogDebug("Successfully fetched Manhwa from AniList for MAL ID $malId")
+                    return aniRes
                 }
-            }
-            if (!title.isNullOrBlank()) {
-                val aniTitleRes = queryAniListByTitle(title, isManga = true, isManhwa = true)
-                if (aniTitleRes.isSuccess && !aniTitleRes.getOrNull()?.posterUrl.isNullOrBlank()) {
-                    Log.d(TAG, "Successfully fetched Manhwa from AniList by title for '$title'")
-                    return aniTitleRes
-                }
-            }
-            // 3. Fallback to Kitsu
-            if (!title.isNullOrBlank()) {
-                val kitsuRes = KitsuApiClient.searchMangaDetailsByTitle(title)
-                if (kitsuRes.isSuccess && !kitsuRes.getOrNull()?.posterUrl.isNullOrBlank()) {
-                    Log.d(TAG, "Successfully fetched Manhwa from Kitsu for '$title'")
-                    return kitsuRes
-                }
-            }
-            // 4. Jikan as last resort only
-            if (malId > 0) {
                 val jikanRes = queryJikan(baseUrl, "manga", malId)
                 if (jikanRes.isSuccess && !jikanRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    safeLogDebug("Successfully fetched Manhwa from Jikan for MAL ID $malId")
                     return jikanRes
                 }
             }
-            return Result.failure(Exception("All Manhwa lookups failed for '$title'"))
+            // Title-based fallbacks (only when no MAL ID or both ID lookups failed; each requires confident match).
+            if (!title.isNullOrBlank()) {
+                val mdRes = MangaDexApiClient.searchMangaDetailsByTitle(title, isManhwa = true)
+                if (mdRes.isSuccess && !mdRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    safeLogDebug("Successfully fetched Manhwa fallback from MangaDex for '$title'")
+                    return mdRes
+                }
+                val aniTitleRes = queryAniListByTitle(title, isManga = true, isManhwa = true)
+                if (aniTitleRes.isSuccess && !aniTitleRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    safeLogDebug("Successfully fetched Manhwa fallback from AniList by title for '$title'")
+                    return aniTitleRes
+                }
+                val kitsuRes = KitsuApiClient.searchMangaDetailsByTitle(title)
+                if (kitsuRes.isSuccess && !kitsuRes.getOrNull()?.posterUrl.isNullOrBlank()) {
+                    safeLogDebug("Successfully fetched Manhwa fallback from Kitsu for '$title'")
+                    return kitsuRes
+                }
+            }
+            return Result.failure(Exception("All Manhwa lookups failed for malId=$malId, title='$title'"))
         }
 
         // 1. Fast Path for Anime & Japanese Manga: AniList GraphQL (Details + Airing + Relations in ~150ms)
@@ -368,7 +445,7 @@ object JikanApiClient {
             }
             val bodyString = response.body?.string() ?: ""
 
-            Log.d(TAG, "Jikan HTTP $code for $endpoint")
+            safeLogDebug("Jikan HTTP $code for $endpoint")
 
             if (code == 429) {
                 return Result.failure(RateLimitException("Jikan API rate limit (429) for $type #$malId"))
@@ -386,7 +463,7 @@ object JikanApiClient {
 
             Result.success(parseJikanData(dataObj, fallbackMalId = malId))
         } catch (e: Exception) {
-            Log.e(TAG, "Exception querying Jikan $endpoint", e)
+            safeLogError("Exception querying Jikan $endpoint", e)
             Result.failure(e)
         }
     }
@@ -504,7 +581,7 @@ object JikanApiClient {
             }
             val bodyString = response.body?.string() ?: ""
 
-            Log.d(TAG, "AniList HTTP $code for $label ($type)")
+            safeLogDebug("AniList HTTP $code for $label ($type)")
 
             if (!response.isSuccessful) {
                 return Result.failure(Exception("AniList HTTP $code: ${bodyString.take(200)}"))
@@ -517,7 +594,7 @@ object JikanApiClient {
 
             Result.success(parseAniListMedia(mediaObj, fallbackMalId = idMal))
         } catch (e: Exception) {
-            Log.e(TAG, "Exception querying AniList for $label", e)
+            safeLogError("Exception querying AniList for $label", e)
             Result.failure(e)
         }
     }
@@ -630,7 +707,7 @@ object JikanApiClient {
         }
 
         val jikanErr = jikanResult.exceptionOrNull()
-        Log.w(TAG, "Jikan title search failed for '$rawTitle': ${jikanErr?.message}. Falling back to secondary sources...")
+        safeLogWarn("Jikan title search failed for '$rawTitle': ${jikanErr?.message}. Falling back to secondary sources...")
 
         // 3. If Manga or Manhwa, Fallback 1 is MangaDex!
         if (isMangaOrManhwa) {
@@ -705,7 +782,7 @@ object JikanApiClient {
         }
 
         val errorSummary = "Jikan search: ${jikanErr?.message ?: "not found"}, AniList search: ${anilistResult.exceptionOrNull()?.message ?: "not found"}"
-        Log.e(TAG, "All title searches failed for '$rawTitle'. $errorSummary")
+        safeLogError("All title searches failed for '$rawTitle'. $errorSummary")
         return Result.failure(NotFoundException(errorSummary))
     }
 
@@ -1042,7 +1119,7 @@ object JikanApiClient {
         queryTitle: String
     ): Result<JikanMediaDetails> {
         val encodedQuery = URLEncoder.encode(queryTitle, "UTF-8")
-        val endpoint = "${baseUrl.trimEnd('/')}/$type?q=$encodedQuery&limit=1"
+        val endpoint = "${baseUrl.trimEnd('/')}/$type?q=$encodedQuery&limit=5"
         return try {
             val request = Request.Builder()
                 .url(endpoint)
@@ -1056,7 +1133,7 @@ object JikanApiClient {
             val code = response.code
             val bodyString = response.body?.string() ?: ""
 
-            Log.d(TAG, "Jikan title search HTTP $code for $endpoint")
+            safeLogDebug("Jikan title search HTTP $code for $endpoint")
 
             if (code == 429) {
                 return Result.failure(RateLimitException("Jikan API rate limit (429) for search '$queryTitle'"))
@@ -1074,13 +1151,24 @@ object JikanApiClient {
                 return Result.failure(NotFoundException("No search results found for '$queryTitle' on Jikan"))
             }
 
-            val dataObj = dataArray.get(0).asJsonObject
-            val malId = dataObj.get("mal_id")?.takeIf { !it.isJsonNull }?.asLong
-                ?: return Result.failure(NotFoundException("Missing 'mal_id' in Jikan search result"))
+            val candidates = mutableListOf<JikanMediaDetails>()
+            for (i in 0 until dataArray.size()) {
+                val elem = dataArray.get(i)
+                if (elem.isJsonObject) {
+                    val dataObj = elem.asJsonObject
+                    val malId = dataObj.get("mal_id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
+                    try {
+                        candidates.add(parseJikanData(dataObj, fallbackMalId = malId))
+                    } catch (_: Exception) {}
+                }
+            }
+            val confident = candidates.firstOrNull {
+                TachiyomiResolverManager.isConfidentExactMatch(queryTitle, it)
+            } ?: return Result.failure(NotFoundException("No confident Jikan match found for '$queryTitle'"))
 
-            Result.success(parseJikanData(dataObj, fallbackMalId = malId))
+            Result.success(confident)
         } catch (e: Exception) {
-            Log.e(TAG, "Exception querying Jikan title search $endpoint", e)
+            safeLogError("Exception querying Jikan title search $endpoint", e)
             Result.failure(e)
         }
     }
@@ -1223,7 +1311,7 @@ object JikanApiClient {
             }
             val bodyString = response.body?.string() ?: ""
 
-            Log.d(TAG, "AniList title search HTTP $code for '$searchTitle' ($type, isManhwa=$isManhwa)")
+            safeLogDebug("AniList title search HTTP $code for '$searchTitle' ($type, isManhwa=$isManhwa)")
 
             if (!response.isSuccessful) {
                 return Result.failure(Exception("AniList HTTP $code: ${bodyString.take(200)}"))
@@ -1235,10 +1323,14 @@ object JikanApiClient {
                 ?: return Result.failure(NotFoundException("Title '$searchTitle' not found on AniList"))
 
             val idMal = mediaObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong
+            val details = parseAniListMedia(mediaObj, fallbackMalId = idMal)
+            if (!TachiyomiResolverManager.isConfidentExactMatch(searchTitle, details)) {
+                return Result.failure(NotFoundException("AniList result '${details.title}' did not confidently match '$searchTitle'"))
+            }
 
-            Result.success(parseAniListMedia(mediaObj, fallbackMalId = idMal))
+            Result.success(details)
         } catch (e: Exception) {
-            Log.e(TAG, "Exception querying AniList title search for '$searchTitle'", e)
+            safeLogError("Exception querying AniList title search for '$searchTitle'", e)
             Result.failure(e)
         }
     }
@@ -1350,7 +1442,7 @@ object JikanApiClient {
         // External Score (MAL score e.g. 7.18)
         val rawScore = dataObj.get("score")?.takeIf { !it.isJsonNull }?.asFloat
         val externalScore = rawScore?.takeIf { it > 0f }
-        val externalScoreSource = if (externalScore != null) "MAL" else null
+        val externalScoreSource = if (externalScore != null) ExternalSources.MAL else null
 
         // Broadcast schedule
         val broadcastObj = dataObj.getSafeJsonObject("broadcast")
@@ -1421,7 +1513,7 @@ object JikanApiClient {
             externalScore = externalScore,
             externalScoreSource = externalScoreSource,
             type = mediaTypeStr,
-            sourceProvider = "Jikan",
+            sourceProvider = ExternalSources.MAL,
             url = dataObj.get("url")?.takeIf { !it.isJsonNull }?.asString,
             airedEpisodes = airedEpisodes,
             broadcastTime = broadcastTime,
@@ -1497,7 +1589,7 @@ object JikanApiClient {
         val aniScoreInt = mediaObj.get("averageScore")?.takeIf { !it.isJsonNull }?.asInt
             ?: mediaObj.get("meanScore")?.takeIf { !it.isJsonNull }?.asInt
         val externalScore = aniScoreInt?.takeIf { it > 0 }?.let { it / 10.0f }
-        val externalScoreSource = if (externalScore != null) "AniList" else null
+        val externalScoreSource = if (externalScore != null) ExternalSources.ANILIST else null
 
         val countryOfOrigin = mediaObj.get("countryOfOrigin")?.takeIf { !it.isJsonNull }?.asString
         val resolvedLang = countryOfOrigin?.let { OriginalLanguageRegistry.findByCode(it)?.code ?: it.lowercase(Locale.ROOT) } ?: "ja"
@@ -1580,7 +1672,7 @@ object JikanApiClient {
             externalScore = externalScore,
             externalScoreSource = externalScoreSource,
             type = resolvedType,
-            sourceProvider = if (idMal != null && idMal > 0) "MAL (AniList)" else "AniList",
+            sourceProvider = ExternalSources.ANILIST,
             url = mediaObj.get("siteUrl")?.takeIf { !it.isJsonNull }?.asString,
             airedEpisodes = airedEpisodes,
             broadcastTime = broadcastTime,
@@ -1719,7 +1811,7 @@ object JikanApiClient {
                             title = name,
                             relationship = relationName,
                             externalId = id.toString(),
-                            externalSource = "MAL",
+                            externalSource = ExternalSources.MAL,
                             mediaType = mType
                         )
                     )
@@ -1762,8 +1854,8 @@ object JikanApiClient {
             val relTypeRaw = edgeObj.get("relationType")?.takeIf { !it.isJsonNull }?.asString
             val nodeObj = edgeObj.getAsJsonObject("node") ?: continue
 
-            val id = nodeObj.get("id")?.takeIf { !it.isJsonNull }?.asLong ?: continue
-            val idMal = nodeObj.get("idMal")?.takeIf { !it.isJsonNull }?.asLong
+            val id = nodeObj.get("id")?.takeIf { !it.isJsonNull && it.asLong > 0 }?.asLong ?: continue
+            val idMal = nodeObj.get("idMal")?.takeIf { !it.isJsonNull && it.asLong > 0 }?.asLong
             val finalExternalId = (idMal ?: id).toString()
 
             val titleObj = nodeObj.getAsJsonObject("title")
@@ -1796,7 +1888,7 @@ object JikanApiClient {
                     title = title,
                     relationship = formattedRel,
                     externalId = finalExternalId,
-                    externalSource = if (idMal != null) "MAL" else "AniList",
+                    externalSource = if (idMal != null) ExternalSources.MAL else ExternalSources.ANILIST,
                     mediaType = mediaType,
                     posterUrl = posterUrl,
                     releaseYear = releaseYear,
@@ -1990,56 +2082,115 @@ object JikanApiClient {
         }
     }
 
+    internal enum class RelatedFetchStrategy {
+        MAL_THEN_ANILIST_BY_MAL_ID,
+        ANILIST_BY_ID,
+        TITLE_ONLY
+    }
+
+    internal fun relatedFetchStrategyFor(
+        externalSource: String?,
+        externalId: String?,
+        malId: Long?
+    ): RelatedFetchStrategy {
+        val canonicalSrc = ExternalSources.canonical(externalSource, externalId)
+        val numericId = externalId?.trim()?.toLongOrNull()?.takeIf { it > 0 } ?: malId?.takeIf { it > 0 }
+        return when (canonicalSrc) {
+            ExternalSources.ANILIST -> if (numericId != null) RelatedFetchStrategy.ANILIST_BY_ID else RelatedFetchStrategy.TITLE_ONLY
+            ExternalSources.MANGADEX, ExternalSources.KITSU -> RelatedFetchStrategy.TITLE_ONLY
+            ExternalSources.MAL, null -> if (numericId != null) RelatedFetchStrategy.MAL_THEN_ANILIST_BY_MAL_ID else RelatedFetchStrategy.TITLE_ONLY
+            else -> RelatedFetchStrategy.TITLE_ONLY
+        }
+    }
+
     fun fetchRelatedEntries(
         malId: Long? = null,
         isManga: Boolean,
         title: String? = null,
-        baseUrl: String = DEFAULT_BASE_URL
+        baseUrl: String = DEFAULT_BASE_URL,
+        externalSource: String? = null,
+        externalId: String? = null
+    ): Result<List<RelatedMediaItem>> = fetchRelatedEntriesInternal(
+        malId = malId,
+        isManga = isManga,
+        title = title,
+        externalSource = externalSource,
+        externalId = externalId,
+        fetchJikanByMalId = { id -> queryJikanRelations(baseUrl, isManga, id) },
+        fetchAniListByMalId = { id -> queryAniListRelations(malId = id, isManga = isManga) },
+        fetchAniListByAniId = { id -> queryAniListRelations(aniListId = id, isManga = isManga) },
+        fetchAniListByTitle = { q -> queryAniListRelationsByTitle(q, isManga) }
+    )
+
+    private fun safeLogWarn(message: String) {
+        try {
+            Log.w(TAG, message)
+        } catch (_: RuntimeException) {
+            // Ignored under unmocked local JVM unit tests.
+        }
+    }
+
+    internal fun fetchRelatedEntriesInternal(
+        malId: Long? = null,
+        isManga: Boolean,
+        title: String? = null,
+        externalSource: String? = null,
+        externalId: String? = null,
+        fetchJikanByMalId: (Long) -> Result<List<RelatedMediaItem>>,
+        fetchAniListByMalId: (Long) -> Result<List<RelatedMediaItem>>,
+        fetchAniListByAniId: (Long) -> Result<List<RelatedMediaItem>>,
+        fetchAniListByTitle: (String) -> Result<List<RelatedMediaItem>>
     ): Result<List<RelatedMediaItem>> {
         var lastException: Throwable? = null
         var anyProviderSucceeded = false
 
-        // 1. If malId is provided, try Jikan relations endpoint
-        if (malId != null && malId > 0) {
-            val jikanRes = queryJikanRelations(baseUrl, isManga, malId)
-            if (jikanRes.isSuccess) {
-                anyProviderSucceeded = true
-                val items = jikanRes.getOrDefault(emptyList())
-                if (items.isNotEmpty()) {
-                    return jikanRes
-                }
-            } else {
-                lastException = jikanRes.exceptionOrNull()
-                Log.w(TAG, "Jikan relations query failed for MAL ID $malId (${lastException?.message}). Falling back to AniList...")
-            }
+        val strategy = relatedFetchStrategyFor(externalSource, externalId, malId)
+        val numericId = externalId?.trim()?.toLongOrNull()?.takeIf { it > 0 } ?: malId?.takeIf { it > 0 }
 
-            // 2. Fallback to AniList by MAL ID
-            val anilistRes = queryAniListRelations(malId = malId, isManga = isManga)
-            if (anilistRes.isSuccess) {
-                anyProviderSucceeded = true
-                val items = anilistRes.getOrDefault(emptyList())
-                if (items.isNotEmpty()) {
-                    return anilistRes
-                }
-            } else {
-                lastException = anilistRes.exceptionOrNull()
-                Log.w(TAG, "AniList relations query failed for MAL ID $malId (${lastException?.message}).")
-            }
+        when (strategy) {
+            RelatedFetchStrategy.MAL_THEN_ANILIST_BY_MAL_ID -> {
+                if (numericId != null) {
+                    val jikanRes = fetchJikanByMalId(numericId)
+                    if (jikanRes.isSuccess) {
+                        anyProviderSucceeded = true
+                        val items = jikanRes.getOrDefault(emptyList())
+                        if (items.isNotEmpty()) return jikanRes
+                    } else {
+                        lastException = jikanRes.exceptionOrNull()
+                        safeLogWarn("Jikan relations query failed for MAL ID $numericId (${lastException?.message}). Falling back to AniList...")
+                    }
 
-            // 2b. Also try as AniList ID directly
-            val anilistDirectRes = queryAniListRelations(aniListId = malId, isManga = isManga)
-            if (anilistDirectRes.isSuccess) {
-                anyProviderSucceeded = true
-                val items = anilistDirectRes.getOrDefault(emptyList())
-                if (items.isNotEmpty()) {
-                    return anilistDirectRes
+                    // Fallback to AniList by MAL ID (idMal) — never reinterpret a MAL ID as an AniList ID.
+                    val anilistRes = fetchAniListByMalId(numericId)
+                    if (anilistRes.isSuccess) {
+                        anyProviderSucceeded = true
+                        val items = anilistRes.getOrDefault(emptyList())
+                        if (items.isNotEmpty()) return anilistRes
+                    } else {
+                        lastException = anilistRes.exceptionOrNull()
+                        safeLogWarn("AniList relations query failed for MAL ID $numericId (${lastException?.message}).")
+                    }
                 }
             }
+            RelatedFetchStrategy.ANILIST_BY_ID -> {
+                if (numericId != null) {
+                    val anilistDirectRes = fetchAniListByAniId(numericId)
+                    if (anilistDirectRes.isSuccess) {
+                        anyProviderSucceeded = true
+                        val items = anilistDirectRes.getOrDefault(emptyList())
+                        if (items.isNotEmpty()) return anilistDirectRes
+                    } else {
+                        lastException = anilistDirectRes.exceptionOrNull()
+                        safeLogWarn("AniList direct relations query failed for AniList ID $numericId (${lastException?.message}).")
+                    }
+                }
+            }
+            RelatedFetchStrategy.TITLE_ONLY -> Unit
         }
 
-        // 3. Fallback to AniList by exact title if provided
+        // Fallback to AniList by exact title if provided
         if (!title.isNullOrBlank()) {
-            val rawRes = queryAniListRelationsByTitle(title.trim(), isManga)
+            val rawRes = fetchAniListByTitle(title.trim())
             if (rawRes.isSuccess) {
                 anyProviderSucceeded = true
                 val items = rawRes.getOrDefault(emptyList())
@@ -2052,7 +2203,7 @@ object JikanApiClient {
 
             val cleaned = cleanSearchTitle(title)
             if (cleaned != title.trim()) {
-                val anilistTitleRes = queryAniListRelationsByTitle(cleaned, isManga)
+                val anilistTitleRes = fetchAniListByTitle(cleaned)
                 if (anilistTitleRes.isSuccess) {
                     anyProviderSucceeded = true
                     val items = anilistTitleRes.getOrDefault(emptyList())
@@ -2070,8 +2221,8 @@ object JikanApiClient {
             return Result.success(emptyList())
         }
 
-        // If we experienced an error during all attempts and malId or title was provided:
-        if (lastException != null && (malId != null || !title.isNullOrBlank())) {
+        // If we experienced an error during all attempts and id or title was provided:
+        if (lastException != null && (numericId != null || !title.isNullOrBlank())) {
             if (lastException is NotFoundException ||
                 lastException.message?.contains("404", ignoreCase = true) == true ||
                 lastException.message?.contains("not found", ignoreCase = true) == true

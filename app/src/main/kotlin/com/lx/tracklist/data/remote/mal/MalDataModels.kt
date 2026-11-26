@@ -79,7 +79,8 @@ data class MalMangaNode(
     @SerializedName("synopsis") val synopsis: String? = null,
     @SerializedName("mean") val mean: Float? = null,
     @SerializedName("alternative_titles") val alternativeTitles: MalAlternativeTitles? = null,
-    @SerializedName("genres") val genres: List<MalGenre>? = null
+    @SerializedName("genres") val genres: List<MalGenre>? = null,
+    @SerializedName("media_type") val mediaType: String? = null
 )
 
 data class MalMangaListStatus(

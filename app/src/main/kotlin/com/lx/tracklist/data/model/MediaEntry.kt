@@ -98,9 +98,25 @@ data class MediaEntry(
     val totalPages: Int = 0,
     val trackingUnit: TrackingUnit = TrackingUnit.CHAPTERS,
 
-    // Movie fields
+    // Movie / Music / Game overloaded fields (see typed @get:Ignore accessors below)
+    /**
+     * For [MediaType.MOVIE]: ordinal position within a movie series/franchise.
+     * For [MediaType.MUSIC]: track number on the album.
+     * Unused for other media types.
+     */
     val movieSeriesNumber: Int? = null,
+    /**
+     * For [MediaType.MOVIE]: movie series/collection name.
+     * For [MediaType.MUSIC]: album title.
+     * Unused for other media types.
+     */
     val movieSeriesName: String? = null,
+    /**
+     * Overloaded duration column:
+     * - [MediaType.MOVIE]: runtime in **minutes**.
+     * - [MediaType.MUSIC]: track duration in **seconds**.
+     * - [MediaType.GAME]: average 100% completion time in **minutes**.
+     */
     val durationMinutes: Int? = null,
     val relatedEntriesJson: String? = null,
 
@@ -126,22 +142,37 @@ data class MediaEntry(
 
     // Music album external ID (MusicBrainz Release Group MBID / Apple Music Album ID)
     @SerializedName(value = "musicAlbumId", alternate = ["albumId"])
-    val musicAlbumId: String? = null
+    val musicAlbumId: String? = null,
+
+    // Epoch millis of the last metadata sync attempt (used by Fetch Missing)
+    val lastMetadataSyncAt: Long? = null
 ) {
     // Backward compatibility reference for legacy callers
     @get:Ignore
     val notes: String?
         get() = description
 
-    fun getCreatorRoleLabel(): String = when (mediaType) {
-        MediaType.MUSIC -> "Artist"
-        MediaType.ANIME -> "Studio"
-        MediaType.MANGA, MediaType.MANHWA -> "Author"
-        MediaType.BOOK -> "Author"
-        MediaType.GAME -> "Developer"
-        MediaType.MOVIE -> "Director"
-        MediaType.SHOW -> "Creator / Network"
-    }
+    @get:Ignore
+    val runtimeMinutes: Int?
+        get() = if (mediaType == MediaType.MOVIE) durationMinutes else null
+
+    @get:Ignore
+    val trackDurationSeconds: Int?
+        get() = if (mediaType == MediaType.MUSIC) durationMinutes else null
+
+    @get:Ignore
+    val avgCompletionMinutes: Int?
+        get() = if (mediaType == MediaType.GAME) durationMinutes else null
+
+    @get:Ignore
+    val albumName: String?
+        get() = if (mediaType == MediaType.MUSIC) movieSeriesName else null
+
+    @get:Ignore
+    val trackNumber: Int?
+        get() = if (mediaType == MediaType.MUSIC) movieSeriesNumber else null
+
+    fun getCreatorRoleLabel(): String = mediaType.getCreatorRoleLabel()
 
     val artist: String? get() = creator
     val author: String? get() = creator
@@ -164,6 +195,29 @@ data class MediaEntry(
             }
             return false
         }
+
+    /** Returns the canonical release-state badge ("NYA"/"NYP"/"UNRELEASED" or "AIRING"/"PUBLISHING"), or null. */
+    fun releaseBadge(): String? = when {
+        isNotYetAiredOrPublished -> mediaType.unreleasedBadge()
+        isAiring -> mediaType.ongoingBadge()
+        else -> null
+    }
+
+    /** Returns the category-aware display label for this entry's current [status]. */
+    fun statusLabel(): String = status.getDisplayLabel(mediaType)
+
+    /**
+     * Canonical Light Novel detection rule: only [MediaType.BOOK] entries qualify,
+     * either via light-novel sub/custom category markers or MAL/AniList external source.
+     * Web Novels intentionally remain false so they use print book providers.
+     */
+    fun isLightNovel(): Boolean {
+        if (mediaType != MediaType.BOOK) return false
+        if (isLightNovelMarker(subCategory)) return true
+        if (isLightNovelMarker(customCategory)) return true
+        val src = ExternalSources.canonical(externalSource)
+        return src == ExternalSources.MAL || src == ExternalSources.ANILIST
+    }
     fun getRelatedMediaItems(): List<RelatedMediaItem> {
         if (relatedEntriesJson.isNullOrBlank()) return emptyList()
         return try {
@@ -193,13 +247,7 @@ data class MediaEntry(
 
     fun formatPlaybackTime(): String? {
         val current = currentTimeMinutes?.takeIf { it > 0 } ?: return null
-        val hours = current / 60
-        val mins = current % 60
-        return if (hours > 0) {
-            if (mins > 0) "${hours}h ${mins}m" else "${hours}h"
-        } else {
-            "${mins}m"
-        }
+        return com.lx.tracklist.util.DurationFormatter.formatRuntime(current)
     }
 
     /**
@@ -287,10 +335,10 @@ data class MediaEntry(
 
     /**
      * Calculates the time remaining to complete this entry in minutes.
-     * Returns 0.0 if already completed.
+     * Returns 0.0 for [MediaStatus.COMPLETED] and [MediaStatus.DROPPED] entries.
      */
     fun calculateRemainingTimeMinutes(): Double {
-        if (status == MediaStatus.COMPLETED) return 0.0
+        if (status == MediaStatus.COMPLETED || status == MediaStatus.DROPPED) return 0.0
 
         return when (mediaType) {
             MediaType.ANIME, MediaType.SHOW -> {
@@ -1121,6 +1169,24 @@ data class MediaEntry(
     }
 
     companion object {
+        private val LIGHT_NOVEL_MARKERS = setOf("light novel", "light novels", "ln")
+        private val LIGHT_NOVEL_TYPE_TOKENS = LIGHT_NOVEL_MARKERS + setOf("light_novel", "novel")
+
+        /** Returns true if [raw] matches a canonical Light Novel marker (`"Light Novel"`, `"Light Novels"`, `"LN"`). */
+        fun isLightNovelMarker(raw: String?): Boolean =
+            raw?.trim()?.lowercase(Locale.ROOT) in LIGHT_NOVEL_MARKERS
+
+        /** Returns true if [raw] identifies a Light Novel in API payloads or imports (e.g. `"light_novel"`, `"novel"`, `"Light Novel"`). */
+        fun isLightNovelTypeToken(raw: String?): Boolean =
+            raw?.trim()?.lowercase(Locale.ROOT) in LIGHT_NOVEL_TYPE_TOKENS
+
+        /** Returns true when a category/subcategory selection targets Light Novels under [MediaType.BOOK]. */
+        fun isLightNovelCategory(
+            mediaType: MediaType?,
+            customCategory: String?,
+            subCategory: String?
+        ): Boolean = mediaType == MediaType.BOOK && (isLightNovelMarker(subCategory) || isLightNovelMarker(customCategory))
+
         fun formatMusicDuration(seconds: Int?): String {
             val s = (seconds ?: 0).coerceAtLeast(0)
             val m = s / 60
@@ -1179,13 +1245,7 @@ data class MediaEntry(
         }
 
         fun normalizeSource(source: String?): String? {
-            if (source.isNullOrBlank()) return null
-            val upper = source.trim().uppercase(Locale.US)
-            return when (upper) {
-                "MYANIMELIST" -> "MAL"
-                "APPLE MUSIC", "ITUNES" -> "ITUNES"
-                else -> upper
-            }
+            return ExternalSources.canonical(source)?.uppercase(Locale.US)
         }
 
         fun formatSeasonEpisodes(counts: List<Int>): String? {

@@ -1,22 +1,31 @@
 package com.lx.tracklist.data.repository
 
 import android.content.Context
+import androidx.room.RoomDatabase
+import androidx.room.withTransaction
 import com.lx.tracklist.data.local.CustomCategoryDao
 import com.lx.tracklist.data.local.MediaEntryDao
 import com.lx.tracklist.data.local.StatusCount
 import com.lx.tracklist.data.local.SubCategoryDao
 import com.lx.tracklist.data.local.UserProfileDao
 import com.lx.tracklist.data.model.CustomCategory
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.RelatedMediaItem
 import com.lx.tracklist.data.model.SubCategory
 import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.model.validateCustomCategoryName
 import com.lx.tracklist.data.remote.BookMetadataManager
 import com.lx.tracklist.data.remote.GameMetadataManager
 import com.lx.tracklist.data.remote.GoogleBooksApiClient
 import com.lx.tracklist.data.remote.ITunesApiClient
+import com.lx.tracklist.data.remote.JikanApiClient
+import com.lx.tracklist.data.remote.JikanMediaDetails
+import com.lx.tracklist.data.remote.KitsuApiClient
+import com.lx.tracklist.data.remote.MangaDexApiClient
 import com.lx.tracklist.data.remote.MusicMetadataManager
 import com.lx.tracklist.data.remote.OpenLibraryApiClient
 import kotlinx.coroutines.CoroutineScope
@@ -40,12 +49,18 @@ enum class ConflictStrategy {
     MERGE
 }
 
+data class DuplicateMergePair(
+    val primary: MediaEntry,
+    val duplicate: MediaEntry
+)
+
 class MediaRepository(
     private val dao: MediaEntryDao,
     private val userProfileDao: UserProfileDao? = null,
     private val customCategoryDao: CustomCategoryDao? = null,
     private val subCategoryDao: SubCategoryDao? = null,
-    private val context: Context? = null
+    private val context: Context? = null,
+    private val database: RoomDatabase? = null
 ) {
     private val repoScope = CoroutineScope(Dispatchers.IO)
     private val prefs = context?.getSharedPreferences("lx_user_prefs", Context.MODE_PRIVATE)
@@ -256,10 +271,33 @@ class MediaRepository(
     }
 
     suspend fun updateCustomCategory(category: CustomCategory) {
-        customCategoryDao?.update(category)
+        val existingOtherNames = customCategoryDao
+            ?.getAllCategoriesSync(category.userId)
+            ?.filter { it.id != category.id }
+            ?.map { it.name }
+            .orEmpty()
+        if (validateCustomCategoryName(category.name, existingOtherNames) != null) return
+        customCategoryDao?.update(category.copy(name = category.name.trim()))
     }
 
-    suspend fun deleteCustomCategory(category: CustomCategory) {
+    suspend fun countEntriesInCustomCategory(name: String, userId: Long? = null): Int {
+        val targetUserId = userId ?: _activeUser.value.id
+        return dao.countByCustomCategory(targetUserId, name)
+    }
+
+    suspend fun clearCustomCategory(name: String, userId: Long? = null) {
+        val targetUserId = userId ?: _activeUser.value.id
+        dao.clearCustomCategory(targetUserId, name, System.currentTimeMillis())
+    }
+
+    suspend fun deleteCustomCategory(category: CustomCategory, deleteEntries: Boolean = false) {
+        val targetUserId = if (category.userId > 0L) category.userId else _activeUser.value.id
+        if (deleteEntries) {
+            dao.deleteByCustomCategory(targetUserId, category.name)
+        } else {
+            clearCustomCategory(category.name, targetUserId)
+        }
+        subCategoryDao?.deleteByCategoryKey(targetUserId, category.name)
         customCategoryDao?.delete(category)
     }
 
@@ -276,6 +314,23 @@ class MediaRepository(
         get() = if (subCategoryDao != null) {
             _activeUser.flatMapLatest { user -> subCategoryDao.getAllSubCategories(user.id) }
         } else emptyFlow()
+
+    suspend fun ensureSubCategory(categoryKey: String, name: String, userId: Long? = null) {
+        val trimmedName = name.trim()
+        val trimmedKey = categoryKey.trim()
+        if (trimmedName.isBlank() || trimmedKey.isBlank()) return
+        val dao = subCategoryDao ?: return
+        val targetUserId = userId ?: _activeUser.value.id
+        if (dao.getSubCategory(targetUserId, trimmedKey, trimmedName) == null) {
+            dao.insert(
+                SubCategory(
+                    userId = targetUserId,
+                    categoryKey = trimmedKey,
+                    name = trimmedName
+                )
+            )
+        }
+    }
 
     suspend fun addSubCategory(categoryKey: String, name: String, colorHex: String = "#A7EF60", userId: Long? = null) {
         val trimmed = name.trim()
@@ -390,7 +445,17 @@ class MediaRepository(
         return id
     }
 
-    suspend fun update(entry: MediaEntry) {
+    internal var dispatchMalPush: (MediaEntry) -> Unit = { updated ->
+        context?.let { ctx ->
+            com.lx.tracklist.data.remote.mal.MalSyncManager.pushUpdateInBackground(ctx, updated)
+        }
+    }
+
+    /**
+     * Persists metadata-only changes (e.g. background sync, ID resolution, detail refresh)
+     * without triggering a MAL push.
+     */
+    suspend fun updateMetadataOnly(entry: MediaEntry) {
         val effectiveEntry = if (entry.userId <= 0L) {
             val existing = dao.getEntryByIdSync(entry.id)
             entry.copy(userId = existing?.userId ?: _activeUser.value.id)
@@ -398,8 +463,18 @@ class MediaRepository(
             entry
         }
         dao.update(effectiveEntry)
-        context?.let { ctx ->
-            com.lx.tracklist.data.remote.mal.MalSyncManager.pushUpdateInBackground(ctx, effectiveEntry)
+    }
+
+    suspend fun update(entry: MediaEntry) {
+        val previous = dao.getEntryByIdSync(entry.id)
+        val effectiveEntry = if (entry.userId <= 0L) {
+            entry.copy(userId = previous?.userId ?: _activeUser.value.id)
+        } else {
+            entry
+        }
+        dao.update(effectiveEntry)
+        if (hasTrackedUserFieldChanges(previous, effectiveEntry)) {
+            dispatchMalPush(effectiveEntry)
         }
     }
 
@@ -510,8 +585,9 @@ class MediaRepository(
         strategy: ConflictStrategy,
         targetUserId: Long = _activeUser.value.id
     ): Pair<Int, Int> { // Returns Pair(insertedCount, updatedCount)
-        var inserted = 0
-        var updated = 0
+        val runImport: suspend () -> Pair<Int, Int> = {
+            var inserted = 0
+            var updated = 0
 
         // Auto-create any missing custom categories
         if (customCategoryDao != null) {
@@ -543,26 +619,15 @@ class MediaRepository(
         }
 
         // Auto-create any missing sub categories
-        if (subCategoryDao != null) {
-            for (rawEntry in entries) {
-                val subCat = rawEntry.subCategory?.trim()
-                if (!subCat.isNullOrBlank()) {
-                    val catKey = if (!rawEntry.customCategory.isNullOrBlank()) {
-                        rawEntry.customCategory.trim()
-                    } else {
-                        rawEntry.mediaType.name
-                    }
-                    val existing = subCategoryDao.getSubCategory(targetUserId, catKey, subCat)
-                    if (existing == null) {
-                        subCategoryDao.insert(
-                            SubCategory(
-                                userId = targetUserId,
-                                categoryKey = catKey,
-                                name = subCat
-                            )
-                        )
-                    }
+        for (rawEntry in entries) {
+            val subCat = rawEntry.subCategory?.trim()
+            if (!subCat.isNullOrBlank()) {
+                val catKey = if (!rawEntry.customCategory.isNullOrBlank()) {
+                    rawEntry.customCategory.trim()
+                } else {
+                    rawEntry.mediaType.name
                 }
+                ensureSubCategory(catKey, subCat, targetUserId)
             }
         }
 
@@ -596,11 +661,19 @@ class MediaRepository(
                         userEntries.add(merged)
                         updated++
                     }
+                    }
                 }
             }
+
+            Pair(inserted, updated)
         }
 
-        return Pair(inserted, updated)
+        val db = database
+        return if (db != null) {
+            db.withTransaction { runImport() }
+        } else {
+            runImport()
+        }
     }
 
     suspend fun findExistingEntry(
@@ -610,6 +683,7 @@ class MediaRepository(
     ): MediaEntry? {
         val impExtId = imported.externalId?.trim()?.takeIf { it.isNotBlank() && it != "0" && it != "null" }
         val impExtSrc = imported.externalSource?.trim()?.takeIf { it.isNotBlank() }
+            ?.let { ExternalSources.canonical(it, impExtId) ?: it }
         val impTitle = imported.title.trim()
         val impType = imported.mediaType
 
@@ -627,13 +701,15 @@ class MediaRepository(
             if (byAnyId != null) {
                 // If byAnyId has an externalSource specified, it MUST match impExtSrc.
                 // Different external sources (e.g. MAL vs Tachiyomi/AniList) use different ID spaces.
-                val isSourceCompatible = byAnyId.externalSource == null ||
-                        (impExtSrc != null && byAnyId.externalSource.equals(impExtSrc, ignoreCase = true))
+                val existingCanon = ExternalSources.canonical(byAnyId.externalSource, byAnyId.externalId)
+                    ?: byAnyId.externalSource
+                val isSourceCompatible = existingCanon == null ||
+                        (impExtSrc != null && existingCanon.equals(impExtSrc, ignoreCase = true))
                 val isTitleCompatible = byAnyId.title.equals(impTitle, ignoreCase = true) ||
                         com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(byAnyId.title) ==
                         com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(impTitle)
 
-                if (isSourceCompatible && (byAnyId.externalSource != null || isTitleCompatible)) {
+                if (isSourceCompatible && (existingCanon != null || isTitleCompatible)) {
                     return byAnyId
                 }
             }
@@ -642,9 +718,11 @@ class MediaRepository(
         // 3. Exact Title and Media Type
         val byTitle = dao.findByTitleAndType(targetUserId, impTitle, impType)
         if (byTitle != null) {
+            val existingCanon = ExternalSources.canonical(byTitle.externalSource, byTitle.externalId)
+                ?: byTitle.externalSource
             val isConflictingExtId = impExtSrc != null && impExtId != null &&
-                    byTitle.externalSource != null &&
-                    byTitle.externalSource.equals(impExtSrc, ignoreCase = true) &&
+                    existingCanon != null &&
+                    existingCanon.equals(impExtSrc, ignoreCase = true) &&
                     !byTitle.externalId.isNullOrBlank() &&
                     byTitle.externalId != impExtId
             if (!isConflictingExtId) return byTitle
@@ -770,16 +848,17 @@ class MediaRepository(
         // Preserve external source & ID: If existing is already linked to external database (MangaDex, MAL, AniList, TMDB), keep it!
         val isExistingLinked = !existing.externalSource.isNullOrBlank() && !com.lx.tracklist.data.remote.JikanSyncManager.isTachiyomiSource(existing)
         val isImportedLinked = !imported.externalSource.isNullOrBlank() && !com.lx.tracklist.data.remote.JikanSyncManager.isTachiyomiSource(imported)
-        val finalExternalSource = when {
-            isExistingLinked -> existing.externalSource
-            isImportedLinked -> imported.externalSource
-            else -> imported.externalSource ?: existing.externalSource
-        }
         val finalExternalId = when {
             isExistingLinked -> existing.externalId
             isImportedLinked -> imported.externalId
             else -> imported.externalId ?: existing.externalId
         }
+        val rawMergedSource = when {
+            isExistingLinked -> existing.externalSource
+            isImportedLinked -> imported.externalSource
+            else -> imported.externalSource ?: existing.externalSource
+        }
+        val finalExternalSource = rawMergedSource?.let { ExternalSources.canonical(it, finalExternalId) ?: it }
 
         // Merge alternate titles (keep all known names)
         val existingAlts = existing.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
@@ -857,61 +936,76 @@ class MediaRepository(
         )
     }
 
-    suspend fun deduplicateLibrary(targetUserId: Long = _activeUser.value.id): Int {
-        val allEntries = dao.getAllEntriesByUserSync(targetUserId)
-        if (allEntries.size < 2) return 0
+    suspend fun findDuplicatePairs(targetUserId: Long = _activeUser.value.id): List<DuplicateMergePair> {
+        val entries = dao.getAllEntriesByUserSync(targetUserId).toMutableList()
+        if (entries.size < 2) return emptyList()
 
-        var mergedCount = 0
+        val pairs = mutableListOf<DuplicateMergePair>()
         val deletedIds = mutableSetOf<Long>()
 
-        for (i in 0 until allEntries.size) {
-            val entryA = allEntries[i]
-            if (deletedIds.contains(entryA.id)) continue
+        for (i in 0 until entries.size) {
+            if (deletedIds.contains(entries[i].id)) continue
 
-            for (j in i + 1 until allEntries.size) {
-                val entryB = allEntries[j]
-                if (deletedIds.contains(entryB.id)) continue
+            for (j in i + 1 until entries.size) {
+                if (deletedIds.contains(entries[j].id)) continue
 
-                if (areEntriesDuplicates(entryA, entryB)) {
-                    val (primary, duplicate) = pickPrimaryAndDuplicate(entryA, entryB)
+                val currentA = entries[i]
+                val currentB = entries[j]
+                if (areEntriesDuplicates(currentA, currentB)) {
+                    val (primary, duplicate) = pickPrimaryAndDuplicate(currentA, currentB)
                     val merged = mergeEntries(primary, duplicate).copy(id = primary.id, userId = targetUserId)
-                    dao.update(merged)
-                    dao.delete(duplicate)
+                    pairs.add(DuplicateMergePair(primary = primary, duplicate = duplicate))
                     deletedIds.add(duplicate.id)
-                    mergedCount++
-                    break
+                    if (primary.id == currentA.id) {
+                        entries[i] = merged
+                    } else {
+                        entries[j] = merged
+                        break
+                    }
                 }
             }
         }
-        return mergedCount
+        return pairs
+    }
+
+    suspend fun deduplicateLibrary(targetUserId: Long = _activeUser.value.id): Int {
+        val pairs = findDuplicatePairs(targetUserId)
+        if (pairs.isEmpty()) return 0
+
+        val updatedById = mutableMapOf<Long, MediaEntry>()
+        for (pair in pairs) {
+            val currentPrimary = updatedById[pair.primary.id]
+                ?: dao.getEntryByIdSync(pair.primary.id)
+                ?: pair.primary
+            val merged = mergeEntries(currentPrimary, pair.duplicate).copy(id = currentPrimary.id, userId = targetUserId)
+            dao.update(merged)
+            dao.delete(pair.duplicate)
+            updatedById[currentPrimary.id] = merged
+        }
+        return pairs.size
     }
 
     fun areEntriesDuplicates(entryA: MediaEntry, entryB: MediaEntry): Boolean {
-        if (!isMediaTypeCompatible(entryA.mediaType, entryB.mediaType)) return false
+        if (entryA.mediaType != entryB.mediaType) return false
 
-        // 1. Same non-empty externalId and externalSource
-        if (!entryA.externalId.isNullOrBlank() && !entryB.externalId.isNullOrBlank()) {
-            if (entryA.externalId == entryB.externalId && entryA.externalSource == entryB.externalSource) {
-                return true
-            }
+        val extIdA = entryA.externalId?.trim()?.takeIf { it.isNotBlank() && it != "0" && it != "null" }
+        val extIdB = entryB.externalId?.trim()?.takeIf { it.isNotBlank() && it != "0" && it != "null" }
+        val srcA = com.lx.tracklist.data.model.ExternalSources.canonical(entryA.externalSource, extIdA)
+        val srcB = com.lx.tracklist.data.model.ExternalSources.canonical(entryB.externalSource, extIdB)
+
+        // 1. Both have IDs from the same canonical source: equal IDs decide; different IDs are distinct works.
+        if (extIdA != null && extIdB != null && srcA != null && srcA == srcB) {
+            return extIdA.equals(extIdB, ignoreCase = true)
         }
 
-        // 2. Exact title match
-        if (entryA.title.equals(entryB.title, ignoreCase = true)) {
-            return true
+        // Release year compatibility when both have airedStartDate.
+        val yearA = entryA.airedStartDate?.let { MediaEntry.extractYearFromMillis(it) }
+        val yearB = entryB.airedStartDate?.let { MediaEntry.extractYearFromMillis(it) }
+        if (yearA != null && yearB != null && yearA != yearB) {
+            return false
         }
 
-        // 3. One entry's title is in the other entry's alternateTitle
-        val altsA = entryA.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
-        val altsB = entryB.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
-
-        if (altsA.any { it.equals(entryB.title, ignoreCase = true) } || altsB.any { it.equals(entryA.title, ignoreCase = true) }) {
-            return true
-        }
-
-        // 4. Tachiyomi ID cross-match in description or user comments
-        val extIdA = entryA.externalId
-        val extIdB = entryB.externalId
+        // 2. Tachiyomi ID cross-match in description or user comments
         if (extIdA != null && extIdA.startsWith("/") &&
             ((entryB.description ?: entryB.notes)?.contains(extIdA) == true || entryB.userComments?.contains(extIdA) == true)
         ) {
@@ -923,9 +1017,23 @@ class MediaRepository(
             return true
         }
 
-        // 5. Normalized space-agnostic title match
-        val normA = com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(entryA.title)
-        val normB = com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(entryB.title)
+        // 3. Exact title or alternate-title match
+        val titleA = entryA.title.trim()
+        val titleB = entryB.title.trim()
+        if (titleA.equals(titleB, ignoreCase = true)) {
+            return true
+        }
+
+        val altsA = entryA.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+        val altsB = entryB.alternateTitle?.split("\n")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
+
+        if (altsA.any { it.equals(titleB, ignoreCase = true) } || altsB.any { it.equals(titleA, ignoreCase = true) }) {
+            return true
+        }
+
+        // 4. Normalized space-agnostic title match
+        val normA = com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(titleA)
+        val normB = com.lx.tracklist.data.remote.TachiyomiResolverManager.normalizeTitle(titleB)
         if (normA.isNotBlank() && normA == normB) {
             return true
         }
@@ -951,16 +1059,55 @@ class MediaRepository(
         }
     }
 
+    internal fun buildAnimeMangaRelatedMediaEntry(
+        userId: Long,
+        item: RelatedMediaItem,
+        details: JikanMediaDetails?,
+        status: MediaStatus
+    ): MediaEntry {
+        val canonicalSrc = ExternalSources.canonical(item.externalSource, item.externalId)
+        val isVideo = item.mediaType == MediaType.ANIME
+        val resolvedSource = canonicalSrc
+            ?: ExternalSources.canonical(details?.sourceProvider)
+            ?: ExternalSources.MAL
+        val resolvedScoreSource = details?.externalScoreSource?.let { ExternalSources.canonical(it) ?: it }
+            ?: resolvedSource
+        return MediaEntry(
+            userId = userId,
+            title = details?.title ?: item.title,
+            alternateTitle = details?.alternateTitle,
+            mediaType = item.mediaType,
+            status = status,
+            creator = details?.authors?.takeIf { it.isNotBlank() },
+            externalId = item.externalId,
+            externalSource = resolvedSource,
+            externalScore = details?.externalScore ?: item.score,
+            externalScoreSource = resolvedScoreSource,
+            coverImageUri = details?.posterUrl ?: item.posterUrl,
+            totalEpisodes = if (isVideo) (details?.totalEpisodes ?: 0) else 0,
+            totalChapters = if (!isVideo) (details?.totalChapters ?: 0) else 0,
+            totalVolumes = if (!isVideo) (details?.totalVolumes ?: 0) else 0,
+            episodeLengthMinutes = details?.durationMinutes,
+            durationMinutes = if (item.mediaType == MediaType.MOVIE) details?.durationMinutes else null,
+            tags = details?.tags,
+            description = details?.synopsis,
+            airedStartDate = details?.airedStartDate,
+            airedEndDate = details?.airedEndDate,
+            isAiring = details?.isAiring ?: false
+        )
+    }
+
     suspend fun addRelatedItem(
-        item: com.lx.tracklist.data.model.RelatedMediaItem,
+        item: RelatedMediaItem,
         status: MediaStatus,
         context: Context? = null,
         targetUserId: Long? = null
     ): Long {
         val effectiveUserId = targetUserId ?: activeUser.value.id
         return withContext(Dispatchers.IO) {
-            val entry = if (item.mediaType == MediaType.BOOK || item.externalSource in listOf("Google Books", "Open Library")) {
-                val bookDetails = if (item.externalSource.equals("Google Books", ignoreCase = true)) {
+            val canonSrc = ExternalSources.canonical(item.externalSource, item.externalId)
+            val entry = if (item.mediaType == MediaType.BOOK || canonSrc == ExternalSources.GOOGLE_BOOKS || canonSrc == ExternalSources.OPEN_LIBRARY) {
+                val bookDetails = if (canonSrc == ExternalSources.GOOGLE_BOOKS) {
                     GoogleBooksApiClient.fetchVolumeDetails(item.externalId, context).getOrNull()
                         ?: BookMetadataManager.searchBooks(item.title, context, limit = 1).getOrNull()?.firstOrNull()
                 } else {
@@ -984,6 +1131,7 @@ class MediaRepository(
                         }
                     } catch (_: Exception) { null }
                 }
+                val bookSrc = canonSrc ?: ExternalSources.canonical(bookDetails?.sourceProvider) ?: ExternalSources.GOOGLE_BOOKS
 
                 MediaEntry(
                     userId = effectiveUserId,
@@ -993,9 +1141,9 @@ class MediaRepository(
                     status = status,
                     creator = bookDetails?.authorString?.takeIf { it.isNotBlank() },
                     externalId = item.externalId,
-                    externalSource = item.externalSource,
+                    externalSource = bookSrc,
                     externalScore = bookDetails?.averageScore ?: item.score,
-                    externalScoreSource = item.externalSource,
+                    externalScoreSource = bookSrc,
                     coverImageUri = bookDetails?.coverUrl ?: item.posterUrl,
                     totalPages = bookDetails?.pageCount ?: 0,
                     totalVolumes = bookDetails?.totalVolumes ?: 0,
@@ -1007,9 +1155,15 @@ class MediaRepository(
                     airedEndDate = publishEpoch,
                     isAiring = false
                 )
-            } else if (item.mediaType == MediaType.GAME || item.externalSource in listOf("IGDB", "RAWG")) {
+            } else if (item.mediaType == MediaType.GAME || canonSrc == ExternalSources.IGDB || canonSrc == ExternalSources.RAWG) {
                 val fullGame = if (context != null) {
-                    GameMetadataManager.getGameDetails(context, item.externalId, item.externalSource).getOrNull()
+                    GameMetadataManager.getGameDetails(
+                        context = context,
+                        externalId = item.externalId,
+                        externalSource = canonSrc ?: item.externalSource,
+                        title = item.title,
+                        releaseYear = item.releaseYear
+                    ).getOrNull()
                 } else null
                 val releaseMillis = fullGame?.releaseDateMillis ?: item.releaseYear?.trim()?.take(4)?.toIntOrNull()?.let { year ->
                     val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
@@ -1017,6 +1171,7 @@ class MediaRepository(
                     cal.timeInMillis
                 }
                 val platformsList = fullGame?.platforms?.takeIf { it.isNotEmpty() } ?: item.platforms.orEmpty()
+                val gameSrc = canonSrc ?: ExternalSources.IGDB
                 MediaEntry(
                     userId = effectiveUserId,
                     title = fullGame?.title ?: item.title,
@@ -1025,9 +1180,9 @@ class MediaRepository(
                     status = status,
                     creator = fullGame?.developers?.firstOrNull()?.takeIf { it.isNotBlank() } ?: fullGame?.publishers?.firstOrNull()?.takeIf { it.isNotBlank() },
                     externalId = item.externalId,
-                    externalSource = if (item.externalSource.isNotBlank()) item.externalSource else "IGDB",
+                    externalSource = gameSrc,
                     externalScore = fullGame?.rating ?: item.score,
-                    externalScoreSource = fullGame?.ratingSource ?: if (item.externalSource.isNotBlank()) item.externalSource else "IGDB",
+                    externalScoreSource = (fullGame?.ratingSource ?: gameSrc).let { ExternalSources.canonical(it) ?: it },
                     coverImageUri = fullGame?.coverUrl ?: item.posterUrl,
                     airedStartDate = releaseMillis,
                     gamePlatforms = MediaEntry.formatGamePlatforms(platformsList),
@@ -1036,11 +1191,7 @@ class MediaRepository(
                     durationMinutes = fullGame?.completionTimeMinutes,
                     relatedEntriesJson = if (fullGame != null && fullGame.relatedItems.isNotEmpty()) com.google.gson.Gson().toJson(fullGame.relatedItems) else null
                 )
-            } else if (item.mediaType == MediaType.MUSIC ||
-                item.externalSource.equals("iTunes", ignoreCase = true) ||
-                item.externalSource.equals("Apple Music", ignoreCase = true) ||
-                item.externalSource.equals("MusicBrainz", ignoreCase = true)
-            ) {
+            } else if (item.mediaType == MediaType.MUSIC || canonSrc == ExternalSources.APPLE_MUSIC || canonSrc == ExternalSources.MUSICBRAINZ) {
                 val track = if (item.externalId.isNotBlank() && item.externalId.all { it.isDigit() }) {
                     ITunesApiClient.lookupTrack(item.externalId).getOrNull()
                 } else {
@@ -1051,7 +1202,9 @@ class MediaRepository(
                 val effectiveArtist = track?.artist?.takeIf { it.isNotBlank() }
                 val effectiveAlbum = track?.albumName?.takeIf { it.isNotBlank() }
                 val effectiveExtId = track?.externalId?.takeIf { it.isNotBlank() } ?: item.externalId
-                val effectiveExtSrc = track?.externalSource?.takeIf { it.isNotBlank() } ?: item.externalSource.ifBlank { "Apple Music" }
+                val effectiveExtSrc = ExternalSources.canonical(track?.externalSource)
+                    ?: canonSrc
+                    ?: ExternalSources.APPLE_MUSIC
                 val relatedAlbumItems = MusicMetadataManager.fetchRelatedAlbumTracks(
                     title = effectiveTitle,
                     artist = effectiveArtist,
@@ -1077,7 +1230,7 @@ class MediaRepository(
                     externalId = effectiveExtId,
                     externalSource = effectiveExtSrc,
                     externalScore = track?.score ?: item.score,
-                    externalScoreSource = track?.externalSource ?: effectiveExtSrc,
+                    externalScoreSource = ExternalSources.canonical(track?.externalSource) ?: effectiveExtSrc,
                     coverImageUri = track?.coverUrl ?: track?.albumCoverUrl ?: item.posterUrl,
                     durationMinutes = track?.durationSeconds,
                     tags = track?.genres?.joinToString(", ")?.takeIf { it.isNotBlank() },
@@ -1088,7 +1241,7 @@ class MediaRepository(
                     originalLanguage = track?.originalLanguage,
                     relatedEntriesJson = if (!relatedAlbumItems.isNullOrEmpty()) com.google.gson.Gson().toJson(relatedAlbumItems) else null
                 )
-            } else if (item.externalSource.equals("TMDB", ignoreCase = true)) {
+            } else if (canonSrc == ExternalSources.TMDB) {
                 val tmdbId = item.externalId.toLongOrNull() ?: 0L
                 if (item.mediaType == MediaType.MOVIE) {
                     val fullDetails = com.lx.tracklist.data.remote.TmdbApiClient.fetchMovieDetails(tmdbId, context).getOrNull()
@@ -1100,9 +1253,9 @@ class MediaRepository(
                         status = status,
                         creator = fullDetails?.resolveCreatorFor(false),
                         externalId = item.externalId,
-                        externalSource = "TMDB",
+                        externalSource = ExternalSources.TMDB,
                         externalScore = fullDetails?.externalScore ?: item.score,
-                        externalScoreSource = "TMDB",
+                        externalScoreSource = ExternalSources.TMDB,
                         coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
                         durationMinutes = fullDetails?.durationMinutes,
                         tags = fullDetails?.tags,
@@ -1123,9 +1276,9 @@ class MediaRepository(
                         status = status,
                         creator = fullDetails?.resolveCreatorFor(true),
                         externalId = item.externalId,
-                        externalSource = "TMDB",
+                        externalSource = ExternalSources.TMDB,
                         externalScore = fullDetails?.externalScore ?: item.score,
-                        externalScoreSource = "TMDB",
+                        externalScoreSource = ExternalSources.TMDB,
                         coverImageUri = fullDetails?.posterUrl ?: item.posterUrl,
                         totalEpisodes = fullDetails?.totalEpisodes ?: 0,
                         totalSeasons = fullDetails?.totalSeasons ?: 1,
@@ -1139,35 +1292,53 @@ class MediaRepository(
                     )
                 }
             } else {
-                val malId = item.externalId.toLongOrNull() ?: 0L
                 val isManga = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA || item.mediaType == MediaType.BOOK
-                val details = com.lx.tracklist.data.remote.JikanApiClient.fetchMediaDetails(malId, isManga).getOrNull()
-                val isVideo = item.mediaType == MediaType.ANIME
-                MediaEntry(
+                val numericId = item.externalId.trim().toLongOrNull() ?: 0L
+                val details = when (canonSrc) {
+                    ExternalSources.ANILIST -> {
+                        if (numericId > 0) JikanApiClient.queryAniListById(aniListId = numericId, isManga = isManga).getOrNull()
+                        else JikanApiClient.queryAniListByTitle(item.title, isManga).getOrNull()
+                    }
+                    ExternalSources.MANGADEX -> {
+                        MangaDexApiClient.fetchMangaDetails(item.externalId).getOrNull()
+                    }
+                    ExternalSources.KITSU -> {
+                        KitsuApiClient.fetchDetailsById(item.externalId, isAnime = !isManga).getOrNull()
+                    }
+                    else -> {
+                        if (numericId > 0) JikanApiClient.fetchMediaDetails(numericId, isManga).getOrNull() else null
+                    }
+                }
+                buildAnimeMangaRelatedMediaEntry(
                     userId = effectiveUserId,
-                    title = details?.title ?: item.title,
-                    alternateTitle = details?.alternateTitle,
-                    mediaType = item.mediaType,
-                    status = status,
-                    creator = details?.authors?.takeIf { it.isNotBlank() },
-                    externalId = item.externalId,
-                    externalSource = "MAL",
-                    externalScore = details?.externalScore ?: item.score,
-                    externalScoreSource = "MAL",
-                    coverImageUri = details?.posterUrl ?: item.posterUrl,
-                    totalEpisodes = if (isVideo) (details?.totalEpisodes ?: 0) else 0,
-                    totalChapters = if (!isVideo) (details?.totalChapters ?: 0) else 0,
-                    totalVolumes = if (!isVideo) (details?.totalVolumes ?: 0) else 0,
-                    episodeLengthMinutes = details?.durationMinutes,
-                    durationMinutes = if (item.mediaType == MediaType.MOVIE) details?.durationMinutes else null,
-                    tags = details?.tags,
-                    description = details?.synopsis,
-                    airedStartDate = details?.airedStartDate,
-                    airedEndDate = details?.airedEndDate,
-                    isAiring = details?.isAiring ?: false
+                    item = item,
+                    details = details,
+                    status = status
                 )
             }
             insert(entry)
+        }
+    }
+
+    companion object {
+        /**
+         * Returns true when a user-tracked field (status, score, progress, rewatch state,
+         * personal dates, or newly enabled external tracking) differs from [previous].
+         */
+        internal fun hasTrackedUserFieldChanges(previous: MediaEntry?, updated: MediaEntry): Boolean {
+            if (previous == null) return true
+            return previous.status != updated.status ||
+                previous.score != updated.score ||
+                previous.currentEpisodes != updated.currentEpisodes ||
+                previous.currentChapters != updated.currentChapters ||
+                previous.currentVolumes != updated.currentVolumes ||
+                previous.currentPages != updated.currentPages ||
+                previous.currentSeasons != updated.currentSeasons ||
+                previous.isRewatching != updated.isRewatching ||
+                previous.rewatchCount != updated.rewatchCount ||
+                previous.startDate != updated.startDate ||
+                previous.finishDate != updated.finishDate ||
+                (updated.isExternallyTracked && !previous.isExternallyTracked)
         }
     }
 }

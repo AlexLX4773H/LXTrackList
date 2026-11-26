@@ -219,15 +219,15 @@ object BookMetadataManager {
         val title = entry.title.trim()
         if (title.isBlank()) return Result.success(emptyList())
 
-        val isLightNovel = entry.externalSource.equals("AniList", ignoreCase = true) ||
-                entry.customCategory.equals("Light Novels", ignoreCase = true) ||
-                entry.subCategory.equals("Light Novel", ignoreCase = true)
+        val isLightNovel = entry.isLightNovel()
 
         if (isLightNovel) {
             val lnRes = JikanApiClient.fetchRelatedEntries(
                 malId = entry.externalId?.toLongOrNull(),
                 isManga = true,
-                title = title
+                title = title,
+                externalSource = entry.externalSource,
+                externalId = entry.externalId
             )
             if (lnRes.isSuccess && lnRes.getOrDefault(emptyList()).isNotEmpty()) {
                 return lnRes

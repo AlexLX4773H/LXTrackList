@@ -46,12 +46,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lx.tracklist.data.model.CustomCategory
 import com.lx.tracklist.data.model.MediaType
+import com.lx.tracklist.data.model.effectiveMediaType
+import com.lx.tracklist.data.model.summarySubtitle
 import com.lx.tracklist.ui.theme.LXBorder
 import com.lx.tracklist.ui.theme.LXPrimaryGreen
 import com.lx.tracklist.ui.theme.LXSurfaceBlack
 import com.lx.tracklist.ui.theme.LXSurfaceElevated
 import com.lx.tracklist.ui.theme.LXTextPrimary
 import com.lx.tracklist.ui.theme.LXTextSecondary
+import com.lx.tracklist.ui.theme.parseHexColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -207,7 +210,7 @@ fun CategorySelectorSheet(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = if (customCat.isWatchType) Icons.Default.LiveTv else Icons.Default.Bookmark,
+                                    imageVector = getCategoryIcon(customCat.effectiveMediaType()),
                                     contentDescription = null,
                                     tint = accentColor,
                                     modifier = Modifier.size(20.dp)
@@ -225,7 +228,7 @@ fun CategorySelectorSheet(
                                     color = if (isSelected) accentColor else LXTextPrimary
                                 )
                                 Text(
-                                    text = if (customCat.isWatchType) "Watch • Episodes" else "Read • ${customCat.trackingUnit.displayName}",
+                                    text = customCat.summarySubtitle(),
                                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                     color = LXTextSecondary
                                 )
@@ -285,19 +288,5 @@ fun getCategoryIcon(type: MediaType): ImageVector {
         MediaType.BOOK -> Icons.Default.Book
         MediaType.GAME -> Icons.Default.SportsEsports
         MediaType.MUSIC -> Icons.Default.MusicNote
-    }
-}
-
-private fun parseHexColor(hex: String): Color {
-    return try {
-        val clean = hex.removePrefix("#")
-        val colorInt = clean.toLong(16)
-        if (clean.length == 6) {
-            Color(colorInt or 0xFF000000)
-        } else {
-            Color(colorInt)
-        }
-    } catch (_: Exception) {
-        LXPrimaryGreen
     }
 }

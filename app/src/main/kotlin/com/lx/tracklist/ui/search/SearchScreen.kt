@@ -88,6 +88,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.ui.platform.LocalUriHandler
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.util.ExternalLinkHelper
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -123,6 +124,7 @@ import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaStatus
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.UserProfile
+import com.lx.tracklist.data.model.effectiveMediaType
 import com.lx.tracklist.data.remote.GoogleBooksApiClient
 import com.lx.tracklist.data.remote.GameMetadataManager
 import com.lx.tracklist.data.remote.OpenLibraryApiClient
@@ -132,6 +134,7 @@ import com.lx.tracklist.data.remote.buildGameDescriptionWithMetadata
 import com.lx.tracklist.data.remote.buildMovieTvDescriptionWithMetadata
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.lx.tracklist.ui.components.LXOpenMenu
 import com.lx.tracklist.ui.components.UserAvatarButton
 import com.lx.tracklist.ui.theme.LXBackgroundBlack
 import com.lx.tracklist.ui.theme.LXBorder
@@ -212,7 +215,7 @@ fun SearchScreen(
     if (itemToAdd != null) {
         AddToLibraryDialog(
             item = itemToAdd!!,
-            customCategories = state.customCategories.filter { it.mediaType == itemToAdd!!.mediaType }.map { it.name },
+            customCategories = state.customCategories.filter { it.effectiveMediaType() == itemToAdd!!.mediaType }.map { it.name },
             subCategories = state.subCategories.map { it.name },
             onConfirm = { status, customCat, subCat ->
                 viewModel.addToLibrary(
@@ -563,9 +566,9 @@ fun SearchScreen(
                         )
                     }
                 } else {
-                    val hasMangaDex = state.results.any { it.externalSource == "MangaDex" }
+                    val hasMangaDex = state.results.any { ExternalSources.canonical(it.externalSource, it.externalId) == ExternalSources.MANGADEX }
                     val isAniListBackup = state.results.isNotEmpty() && state.results.all {
-                        it.rawJikanDetails?.sourceProvider?.contains("AniList", ignoreCase = true) == true
+                        ExternalSources.canonical(it.scoreSource ?: it.rawJikanDetails?.sourceProvider) == ExternalSources.ANILIST
                     }
                     val attributionText = when {
                         state.selectedCategory == SearchCategory.GAMES -> "Results from IGDB (RAWG fallback)"
@@ -1013,12 +1016,21 @@ private fun SearchResultCard(
                             MediaType.ANIME -> if (it == 1) "1 Ep" else "$it Eps"
                             MediaType.MANGA, MediaType.MANHWA -> if (it == 1) "1 Ch" else "$it Chs"
                             MediaType.SHOW -> if (it == 1) "1 Ep" else "$it Eps"
-                            MediaType.BOOK -> if (it == 1) "1 page" else "$it pages"
+                            MediaType.BOOK -> if (item.isLightNovelResult()) {
+                                if (it == 1) "1 Ch" else "$it Chs"
+                            } else {
+                                if (it == 1) "1 page" else "$it pages"
+                            }
                             MediaType.MOVIE -> null
                             MediaType.GAME -> null
                             MediaType.MUSIC -> null
                         }
                         if (unitLabel != null) metaParts.add(unitLabel)
+                    }
+                    if (item.isLightNovelResult()) {
+                        item.totalVolumes?.takeIf { it > 0 }?.let {
+                            metaParts.add(if (it == 1) "1 Vol" else "$it Vols")
+                        }
                     }
                     item.durationMinutes?.takeIf { it > 0 }?.let {
                         if (item.mediaType == MediaType.MUSIC) {
@@ -1061,7 +1073,40 @@ private fun SearchResultCard(
                     if (item.webUrl != null) {
                         val isTmdb = item.externalSource.equals("TMDB", ignoreCase = true)
                         val isMusic = item.mediaType == MediaType.MUSIC
-                        val hasOpenMenu = isTmdb || isMusic
+                        val rawMusic = item.rawMusicResult
+                        val resolvedArtist = rawMusic?.artist ?: item.musicArtist ?: item.creator
+                        val resolvedAlbum = rawMusic?.albumName ?: item.albumName
+                        val cardOpenOptions = remember(
+                            isTmdb,
+                            isMusic,
+                            item.title,
+                            item.mediaType,
+                            item.imdbId,
+                            resolvedArtist,
+                            resolvedAlbum,
+                            item.externalId,
+                            item.externalSource,
+                            item.webUrl
+                        ) {
+                            when {
+                                isMusic -> ExternalLinkHelper.buildMusicOpenOptions(
+                                    title = rawMusic?.title ?: item.title,
+                                    artist = resolvedArtist,
+                                    album = resolvedAlbum,
+                                    externalId = item.externalId,
+                                    externalSource = item.externalSource,
+                                    webUrl = item.webUrl
+                                )
+                                isTmdb -> ExternalLinkHelper.buildTmdbOpenOptions(
+                                    title = item.title,
+                                    tmdbId = item.externalId,
+                                    isMovie = item.mediaType == MediaType.MOVIE,
+                                    imdbId = item.imdbId,
+                                    webUrl = item.webUrl
+                                )
+                                else -> emptyList()
+                            }
+                        }
                         var showCardMenu by remember { mutableStateOf(false) }
                         val context = LocalContext.current
                         val uriHandler = LocalUriHandler.current
@@ -1069,8 +1114,10 @@ private fun SearchResultCard(
                         Box {
                             IconButton(
                                 onClick = {
-                                    if (hasOpenMenu) {
+                                    if (cardOpenOptions.size > 1) {
                                         showCardMenu = true
+                                    } else if (cardOpenOptions.isNotEmpty()) {
+                                        ExternalLinkHelper.openUrlSafely(cardOpenOptions.first().url, uriHandler, context)
                                     } else {
                                         ExternalLinkHelper.openUrlSafely(item.webUrl, uriHandler, context)
                                     }
@@ -1085,110 +1132,15 @@ private fun SearchResultCard(
                                 )
                             }
 
-                            if (isMusic) {
-                                val rawMusic = item.rawMusicResult
-                                val resolvedArtist = rawMusic?.artist ?: item.musicArtist ?: item.creator
-                                val resolvedAlbum = rawMusic?.albumName ?: item.albumName
-                                val musicOptions = remember(
-                                    item.title,
-                                    resolvedArtist,
-                                    resolvedAlbum,
-                                    item.externalId,
-                                    item.externalSource,
-                                    item.webUrl
-                                ) {
-                                    ExternalLinkHelper.buildMusicOpenOptions(
-                                        title = rawMusic?.title ?: item.title,
-                                        artist = resolvedArtist,
-                                        album = resolvedAlbum,
-                                        externalId = item.externalId,
-                                        externalSource = item.externalSource,
-                                        webUrl = item.webUrl
-                                    )
-                                }
-                                DropdownMenu(
+                            if (cardOpenOptions.size > 1) {
+                                LXOpenMenu(
+                                    options = cardOpenOptions,
                                     expanded = showCardMenu,
-                                    onDismissRequest = { showCardMenu = false },
-                                    modifier = Modifier.background(LXSurfaceElevated)
-                                ) {
-                                    musicOptions.forEach { option ->
-                                        DropdownMenuItem(
-                                            text = {
-                                                Column {
-                                                    Text(
-                                                        text = option.title,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = Color(option.color)
-                                                    )
-                                                    Text(
-                                                        text = option.subtitle,
-                                                        fontSize = 11.sp,
-                                                        color = LXTextSecondary
-                                                    )
-                                                }
-                                            },
-                                            onClick = {
-                                                showCardMenu = false
-                                                ExternalLinkHelper.openUrlSafely(option.url, uriHandler, context)
-                                            }
-                                        )
+                                    onDismiss = { showCardMenu = false },
+                                    onOpen = { option ->
+                                        ExternalLinkHelper.openUrlSafely(option.url, uriHandler, context)
                                     }
-                                }
-                            }
-
-                            if (isTmdb) {
-                                DropdownMenu(
-                                    expanded = showCardMenu,
-                                    onDismissRequest = { showCardMenu = false },
-                                    modifier = Modifier.background(LXSurfaceElevated)
-                                ) {
-                                    DropdownMenuItem(
-                                        text = {
-                                            Column {
-                                                Text("Open on TMDB", fontWeight = FontWeight.Bold, color = LXTextPrimary, fontSize = 12.sp)
-                                                Text("themoviedb.org", fontSize = 10.sp, color = LXTextSecondary)
-                                            }
-                                        },
-                                        leadingIcon = {
-                                            Icon(Icons.Default.OpenInNew, contentDescription = null, tint = LXPrimaryGreen, modifier = Modifier.size(14.dp))
-                                        },
-                                        onClick = {
-                                            showCardMenu = false
-                                            ExternalLinkHelper.openUrlSafely(item.webUrl, uriHandler, context)
-                                        }
-                                    )
-                                    HorizontalDivider(color = LXBorder)
-                                    DropdownMenuItem(
-                                        text = {
-                                            Column {
-                                                Text("Open on IMDb ⭐", fontWeight = FontWeight.Bold, color = Color(0xFFF5C518), fontSize = 12.sp)
-                                                Text("Search on IMDb", fontSize = 10.sp, color = LXTextSecondary)
-                                            }
-                                        },
-                                        leadingIcon = {
-                                            Icon(Icons.Default.OpenInNew, contentDescription = null, tint = Color(0xFFF5C518), modifier = Modifier.size(14.dp))
-                                        },
-                                        onClick = {
-                                            showCardMenu = false
-                                            ExternalLinkHelper.openUrlSafely(ExternalLinkHelper.buildImdbUrl(item.title, item.imdbId), uriHandler, context)
-                                        }
-                                    )
-                                    DropdownMenuItem(
-                                        text = {
-                                            Column {
-                                                Text("Open on Rotten Tomatoes 🍅", fontWeight = FontWeight.Bold, color = Color(0xFFFF523B), fontSize = 12.sp)
-                                                Text("Search on Rotten Tomatoes", fontSize = 10.sp, color = LXTextSecondary)
-                                            }
-                                        },
-                                        leadingIcon = {
-                                            Icon(Icons.Default.OpenInNew, contentDescription = null, tint = Color(0xFFFF523B), modifier = Modifier.size(14.dp))
-                                        },
-                                        onClick = {
-                                            showCardMenu = false
-                                            ExternalLinkHelper.openUrlSafely(ExternalLinkHelper.buildRottenTomatoesUrl(item.title), uriHandler, context)
-                                        }
-                                    )
-                                }
+                                )
                             }
                         }
 
@@ -1214,7 +1166,7 @@ private fun SearchResultCard(
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Text(
-                                    text = "In Library (${item.existingStatus?.defaultLabel ?: "Saved"})",
+                                    text = "In Library (${item.existingStatus?.getDisplayLabel(item.mediaType) ?: "Saved"})",
                                     color = LXPrimaryGreen,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
@@ -1299,7 +1251,7 @@ private fun AddToLibraryDialog(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "${item.mediaType.displayName} • ${item.externalSource}",
+                            text = "${if (item.isLightNovelResult()) "Light Novel" else item.mediaType.displayName} • ${item.externalSource}",
                             style = MaterialTheme.typography.bodySmall,
                             color = LXPrimaryGreen
                         )
@@ -1749,7 +1701,7 @@ private fun SearchResultDetailSheet(
                                     )
                                     Spacer(modifier = Modifier.width(2.dp))
                                     Text(
-                                        text = "${String.format(Locale.US, "%.2f", item.score).trimEnd('0').trimEnd('.')} (${item.externalSource})",
+                                        text = "${String.format(Locale.US, "%.2f", item.score).trimEnd('0').trimEnd('.')} (${item.scoreSource ?: item.externalSource})",
                                         color = LXScoreGold,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold
@@ -1804,7 +1756,15 @@ private fun SearchResultDetailSheet(
                             val vols = item.totalVolumes?.takeIf { it > 0 }?.let { " • $it Volumes" } ?: ""
                             chs + vols
                         }
-                        MediaType.BOOK -> {
+                        MediaType.BOOK -> if (item.isLightNovelResult()) {
+                            val chs = (item.rawBookDetails?.totalChapters ?: item.totalUnits)?.takeIf { it > 0 }?.let {
+                                if (it == 1) "1 Ch" else "$it Chs"
+                            }
+                            val vols = item.totalVolumes?.takeIf { it > 0 }?.let {
+                                if (it == 1) "1 Vol" else "$it Vols"
+                            }
+                            listOfNotNull(chs, vols).joinToString(" • ").ifBlank { "Chapters unknown" }
+                        } else {
                             val pages = item.totalUnits?.takeIf { it > 0 }?.let { if (it == 1) "1 Page" else "$it Pages" }
                             val vols = item.totalVolumes?.takeIf { it > 0 }?.let { if (it == 1) "1 Volume" else "$it Volumes" }
                             val chs = item.rawBookDetails?.totalChapters?.takeIf { it > 0 }?.let { if (it == 1) "1 Chapter" else "$it Chapters" }
@@ -2228,12 +2188,9 @@ private fun SearchResultDetailSheet(
             }
 
             // Bottom Actions
-            val isMovieOrShow = item.mediaType == MediaType.MOVIE || item.mediaType == MediaType.SHOW || item.externalSource.equals("TMDB", ignoreCase = true)
-            val isLightNovel = item.mediaType == MediaType.BOOK && (
-                item.statusText?.contains("Light Novel", ignoreCase = true) == true ||
-                item.statusText?.contains("Novel", ignoreCase = true) == true ||
-                item.externalSource.startsWith("AniList", ignoreCase = true)
-            )
+            val canonSource = ExternalSources.canonical(item.externalSource, item.externalId)
+            val isMovieOrShow = item.mediaType == MediaType.MOVIE || item.mediaType == MediaType.SHOW || canonSource == ExternalSources.TMDB
+            val isLightNovel = item.isLightNovelResult()
             val isBook = item.mediaType == MediaType.BOOK && !isLightNovel
             val isAnime = item.mediaType == MediaType.ANIME
             val isMangaOrManhwa = item.mediaType == MediaType.MANGA || item.mediaType == MediaType.MANHWA
@@ -2347,51 +2304,19 @@ private fun SearchResultDetailSheet(
                         }
 
                         if (openOptions.size > 1) {
-                            DropdownMenu(
+                            LXOpenMenu(
+                                options = openOptions,
                                 expanded = showOpenMenu,
-                                onDismissRequest = { showOpenMenu = false },
-                                modifier = Modifier.background(LXSurfaceElevated)
-                            ) {
-                                openOptions.forEachIndexed { index, option ->
-                                    if (index > 0) {
-                                        HorizontalDivider(color = LXBorder)
-                                    }
-                                    DropdownMenuItem(
-                                        text = {
-                                            Column {
-                                                Text(
-                                                    text = option.title,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(option.color),
-                                                    fontSize = 13.sp
-                                                )
-                                                Text(
-                                                    text = option.subtitle,
-                                                    fontSize = 10.sp,
-                                                    color = LXTextSecondary
-                                                )
-                                            }
-                                        },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = Icons.Default.OpenInNew,
-                                                contentDescription = null,
-                                                tint = Color(option.color),
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        },
-                                        onClick = {
-                                            showOpenMenu = false
-                                            ExternalLinkHelper.openUrlSafely(
-                                                option.url,
-                                                uriHandler,
-                                                context,
-                                                clipboardManager
-                                            )
-                                        }
+                                onDismiss = { showOpenMenu = false },
+                                onOpen = { option ->
+                                    ExternalLinkHelper.openUrlSafely(
+                                        option.url,
+                                        uriHandler,
+                                        context,
+                                        clipboardManager
                                     )
                                 }
-                            }
+                            )
                         }
                     }
                 }
@@ -2416,7 +2341,7 @@ private fun SearchResultDetailSheet(
                         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "In Library (${item.existingStatus?.defaultLabel ?: "Saved"})",
+                            text = "In Library (${item.existingStatus?.getDisplayLabel(item.mediaType) ?: "Saved"})",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             maxLines = 1,

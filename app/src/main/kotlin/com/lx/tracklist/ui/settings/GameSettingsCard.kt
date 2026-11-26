@@ -1,31 +1,26 @@
 package com.lx.tracklist.ui.settings
 
-import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +30,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,39 +47,214 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lx.tracklist.data.remote.ApiKeyState
 import com.lx.tracklist.data.remote.GameApiConfig
-import com.lx.tracklist.data.remote.GameSyncProgress
+import com.lx.tracklist.data.remote.GoogleBooksConfig
 import com.lx.tracklist.data.remote.IgdbApiClient
 import com.lx.tracklist.data.remote.RawgApiClient
 import com.lx.tracklist.data.remote.SteamGridDbApiClient
-import com.lx.tracklist.ui.theme.LXBackgroundBlack
-import com.lx.tracklist.ui.theme.LXBorder
-import com.lx.tracklist.ui.theme.LXErrorRed
-import com.lx.tracklist.ui.theme.LXPrimaryGreen
-import com.lx.tracklist.ui.theme.LXScoreGold
-import com.lx.tracklist.ui.theme.LXSurfaceElevated
-import com.lx.tracklist.ui.theme.LXTextPrimary
-import com.lx.tracklist.ui.theme.LXTextSecondary
+import com.lx.tracklist.data.remote.TmdbConfig
+import com.lx.tracklist.ui.components.LXBadge
+import com.lx.tracklist.ui.components.LXCard
+import com.lx.tracklist.ui.theme.LocalLXColors
 import kotlinx.coroutines.launch
+
+/**
+ * Renders the **API Keys** sub-section under Settings -> External Sync Jobs for entering optional
+ * device-local overrides when building without bundled `.env` credentials.
+ */
+@Composable
+fun SyncJobsApiKeysSection(
+    onApiKeysChanged: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = LocalLXColors.current
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "API KEYS",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                fontSize = 11.sp
+            ),
+            color = colors.primary,
+            modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp)
+        )
+
+        MediaAndBooksApiKeysCard(onApiKeysChanged = onApiKeysChanged)
+
+        GameSettingsCard(onApiKeysChanged = onApiKeysChanged)
+    }
+}
+
+@Composable
+private fun MediaAndBooksApiKeysCard(
+    onApiKeysChanged: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val colors = LocalLXColors.current
+
+    var revision by remember { mutableIntStateOf(0) }
+    var tmdbDraft by remember { mutableStateOf(TmdbConfig.getCustomAccessToken(context)) }
+    var booksDraft by remember { mutableStateOf(GoogleBooksConfig.getCustomApiKey(context)) }
+
+    var tmdbFeedback by remember { mutableStateOf<String?>(null) }
+    var booksFeedback by remember { mutableStateOf<String?>(null) }
+
+    val tmdbState = remember(revision) { TmdbConfig.getAccessTokenState(context) }
+    val booksState = remember(revision) { GoogleBooksConfig.getApiKeyState(context) }
+
+    LXCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Key,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Movies, TV & Books API Keys",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                LXBadge(
+                    text = if (tmdbState.isConfigured) "TMDB READY" else "TMDB MISSING",
+                    color = if (tmdbState.isConfigured) colors.primary else colors.textSecondary
+                )
+            }
+
+            Text(
+                text = "Configure your TMDB Read Access Token (required for Movies & TV search/sync) and an optional Google Books API key for higher book lookup quota.",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.textSecondary
+            )
+
+            // Attribution Notice matching job card size
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colors.surfaceElevated)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = TmdbConfig.ATTRIBUTION_TEXT,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = colors.textSecondary
+                )
+            }
+
+            // TMDB Read Access Token
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ApiKeyInputField(
+                    label = "TMDB Read Access Token",
+                    state = tmdbState,
+                    value = tmdbDraft,
+                    onValueChange = {
+                        tmdbDraft = it
+                        tmdbFeedback = null
+                    },
+                    isSecret = true,
+                    accentColor = colors.primary
+                )
+
+                KeySaveClearRow(
+                    hasCustomOverride = tmdbState == ApiKeyState.CUSTOM,
+                    feedback = tmdbFeedback,
+                    onSave = {
+                        TmdbConfig.setCustomAccessToken(context, tmdbDraft)
+                        tmdbDraft = TmdbConfig.getCustomAccessToken(context)
+                        revision++
+                        onApiKeysChanged()
+                        tmdbFeedback = if (tmdbDraft.isBlank()) "Cleared custom TMDB token" else "Saved TMDB token"
+                    },
+                    onClear = {
+                        TmdbConfig.setCustomAccessToken(context, null)
+                        tmdbDraft = ""
+                        revision++
+                        onApiKeysChanged()
+                        tmdbFeedback = "Reverted custom TMDB token"
+                    }
+                )
+            }
+
+            HorizontalDivider(color = colors.border.copy(alpha = 0.6f))
+
+            // Google Books API Key
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ApiKeyInputField(
+                    label = "Google Books API Key (Optional)",
+                    state = booksState,
+                    value = booksDraft,
+                    onValueChange = {
+                        booksDraft = it
+                        booksFeedback = null
+                    },
+                    isSecret = true,
+                    accentColor = colors.info
+                )
+
+                KeySaveClearRow(
+                    hasCustomOverride = booksState == ApiKeyState.CUSTOM,
+                    feedback = booksFeedback,
+                    onSave = {
+                        GoogleBooksConfig.setCustomApiKey(context, booksDraft)
+                        booksDraft = GoogleBooksConfig.getCustomApiKey(context)
+                        revision++
+                        onApiKeysChanged()
+                        booksFeedback = if (booksDraft.isBlank()) "Cleared custom Google Books key" else "Saved Google Books key"
+                    },
+                    onClear = {
+                        GoogleBooksConfig.setCustomApiKey(context, null)
+                        booksDraft = ""
+                        revision++
+                        onApiKeysChanged()
+                        booksFeedback = "Reverted custom Google Books key"
+                    }
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun GameSettingsCard(
-    gameSyncState: GameSyncProgress,
-    onStartSync: (forceRefresh: Boolean) -> Unit,
-    onCancelSync: () -> Unit,
+    onApiKeysChanged: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val colors = LocalLXColors.current
 
-    var igdbClientId by remember { mutableStateOf(GameApiConfig.getIgdbClientId(context)) }
-    var igdbClientSecret by remember { mutableStateOf(GameApiConfig.getIgdbClientSecret(context)) }
-    var rawgApiKey by remember { mutableStateOf(GameApiConfig.getRawgApiKey(context)) }
-    var steamGridDbApiKey by remember { mutableStateOf(GameApiConfig.getSteamGridDbApiKey(context)) }
+    var revision by remember { mutableIntStateOf(0) }
+    var igdbClientId by remember { mutableStateOf(GameApiConfig.getCustomIgdbClientId(context)) }
+    var igdbClientSecret by remember { mutableStateOf(GameApiConfig.getCustomIgdbClientSecret(context)) }
+    var rawgApiKey by remember { mutableStateOf(GameApiConfig.getCustomRawgApiKey(context)) }
+    var steamGridDbApiKey by remember { mutableStateOf(GameApiConfig.getCustomSteamGridDbApiKey(context)) }
 
-    var isSecretVisible by remember { mutableStateOf(false) }
-
-    // Test connection states
+    // Test connection & feedback states
     var isTestingIgdb by remember { mutableStateOf(false) }
     var igdbTestResult by remember { mutableStateOf<String?>(null) }
     var isIgdbTestSuccess by remember { mutableStateOf(false) }
@@ -96,488 +267,552 @@ fun GameSettingsCard(
     var steamGridTestResult by remember { mutableStateOf<String?>(null) }
     var isSteamGridTestSuccess by remember { mutableStateOf(false) }
 
-    val isIgdbConfigured = GameApiConfig.isIgdbConfigured(context)
-    val isRawgConfigured = GameApiConfig.isRawgConfigured(context)
-    val isSteamGridConfigured = GameApiConfig.isSteamGridDbConfigured(context)
+    val igdbClientIdState = remember(revision) { GameApiConfig.getIgdbClientIdState(context) }
+    val igdbClientSecretState = remember(revision) { GameApiConfig.getIgdbClientSecretState(context) }
+    val rawgKeyState = remember(revision) { GameApiConfig.getRawgApiKeyState(context) }
+    val steamGridKeyState = remember(revision) { GameApiConfig.getSteamGridDbApiKeyState(context) }
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(LXSurfaceElevated)
-            .border(1.dp, LXBorder, RoundedCornerShape(12.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        // Header Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    val isIgdbConfigured = remember(revision) { GameApiConfig.isIgdbConfigured(context) }
+    val isRawgConfigured = remember(revision) { GameApiConfig.isRawgConfigured(context) }
+
+    fun saveIgdbDrafts() {
+        GameApiConfig.setCustomIgdbCredentials(context, igdbClientId, igdbClientSecret)
+        igdbClientId = GameApiConfig.getCustomIgdbClientId(context)
+        igdbClientSecret = GameApiConfig.getCustomIgdbClientSecret(context)
+        revision++
+        onApiKeysChanged()
+    }
+
+    fun saveRawgDraft() {
+        GameApiConfig.setCustomRawgApiKey(context, rawgApiKey)
+        rawgApiKey = GameApiConfig.getCustomRawgApiKey(context)
+        revision++
+        onApiKeysChanged()
+    }
+
+    fun saveSteamGridDraft() {
+        GameApiConfig.setCustomSteamGridDbApiKey(context, steamGridDbApiKey)
+        steamGridDbApiKey = GameApiConfig.getCustomSteamGridDbApiKey(context)
+        revision++
+        onApiKeysChanged()
+    }
+
+    LXCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SportsEsports,
-                    contentDescription = null,
-                    tint = LXPrimaryGreen,
-                    modifier = Modifier.size(24.dp)
-                )
-                Text(
-                    text = "Video Games Metadata & Posters",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = LXTextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            if (gameSyncState.isRunning) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "SYNCING",
-                        color = LXPrimaryGreen,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        maxLines = 1
-                    )
-                }
-            } else if (isIgdbConfigured) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(LXPrimaryGreen.copy(alpha = 0.15f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "IGDB CONNECTED",
-                        color = LXPrimaryGreen,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        maxLines = 1
-                    )
-                }
-            } else if (isRawgConfigured) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF00E5FF).copy(alpha = 0.15f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "RAWG CONNECTED",
-                        color = Color(0xFF00E5FF),
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        maxLines = 1
-                    )
-                }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(LXBorder.copy(alpha = 0.5f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "NOT CONFIGURED",
-                        color = LXTextSecondary,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        maxLines = 1
-                    )
-                }
-            }
-        }
-
-        Text(
-            text = "Fetches game metadata, covers, release dates, platforms, and franchise series from IGDB (Twitch OAuth) and RAWG. Custom 600×900 vertical posters powered by SteamGridDB.",
-            style = MaterialTheme.typography.bodySmall,
-            color = LXTextSecondary
-        )
-
-        // Attributions
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(LXBackgroundBlack.copy(alpha = 0.5f))
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "${GameApiConfig.IGDB_ATTRIBUTION_TEXT} • ${GameApiConfig.RAWG_ATTRIBUTION_TEXT}",
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                color = LXTextSecondary.copy(alpha = 0.8f)
-            )
-        }
-
-        // Section 1: IGDB Configuration
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "IGDB v4 Credentials (Twitch Developer API)",
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = LXPrimaryGreen
-            )
-
-            OutlinedTextField(
-                value = igdbClientId,
-                onValueChange = {
-                    igdbClientId = it
-                    GameApiConfig.setCustomIgdbCredentials(context, it, igdbClientSecret)
-                },
-                label = { Text("IGDB Client ID", fontSize = 12.sp) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = LXPrimaryGreen,
-                    unfocusedBorderColor = LXBorder,
-                    focusedTextColor = LXTextPrimary,
-                    unfocusedTextColor = LXTextPrimary
-                ),
-                shape = RoundedCornerShape(8.dp)
-            )
-
-            OutlinedTextField(
-                value = igdbClientSecret,
-                onValueChange = {
-                    igdbClientSecret = it
-                    GameApiConfig.setCustomIgdbCredentials(context, igdbClientId, it)
-                },
-                label = { Text("IGDB Client Secret", fontSize = 12.sp) },
-                singleLine = true,
-                visualTransformation = if (isSecretVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                trailingIcon = {
-                    IconButton(onClick = { isSecretVisible = !isSecretVisible }) {
-                        Icon(
-                            imageVector = if (isSecretVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = if (isSecretVisible) "Hide secret" else "Show secret",
-                            tint = LXTextSecondary
-                        )
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = LXPrimaryGreen,
-                    unfocusedBorderColor = LXBorder,
-                    focusedTextColor = LXTextPrimary,
-                    unfocusedTextColor = LXTextPrimary
-                ),
-                shape = RoundedCornerShape(8.dp)
-            )
-
+            // Header Row styled identically to job cards
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(
-                    onClick = {
-                        isTestingIgdb = true
-                        igdbTestResult = null
-                        coroutineScope.launch {
-                            val res = IgdbApiClient.ensureValidToken(context, forceRefresh = true)
-                            isTestingIgdb = false
-                            if (res.isSuccess) {
-                                isIgdbTestSuccess = true
-                                igdbTestResult = "Connected! Twitch OAuth token active."
-                            } else {
-                                isIgdbTestSuccess = false
-                                igdbTestResult = "Failed: ${res.exceptionOrNull()?.message ?: "Check credentials"}"
-                            }
-                        }
-                    },
-                    enabled = !isTestingIgdb && igdbClientId.isNotBlank() && igdbClientSecret.isNotBlank(),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                    border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
-                    shape = RoundedCornerShape(8.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp)
                 ) {
-                    if (isTestingIgdb) {
-                        CircularProgressIndicator(color = LXPrimaryGreen, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Testing...", fontSize = 12.sp)
-                    } else {
-                        Text("Test IGDB Connection", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Icon(
+                        imageVector = Icons.Default.SportsEsports,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Games & Posters API Keys",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                when {
+                    isIgdbConfigured -> LXBadge(text = "IGDB CONNECTED", color = colors.primary)
+                    isRawgConfigured -> LXBadge(text = "RAWG CONNECTED", color = colors.info)
+                    else -> LXBadge(text = "MISSING", color = colors.textSecondary)
+                }
+            }
+
+            Text(
+                text = "Credentials used for Video Games metadata & search (IGDB via Twitch OAuth and RAWG) plus custom 600×900 vertical posters (SteamGridDB).",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.textSecondary
+            )
+
+            // Attributions
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colors.surfaceElevated)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${GameApiConfig.IGDB_ATTRIBUTION_TEXT} • ${GameApiConfig.RAWG_ATTRIBUTION_TEXT}",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = colors.textSecondary
+                )
+            }
+
+            // Section 1: IGDB Configuration
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "IGDB v4 Credentials (Twitch Developer API)",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.primary
+                )
+
+                ApiKeyInputField(
+                    label = "IGDB Client ID",
+                    state = igdbClientIdState,
+                    value = igdbClientId,
+                    onValueChange = {
+                        igdbClientId = it
+                        igdbTestResult = null
+                    },
+                    isSecret = false,
+                    accentColor = colors.primary
+                )
+
+                ApiKeyInputField(
+                    label = "IGDB Client Secret",
+                    state = igdbClientSecretState,
+                    value = igdbClientSecret,
+                    onValueChange = {
+                        igdbClientSecret = it
+                        igdbTestResult = null
+                    },
+                    isSecret = true,
+                    accentColor = colors.primary
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = {
+                            saveIgdbDrafts()
+                            isIgdbTestSuccess = true
+                            igdbTestResult = if (igdbClientId.isBlank() && igdbClientSecret.isBlank()) {
+                                "Cleared custom IGDB credentials"
+                            } else {
+                                "Saved IGDB credentials"
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.primary,
+                            contentColor = colors.onAccent
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Save", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    if (igdbClientIdState == ApiKeyState.CUSTOM || igdbClientSecretState == ApiKeyState.CUSTOM) {
+                        OutlinedButton(
+                            onClick = {
+                                igdbClientId = ""
+                                igdbClientSecret = ""
+                                saveIgdbDrafts()
+                                isIgdbTestSuccess = true
+                                igdbTestResult = "Reverted custom IGDB credentials"
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.error),
+                            border = BorderStroke(1.dp, colors.error.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Clear", fontSize = 12.sp)
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            if (igdbClientId.isNotBlank() || igdbClientSecret.isNotBlank()) {
+                                saveIgdbDrafts()
+                            }
+                            isTestingIgdb = true
+                            igdbTestResult = null
+                            coroutineScope.launch {
+                                val res = IgdbApiClient.ensureValidToken(context, forceRefresh = true)
+                                isTestingIgdb = false
+                                if (res.isSuccess) {
+                                    isIgdbTestSuccess = true
+                                    igdbTestResult = "Connected! Twitch OAuth token active."
+                                } else {
+                                    isIgdbTestSuccess = false
+                                    igdbTestResult = "Failed: ${res.exceptionOrNull()?.message ?: "Check credentials"}"
+                                }
+                            }
+                        },
+                        enabled = !isTestingIgdb &&
+                            (GameApiConfig.isIgdbConfigured(context) || (igdbClientId.isNotBlank() && igdbClientSecret.isNotBlank())),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.primary),
+                        border = BorderStroke(1.dp, colors.primary.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        if (isTestingIgdb) {
+                            CircularProgressIndicator(color = colors.primary, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Testing...", fontSize = 12.sp)
+                        } else {
+                            Text("Test", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
 
                 if (igdbTestResult != null) {
                     Text(
-                        text = igdbTestResult ?: "",
+                        text = igdbTestResult.orEmpty(),
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = if (isIgdbTestSuccess) LXPrimaryGreen else LXErrorRed,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        color = if (isIgdbTestSuccess) colors.success else colors.error
                     )
                 }
             }
-        }
 
-        // Section 2: RAWG Configuration
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "RAWG API Key (Optional Fallback)",
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = Color(0xFF00E5FF)
-            )
+            HorizontalDivider(color = colors.border.copy(alpha = 0.6f))
 
-            OutlinedTextField(
-                value = rawgApiKey,
-                onValueChange = {
-                    rawgApiKey = it
-                    GameApiConfig.setCustomRawgApiKey(context, it)
-                },
-                label = { Text("RAWG API Key", fontSize = 12.sp) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF00E5FF),
-                    unfocusedBorderColor = LXBorder,
-                    focusedTextColor = LXTextPrimary,
-                    unfocusedTextColor = LXTextPrimary
-                ),
-                shape = RoundedCornerShape(8.dp)
-            )
+            // Section 2: RAWG Configuration
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "RAWG API Key (Fallback)",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.info
+                )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        isTestingRawg = true
+                ApiKeyInputField(
+                    label = "RAWG API Key",
+                    state = rawgKeyState,
+                    value = rawgApiKey,
+                    onValueChange = {
+                        rawgApiKey = it
                         rawgTestResult = null
-                        coroutineScope.launch {
-                            val res = RawgApiClient.searchGames(context, "Zelda", limit = 1)
-                            isTestingRawg = false
-                            if (res.isSuccess) {
-                                isRawgTestSuccess = true
-                                rawgTestResult = "Connected! RAWG responding."
-                            } else {
-                                isRawgTestSuccess = false
-                                rawgTestResult = "Failed: ${res.exceptionOrNull()?.message ?: "Check key"}"
-                            }
-                        }
                     },
-                    enabled = !isTestingRawg && rawgApiKey.isNotBlank(),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF00E5FF)),
-                    border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.5f)),
-                    shape = RoundedCornerShape(8.dp)
+                    isSecret = true,
+                    accentColor = colors.info
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (isTestingRawg) {
-                        CircularProgressIndicator(color = Color(0xFF00E5FF), modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Testing...", fontSize = 12.sp)
-                    } else {
-                        Text("Test RAWG Connection", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Button(
+                        onClick = {
+                            saveRawgDraft()
+                            isRawgTestSuccess = true
+                            rawgTestResult = if (rawgApiKey.isBlank()) "Cleared custom RAWG key" else "Saved RAWG key"
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.primary,
+                            contentColor = colors.onAccent
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Save", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    if (rawgKeyState == ApiKeyState.CUSTOM) {
+                        OutlinedButton(
+                            onClick = {
+                                rawgApiKey = ""
+                                saveRawgDraft()
+                                isRawgTestSuccess = true
+                                rawgTestResult = "Reverted custom RAWG key"
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.error),
+                            border = BorderStroke(1.dp, colors.error.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Clear", fontSize = 12.sp)
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            if (rawgApiKey.isNotBlank()) saveRawgDraft()
+                            isTestingRawg = true
+                            rawgTestResult = null
+                            coroutineScope.launch {
+                                val res = RawgApiClient.searchGames(context, "Zelda", limit = 1)
+                                isTestingRawg = false
+                                if (res.isSuccess) {
+                                    isRawgTestSuccess = true
+                                    rawgTestResult = "Connected! RAWG responding."
+                                } else {
+                                    isRawgTestSuccess = false
+                                    rawgTestResult = "Failed: ${res.exceptionOrNull()?.message ?: "Check key"}"
+                                }
+                            }
+                        },
+                        enabled = !isTestingRawg && (rawgKeyState.isConfigured || rawgApiKey.isNotBlank()),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.info),
+                        border = BorderStroke(1.dp, colors.info.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        if (isTestingRawg) {
+                            CircularProgressIndicator(color = colors.info, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Testing...", fontSize = 12.sp)
+                        } else {
+                            Text("Test", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
 
                 if (rawgTestResult != null) {
                     Text(
-                        text = rawgTestResult ?: "",
+                        text = rawgTestResult.orEmpty(),
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = if (isRawgTestSuccess) LXPrimaryGreen else LXErrorRed,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        color = if (isRawgTestSuccess) colors.success else colors.error
                     )
                 }
             }
-        }
 
-        // Section 3: SteamGridDB Configuration
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = "SteamGridDB API Key (Optional Posters)",
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = LXScoreGold
-            )
+            HorizontalDivider(color = colors.border.copy(alpha = 0.6f))
 
-            OutlinedTextField(
-                value = steamGridDbApiKey,
-                onValueChange = {
-                    steamGridDbApiKey = it
-                    GameApiConfig.setCustomSteamGridDbApiKey(context, it)
-                },
-                label = { Text("SteamGridDB API Key", fontSize = 12.sp) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = LXScoreGold,
-                    unfocusedBorderColor = LXBorder,
-                    focusedTextColor = LXTextPrimary,
-                    unfocusedTextColor = LXTextPrimary
-                ),
-                shape = RoundedCornerShape(8.dp)
-            )
+            // Section 3: SteamGridDB Configuration
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "SteamGridDB API Key (Optional Posters)",
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.scoreGold
+                )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        isTestingSteamGrid = true
+                ApiKeyInputField(
+                    label = "SteamGridDB API Key",
+                    state = steamGridKeyState,
+                    value = steamGridDbApiKey,
+                    onValueChange = {
+                        steamGridDbApiKey = it
                         steamGridTestResult = null
-                        coroutineScope.launch {
-                            val res = SteamGridDbApiClient.searchByTitle(context, "Portal")
-                            isTestingSteamGrid = false
-                            if (res.isSuccess) {
-                                isSteamGridTestSuccess = true
-                                steamGridTestResult = "Connected! SteamGridDB responding."
-                            } else {
-                                isSteamGridTestSuccess = false
-                                steamGridTestResult = "Failed: ${res.exceptionOrNull()?.message ?: "Check key"}"
-                            }
-                        }
                     },
-                    enabled = !isTestingSteamGrid && steamGridDbApiKey.isNotBlank(),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LXScoreGold),
-                    border = BorderStroke(1.dp, LXScoreGold.copy(alpha = 0.5f)),
-                    shape = RoundedCornerShape(8.dp)
+                    isSecret = true,
+                    accentColor = colors.scoreGold
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (isTestingSteamGrid) {
-                        CircularProgressIndicator(color = LXScoreGold, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Testing...", fontSize = 12.sp)
-                    } else {
-                        Text("Test SteamGridDB Connection", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Button(
+                        onClick = {
+                            saveSteamGridDraft()
+                            isSteamGridTestSuccess = true
+                            steamGridTestResult = if (steamGridDbApiKey.isBlank()) {
+                                "Cleared custom SteamGridDB key"
+                            } else {
+                                "Saved SteamGridDB key"
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.primary,
+                            contentColor = colors.onAccent
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Save", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    if (steamGridKeyState == ApiKeyState.CUSTOM) {
+                        OutlinedButton(
+                            onClick = {
+                                steamGridDbApiKey = ""
+                                saveSteamGridDraft()
+                                isSteamGridTestSuccess = true
+                                steamGridTestResult = "Reverted custom SteamGridDB key"
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.error),
+                            border = BorderStroke(1.dp, colors.error.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Clear", fontSize = 12.sp)
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            if (steamGridDbApiKey.isNotBlank()) saveSteamGridDraft()
+                            isTestingSteamGrid = true
+                            steamGridTestResult = null
+                            coroutineScope.launch {
+                                val res = SteamGridDbApiClient.searchByTitle(context, "Portal")
+                                isTestingSteamGrid = false
+                                if (res.isSuccess) {
+                                    isSteamGridTestSuccess = true
+                                    steamGridTestResult = "Connected! SteamGridDB responding."
+                                } else {
+                                    isSteamGridTestSuccess = false
+                                    steamGridTestResult = "Failed: ${res.exceptionOrNull()?.message ?: "Check key"}"
+                                }
+                            }
+                        },
+                        enabled = !isTestingSteamGrid && (steamGridKeyState.isConfigured || steamGridDbApiKey.isNotBlank()),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.scoreGold),
+                        border = BorderStroke(1.dp, colors.scoreGold.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        if (isTestingSteamGrid) {
+                            CircularProgressIndicator(color = colors.scoreGold, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Testing...", fontSize = 12.sp)
+                        } else {
+                            Text("Test", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
 
                 if (steamGridTestResult != null) {
                     Text(
-                        text = steamGridTestResult ?: "",
+                        text = steamGridTestResult.orEmpty(),
                         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = if (isSteamGridTestSuccess) LXPrimaryGreen else LXErrorRed,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        color = if (isSteamGridTestSuccess) colors.success else colors.error
                     )
                 }
             }
         }
+    }
+}
 
-        // Section 4: Sync Controls
-        if (gameSyncState.isRunning) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(LXBackgroundBlack.copy(alpha = 0.5f))
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (gameSyncState.totalCount > 0) {
-                            "Progress (${gameSyncState.completedCount}/${gameSyncState.totalCount}) • ${gameSyncState.updatedCount} updated"
-                        } else {
-                            gameSyncState.statusMessage ?: "Preparing game sync..."
-                        },
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = LXTextPrimary
-                    )
-                    if (gameSyncState.totalCount > 0) {
-                        Text(
-                            text = "${(gameSyncState.progressFraction * 100).toInt()}%",
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                            color = LXPrimaryGreen
-                        )
-                    }
-                }
+@Composable
+private fun ApiKeyStateBadge(state: ApiKeyState) {
+    val colors = LocalLXColors.current
+    val badgeColor = when (state) {
+        ApiKeyState.CUSTOM -> colors.primary
+        ApiKeyState.BUILT_IN -> colors.info
+        ApiKeyState.MISSING -> colors.textSecondary
+    }
+    LXBadge(text = state.label.uppercase(), color = badgeColor)
+}
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(LXBorder)
-                ) {
-                    if (gameSyncState.totalCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(gameSyncState.progressFraction)
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(LXPrimaryGreen)
-                        )
-                    }
-                }
+@Composable
+private fun ApiKeyInputField(
+    label: String,
+    state: ApiKeyState,
+    value: String,
+    onValueChange: (String) -> Unit,
+    isSecret: Boolean,
+    accentColor: Color
+) {
+    val colors = LocalLXColors.current
+    var isSecretVisible by remember { mutableStateOf(false) }
 
-                if (gameSyncState.currentTitle.isNotBlank()) {
-                    Text(
-                        text = "Current: ${gameSyncState.currentTitle}",
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                        color = LXTextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.textPrimary,
+                modifier = Modifier.weight(1f).padding(end = 8.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            ApiKeyStateBadge(state)
+        }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    OutlinedButton(
-                        onClick = onCancelSync,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = LXErrorRed),
-                        border = BorderStroke(1.dp, LXErrorRed.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Cancel Sync", fontSize = 12.sp)
-                    }
-                }
-            }
-        } else {
-            if (!gameSyncState.statusMessage.isNullOrBlank()) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            placeholder = {
                 Text(
-                    text = gameSyncState.statusMessage ?: "",
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                    color = LXTextSecondary
+                    text = if (state == ApiKeyState.BUILT_IN) {
+                        "Using built-in key — enter a custom key to override"
+                    } else {
+                        "Enter $label"
+                    },
+                    fontSize = 12.sp,
+                    color = colors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-            }
+            },
+            singleLine = true,
+            visualTransformation = if (isSecret && !isSecretVisible) {
+                PasswordVisualTransformation()
+            } else {
+                VisualTransformation.None
+            },
+            keyboardOptions = if (isSecret) {
+                KeyboardOptions(keyboardType = KeyboardType.Password)
+            } else {
+                KeyboardOptions.Default
+            },
+            trailingIcon = if (isSecret) {
+                {
+                    IconButton(onClick = { isSecretVisible = !isSecretVisible }) {
+                        Icon(
+                            imageVector = if (isSecretVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = if (isSecretVisible) "Hide secret" else "Show secret",
+                            tint = colors.textSecondary
+                        )
+                    }
+                }
+            } else null,
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = accentColor,
+                unfocusedBorderColor = colors.border,
+                focusedTextColor = colors.textPrimary,
+                unfocusedTextColor = colors.textPrimary
+            ),
+            shape = RoundedCornerShape(8.dp)
+        )
+    }
+}
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+@Composable
+private fun KeySaveClearRow(
+    hasCustomOverride: Boolean,
+    feedback: String?,
+    onSave: () -> Unit,
+    onClear: () -> Unit
+) {
+    val colors = LocalLXColors.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Button(
+            onClick = onSave,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = colors.primary,
+                contentColor = colors.onAccent
+            ),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text("Save", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+
+        if (hasCustomOverride) {
+            OutlinedButton(
+                onClick = onClear,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.error),
+                border = BorderStroke(1.dp, colors.error.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(8.dp)
             ) {
-                Button(
-                    onClick = { onStartSync(false) },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = LXPrimaryGreen,
-                        contentColor = LXBackgroundBlack
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Sync Games", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-
-                OutlinedButton(
-                    onClick = { onStartSync(true) },
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LXPrimaryGreen),
-                    border = BorderStroke(1.dp, LXPrimaryGreen.copy(alpha = 0.5f)),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Force Refresh", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                }
+                Text("Clear", fontSize = 12.sp)
             }
+        }
+
+        if (feedback != null) {
+            Text(
+                text = feedback,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                color = colors.success,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

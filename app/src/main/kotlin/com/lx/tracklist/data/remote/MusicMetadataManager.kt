@@ -1,6 +1,7 @@
 package com.lx.tracklist.data.remote
 
 import android.util.Log
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.RelatedMediaItem
@@ -555,7 +556,7 @@ object MusicMetadataManager {
                 else if (cAlbum.contains(normAlbum) || normAlbum.contains(cAlbum)) score += 25
             }
             if (!cand.musicAlbumId.isNullOrBlank() && cand.musicAlbumId.all { it.isDigit() }) score += 20
-            if (cand.externalSource.equals("iTunes", ignoreCase = true) || cand.externalSource.equals("Apple Music", ignoreCase = true)) score += 10
+            if (ExternalSources.canonical(cand.externalSource) == ExternalSources.APPLE_MUSIC) score += 10
             if (!cand.coverUrl.isNullOrBlank()) score += 5
             score
         }

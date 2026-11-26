@@ -190,6 +190,15 @@ interface MediaEntryDao {
     @Query("DELETE FROM media_entries WHERE userId = :userId")
     suspend fun deleteAllByUser(userId: Long)
 
+    @Query("SELECT COUNT(*) FROM media_entries WHERE userId = :userId AND customCategory = :name COLLATE NOCASE")
+    suspend fun countByCustomCategory(userId: Long, name: String): Int
+
+    @Query("UPDATE media_entries SET customCategory = NULL, updatedAt = :updatedAt WHERE userId = :userId AND customCategory = :name COLLATE NOCASE")
+    suspend fun clearCustomCategory(userId: Long, name: String, updatedAt: Long)
+
+    @Query("DELETE FROM media_entries WHERE userId = :userId AND customCategory = :name COLLATE NOCASE")
+    suspend fun deleteByCustomCategory(userId: Long, name: String)
+
     @Query("DELETE FROM media_entries")
     suspend fun deleteAll()
 }

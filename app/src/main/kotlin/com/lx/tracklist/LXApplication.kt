@@ -6,6 +6,7 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.lx.tracklist.data.local.CoverCacheManager
+import com.lx.tracklist.data.local.FailedCoverTracker
 import com.lx.tracklist.data.local.LXTrackListDatabase
 import com.lx.tracklist.data.local.StorageHelper
 import com.lx.tracklist.data.remote.AniListNovelApiClient
@@ -27,7 +28,8 @@ class LXApplication : Application(), ImageLoaderFactory {
             userProfileDao = database.userProfileDao(),
             customCategoryDao = database.customCategoryDao(),
             subCategoryDao = database.subCategoryDao(),
-            context = applicationContext
+            context = applicationContext,
+            database = database
         )
     }
 
@@ -47,6 +49,7 @@ class LXApplication : Application(), ImageLoaderFactory {
         KitsuApiClient.initWithDoH(this)
         MangaDexApiClient.initWithDoH(this)
         AniListNovelApiClient.initWithDoH(this)
+        FailedCoverTracker.initWithDoH(this)
     }
 
     override fun newImageLoader(): ImageLoader {

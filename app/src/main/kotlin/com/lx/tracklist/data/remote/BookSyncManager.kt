@@ -8,6 +8,7 @@ import coil.request.ImageRequest
 import com.google.gson.Gson
 import com.lx.tracklist.LXApplication
 import com.lx.tracklist.data.local.FailedCoverTracker
+import com.lx.tracklist.data.model.ExternalSources
 import com.lx.tracklist.data.model.MediaEntry
 import com.lx.tracklist.data.model.MediaType
 import com.lx.tracklist.data.model.TrackingUnit
@@ -73,10 +74,7 @@ object BookSyncManager {
     }
 
     fun isBookSource(entry: MediaEntry): Boolean {
-        if (isEligibleMediaForBook(entry.mediaType)) return true
-        val src = (entry.externalSource ?: entry.foreignDatabaseSource)?.trim() ?: ""
-        return src.equals("Google Books", ignoreCase = true) ||
-               src.equals("Open Library", ignoreCase = true)
+        return SyncRouter.jobFor(entry) == SyncJob.BOOKS
     }
 
     private fun needsSync(entry: MediaEntry, forceRefresh: Boolean): Boolean {
@@ -164,7 +162,7 @@ object BookSyncManager {
                         statusMessage = "Checking cover images..."
                     )
                 }
-                FailedCoverTracker.probeBrokenCovers(bookEntries)
+                FailedCoverTracker.probeBrokenCovers(bookEntries, context)
             }
 
             val eligible = if (targetEntryIds != null) bookEntries else bookEntries.filter { needsSync(it, forceRefresh) }
@@ -381,6 +379,56 @@ object BookSyncManager {
         }
     }
 
+    internal fun isAniListTitleMismatch(entry: MediaEntry, aniById: JikanMediaDetails?): Boolean {
+        if (aniById == null) return true
+        return !TachiyomiResolverManager.isConfidentExactMatch(
+            queryTitle = entry.title,
+            candidateTitle = aniById.title,
+            candidateAltTitles = aniById.alternateTitle,
+            entryAltTitles = entry.alternateTitle
+        )
+    }
+
+    internal fun selectConfidentLightNovelMatch(
+        entry: MediaEntry,
+        candidates: List<JikanMediaDetails>
+    ): JikanMediaDetails? {
+        return candidates.firstOrNull { cand ->
+            TachiyomiResolverManager.isConfidentExactMatch(
+                queryTitle = entry.title,
+                candidateTitle = cand.title,
+                candidateAltTitles = cand.alternateTitle,
+                entryAltTitles = entry.alternateTitle
+            )
+        }
+    }
+
+    /**
+     * Updates tracking unit only when the entry has zero recorded progress across chapters, volumes,
+     * and pages AND is still using the default unit ([TrackingUnit.CHAPTERS]).
+     */
+    internal fun resolveUpdatedBookTrackingUnit(entry: MediaEntry, bookDetails: BookDetails): TrackingUnit {
+        val hasAnyProgress = entry.currentChapters > 0 || entry.currentVolumes > 0 || entry.currentPages > 0
+        val isDefaultUnit = entry.trackingUnit == TrackingUnit.CHAPTERS
+        if (hasAnyProgress || !isDefaultUnit) {
+            return entry.trackingUnit
+        }
+        return when {
+            entry.isLightNovel() && (bookDetails.totalChapters ?: 0) > 0 -> TrackingUnit.CHAPTERS
+            (bookDetails.pageCount ?: 0) > 0 -> TrackingUnit.PAGES
+            (bookDetails.totalVolumes ?: 0) > 0 -> TrackingUnit.VOLUMES
+            (bookDetails.totalChapters ?: 0) > 0 -> TrackingUnit.CHAPTERS
+            else -> entry.trackingUnit
+        }
+    }
+
+    internal fun shouldAttemptBookTitleFallback(entry: MediaEntry, forceReLink: Boolean = false): Boolean {
+        if (forceReLink) return true
+        val extId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()
+        if (extId.isNullOrBlank()) return true
+        return !JikanSyncManager.hasValidExternalId(entry)
+    }
+
     private suspend fun syncSingleEntry(
         context: Context,
         repository: MediaRepository,
@@ -389,18 +437,49 @@ object BookSyncManager {
         forceRefresh: Boolean
     ): BookSyncItemResult {
         val extId = (entry.externalId ?: entry.foreignDatabaseId)?.trim()
-        val isLightNovel = entry.externalSource.equals("AniList", ignoreCase = true) ||
-                entry.customCategory.equals("Light Novels", ignoreCase = true) ||
-                entry.subCategory.equals("Light Novel", ignoreCase = true)
+        val canonSrc = ExternalSources.canonical(entry.externalSource ?: entry.foreignDatabaseSource, extId)
+        val isLightNovel = entry.isLightNovel()
 
         var bookDetails: BookDetails? = null
+        var needsExternalRefRepair = false
 
         if (isLightNovel) {
-            val lnResult = BookMetadataManager.searchLightNovels(entry.title, limit = 5)
-            val lnItem = lnResult.getOrNull()?.firstOrNull()
+            val existingAniNum = if (canonSrc == ExternalSources.ANILIST) extId?.toLongOrNull()?.takeIf { it > 0 } else null
+            val existingMalNum = if (canonSrc == ExternalSources.MAL) extId?.toLongOrNull()?.takeIf { it > 0 } else null
+
+            var directLnItem: JikanMediaDetails? = null
+            if (existingMalNum != null) {
+                directLnItem = JikanApiClient.fetchMediaDetails(malId = existingMalNum, isManga = true, title = entry.title).getOrNull()
+            } else if (existingAniNum != null) {
+                val aniCheck = JikanApiClient.queryAniListById(aniListId = existingAniNum, isManga = true)
+                if (aniCheck.isSuccess) {
+                    val aniById = aniCheck.getOrNull()
+                    if (isAniListTitleMismatch(entry, aniById)) {
+                        needsExternalRefRepair = true
+                    } else {
+                        directLnItem = aniById
+                    }
+                } else {
+                    val msg = aniCheck.exceptionOrNull()?.message.orEmpty()
+                    if (msg.contains("404") || msg.contains("Not Found", ignoreCase = true)) {
+                        needsExternalRefRepair = true
+                    }
+                }
+            }
+
+            val lnItem = directLnItem ?: if (needsExternalRefRepair || shouldAttemptBookTitleFallback(entry)) {
+                val lnResult = BookMetadataManager.searchLightNovels(entry.title, limit = 5)
+                val candidates = lnResult.getOrNull().orEmpty()
+                val confidentLn = selectConfidentLightNovelMatch(entry, candidates)
+                if (needsExternalRefRepair) confidentLn else (confidentLn ?: candidates.firstOrNull())
+            } else {
+                null
+            }
+
             if (lnItem != null) {
+                val ref = lnItem.preferredExternalRef()
                 bookDetails = BookDetails(
-                    id = lnItem.malId?.toString() ?: extId.orEmpty(),
+                    id = ref?.second ?: extId.orEmpty(),
                     title = lnItem.title ?: entry.title,
                     subtitle = lnItem.alternateTitle,
                     authors = lnItem.authors?.split(",")?.map { it.trim() } ?: emptyList(),
@@ -414,29 +493,30 @@ object BookSyncManager {
                     coverUrl = lnItem.posterUrl,
                     categories = lnItem.tags?.split(",")?.map { it.trim() } ?: emptyList(),
                     averageScore = lnItem.externalScore,
-                    sourceProvider = lnItem.sourceProvider ?: "AniList"
+                    sourceProvider = ref?.first ?: (ExternalSources.canonical(lnItem.sourceProvider) ?: ExternalSources.ANILIST),
+                    scoreSource = lnItem.externalScoreSource ?: ExternalSources.ANILIST
                 )
             }
         }
 
-        if (bookDetails == null) {
+        if (bookDetails == null && !isLightNovel) {
             val cleanExtId = extId?.removePrefix("/works/")?.removePrefix("/")?.trim()
 
-            // 1. Direct ID lookup
-            if (entry.externalSource.equals("Google Books", ignoreCase = true) && !cleanExtId.isNullOrBlank()) {
+            // 1. Direct ID lookup strictly scoped to the canonical source
+            if (canonSrc == ExternalSources.GOOGLE_BOOKS && !cleanExtId.isNullOrBlank()) {
                 bookDetails = GoogleBooksApiClient.fetchVolumeDetails(cleanExtId, context).getOrNull()
-            } else if (entry.externalSource.equals("Open Library", ignoreCase = true) && !cleanExtId.isNullOrBlank()) {
+            } else if (canonSrc == ExternalSources.OPEN_LIBRARY && !cleanExtId.isNullOrBlank()) {
                 bookDetails = OpenLibraryApiClient.fetchWorkDetails(cleanExtId).getOrNull()
             }
 
-            // 2. Direct ID fallback if source was unassigned
-            if (bookDetails == null && !cleanExtId.isNullOrBlank()) {
+            // 2. Direct ID fallback only if source was unassigned
+            if (bookDetails == null && canonSrc == null && !cleanExtId.isNullOrBlank()) {
                 bookDetails = GoogleBooksApiClient.fetchVolumeDetails(cleanExtId, context).getOrNull()
                     ?: OpenLibraryApiClient.fetchWorkDetails(cleanExtId).getOrNull()
             }
 
-            // 3. Fallback to ISBN
-            if (bookDetails == null) {
+            // 3. Fallback to ISBN / title ONLY when entry has no valid ID
+            if (bookDetails == null && shouldAttemptBookTitleFallback(entry)) {
                 val isbnRegex = Regex("(?i)ISBN:\\s*([0-9Xx-]+)")
                 val isbn = (entry.description ?: entry.notes)?.let {
                     isbnRegex.find(it)?.groupValues?.get(1)?.replace("-", "")?.trim()
@@ -448,175 +528,52 @@ object BookSyncManager {
                         bookDetails = googleAsync.await() ?: openLibAsync.await()
                     }
                 }
-            }
 
-            // 4. Fallback to title search
-            if (bookDetails == null && entry.title.isNotBlank()) {
-                bookDetails = BookMetadataManager.searchBooks(entry.title, context, limit = 1).getOrNull()?.firstOrNull()
+                if (bookDetails == null && entry.title.isNotBlank()) {
+                    bookDetails = BookMetadataManager.searchBooks(entry.title, context, limit = 1).getOrNull()?.firstOrNull()
+                }
             }
         }
 
         if (bookDetails != null) {
-            var hasChanges = false
-            var finalCoverUri: String? = entry.coverImageUri
-            var finalExternalId: String? = entry.externalId
-            var finalExternalSource: String? = entry.externalSource
-
-            if (entry.externalId.isNullOrBlank() && bookDetails.id.isNotBlank()) {
-                finalExternalId = bookDetails.id
-                finalExternalSource = bookDetails.sourceProvider
-                hasChanges = true
-            }
-
-            val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(entry)
-            val needsCover = entry.coverImageUri.isNullOrBlank() ||
-                             entry.coverImageUri.startsWith("file:") ||
-                             isCoverBroken ||
-                             forceRefresh
-
-            if (!bookDetails.coverUrl.isNullOrBlank() && needsCover) {
-                finalCoverUri = bookDetails.coverUrl
-                hasChanges = true
-
-                FailedCoverTracker.markSuccess(entry.id, bookDetails.coverUrl)
-
-                try {
-                    val imageLoader = Coil.imageLoader(context)
-                    val request = ImageRequest.Builder(context)
-                        .data(bookDetails.coverUrl)
-                        .memoryCachePolicy(CachePolicy.ENABLED)
-                        .diskCachePolicy(CachePolicy.ENABLED)
-                        .build()
-                    imageLoader.enqueue(request)
-                } catch (_: Exception) {}
-            }
-
-            val publishEpoch = bookDetails.publishedDate?.let { dateStr ->
-                try {
-                    when (dateStr.length) {
-                        4 -> SimpleDateFormat("yyyy", Locale.US).parse(dateStr)?.time
-                        7 -> SimpleDateFormat("yyyy-MM", Locale.US).parse(dateStr)?.time
-                        else -> SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(dateStr)?.time
-                    }
-                } catch (_: Exception) { null }
-            }
-
-            val newAiredStart = if ((entry.airedStartDate == null || forceRefresh) && publishEpoch != null) {
-                hasChanges = true
-                publishEpoch
-            } else {
-                entry.airedStartDate
-            }
-
-            val newAiredEnd = if ((entry.airedEndDate == null || forceRefresh) && publishEpoch != null) {
-                hasChanges = true
-                publishEpoch
-            } else {
-                entry.airedEndDate
-            }
-
-            val newAltTitle = if ((entry.alternateTitle.isNullOrBlank() || forceRefresh) && !bookDetails.subtitle.isNullOrBlank()) {
-                hasChanges = true
-                bookDetails.subtitle
-            } else {
-                entry.alternateTitle
-            }
-
-            val tagsStr = bookDetails.buildTagsString()
-            val newTags = if ((entry.tags.isNullOrBlank() || forceRefresh) && tagsStr.isNotBlank()) {
-                hasChanges = true
-                tagsStr
-            } else {
-                entry.tags
-            }
-
-            val descWithMeta = bookDetails.buildDescriptionWithMetadata()
-            val newDescription = if (((entry.description ?: entry.notes).isNullOrBlank() || forceRefresh) && descWithMeta.isNotBlank()) {
-                hasChanges = true
-                descWithMeta
-            } else {
-                entry.description ?: entry.notes
-            }
-
-            val newScore = if ((entry.externalScore == null || forceRefresh) && bookDetails.averageScore != null) {
-                hasChanges = true
-                bookDetails.averageScore
-            } else {
-                entry.externalScore
-            }
-
-            val newScoreSource = if (bookDetails.averageScore != null && bookDetails.sourceProvider.isNotBlank()) {
-                bookDetails.sourceProvider
-            } else {
-                entry.externalScoreSource
-            }
-
-            val targetUnit = when {
-                (bookDetails.pageCount ?: 0) > 0 -> TrackingUnit.PAGES
-                (bookDetails.totalVolumes ?: 0) > 0 -> TrackingUnit.VOLUMES
-                (bookDetails.totalChapters ?: 0) > 0 -> TrackingUnit.CHAPTERS
-                else -> entry.trackingUnit
-            }
-
-            val newTotalPages = if ((entry.totalPages == 0 || forceRefresh) && (bookDetails.pageCount ?: 0) > 0) {
-                hasChanges = true
-                bookDetails.pageCount ?: 0
-            } else {
-                entry.totalPages
-            }
-
-            val newTotalVolumes = if ((entry.totalVolumes == 0 || forceRefresh) && (bookDetails.totalVolumes ?: 0) > 0) {
-                hasChanges = true
-                bookDetails.totalVolumes ?: 0
-            } else {
-                entry.totalVolumes
-            }
-
-            val newTotalChapters = if ((entry.totalChapters == 0 || forceRefresh) && (bookDetails.totalChapters ?: 0) > 0) {
-                hasChanges = true
-                bookDetails.totalChapters ?: 0
-            } else {
-                entry.totalChapters
-            }
-
-            var relatedJson: String? = entry.relatedEntriesJson
-            if (relatedJson.isNullOrBlank() || forceRefresh) {
+            val fetchedRelatedJson = if (entry.relatedEntriesJson.isNullOrBlank() || forceRefresh) {
                 try {
                     val relatedRes = BookMetadataManager.fetchRelatedBooks(entry, context)
                     val relatedList = relatedRes.getOrNull()
-                    if (!relatedList.isNullOrEmpty()) {
-                        relatedJson = gson.toJson(relatedList)
-                        hasChanges = true
-                    }
-                } catch (_: Exception) {}
+                    if (!relatedList.isNullOrEmpty()) gson.toJson(relatedList) else null
+                } catch (_: Exception) {
+                    null
+                }
+            } else {
+                null
             }
 
-            val newOriginalLanguage = if (!bookDetails.language.isNullOrBlank()) {
-                if (bookDetails.language != entry.originalLanguage) hasChanges = true
-                bookDetails.language
-            } else entry.originalLanguage
+            // BUG-17: Re-read latest row right before merging so concurrent user edits survive sync.
+            val latest = repository.getEntryByIdSync(entry.id) ?: entry
+            val isCoverBroken = FailedCoverTracker.isEntryCoverBroken(latest)
+            val (updatedEntry, hasChanges) = applyBookMetadataToFresh(
+                latest = latest,
+                bookDetails = bookDetails,
+                needsExternalRefRepair = needsExternalRefRepair,
+                isCoverBroken = isCoverBroken,
+                fetchedRelatedJson = fetchedRelatedJson,
+                forceRefresh = forceRefresh
+            )
 
             if (hasChanges) {
-                val updatedEntry = entry.copy(
-                    coverImageUri = finalCoverUri,
-                    externalId = finalExternalId,
-                    externalSource = finalExternalSource,
-                    alternateTitle = newAltTitle,
-                    tags = newTags,
-                    description = newDescription,
-                    externalScore = newScore,
-                    externalScoreSource = newScoreSource,
-                    airedStartDate = newAiredStart,
-                    airedEndDate = newAiredEnd,
-                    totalPages = newTotalPages,
-                    totalVolumes = newTotalVolumes,
-                    totalChapters = newTotalChapters,
-                    trackingUnit = targetUnit,
-                    relatedEntriesJson = relatedJson,
-                    originalLanguage = newOriginalLanguage,
-                    updatedAt = System.currentTimeMillis()
-                )
-                repository.update(updatedEntry)
+                if (updatedEntry.coverImageUri != latest.coverImageUri && !updatedEntry.coverImageUri.isNullOrBlank()) {
+                    FailedCoverTracker.markSuccess(latest.id, updatedEntry.coverImageUri)
+                    try {
+                        val imageLoader = Coil.imageLoader(context)
+                        val request = ImageRequest.Builder(context)
+                            .data(updatedEntry.coverImageUri)
+                            .memoryCachePolicy(CachePolicy.ENABLED)
+                            .diskCachePolicy(CachePolicy.ENABLED)
+                            .build()
+                        imageLoader.enqueue(request)
+                    } catch (_: Exception) {}
+                }
+                repository.updateMetadataOnly(updatedEntry)
             }
             return BookSyncItemResult(hasChanges = hasChanges, isSuccess = true)
         }
@@ -626,6 +583,170 @@ object BookSyncManager {
             isSuccess = false,
             errorMessage = "Could not find book metadata for '${entry.title}'"
         )
+    }
+
+    internal fun applyBookMetadataToFresh(
+        latest: MediaEntry,
+        bookDetails: BookDetails,
+        needsExternalRefRepair: Boolean = false,
+        isCoverBroken: Boolean = false,
+        fetchedRelatedJson: String? = null,
+        forceRefresh: Boolean = false,
+        now: Long = System.currentTimeMillis()
+    ): Pair<MediaEntry, Boolean> {
+        var hasChanges = false
+        var finalCoverUri: String? = latest.coverImageUri
+        var finalExternalId: String? = latest.externalId
+        val latestCanonicalSource = ExternalSources.canonical(latest.externalSource, latest.externalId)
+        var finalExternalSource: String? = latestCanonicalSource ?: latest.externalSource
+        if (latestCanonicalSource != null && latestCanonicalSource != latest.externalSource && !latest.externalId.isNullOrBlank()) {
+            hasChanges = true
+        }
+
+        val preferredRef = bookDetails.preferredExternalRef()
+        if ((latest.externalId.isNullOrBlank() || needsExternalRefRepair) && preferredRef != null) {
+            if (preferredRef.first != latest.externalSource || preferredRef.second != latest.externalId) {
+                finalExternalSource = preferredRef.first
+                finalExternalId = preferredRef.second
+                hasChanges = true
+            }
+        }
+
+        val needsCover = latest.coverImageUri.isNullOrBlank() ||
+            latest.coverImageUri.startsWith("file:") ||
+            isCoverBroken ||
+            forceRefresh
+        if (!bookDetails.coverUrl.isNullOrBlank() && needsCover && bookDetails.coverUrl != latest.coverImageUri) {
+            finalCoverUri = bookDetails.coverUrl
+            hasChanges = true
+        }
+
+        val publishEpoch = bookDetails.publishedDate?.let { dateStr ->
+            try {
+                when (dateStr.length) {
+                    4 -> SimpleDateFormat("yyyy", Locale.US).parse(dateStr)?.time
+                    7 -> SimpleDateFormat("yyyy-MM", Locale.US).parse(dateStr)?.time
+                    else -> SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(dateStr)?.time
+                }
+            } catch (_: Exception) { null }
+        }
+
+        val newAiredStart = if ((latest.airedStartDate == null || forceRefresh) && publishEpoch != null && publishEpoch != latest.airedStartDate) {
+            hasChanges = true
+            publishEpoch
+        } else {
+            latest.airedStartDate
+        }
+
+        val newAiredEnd = if ((latest.airedEndDate == null || forceRefresh) && publishEpoch != null && publishEpoch != latest.airedEndDate) {
+            hasChanges = true
+            publishEpoch
+        } else {
+            latest.airedEndDate
+        }
+
+        val newAltTitle = if ((latest.alternateTitle.isNullOrBlank() || forceRefresh) && !bookDetails.subtitle.isNullOrBlank() && bookDetails.subtitle != latest.alternateTitle) {
+            hasChanges = true
+            bookDetails.subtitle
+        } else {
+            latest.alternateTitle
+        }
+
+        val tagsStr = bookDetails.buildTagsString()
+        val newTags = if ((latest.tags.isNullOrBlank() || forceRefresh) && tagsStr.isNotBlank() && tagsStr != latest.tags) {
+            hasChanges = true
+            tagsStr
+        } else {
+            latest.tags
+        }
+
+        val curDesc = latest.description ?: latest.notes
+        val descWithMeta = bookDetails.buildDescriptionWithMetadata()
+        val newDescription = if ((curDesc.isNullOrBlank() || forceRefresh) && descWithMeta.isNotBlank() && descWithMeta != curDesc) {
+            hasChanges = true
+            descWithMeta
+        } else {
+            curDesc
+        }
+
+        val newScore = if ((latest.externalScore == null || forceRefresh) && bookDetails.averageScore != null && bookDetails.averageScore != latest.externalScore) {
+            hasChanges = true
+            bookDetails.averageScore
+        } else {
+            latest.externalScore
+        }
+
+        val resolvedScoreSource = (bookDetails.scoreSource ?: bookDetails.sourceProvider)
+            .takeIf { it.isNotBlank() }
+            ?.let { ExternalSources.canonical(it) ?: it }
+        val newScoreSource = if (bookDetails.averageScore != null && resolvedScoreSource != null) {
+            if (resolvedScoreSource != latest.externalScoreSource && newScore != null) hasChanges = true
+            resolvedScoreSource
+        } else {
+            latest.externalScoreSource
+        }
+
+        val targetUnit = resolveUpdatedBookTrackingUnit(latest, bookDetails)
+        if (targetUnit != latest.trackingUnit) {
+            hasChanges = true
+        }
+
+        val newTotalPages = if ((latest.totalPages == 0 || forceRefresh) && (bookDetails.pageCount ?: 0) > 0 && (bookDetails.pageCount ?: 0) != latest.totalPages) {
+            hasChanges = true
+            bookDetails.pageCount ?: 0
+        } else {
+            latest.totalPages
+        }
+
+        val newTotalVolumes = if ((latest.totalVolumes == 0 || forceRefresh) && (bookDetails.totalVolumes ?: 0) > 0 && (bookDetails.totalVolumes ?: 0) != latest.totalVolumes) {
+            hasChanges = true
+            bookDetails.totalVolumes ?: 0
+        } else {
+            latest.totalVolumes
+        }
+
+        val newTotalChapters = if ((latest.totalChapters == 0 || forceRefresh) && (bookDetails.totalChapters ?: 0) > 0 && (bookDetails.totalChapters ?: 0) != latest.totalChapters) {
+            hasChanges = true
+            bookDetails.totalChapters ?: 0
+        } else {
+            latest.totalChapters
+        }
+
+        val relatedJson = if ((latest.relatedEntriesJson.isNullOrBlank() || forceRefresh) && !fetchedRelatedJson.isNullOrBlank() && fetchedRelatedJson != latest.relatedEntriesJson) {
+            hasChanges = true
+            fetchedRelatedJson
+        } else {
+            latest.relatedEntriesJson
+        }
+
+        val newOriginalLanguage = if (latest.originalLanguage.isNullOrBlank() && !bookDetails.language.isNullOrBlank()) {
+            hasChanges = true
+            bookDetails.language
+        } else {
+            latest.originalLanguage
+        }
+
+        val updatedEntry = latest.copy(
+            coverImageUri = finalCoverUri,
+            externalId = finalExternalId,
+            externalSource = finalExternalSource,
+            alternateTitle = newAltTitle,
+            tags = newTags,
+            description = newDescription,
+            externalScore = newScore,
+            externalScoreSource = newScoreSource,
+            airedStartDate = newAiredStart,
+            airedEndDate = newAiredEnd,
+            totalPages = newTotalPages,
+            totalVolumes = newTotalVolumes,
+            totalChapters = newTotalChapters,
+            trackingUnit = targetUnit,
+            relatedEntriesJson = relatedJson,
+            originalLanguage = newOriginalLanguage,
+            lastMetadataSyncAt = now,
+            updatedAt = now
+        )
+        return updatedEntry to hasChanges
     }
 
     fun cancelSync(context: Context? = null) {

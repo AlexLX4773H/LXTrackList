@@ -61,7 +61,8 @@ fun GamePlatformsSubMenu(
     onCyclePlatform: (String) -> Unit,
     onClearAll: () -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    umbrellaOnly: Boolean = false
 ) {
     var searchQuery by remember { mutableStateOf("") }
     val hasPlatforms = includedPlatforms.isNotEmpty() || excludedPlatforms.isNotEmpty()
@@ -186,7 +187,11 @@ fun GamePlatformsSubMenu(
             onValueChange = { searchQuery = it },
             placeholder = {
                 Text(
-                    text = "Search platforms (e.g. PC, Switch, PS5, Xbox)...",
+                    text = if (umbrellaOnly) {
+                        "Filter platforms (PC, PlayStation, Xbox, Switch...)"
+                    } else {
+                        "Search platforms (e.g. PC, Switch, PS5, Xbox)..."
+                    },
                     color = LXTextSecondary,
                     fontSize = 13.sp
                 )
@@ -216,9 +221,16 @@ fun GamePlatformsSubMenu(
         )
 
         // Filtered Platforms
-        val filteredPlatforms = remember(searchQuery) {
+        val filteredPlatforms = remember(searchQuery, umbrellaOnly) {
             val query = searchQuery.trim()
-            if (query.isEmpty()) {
+            if (umbrellaOnly) {
+                val umbrellas = if (query.isEmpty()) {
+                    GamePlatformRegistry.LIBRARY_UMBRELLA_PLATFORMS
+                } else {
+                    GamePlatformRegistry.filterLibraryPlatforms(query)
+                }
+                umbrellas to emptyList<GamePlatformOption>()
+            } else if (query.isEmpty()) {
                 val top = GamePlatformRegistry.getTopPlatforms()
                 val others = GamePlatformRegistry.getOtherPlatforms()
                 top to others
@@ -312,10 +324,10 @@ fun GamePlatformsSubMenu(
                 }
             }
 
-            // Top Platforms
+            // Top Platforms (or canonical umbrella platforms in Library mode)
             if (filteredPlatforms.first.isNotEmpty()) {
                 Text(
-                    text = "Popular Platforms",
+                    text = if (umbrellaOnly) "Platforms" else "Popular Platforms",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     color = LXTextSecondary,
                     modifier = Modifier.padding(top = 4.dp)

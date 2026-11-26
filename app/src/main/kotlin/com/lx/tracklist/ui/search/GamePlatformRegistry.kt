@@ -22,7 +22,7 @@ object GamePlatformRegistry {
             displayName = "PC",
             category = "Popular",
             iconEmoji = "💻",
-            aliases = listOf("pc", "windows", "microsoft windows", "steam", "mac", "macos", "linux", "dos", "gog", "epic"),
+            aliases = listOf("pc", "pc (microsoft windows)", "windows", "microsoft windows", "steam", "mac", "macos", "linux", "dos", "gog", "epic"),
             igdbPlatformIds = listOf(6, 14, 3), // PC (Microsoft Windows), Mac, Linux
             rawgPlatformIds = listOf(4, 5, 6)   // PC, macOS, Linux
         ),
@@ -58,7 +58,7 @@ object GamePlatformRegistry {
             displayName = "Xbox Series X/S",
             category = "Popular",
             iconEmoji = "🎮",
-            aliases = listOf("xbox series", "series x", "series s", "xbsx", "xbox series x/s"),
+            aliases = listOf("xbox series", "xbox series x/s", "xbox series x|s", "xbox series s/x", "series x", "series s", "xbsx"),
             igdbPlatformIds = listOf(169),
             rawgPlatformIds = listOf(186)
         ),
@@ -96,7 +96,13 @@ object GamePlatformRegistry {
             displayName = "PlayStation (All)",
             category = "PlayStation",
             iconEmoji = "🎮",
-            aliases = listOf("ps", "playstation", "ps5", "ps4", "ps3", "ps2", "ps1", "psx", "psp", "vita"),
+            aliases = listOf(
+                "ps", "playstation", "playstation (all)",
+                "ps5", "playstation 5", "ps4", "playstation 4",
+                "ps3", "playstation 3", "ps2", "playstation 2",
+                "ps1", "psx", "playstation 1", "playstation 1 (psx)", "original playstation",
+                "psp", "playstation portable", "vita", "ps vita", "playstation vita"
+            ),
             igdbPlatformIds = listOf(167, 48, 9, 8, 7, 46, 38),
             rawgPlatformIds = listOf(187, 18, 16, 15, 27, 19, 17)
         ),
@@ -123,7 +129,7 @@ object GamePlatformRegistry {
             displayName = "PlayStation 1 (PSX)",
             category = "PlayStation",
             iconEmoji = "🎮",
-            aliases = listOf("ps1", "psx", "playstation 1", "original playstation"),
+            aliases = listOf("ps1", "psx", "playstation 1", "original playstation", "playstation"),
             igdbPlatformIds = listOf(7),
             rawgPlatformIds = listOf(27)
         ),
@@ -152,7 +158,13 @@ object GamePlatformRegistry {
             displayName = "Xbox (All)",
             category = "Xbox",
             iconEmoji = "🎮",
-            aliases = listOf("xbox", "xbox series", "xbox one", "xbox 360"),
+            aliases = listOf(
+                "xbox", "xbox (all)",
+                "xbox series", "xbox series x/s", "xbox series x|s", "xbox series s/x", "series x", "series s", "xbsx",
+                "xbox one", "xone", "xbone",
+                "xbox 360", "x360",
+                "original xbox", "xbox original"
+            ),
             igdbPlatformIds = listOf(169, 49, 12, 11),
             rawgPlatformIds = listOf(186, 1, 14, 80)
         ),
@@ -170,7 +182,7 @@ object GamePlatformRegistry {
             displayName = "Original Xbox",
             category = "Xbox",
             iconEmoji = "🎮",
-            aliases = listOf("original xbox", "xbox original"),
+            aliases = listOf("original xbox", "xbox original", "xbox"),
             igdbPlatformIds = listOf(11),
             rawgPlatformIds = listOf(80)
         ),
@@ -217,7 +229,7 @@ object GamePlatformRegistry {
             displayName = "Nintendo GameCube",
             category = "Nintendo",
             iconEmoji = "🎮",
-            aliases = listOf("gamecube", "gcn", "gc"),
+            aliases = listOf("gamecube", "nintendo gamecube", "gcn", "gc"),
             igdbPlatformIds = listOf(21),
             rawgPlatformIds = listOf(105)
         ),
@@ -244,7 +256,7 @@ object GamePlatformRegistry {
             displayName = "Super Nintendo (SNES)",
             category = "Nintendo",
             iconEmoji = "🕹️",
-            aliases = listOf("snes", "super nintendo", "super nes"),
+            aliases = listOf("snes", "super nintendo", "super nes", "super nintendo entertainment system", "super nintendo entertainment system (snes)"),
             igdbPlatformIds = listOf(19),
             rawgPlatformIds = listOf(79)
         ),
@@ -253,7 +265,7 @@ object GamePlatformRegistry {
             displayName = "NES (Famicom)",
             category = "Nintendo",
             iconEmoji = "🕹️",
-            aliases = listOf("nes", "famicom"),
+            aliases = listOf("nes", "famicom", "nintendo entertainment system", "family computer"),
             igdbPlatformIds = listOf(18),
             rawgPlatformIds = listOf(49)
         ),
@@ -264,7 +276,7 @@ object GamePlatformRegistry {
             displayName = "Mobile (Android / iOS)",
             category = "Mobile",
             iconEmoji = "📱",
-            aliases = listOf("mobile", "phone", "android", "ios", "iphone", "ipad"),
+            aliases = listOf("mobile", "mobile (android / ios)", "phone", "android", "google play", "ios", "iphone", "ipad", "apple app store"),
             igdbPlatformIds = listOf(34, 39),
             rawgPlatformIds = listOf(21, 3)
         ),
@@ -286,11 +298,101 @@ object GamePlatformRegistry {
             displayName = "Retro / Classics",
             category = "Retro",
             iconEmoji = "🕹️",
-            aliases = listOf("retro", "arcade", "sega", "genesis", "mega drive", "atari", "dreamcast", "saturn", "commodore", "amiga", "emulat"),
+            aliases = listOf("retro", "retro / classics", "arcade", "sega", "genesis", "mega drive", "atari", "dreamcast", "saturn", "commodore", "amiga", "emulat"),
             igdbPlatformIds = listOf(18, 19, 24, 4, 21, 5, 7, 8, 33, 52, 29, 30),
             rawgPlatformIds = listOf(26, 49, 79, 24, 83, 105, 27, 15)
         )
     )
+
+    /**
+     * Canonical umbrella options shown for Library platform filtering, matching how entries
+     * store `MediaEntry.CANONICAL_GAME_PLATFORMS` (`["PC", "PS", "XBox", "Switch", "Mobile", "Retro"]`).
+     */
+    val LIBRARY_UMBRELLA_PLATFORMS: List<GamePlatformOption> = listOf(
+        GamePlatformOption(
+            id = "PC",
+            displayName = "PC",
+            category = "Umbrella",
+            iconEmoji = "💻"
+        ),
+        GamePlatformOption(
+            id = "PS",
+            displayName = "PlayStation",
+            category = "Umbrella",
+            iconEmoji = "🎮"
+        ),
+        GamePlatformOption(
+            id = "XBox",
+            displayName = "Xbox",
+            category = "Umbrella",
+            iconEmoji = "🎮"
+        ),
+        GamePlatformOption(
+            id = "Switch",
+            displayName = "Switch",
+            category = "Umbrella",
+            iconEmoji = "🎮"
+        ),
+        GamePlatformOption(
+            id = "Mobile",
+            displayName = "Mobile",
+            category = "Umbrella",
+            iconEmoji = "📱"
+        ),
+        GamePlatformOption(
+            id = "Retro",
+            displayName = "Retro",
+            category = "Umbrella",
+            iconEmoji = "🕹️"
+        )
+    )
+
+    private val FAMILY_UMBRELLA_IDS = setOf("PC", "PS", "XBox", "Mobile", "Retro")
+
+    fun findLibraryOption(idOrName: String?): GamePlatformOption? {
+        if (idOrName.isNullOrBlank()) return null
+        val clean = idOrName.trim()
+        return LIBRARY_UMBRELLA_PLATFORMS.firstOrNull { opt ->
+            opt.id.equals(clean, ignoreCase = true) ||
+                opt.displayName.equals(clean, ignoreCase = true)
+        }
+    }
+
+    fun filterLibraryPlatforms(query: String): List<GamePlatformOption> {
+        val clean = query.trim().lowercase(Locale.ROOT)
+        if (clean.isBlank()) return LIBRARY_UMBRELLA_PLATFORMS
+        return LIBRARY_UMBRELLA_PLATFORMS.filter { opt ->
+            opt.displayName.lowercase(Locale.ROOT).contains(clean) ||
+                opt.id.lowercase(Locale.ROOT).contains(clean)
+        }
+    }
+
+    fun matchesLibraryPlatform(filterPlatform: String, candidatePlatform: String): Boolean {
+        if (filterPlatform.isBlank() || candidatePlatform.isBlank()) return false
+        val filterOpt = findLibraryOption(filterPlatform) ?: return false
+        val candCanonical = MediaEntry.canonicalizeGamePlatform(candidatePlatform)
+        return filterOpt.id.equals(candCanonical, ignoreCase = true)
+    }
+
+    fun matchesAnyLibraryPlatform(filterPlatforms: Collection<String>?, candidatePlatforms: Collection<String>?): Boolean {
+        if (filterPlatforms.isNullOrEmpty()) return true
+        if (candidatePlatforms.isNullOrEmpty()) return false
+        return filterPlatforms.any { filterPlat ->
+            candidatePlatforms.any { candPlat ->
+                matchesLibraryPlatform(filterPlat, candPlat)
+            }
+        }
+    }
+
+    fun isLibraryExcluded(excludedPlatforms: Collection<String>?, candidatePlatforms: Collection<String>?): Boolean {
+        if (excludedPlatforms.isNullOrEmpty()) return false
+        if (candidatePlatforms.isNullOrEmpty()) return false
+        return excludedPlatforms.any { excPlat ->
+            candidatePlatforms.any { candPlat ->
+                matchesLibraryPlatform(excPlat, candPlat)
+            }
+        }
+    }
 
     fun getTopPlatforms(): List<GamePlatformOption> =
         ALL_PLATFORMS.filter { it.category == "Popular" }
@@ -315,7 +417,12 @@ object GamePlatformRegistry {
         return ALL_PLATFORMS.firstOrNull { it.id.equals(clean, ignoreCase = true) }
             ?: ALL_PLATFORMS.firstOrNull { it.displayName.equals(clean, ignoreCase = true) }
             ?: ALL_PLATFORMS.firstOrNull { opt -> opt.aliases.any { it.equals(clean, ignoreCase = true) } }
-            ?: ALL_PLATFORMS.firstOrNull { opt -> opt.displayName.lowercase(Locale.ROOT).contains(clean) }
+    }
+
+    private fun matchesExactOptionToken(opt: GamePlatformOption, candClean: String): Boolean {
+        return opt.id.equals(candClean, ignoreCase = true) ||
+            opt.displayName.equals(candClean, ignoreCase = true) ||
+            opt.aliases.any { it.equals(candClean, ignoreCase = true) }
     }
 
     fun matchesPlatform(filterPlatform: String, candidatePlatform: String): Boolean {
@@ -323,37 +430,31 @@ object GamePlatformRegistry {
         val filterClean = filterPlatform.trim()
         val candClean = candidatePlatform.trim()
 
-        // 1. Direct case-insensitive match
+        // 1. Direct case-insensitive exact match
         if (filterClean.equals(candClean, ignoreCase = true)) return true
 
-        // 2. Canonical matching using MediaEntry canonicalize
-        val filterCanon = MediaEntry.canonicalizeGamePlatform(filterClean)
-        val candCanon = MediaEntry.canonicalizeGamePlatform(candClean)
-        if (filterCanon.equals(candCanon, ignoreCase = true)) {
-            // If the filter specifically requested a canonical umbrella, match
-            if (MediaEntry.CANONICAL_GAME_PLATFORMS.any { it.equals(filterClean, ignoreCase = true) }) {
-                return true
-            }
-        }
-
-        // 3. Option lookup
+        // 2. Canonical umbrella matching when filter targets a canonical umbrella ID or "(All)"/"Classics" group
         val opt = findOption(filterClean)
-        if (opt != null) {
-            val candLower = candClean.lowercase(Locale.ROOT)
-            if (opt.id.equals(candClean, ignoreCase = true)) return true
-            if (opt.displayName.equals(candClean, ignoreCase = true)) return true
-            if (candLower.contains(opt.id.lowercase(Locale.ROOT))) return true
-            if (candLower.contains(opt.displayName.lowercase(Locale.ROOT))) return true
-            if (opt.aliases.any { alias -> candLower.contains(alias) || alias.contains(candLower) }) {
+        val filterUmbrella = when {
+            MediaEntry.CANONICAL_GAME_PLATFORMS.any { it.equals(filterClean, ignoreCase = true) } ->
+                MediaEntry.canonicalizeGamePlatform(filterClean)
+            opt != null && opt.id in FAMILY_UMBRELLA_IDS &&
+                (filterClean.equals(opt.id, ignoreCase = true) || filterClean.equals(opt.displayName, ignoreCase = true)) ->
+                opt.id
+            else -> null
+        }
+        if (filterUmbrella != null) {
+            val candCanon = MediaEntry.canonicalizeGamePlatform(candClean)
+            if (filterUmbrella.equals(candCanon, ignoreCase = true)) {
                 return true
             }
         }
 
-        // 4. Substring fallback
-        val candLower = candClean.lowercase(Locale.ROOT)
-        val filterLower = filterClean.lowercase(Locale.ROOT)
-        if (filterLower.length >= 3 && (candLower.contains(filterLower) || filterLower.contains(candLower))) {
-            return true
+        // 3. Exact option / alias token lookup (no substring matching so Wii does not match Wii U, DS does not match 3DS)
+        if (opt != null) {
+            if (matchesExactOptionToken(opt, candClean)) return true
+            val candOpt = findOption(candClean)
+            if (candOpt != null && candOpt.id.equals(opt.id, ignoreCase = true)) return true
         }
 
         return false

@@ -8,6 +8,8 @@ import com.lx.tracklist.data.model.TrackingUnit
 import com.lx.tracklist.ui.components.SortOption
 import com.lx.tracklist.ui.library.LibrarySortOption
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MediaEntryTest {
@@ -804,6 +806,17 @@ class MediaEntryTest {
         val animeCompleted = anime.copy(status = MediaStatus.COMPLETED, currentEpisodes = 24)
         assertEquals(0.0, animeCompleted.calculateRemainingTimeMinutes(), 0.01)
 
+        // Dropped 500-episode Anime: remaining is 0.0 (STA-02)
+        val dropped500EpAnime = MediaEntry(
+            title = "Dropped Long Series",
+            mediaType = MediaType.ANIME,
+            status = MediaStatus.DROPPED,
+            currentEpisodes = 12,
+            totalEpisodes = 500,
+            episodeLengthMinutes = 24
+        )
+        assertEquals(0.0, dropped500EpAnime.calculateRemainingTimeMinutes(), 0.01)
+
         // 2. Movie: 120 min duration, watched 40 min, 0 rewatch
         val movie = MediaEntry(
             title = "Test Movie",
@@ -914,5 +927,114 @@ class MediaEntryTest {
         assertEquals("Most Time To Read", LibrarySortOption.TIME_REMAINING_DESC.getDisplayLabel(MediaType.MANGA))
         assertEquals("Most Time Watched", LibrarySortOption.TIME_SPENT_DESC.getDisplayLabel(null, "Donghua", customCats))
         assertEquals("Most Time Read", LibrarySortOption.TIME_SPENT_DESC.getDisplayLabel(null, "Webtoons", customCats))
+    }
+
+    @Test
+    fun `isLightNovel follows canonical book marker and source rules`() {
+        assertTrue(
+            MediaEntry(
+                title = "Spice and Wolf",
+                mediaType = MediaType.BOOK,
+                status = MediaStatus.WATCHING,
+                subCategory = " Light Novel "
+            ).isLightNovel()
+        )
+        assertTrue(
+            MediaEntry(
+                title = "Overlord",
+                mediaType = MediaType.BOOK,
+                status = MediaStatus.PLAN_TO_WATCH,
+                customCategory = "LN"
+            ).isLightNovel()
+        )
+        assertTrue(
+            MediaEntry(
+                title = "86",
+                mediaType = MediaType.BOOK,
+                status = MediaStatus.WATCHING,
+                externalSource = "AniList"
+            ).isLightNovel()
+        )
+        assertTrue(
+            MediaEntry(
+                title = "Monogatari",
+                mediaType = MediaType.BOOK,
+                status = MediaStatus.WATCHING,
+                externalSource = "MAL"
+            ).isLightNovel()
+        )
+        assertFalse(
+            MediaEntry(
+                title = "Dune",
+                mediaType = MediaType.BOOK,
+                status = MediaStatus.COMPLETED,
+                externalSource = "Google Books"
+            ).isLightNovel()
+        )
+        assertFalse(
+            MediaEntry(
+                title = "Omniscient Reader",
+                mediaType = MediaType.BOOK,
+                status = MediaStatus.WATCHING,
+                subCategory = "Web Novel"
+            ).isLightNovel()
+        )
+        assertFalse(
+            MediaEntry(
+                title = "Not a Book",
+                mediaType = MediaType.MANGA,
+                status = MediaStatus.WATCHING,
+                subCategory = "Light Novel"
+            ).isLightNovel()
+        )
+    }
+
+    @Test
+    fun `typed accessors for overloaded columns resolve per media type and do not serialize`() {
+        val movie = MediaEntry(
+            title = "Inception",
+            mediaType = MediaType.MOVIE,
+            status = MediaStatus.COMPLETED,
+            durationMinutes = 148,
+            movieSeriesName = "Standalone",
+            movieSeriesNumber = 1
+        )
+        assertEquals(148, movie.runtimeMinutes)
+        org.junit.Assert.assertNull(movie.trackDurationSeconds)
+        org.junit.Assert.assertNull(movie.avgCompletionMinutes)
+        org.junit.Assert.assertNull(movie.albumName)
+        org.junit.Assert.assertNull(movie.trackNumber)
+
+        val music = MediaEntry(
+            title = "Papercut",
+            mediaType = MediaType.MUSIC,
+            status = MediaStatus.COMPLETED,
+            durationMinutes = 185,
+            movieSeriesName = "Hybrid Theory",
+            movieSeriesNumber = 1
+        )
+        org.junit.Assert.assertNull(music.runtimeMinutes)
+        assertEquals(185, music.trackDurationSeconds)
+        org.junit.Assert.assertNull(music.avgCompletionMinutes)
+        assertEquals("Hybrid Theory", music.albumName)
+        assertEquals(1, music.trackNumber)
+
+        val game = MediaEntry(
+            title = "Hades",
+            mediaType = MediaType.GAME,
+            status = MediaStatus.WATCHING,
+            durationMinutes = 3000
+        )
+        org.junit.Assert.assertNull(game.runtimeMinutes)
+        org.junit.Assert.assertNull(game.trackDurationSeconds)
+        assertEquals(3000, game.avgCompletionMinutes)
+
+        // Computed properties must not leak into JSON export
+        val json = com.lx.tracklist.data.exporter.JsonExporter.exportToJson(listOf(movie, music, game))
+        assertFalse(json.contains("\"runtimeMinutes\""))
+        assertFalse(json.contains("\"trackDurationSeconds\""))
+        assertFalse(json.contains("\"avgCompletionMinutes\""))
+        assertFalse(json.contains("\"albumName\""))
+        assertFalse(json.contains("\"trackNumber\""))
     }
 }
